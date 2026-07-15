@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+.sonar/
+*.tgz
+.DS_Store
+.env
+.env.*
+!.env*.example
+*.log
