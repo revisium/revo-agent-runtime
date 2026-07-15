@@ -149,7 +149,7 @@ Preparation, write, or flush failures map to `revo.agent.scratch_failed`; cleanu
 `revo.agent.scratch_cleanup_failed`. A process crash may leave `.scratch` residue. Consumer recovery or retention may remove
 the whole invocation directory; the manager never scans or adopts residue from a prior invocation.
 
-## 3. Manager construction and discovery
+## 3. Manager construction, registry reads, and probing
 
 ```ts
 interface AgentManagerOptions {
@@ -278,6 +278,10 @@ Such identifiers MAY be placed in `metadata`, which the manager stores and retur
 `start()` requires an exact agent ref. It validates the request, result schema, parameters, permissions, limits, workspace,
 and output path; reserves the id; prepares the output directory; and returns a handle. An id is unique among active and
 retained completed records. Duplicate ids fail preflight. Once a completed record has been evicted, its id MAY be reused.
+
+Acceptance is atomic with manager shutdown. If shutdown begins while `start()` is in preflight, exactly one outcome is
+allowed: either the invocation is accepted into the active registry and included in shutdown, or `start()` rejects with
+`revo.agent.manager_closed` without returning a handle or spawning a process.
 
 Before returning the handle, the manager canonical-serializes and parses package-owned copies of metadata, effective
 parameters, effective permissions, the result schema, and effective limits. It copies the prompt, paths, and environment
@@ -468,6 +472,8 @@ type AgentFaultCode =
   | 'revo.agent.definition_invalid'
   | 'revo.agent.definition_duplicate'
   | 'revo.agent.strategy_unsupported'
+  | 'revo.agent.manager_closed'
+  | 'revo.agent.shutdown_failed'
   | 'revo.agent.agent_unknown'
   | 'revo.agent.invocation_invalid'
   | 'revo.agent.invocation_duplicate'
@@ -508,6 +514,8 @@ interface AgentFault {
   readonly message: string;
   readonly phase:
     | 'construction'
+    | 'manager'
+    | 'shutdown'
     | 'preflight'
     | 'probing'
     | 'starting'
@@ -605,6 +613,7 @@ interface AgentManager {
   getResult(invocationId: string): AgentResultLookup;
   waitForResult(invocationId: string): Promise<AgentInvocationResult>;
   cancel(invocationId: string, reason?: string): Promise<CancelInvocationResult>;
+  shutdown(reason?: string): Promise<void>;
 }
 ```
 
@@ -618,6 +627,50 @@ separate `completedRuns` collection exists. Results are ordered by `acceptedAt`,
 
 Cancellation is idempotent. Unknown returns `unknown`; retained completion returns `already_completed`; active work returns
 `requested` after cancellation is committed. Cancellation reason is bounded and redacted.
+
+`shutdown(reason?)` closes the manager's process-local supervision domain. It is idempotent and concurrency-safe: the first
+call atomically marks the manager closing and creates one shared completion promise. Concurrent and later calls return that
+completion and observe its same fulfillment or rejection. The first call's copied, bounded, redacted reason is authoritative;
+reasons on later calls are ignored.
+
+Once closing begins, a new `start()` or `probeAgent()` rejects and a new `subscribe()` throws `AgentManagerError` with fault
+code `revo.agent.manager_closed`, phase `manager`, and `retryable: false`. Pure sealed-registry reads `listAgents` and
+`getAgent` remain available. Process-local state reads `listInvocations`, `getInvocation`, `getResult`, and `waitForResult`
+also remain available with their normal retained/active/unknown semantics. Existing handles remain usable, including their
+`result()` and idempotent `cancel()` methods. Manager `cancel()` retains its existing result contract. Probing is a
+process-creating operation, not a pure discovery read.
+
+A probe racing the close is either registered as in flight and included in shutdown or rejects `manager_closed` without
+spawning. An included probe whose process has not completed is terminated and its caller rejects `manager_closed` after the
+process is reaped. A racing subscription is either registered before closing and later cleared by shutdown or throws
+`manager_closed`; it is never installed after closing.
+
+Shutdown applies the same 4 KiB bound and redaction rules as cancellation reasons and requests cancellation of every active
+invocation. It attempts termination and requires confirmed reap of every manager-owned child process and in-flight
+version-probe process. On successful shutdown, every accepted invocation reaches typed terminal completion, completes output
+finalization, publishes its retained completed record, and delivers its terminal event before shutdown clears remaining
+listeners and resolves. Invocation execution or finalization failures do not reject shutdown; they remain typed invocation
+results. Existing unsubscribe functions remain idempotent before, during, and after listener clearing.
+
+Shutdown does not run an independent completed-record clear or eviction pass. Completions produced while draining enter the
+normal bounded FIFO and MAY evict older completed records under the ordinary retention rule. An invocation handle retains
+its resolved terminal result even if that result's completed record is later evicted. Shutdown never deletes consumer output
+directories or performs restart recovery.
+
+Failure to confirm kill and reap of any owned invocation or probe process rejects the shared shutdown completion with
+`AgentManagerError`: code `revo.agent.shutdown_failed`, phase `shutdown`, and `retryable: false`. Its bounded, redacted
+`details` reports affected invocation ids, whether that id list was truncated, and the affected probe count; it exposes no
+command, environment, or provider output. Invocation execution failures alone never cause this rejection.
+
+After `shutdown_failed`, the manager remains permanently failed-closed. New `start`, `probeAgent`, and `subscribe` operations
+still fail with `revo.agent.manager_closed`; every later `shutdown` returns the same rejected completion; and the registry and
+process-local state reads above remain available. An invocation whose reap cannot be confirmed remains in its nonterminal
+active record and its result MUST NOT be falsely completed. Existing listeners are cleared only after successful drain; on
+failure they remain idempotently unsubscribable while an affected invocation is still observable.
+
+The consumer MUST escalate host termination after `shutdown_failed` and MUST NOT create a replacement manager in the same
+supervision domain until process ownership is externally resolved. Workflow policy, retry, replacement in a resolved/new
+domain, and restart recovery remain consumer responsibilities.
 
 ## 10. Bounds, redaction, and retention
 

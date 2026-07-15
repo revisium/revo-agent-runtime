@@ -11,6 +11,10 @@ needs one package-owned API for listing available agents, probing installations,
 observing all or one invocation, cancelling work, and obtaining terminal results without rebuilding process and event
 coordination in every host.
 
+The same host also needs a deterministic lifecycle boundary. Dropping a manager reference cannot guarantee that accepted
+invocations and version probes are cancelled, their processes are reaped, terminal output is finalized, or subscribers see
+the last event.
+
 A mutable package-side catalog would make execution depend on registration timing and implicit version choice. Event-only
 completion would let consumers miss terminal results. Durable workflow state inside the package would duplicate the
 consumer's runs, steps, attempts, retry policy, and recovery model.
@@ -39,20 +43,36 @@ handle result promise,
 late result lookup, waiting by id, and filtered invocation listing. Async iteration is deferred because a safe buffering
 and backpressure contract is not yet required.
 
+The manager also owns idempotent, concurrency-safe process-local shutdown. The first `shutdown()` call atomically closes
+acceptance and creates one shared completion, cancels all active invocations, attempts to kill and reap every owned
+invocation and probe process with required confirmation, waits for typed terminal completion, output finalization, and
+terminal-event delivery, then clears listeners on success. Racing `start()` calls are either accepted and included or
+rejected without a handle or process. New starts, probes, and subscriptions fail with the stable
+`revo.agent.manager_closed` fault; pure registry reads, process-local state reads, and existing handles remain usable.
+
+If process ownership cannot be confirmed, the shared completion rejects with non-retryable
+`revo.agent.shutdown_failed`. The manager remains permanently failed-closed, an unreaped invocation remains active rather
+than falsely completed, and later shutdown calls observe the same rejection. The consumer escalates host termination and
+does not construct a replacement in the same supervision domain until ownership is resolved.
+
 The completed registry uses bounded FIFO retention. Construction may lower the package default but cannot increase it.
 When capacity is exceeded, the oldest completed record is evicted and becomes `unknown`; an evicted identifier may be
 reused. Active records are never evicted. Durable indexing, retention, and restart recovery remain consumer responsibilities.
 
 ## Consequences
 
-- Consumer code gets one package API for agent discovery, observation, execution, cancellation, and terminal results.
+- Consumer code gets one package API for registry reads, executable probing, observation, execution, cancellation, and
+  terminal results.
 - Definition changes require constructing a new manager; an existing manager remains deterministic.
 - `result()`, `waitForResult()`, completed `getResult()`, and process-local `invocation.finished` expose the same immutable completed
   result contract.
 - A terminal event is a notification, not the only result storage mechanism.
+- Hosts get one explicit shutdown barrier. It does not independently clear completed records, but drain completions follow
+  normal bounded FIFO and may evict older records; handles retain resolved results and consumer output directories remain.
 - Process restart loses the in-memory registry. The consumer uses its durable workflow state and output directory to
   recover according to a future, separately specified recovery contract.
-- Retries, scheduling, orchestration, workflow transitions, and cross-process fan-in stay outside this package.
+- Safe-domain manager replacement, host-termination escalation, retries, scheduling, orchestration, workflow transitions,
+  restart recovery, and cross-process fan-in stay outside this package.
 
 ## Rejected alternatives
 
@@ -62,3 +82,4 @@ reused. Active records are never evicted. Durable indexing, retention, and resta
 - **Unbounded completed history:** creates a process memory leak.
 - **Package-owned durable workflow store:** duplicates consumer state and couples the package to a persistence model.
 - **AsyncIterable in v1:** introduces an unowned queue and backpressure contract.
+- **Implicit cleanup on garbage collection:** cannot provide a kill/reap, finalization, or event-delivery barrier.

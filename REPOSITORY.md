@@ -23,10 +23,12 @@ The current root export is intentionally empty. The AgentManager v1 specificatio
 The package target owns:
 
 - validation and digesting of a complete immutable versioned definition set;
-- exact lookup and process-local discovery through one sealed manager;
+- pure exact registry reads and bounded executable probing through one sealed manager;
 - package-owned protocol, parser, and permission strategies;
 - native command-line and ACP adapters;
 - one invocation lifecycle, process stdio, deadlines, cancellation, and reaping;
+- idempotent process-local shutdown with one shared settlement that drains accepted work, confirms owned invocation/probe
+  kill and reap, and fails closed when ownership cannot be confirmed;
 - process-local active and bounded retained-completed records;
 - normalized results, usage, diagnostics, ordered subscriptions, and stable faults;
 - bounds and redaction before subscriber delivery and file writes;
@@ -42,6 +44,8 @@ The consuming host owns:
 - opaque invocation-id generation and any run/step/attempt metadata;
 - path construction, durable output indexing, retention, restart recovery, and public projections;
 - durable retry, replay, scheduling, pipelines, gates, and workflow transitions;
+- host-termination escalation after shutdown failure, with no replacement in the same supervision domain until ownership is
+  resolved, plus safe-domain replacement and restart-recovery policy;
 - billing ledgers and product verdict policy.
 
 `@revisium/revo-scripts` owns bounded Git, GitHub, and other deterministic system operations. Neither package depends on the

@@ -47,7 +47,7 @@ GraphQL, UI, and durable-recovery layers do not belong in this package.
 | Layer        | Owns                                                                                                      | Must not own                                                  |
 | ------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | Unit         | Pure validation, canonicalization, digest, redaction, limits, parsing, filters, and retention decisions.  | Package export claims or broad process lifecycle.             |
-| Contract     | Manager discovery, exact lookup, preflight, lifecycle, events, results, cancellation, and stable faults.  | Concrete Node process/filesystem behavior or private shape.   |
+| Contract     | Manager discovery, exact lookup, preflight, lifecycle, events, results, cancel/shutdown, stable faults.   | Concrete Node process/filesystem behavior or private shape.   |
 | Integration  | Real temporary process, filesystem, native/ACP framing, file atomicity, and consumer flow.                | Revo workflow policy, durable retry, or public product APIs.  |
 | Architecture | Dependency direction, cycle absence, forbidden imports, test-to-production direction, and probe efficacy. | Runtime behavior or built package resolution.                 |
 | Package      | Built declarations, root export map, ESM resolution, packed contents, and deep-import denial.             | Invocation semantics or future API behavior before it exists. |
@@ -100,6 +100,21 @@ Manager tests must prove:
 - bounded FIFO completion eviction never removes active work, makes evicted ids unknown, and permits reuse only after
   eviction;
 - cancel is idempotent and terminal races commit exactly one outcome;
+- shutdown is idempotent, the first call creates one shared fulfillment/rejection, and only its copied/bounded/redacted reason
+  is used; the first close atomically partitions racing starts into accepted-and-drained or `manager_closed` without a
+  handle/process;
+- after closing begins, new start/probe operations reject and subscribe throws `revo.agent.manager_closed`, while exact
+  registry reads, process-local list/get/result/wait APIs, existing handles, manager cancel, and idempotent unsubscribe remain
+  usable;
+- shutdown requests cancellation for every active invocation, waits for typed terminal completion, output finalization, and
+  exactly one terminal event before clearing listeners, and does not reject for invocation execution failure;
+- shutdown has no independent clear/eviction pass, drain completions use normal bounded FIFO and may evict older records,
+  evicted-record handles retain their resolved result, and consumer output directories are never deleted;
+- inability to confirm any owned invocation/probe kill and reap rejects the shared completion exactly once with bounded,
+  redacted, non-retryable `revo.agent.shutdown_failed` in phase `shutdown`, including affected invocation ids/truncation and
+  probe count; every later shutdown observes the same rejection;
+- after shutdown failure the manager remains failed-closed, registry/state reads remain available, and an unreaped invocation
+  stays active without a false terminal result;
 - late stream/raw recording failure replaces the provisional result with `revo.agent.output_write_failed`, while `.scratch`
   cleanup failure produces `revo.agent.scratch_cleanup_failed`;
 - result commit failure leaves `result.json` absent, commits the same failed value in memory without recursive persistence,
@@ -129,6 +144,10 @@ Integration tests use package-owned narrow process/filesystem seams and real tem
 Required behavior includes:
 
 - spawn, stdin, stdout, stderr, exit, signal, timeout, cancellation, process-tree kill, and reaping;
+- shutdown kills and reaps every owned invocation process and every racing in-flight probe process before resolving, with no
+  accepted invocation or probe left orphaned; an interrupted probe rejects `manager_closed` only after reap;
+- a kill/reap confirmation failure does not report successful shutdown, clear listeners, or synthesize invocation
+  completion; it produces the shared `shutdown_failed` rejection for consumer host-termination escalation;
 - native Codex, native Claude, and ACP conformance to one event/result/error contract;
 - no-shell deterministic argv expansion, total argv bounds, owner-only `<output>/.scratch`, reap-before-cleanup, cleanup
   attempt before terminal commit, typed cleanup failure, and crash-residue recovery ownership;
@@ -179,6 +198,10 @@ The package lane during bootstrap proves:
 
 This does not prove AgentManager behavior. Package tests evolve with public exports only when implementation, declarations,
 tests, and README examples are introduced together.
+
+When the target API is implemented, package/type-surface proof MUST include the factory
+`createAgentManager(options): AgentManager`, public `AgentManagerError` with its readonly `AgentFault`, the complete manager
+surface including `shutdown(reason?: string): Promise<void>`, and the complete invocation-handle surface.
 
 ## Coverage and quality metrics
 

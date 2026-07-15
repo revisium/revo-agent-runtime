@@ -3,8 +3,9 @@
 ## Purpose and status
 
 `@revisium/revo-agent-runtime` will expose one process-local `AgentManager` for exact, versioned AI-agent invocations. Native
-Codex, native Claude, and ACP will share one discovery, process, observability, cancellation, JSON-result, and output-file
-boundary without taking ownership of consumer orchestration or durable workflow state.
+Codex, native Claude, and ACP will share one registry-access, executable-probing, process, observability, cancellation,
+shutdown/reaping, JSON-result, and output-file boundary without taking ownership of consumer orchestration or durable
+workflow state.
 
 The implementation described here is a target. The bootstrap package still exports an empty root. The normative public
 target is [the AgentManager v1 specification](./specs/agent-manager-v1.spec.md).
@@ -14,7 +15,8 @@ target is [the AgentManager v1 specification](./specs/agent-manager-v1.spec.md).
 1. The consumer loads all immutable versioned agent definitions and constructs one manager.
 2. Construction validates plain JSON definitions, canonical-serializes and SHA-256 digests them, parses package-owned
    copies, drops caller references, and seals the registry.
-3. The consumer lists or probes exact agents and may subscribe to all future events.
+3. The consumer reads exact agents from the sealed registry, may run an executable probe, and may subscribe to future
+   events.
 4. The consumer starts an exact `{ id, version }` with an opaque invocation id, dynamic inputs, a JSON Schema result
    contract, and one exact output directory.
 5. The manager snapshots agent identity and definition digest. Execution never rereads the registry.
@@ -22,7 +24,12 @@ target is [the AgentManager v1 specification](./specs/agent-manager-v1.spec.md).
 7. The manager parses one top-level JSON object, validates it, attempts atomic terminal recording, retains a bounded
    process-local completion even after late recording failure, delivers exactly one process-local terminal event, and
    resolves result waiters.
-8. The consumer decides retry, workflow, gate, indexing, retention, or recovery behavior.
+8. The consumer shuts down the manager. Successful close stops acceptance, drains typed invocation completions, confirms
+   kill/reap of owned invocation/probe processes, finishes terminal recording/events, then clears listeners.
+9. A failed ownership confirmation rejects shutdown and leaves the manager permanently failed-closed. The consumer escalates
+   host termination and creates no replacement in that supervision domain until ownership is resolved.
+10. The consumer decides replacement in a resolved/new domain, retry, workflow, gate, indexing, retention, or restart
+    recovery.
 
 ## Target production structure
 
@@ -36,7 +43,8 @@ src/
 │   └── manager/
 │       ├── agent-manager.ts
 │       ├── completed-invocations.ts
-│       └── subscriptions.ts
+│       ├── subscriptions.ts
+│       └── shutdown.ts
 ├── runtime/
 │   ├── spec/
 │   │   ├── agent-definition.ts
@@ -91,7 +99,7 @@ src/
 | `strategies/permissions`   | Translation of provider-neutral validated permission data into one provider invocation.       | Authorization policy or approval workflow decisions.                |
 | `platform/process`         | Explicit environment, strict SemVer probe, spawn, stdio, deadlines, kill, and reaping.        | Agent selection, credential policy, result semantics.               |
 | `platform/filesystem`      | Exclusive leaf/result creation, `.scratch`, bounded recording, and flush mechanics.           | Path construction, indexing, retention, restart recovery.           |
-| `application`              | Public manager composition, discovery, process-local active/completed records, subscriptions. | Provider branches by agent id, durable state, scheduling, retries.  |
+| `application`              | Manager composition, registry/probe coordination, records, subscriptions, and shutdown.       | Provider branches by agent id, durable state, scheduling, retries.  |
 | `testing`                  | Deliberately published fakes or conformance harnesses after demonstrated consumer demand.     | Repository-only fixtures or a second production API.                |
 | root `index.ts`            | Curated public exports implemented and proven together.                                       | Deep implementation barrels or accidental testing exports.          |
 
@@ -139,11 +147,44 @@ probes. A green empty graph alone is not accepted as evidence that the rules wor
 ## AgentManager boundary
 
 The manager owns a sealed definition registry and one process-local supervision domain. It may list and probe agents,
-subscribe to events from all or one invocation, start and cancel work, list active and retained completed invocations, and
-return the same terminal result through handle, lookup, wait, and terminal-event paths.
+subscribe to events from all or one invocation, start and cancel work, list active and retained completed invocations,
+return the same terminal result through handle, lookup, wait, and terminal-event paths, and shut down every process it owns.
+
+The complete method set is summarized here only by responsibility; the
+[AgentManager v1 specification](./specs/agent-manager-v1.spec.md) owns signatures and behavior.
+
+| Responsibility             | API surface                                                      |
+| -------------------------- | ---------------------------------------------------------------- |
+| Composition and faults     | `createAgentManager`, `AgentManagerError`                        |
+| Pure sealed-registry reads | `listAgents`, `getAgent`                                         |
+| Process-creating probe     | `probeAgent`                                                     |
+| Future event observation   | `subscribe` plus returned `Unsubscribe`                          |
+| Invocation acceptance      | `start` -> `AgentInvocationHandle`                               |
+| Process-local state reads  | `listInvocations`, `getInvocation`, `getResult`, `waitForResult` |
+| Handle synchronization     | handle `result`                                                  |
+| Cancellation               | handle `cancel`, manager `cancel`                                |
+| Process-local shutdown     | manager `shutdown`                                               |
+| Handle identity            | `invocationId`, immutable execution `pin`                        |
 
 The completed registry is bounded FIFO. Eviction makes an invocation unknown to the manager and does not touch consumer
 files. The consumer owns durable indexing and may retain output-directory coordinates in its own attempt record.
+
+Shutdown is the manager's concurrency-safe, idempotent process-local lifecycle boundary. Acceptance and closing have one
+atomic boundary: a racing start is either accepted and drained or rejected without a handle or process. Closing rejects new
+starts, probes, and subscriptions, cancels all active invocations, attempts termination, and requires confirmed reap of every
+owned invocation/probe process. Successful closing waits through terminal output finalization and event delivery and only
+then clears listeners. It does not independently clear or evict completed records; drain completions use normal bounded FIFO
+and may evict older records. Handles retain their resolved results, process-local reads keep normal active/retained/unknown
+semantics, and consumer output directories are never removed.
+
+The first shutdown owns one shared settlement. Failure to confirm kill/reap rejects it with non-retryable
+`revo.agent.shutdown_failed` and leaves the manager permanently failed-closed. New start/probe/subscription operations remain
+closed, while registry and state reads remain available. An unreaped invocation remains active and is never falsely
+completed. The consumer escalates host termination and does not create a replacement in the same supervision domain until
+ownership is externally resolved.
+
+This lifecycle ownership does not make the package a workflow engine. The consumer still decides when to replace a closed
+manager in a safe domain, retry or reschedule work, reconcile durable workflow state, and perform restart recovery.
 
 Manager construction and invocation acceptance defensively copy JSON through canonical serialization and parse. Execution
 retains no caller-owned definition, metadata, parameter, permission, result-schema, limit, or environment container. The
@@ -197,7 +238,9 @@ The package does not own:
 - **Determinism:** exact agent refs, canonical full-definition digests, defensive input snapshots, and deterministic bounded
   argv expansion are immutable per invocation.
 - **Security:** output conflicts fail closed; secrets and unbounded provider data do not reach subscribers, files, or faults.
-- **Cancellation:** abort propagates through protocol shutdown and authoritative process kill/reap.
+- **Cancellation and shutdown:** abort and manager close propagate through protocol shutdown and authoritative process
+  kill/reap; successful shutdown reaches typed completion before listeners are cleared, and unconfirmed ownership fails
+  closed.
 - **Backpressure:** every event, file, response, and completed registry has a hard bound; v1 has no hidden async event queue.
 - **Portability:** public durable contracts are provider-neutral JSON values and core logic does not depend on a consumer
   framework or database.

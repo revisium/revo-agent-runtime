@@ -15,6 +15,14 @@ Block the change when any of the following applies:
   after snapshotting an exact definition digest.
 - A live accepted invocation can deliver zero or multiple process-local terminal events, omit the completed record before
   delivery, or return different completed values through handle, lookup, wait, and event paths.
+- Shutdown is not idempotent/concurrency-safe, admits a racing start outside its drain set, resolves without confirmed
+  invocation/probe kill and reap, clears listeners before terminal delivery, rejects because an invocation failed, performs
+  an independent completed-record clear/eviction pass, bypasses normal bounded FIFO, or deletes consumer output directories.
+- Unconfirmed kill/reap does not reject the shared completion with bounded/redacted non-retryable
+  `revo.agent.shutdown_failed`, a later shutdown observes a different settlement, or an affected invocation is falsely
+  completed instead of remaining active, or consumer guidance permits same-domain replacement before ownership resolves.
+- A closed or shutdown-failed manager accepts a new start/probe/subscription, makes registry/state reads or existing handles
+  unusable, or reports closure with anything other than the stable bounded `revo.agent.manager_closed` fault.
 - Late recording failure strands result waiters, recursively retries a failed result commit, claims a missing `result.json`
   exists, mutates a successfully committed result after terminal-event append failure, or treats filesystem exactly-once as
   guaranteed.

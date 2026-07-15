@@ -19,8 +19,9 @@
 
 `@revisium/revo-agent-runtime` will provide one framework-independent `AgentManager` for invoking native command-line and
 ACP agents. The consumer supplies all immutable versioned definitions at construction, chooses one exact agent version for
-each invocation, and provides one exact output directory. The package will normalize discovery, process lifecycle, bounded
-redacted events and files, cancellation, usage, typed failures, and validated JSON results.
+each invocation, and provides one exact output directory. The package will normalize sealed-registry reads, executable
+probing, process lifecycle, bounded redacted events and files, cancellation, shutdown/reaping, usage, typed failures, and
+validated JSON results.
 
 The consumer retains orchestration, runs/steps/attempts, durable retry and workflow state, definition storage, path
 construction, file retention, restart recovery, and product verdicts. Git, GitHub, and other deterministic system operations
@@ -114,10 +115,10 @@ const codexDefinition = {
 } as const;
 ```
 
-### Create, discover, and observe
+### Create, read the registry, probe, and observe
 
 ```ts
-import { createAgentManager } from '@revisium/revo-agent-runtime';
+import { AgentManagerError, createAgentManager } from '@revisium/revo-agent-runtime';
 
 const manager = createAgentManager({
   definitions: [codexDefinition, claudeDefinition, acpDefinition],
@@ -133,6 +134,16 @@ const agents = manager.listAgents();
 const codex = manager.getAgent({ id: 'codex', version: '1.0.0' });
 const availability = await manager.probeAgent({ id: 'codex', version: '1.0.0' });
 
+if (codex === undefined) {
+  throw new Error('Exact agent version is not registered');
+}
+
+if (availability.status === 'unavailable') {
+  reportAgentFault(availability.error);
+} else {
+  recordAvailableAgent(availability);
+}
+
 const stopAll = manager.subscribe({}, (event) => {
   publishAgentEvent(event);
 });
@@ -140,6 +151,30 @@ const stopAll = manager.subscribe({}, (event) => {
 
 The registry is immutable. V1 has no `register`, `replace`, latest-version, or fallback API. Construct a new manager to use a
 new definition set.
+
+### Complete target API
+
+This is the complete v1 consumer surface. Exact types and semantics remain authoritative in the
+[draft specification](./docs/specs/agent-manager-v1.spec.md).
+
+| Surface | Target signature                                                                                    | Purpose                                                                           |
+| ------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Factory | `createAgentManager(options: AgentManagerOptions): AgentManager`                                    | Validate definitions and create one sealed process-local manager.                 |
+| Error   | `AgentManagerError extends Error { readonly fault: AgentFault }`                                    | Expose bounded stable public faults for failed manager operations.                |
+| Manager | `listAgents(): readonly AgentDescriptor[]`                                                          | Purely read every exact sealed-registry version.                                  |
+| Manager | `getAgent(agent: AgentRef): AgentDescriptor \| undefined`                                           | Purely read one exact sealed-registry version.                                    |
+| Manager | `probeAgent(agent: AgentRef): Promise<AgentProbeResult>`                                            | Run a bounded process probe for executable/version compatibility.                 |
+| Manager | `subscribe(filter: AgentEventFilter, listener: AgentEventListener): Unsubscribe`                    | Observe all or filtered future events; call the returned function to unsubscribe. |
+| Manager | `start(request: StartAgentInvocation, context?: AgentStartContext): Promise<AgentInvocationHandle>` | Accept one exact invocation and optional ephemeral signal/environment.            |
+| Manager | `listInvocations(filter?: AgentInvocationFilter): readonly AgentInvocationSnapshot[]`               | List active and retained completed invocations.                                   |
+| Manager | `getInvocation(invocationId: string): AgentInvocationSnapshot \| undefined`                         | Read one active or retained snapshot.                                             |
+| Manager | `getResult(invocationId: string): AgentResultLookup`                                                | Distinguish `running`, `completed`, and `unknown` without waiting.                |
+| Manager | `waitForResult(invocationId: string): Promise<AgentInvocationResult>`                               | Wait for active, return retained completion immediately, or reject unknown.       |
+| Manager | `cancel(invocationId: string, reason?: string): Promise<CancelInvocationResult>`                    | Return `requested`, `already_completed`, or `unknown`.                            |
+| Manager | `shutdown(reason?: string): Promise<void>`                                                          | Share one close/drain completion or typed shutdown failure.                       |
+| Handle  | `readonly invocationId: string`, `readonly pin: AgentExecutionPin`                                  | Expose the opaque id and exact agent execution pin.                               |
+| Handle  | `result(): Promise<AgentInvocationResult>`                                                          | Resolve the typed terminal result, including execution failure.                   |
+| Handle  | `cancel(reason?: string): Promise<CancelInvocationResult>`                                          | Cancel this invocation through the same manager contract.                         |
 
 ### Start one exact invocation
 
@@ -197,6 +232,8 @@ const handle = await manager.start(
     },
   },
 );
+
+recordExecutionPin(handle.invocationId, handle.pin);
 ```
 
 The child receives no wholesale `process.env`. Only named inherited values and explicit variables are copied; both are
@@ -221,7 +258,11 @@ exclusively and never replaces an existing path.
 ### Obtain the result
 
 ```ts
+const waitingById = manager.waitForResult(invocationId); // waits because this invocation is active
 const result = await handle.result();
+const sameResult = await waitingById;
+
+confirmSameTerminalValue(result, sameResult);
 
 if (result.status === 'succeeded') {
   consumeRoleResult(result.value);
@@ -237,17 +278,51 @@ There is no text-success contract.
 The terminal result is not event-only. It remains available while retained by this manager:
 
 ```ts
-const lookup = manager.getResult(invocationId);
+const activeInvocations = manager.listInvocations({
+  statuses: ['accepted', 'starting', 'running', 'cancelling'],
+});
 
-if (lookup.state === 'completed') {
-  consumeCompletedResult(lookup.result);
+const snapshot = manager.getInvocation(invocationId);
+if (snapshot !== undefined) {
+  renderInvocation(snapshot);
 }
 
-const sameResult = await manager.waitForResult(invocationId);
+const unknownSnapshot = manager.getInvocation('unknown-or-evicted-id'); // undefined
+
+const lookup = manager.getResult(invocationId);
+
+switch (lookup.state) {
+  case 'running':
+    renderInvocation(lookup.invocation);
+    break;
+  case 'completed':
+    consumeCompletedResult(lookup.result);
+    break;
+  case 'unknown':
+    reportUnknownInvocation(invocationId);
+    break;
+}
+
+const retainedResult = await manager.waitForResult(invocationId); // returns immediately now
+
+try {
+  await manager.waitForResult('unknown-or-evicted-id');
+} catch (error: unknown) {
+  if (error instanceof AgentManagerError && error.fault.code === 'revo.agent.invocation_unknown') {
+    reportUnknownInvocation('unknown-or-evicted-id');
+  } else {
+    throw error;
+  }
+}
 
 const terminalInvocations = manager.listInvocations({
   statuses: ['succeeded', 'failed', 'cancelled', 'timed_out'],
 });
+
+void activeInvocations;
+void retainedResult;
+void terminalInvocations;
+void unknownSnapshot;
 
 stopOne();
 stopAll();
@@ -266,10 +341,77 @@ Cancellation is a separate flow; it is not required before awaiting an ordinary 
 const cancellable = await manager.start(cancellationRequest);
 
 const cancellation = await manager.cancel(cancellable.invocationId, 'Pipeline was cancelled');
-// Equivalent: await cancellable.cancel('Pipeline was cancelled');
+
+switch (cancellation.state) {
+  case 'requested':
+    renderCancellationRequested(cancellable.invocationId);
+    break;
+  case 'already_completed':
+    consumeCompletedResult(cancellation.result);
+    break;
+  case 'unknown':
+    reportUnknownInvocation(cancellable.invocationId);
+    break;
+}
+
+// The handle exposes the same idempotent cancellation contract.
+const repeatedCancellation = await cancellable.cancel('Pipeline was cancelled');
 
 const cancelledResult = await cancellable.result();
+
+void repeatedCancellation;
+void cancelledResult;
 ```
+
+### Shut down the manager
+
+The host closes the process-local manager during its own lifecycle shutdown. Concurrent and later calls share one
+fulfillment or rejection. Fulfillment means every accepted invocation reached a typed terminal result and every owned
+invocation or probe process was killed and reaped.
+
+```ts
+const firstShutdown = manager.shutdown('Consumer is stopping');
+const concurrentShutdown = manager.shutdown('Consumer is stopping');
+
+try {
+  await Promise.all([firstShutdown, concurrentShutdown]);
+} catch (error: unknown) {
+  if (error instanceof AgentManagerError && error.fault.code === 'revo.agent.shutdown_failed') {
+    escalateHostTermination(error.fault);
+  }
+  throw error;
+}
+
+// Retained state remains readable after shutdown; output directories are untouched.
+const finalSnapshot = manager.getInvocation(invocationId);
+const finalLookup = manager.getResult(invocationId);
+const finalResult = await handle.result();
+
+try {
+  await manager.start(nextInvocation);
+} catch (error: unknown) {
+  if (error instanceof AgentManagerError && error.fault.code === 'revo.agent.manager_closed') {
+    reportClosedManager();
+  } else {
+    throw error;
+  }
+}
+
+void finalSnapshot;
+void finalLookup;
+void finalResult;
+```
+
+After closing begins, process-creating `start` and `probeAgent` calls reject, while observation-creating `subscribe` throws
+synchronously, with `revo.agent.manager_closed`. Pure sealed-registry reads (`listAgents`, `getAgent`) and process-local state
+reads (`listInvocations`, `getInvocation`, `getResult`, `waitForResult`) remain available.
+
+Shutdown has no separate record-clearing pass. Drain completions use normal bounded FIFO retention and may evict older
+records; each existing handle still retains its resolved result. If kill/reap ownership cannot be confirmed, the shared
+promise rejects once with non-retryable `revo.agent.shutdown_failed`, the affected invocation remains active rather than
+being falsely completed, and the manager stays failed-closed. The consumer must escalate host termination and must not
+create a replacement in that supervision domain until ownership is resolved. Workflow transitions, retries, durable state,
+and restart recovery remain consumer-owned.
 
 ## Requirements
 
