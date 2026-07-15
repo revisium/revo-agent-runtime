@@ -6,6 +6,7 @@
   results, events, files, bounds, errors, and invariants. It is not implemented yet.
 - [Architecture](./architecture.md) — target folders, file responsibilities, dependency direction, and ownership boundary.
 - [Testing](./testing.md) — proof layers, architecture/package gates, and implementation test requirements.
+- [Expanded consumer example](./examples/consumer.md) — complete target Codex definition and invocation setup.
 
 ## Decisions
 
