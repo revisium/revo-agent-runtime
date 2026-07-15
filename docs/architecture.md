@@ -1,47 +1,205 @@
 # Architecture
 
-## Purpose
+## Purpose and status
 
-`@revisium/revo-agent-runtime` executes one resolved AI-agent invocation. It gives native command-line runners and ACP the same process, observability, result, and cancellation boundary while remaining independent from any workflow engine or product database.
+`@revisium/revo-agent-runtime` will expose one process-local `AgentManager` for exact, versioned AI-agent invocations. Native
+Codex, native Claude, and ACP will share one discovery, process, observability, cancellation, JSON-result, and output-file
+boundary without taking ownership of consumer orchestration or durable workflow state.
 
-## Runtime flow
+The implementation described here is a target. The bootstrap package still exports an empty root. The normative public
+target is [the AgentManager v1 specification](./specs/agent-manager-v1.spec.md).
 
-1. The consumer selects a runner, model, permissions, and workspace while compiling its immutable execution plan.
-2. The consumer passes a complete invocation specification and ephemeral host context to the runtime.
-3. The runtime validates the pin and resolves only package-owned strategy identifiers.
-4. A native command-line or ACP adapter executes one physical attempt through the shared process lifecycle.
-5. The runtime bounds and redacts ordered events, diagnostics, terminal tails, and artifact data before forwarding them to consumer-provided sinks.
-6. The runtime returns a normalized outcome. The consumer persists it and decides retry, workflow, gate, or terminal behavior.
+## Consumer flow
 
-The runtime never reads a mutable runner catalog during execution or recovery. Missing pinned strategies fail closed.
+1. The consumer loads all immutable versioned agent definitions and constructs one manager.
+2. Construction validates plain JSON definitions, canonical-serializes and SHA-256 digests them, parses package-owned
+   copies, drops caller references, and seals the registry.
+3. The consumer lists or probes exact agents and may subscribe to all future events.
+4. The consumer starts an exact `{ id, version }` with an opaque invocation id, dynamic inputs, a JSON Schema result
+   contract, and one exact output directory.
+5. The manager snapshots agent identity and definition digest. Execution never rereads the registry.
+6. One native or ACP adapter runs the physical process while the manager bounds, redacts, records, and publishes events.
+7. The manager parses one top-level JSON object, validates it, attempts atomic terminal recording, retains a bounded
+   process-local completion even after late recording failure, delivers exactly one process-local terminal event, and
+   resolves result waiters.
+8. The consumer decides retry, workflow, gate, indexing, retention, or recovery behavior.
 
-## Internal areas
+## Target production structure
 
-- **contracts** — JSON-compatible invocation, outcome, event, error, usage, and provenance types;
-- **manifest** — runner manifest schema and validation;
-- **strategies** — sealed protocol-driver, stdout-parser, and permission-style registry;
-- **process** — spawn, stdio, deadlines, cancellation, kill, and reaping;
-- **adapters** — Codex, Claude, and ACP implementations behind package-owned contracts;
-- **observability** — bounded redaction, events, terminal tails, and artifact-sink coordination;
-- **testing** — reusable adapter conformance fixtures and deterministic fakes.
+The first implementation should grow vertically inside this structure. This document does not require empty placeholder
+directories or files.
 
-These are ownership areas, not a commitment to separate npm packages or public subpaths.
+```text
+src/
+├── application/
+│   ├── create-agent-manager.ts
+│   └── manager/
+│       ├── agent-manager.ts
+│       ├── completed-invocations.ts
+│       └── subscriptions.ts
+├── runtime/
+│   ├── spec/
+│   │   ├── agent-definition.ts
+│   │   ├── agent-event.ts
+│   │   ├── agent-fault.ts
+│   │   ├── agent-invocation.ts
+│   │   ├── agent-result.ts
+│   │   └── json.ts
+│   ├── definition/
+│   │   ├── definition-digest.ts
+│   │   └── validate-definition.ts
+│   ├── registry/
+│   │   └── sealed-agent-registry.ts
+│   └── execution/
+│       ├── invocation-executor.ts
+│       ├── lifecycle.ts
+│       ├── input-snapshot.ts
+│       ├── argument-builder.ts
+│       ├── result-collector.ts
+│       ├── execution-ports.ts
+│       └── limits.ts
+├── strategies/
+│   ├── protocol/
+│   │   ├── native/
+│   │   └── acp/
+│   ├── result-parser/
+│   │   ├── codex/
+│   │   └── claude/
+│   └── permissions/
+│       ├── codex/
+│       ├── claude/
+│       └── acp/
+├── platform/
+│   ├── process/
+│   │   └── environment.ts
+│   └── filesystem/
+│       └── invocation-files.ts
+├── testing/                  # only after a real published consumer need
+└── index.ts
+```
+
+## File and area responsibilities
+
+| Area                       | Owns                                                                                          | Must not own                                                        |
+| -------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `runtime/spec`             | Provider-neutral JSON-compatible public types, stable statuses, event and error contracts.    | Node APIs, process code, files, strategies, composition, test code. |
+| `runtime/definition`       | Closed definition/template/range validation, RFC 8785 canonicalization, SHA-256 digest.       | Mutable registration, execution, process or filesystem access.      |
+| `runtime/registry`         | Exact `{ id, version }` lookup over one sealed immutable definition set.                      | Latest/fallback resolution, mutation after construction, execution. |
+| `runtime/execution`        | Input snapshots, bounded argv, one state machine, result validation, ports, and finalization. | Consumer workflow concepts, concrete Node or provider mechanics.    |
+| `strategies/protocol`      | Native stdio and ACP framing behind execution ports.                                          | Manager composition, durable workflow state, direct file policy.    |
+| `strategies/result-parser` | Bounded provider-specific extraction of the final response and usage.                         | Product verdicts or consumer JSON Schema selection.                 |
+| `strategies/permissions`   | Translation of provider-neutral validated permission data into one provider invocation.       | Authorization policy or approval workflow decisions.                |
+| `platform/process`         | Explicit environment, strict SemVer probe, spawn, stdio, deadlines, kill, and reaping.        | Agent selection, credential policy, result semantics.               |
+| `platform/filesystem`      | Exclusive leaf/result creation, `.scratch`, bounded recording, and flush mechanics.           | Path construction, indexing, retention, restart recovery.           |
+| `application`              | Public manager composition, discovery, process-local active/completed records, subscriptions. | Provider branches by agent id, durable state, scheduling, retries.  |
+| `testing`                  | Deliberately published fakes or conformance harnesses after demonstrated consumer demand.     | Repository-only fixtures or a second production API.                |
+| root `index.ts`            | Curated public exports implemented and proven together.                                       | Deep implementation barrels or accidental testing exports.          |
+
+Tests mirror behavior rather than production folders:
+
+```text
+test/
+├── unit/          # introduced only with owned pure behavior
+├── contract/      # introduced only with public runtime behavior
+├── integration/   # introduced only with process/filesystem/consumer behavior
+├── package/       # currently owns bootstrap entrypoint and metadata proof
+└── support/       # introduced only when repeated typed mechanics exist
+```
+
+## Dependency direction
+
+`runtime/spec` is the portable leaf. Definition and registry logic build immutable identity. Execution depends on public
+contracts and its own ports, not concrete process or filesystem implementations. Strategies and platform adapters implement
+those ports. Application composition may depend on all production areas and is the only place that wires them together.
+
+```text
+                         runtime/spec
+                         ^    ^    ^
+                         |    |    |
+runtime/definition ------+    |    +------ runtime/execution
+          ^                   |                ^       ^
+          |                   |                |       |
+runtime/registry -------------+          strategies  platform
+          ^                                      ^       ^
+          +---------------- application ----------+-------+
+```
+
+Forbidden directions include:
+
+- `runtime/spec` to any other production area;
+- definition or registry to execution, strategy, platform, application, or testing code;
+- execution to concrete strategies, platform, application, or testing code;
+- strategy or platform adapters to application or testing code;
+- production code to repository scripts, tests, generated output, or consumer applications;
+- consumer integration tests to private source modules once that lane exists.
+
+The committed architecture verification runs the positive graph and synthesizes representative forbidden-import and cycle
+probes. A green empty graph alone is not accepted as evidence that the rules work.
+
+## AgentManager boundary
+
+The manager owns a sealed definition registry and one process-local supervision domain. It may list and probe agents,
+subscribe to events from all or one invocation, start and cancel work, list active and retained completed invocations, and
+return the same terminal result through handle, lookup, wait, and terminal-event paths.
+
+The completed registry is bounded FIFO. Eviction makes an invocation unknown to the manager and does not touch consumer
+files. The consumer owns durable indexing and may retain output-directory coordinates in its own attempt record.
+
+Manager construction and invocation acceptance defensively copy JSON through canonical serialization and parse. Execution
+retains no caller-owned definition, metadata, parameter, permission, result-schema, limit, or environment container. The
+ephemeral start context explicitly allowlists inherited environment names and separates non-secret variables from secret
+credentials. No child receives wholesale `process.env`; secret values join streaming redaction before spawn and are
+discarded after finalization. Inherited and variable values are deliberately non-confidential and cannot use credential-like
+names.
+
+Definitions are data; protocol drivers, result parsers, permission translators, process execution, and filesystem behavior
+are package code. Adding an agent that uses existing strategies requires a new versioned definition, not an agent-id branch
+in manager or consumer code. Adding genuinely new protocol or parsing behavior requires a package change and conformance
+proof.
+
+## Output and observability boundary
+
+The consumer supplies the exact invocation directory whose leaf must not exist. The manager creates parents, atomically
+creates the leaf without adopting `EEXIST`, and owns `.scratch` plus five reserved filenames: `events.ndjson`, `stdout.log`,
+`stderr.log`, failure-only `raw-final-response.txt`, and exclusive `result.json`. Result publication uses a flushed
+same-directory temp plus non-replacing hard link. The manager never derives hierarchy, overwrites, deletes, rotates, or
+chooses retention for consumer evidence. Controlled completion deletes only manager-owned scratch/temp paths; crash residue
+may survive until consumer recovery or retention removes the directory.
+
+Events, stream data, result diagnostics, and files are bounded and redacted before leaving their owning boundary. The event
+recorder reserves a relationally valid tail for one truncation diagnostic and one terminal event. Late I/O failure may leave
+`result.json` absent or omit the terminal NDJSON line; those are incomplete audit records. The live manager still commits one
+completed record and delivers exactly one process-local `invocation.finished`. Synchronous listeners do not create hidden
+queues; listener failures are isolated from execution.
 
 ## ACP boundary
 
-ACP is a private adapter to the same invocation contract as native command-line runners. Third-party SDK types do not cross the public package boundary. An official ACP SDK may replace package-owned framing only after conformance tests prove parity for correlation, hostile input, permissions, cancellation, diagnostics, and process/session isolation.
+ACP is a private adapter to the same invocation contract as native command-line runners. Third-party SDK types do not cross
+the public package boundary. An official ACP SDK may replace package-owned framing only after conformance tests prove parity
+for correlation, hostile input, permissions, cancellation, diagnostics, bounds, and process/session isolation.
 
-The initial lifecycle is attempt-scoped: one physical attempt owns one process, at most one ACP session, and one top-level prompt. Pooling and cross-attempt session resume are outside the initial boundary.
+The initial lifecycle is invocation-scoped: one physical invocation owns one process, at most one ACP session, and one
+top-level prompt. Pooling and cross-invocation session resume are deferred.
 
-## Observability boundary
+## Consumer-owned responsibilities
 
-The runtime owns normalization, ordering, bounds, redaction, terminal tails, and sink-delivery semantics. The consumer owns durable files and database rows, fan-in, cursor APIs, retention, and user-facing projections. Temporary protocol files are invocation scratch, not durable product artifacts.
+The package does not own:
+
+- definition storage or rollout;
+- choosing an agent version, model, workspace, prompt, or result schema;
+- Revo runs, steps, attempts, pipelines, gates, scheduling, or retry policy;
+- path construction, durable indexing, file retention, restart recovery, or user-facing log projections;
+- Git, GitHub, or other deterministic system operations;
+- credentials policy, billing policy, or product verdict interpretation.
 
 ## Quality attributes
 
-- **Replay safety:** execution uses complete immutable pins and package-owned strategy identifiers.
-- **Security:** secrets stay outside durable specifications; output is bounded and redacted before sinks.
+- **Determinism:** exact agent refs, canonical full-definition digests, defensive input snapshots, and deterministic bounded
+  argv expansion are immutable per invocation.
+- **Security:** output conflicts fail closed; secrets and unbounded provider data do not reach subscribers, files, or faults.
 - **Cancellation:** abort propagates through protocol shutdown and authoritative process kill/reap.
-- **Backpressure:** event and byte limits are explicit in the invocation contract; unbounded in-memory terminal capture is forbidden.
-- **Portability:** the core does not depend on consumer frameworks or persistence.
-- **Testability:** every adapter passes one shared invocation, event, error, cancellation, and result contract suite.
+- **Backpressure:** every event, file, response, and completed registry has a hard bound; v1 has no hidden async event queue.
+- **Portability:** public durable contracts are provider-neutral JSON values and core logic does not depend on a consumer
+  framework or database.
+- **Testability:** adapters share one lifecycle/result suite; architecture verification proves both allowed and forbidden
+  dependency directions.

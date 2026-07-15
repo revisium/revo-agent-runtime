@@ -2,7 +2,7 @@
 
 # @revisium/revo-agent-runtime
 
-**A portable, attempt-scoped execution runtime for AI agents.**
+**A portable runtime and process-local manager for exact, versioned AI-agent invocations.**
 
 [![CI](https://github.com/revisium/revo-agent-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/revisium/revo-agent-runtime/actions/workflows/ci.yml)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=revisium_revo-agent-runtime&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=revisium_revo-agent-runtime)
@@ -12,69 +12,264 @@
 </div>
 
 > [!IMPORTANT]
-> The repository is in its bootstrap phase. The npm package has not been published and no runtime API is available yet.
+> The repository is in bootstrap. The npm package has not been published and its root export is intentionally empty. The
+> AgentManager API below is a target specification, not available code.
 
 ## About
 
-`@revisium/revo-agent-runtime` will provide one framework-independent boundary for invoking AI agents through native command-line protocols and Agent Client Protocol (ACP). The runtime will normalize process lifecycle, protocol handling, bounded events, usage, artifacts, and terminal outcomes without taking ownership of orchestration or durable product state.
+`@revisium/revo-agent-runtime` will provide one framework-independent `AgentManager` for invoking native command-line and
+ACP agents. The consumer supplies all immutable versioned definitions at construction, chooses one exact agent version for
+each invocation, and provides one exact output directory. The package will normalize discovery, process lifecycle, bounded
+redacted events and files, cancellation, usage, typed failures, and validated JSON results.
 
-This initial revision intentionally contains only the package toolchain, quality gates, and target architecture documentation. The runtime API shown below is a design target and is not exported yet.
+The consumer retains orchestration, runs/steps/attempts, durable retry and workflow state, definition storage, path
+construction, file retention, restart recovery, and product verdicts. Git, GitHub, and other deterministic system operations
+belong to `@revisium/revo-scripts`; the packages do not depend on each other.
 
-## Boundary
-
-The package will own:
-
-- an attempt-scoped invocation contract and normalized outcome;
-- runner manifest validation and sealed protocol/parser/permission strategies;
-- Codex, Claude, and ACP adapters;
-- process spawning, standard streams, deadlines, cancellation, and reaping;
-- bounded, redacted execution events and opaque artifact references;
-- contract fixtures for consumers and adapter implementations.
-
-The consuming orchestrator keeps ownership of runner selection, immutable execution-plan pins, prompts, workspaces, durable retries, pipelines, gates, persistence, and public API projections. Git, GitHub, and other deterministic system operations belong to `@revisium/revo-scripts`; the two packages do not depend on each other.
-
-See [the architecture overview](./docs/architecture.md), [ADR-0001](./docs/adr/0001-agent-runtime-boundary.md), and [the repository contract](./REPOSITORY.md) for the complete ownership rules.
+See the [AgentManager v1 draft specification](./docs/specs/agent-manager-v1.spec.md),
+[architecture](./docs/architecture.md), [decisions](./docs/README.md), and
+[repository contract](./REPOSITORY.md).
 
 ## Target consumer usage
 
-The intended consumer shape is one fully resolved invocation in and one normalized outcome out. Names in this example remain provisional until the first public contract is implemented.
+The complete example below is deliberately marked target-only. It illustrates the intended public API; these names are not
+exported yet.
+
+### Define an agent
+
+Definitions are versioned data. The manager validates and seals the complete set at construction. Adding a new agent that
+uses existing package strategies requires data, not a consumer executor branch.
 
 ```ts
-import { createAgentRuntime } from '@revisium/revo-agent-runtime';
+const codexDefinition = {
+  schemaVersion: 'agent-definition/v1',
+  id: 'codex',
+  version: '1.0.0',
+  displayName: 'Codex CLI',
+  description: 'Runs one Codex invocation through the native JSONL protocol.',
+  launch: {
+    command: 'codex',
+    args: [
+      { kind: 'literal', value: 'exec' },
+      { kind: 'literal', value: '--json' },
+      { kind: 'literal', value: '--output-schema' },
+      { kind: 'result-schema-file' },
+      { kind: 'literal', value: '--sandbox' },
+      { kind: 'permission', name: 'mode' },
+      { kind: 'permission', name: 'network' },
+      { kind: 'literal', value: '--model' },
+      { kind: 'parameter', name: 'model' },
+      { kind: 'prompt' },
+    ],
+    versionProbe: {
+      args: ['--version'],
+      stream: 'stdout',
+      prefix: 'codex-cli ',
+      timeoutMs: 5_000,
+    },
+  },
+  protocol: {
+    driver: 'native/stdio-v1',
+    resultParser: 'codex-jsonl/v1',
+    permissionStrategy: 'codex-cli/v1',
+  },
+  delivery: {
+    prompt: 'argument',
+    resultSchema: 'file',
+    result: 'stdout',
+  },
+  parameters: {
+    schema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      properties: {
+        model: { type: 'string', minLength: 1, maxLength: 128 },
+      },
+      required: ['model'],
+      additionalProperties: false,
+    },
+  },
+  permissions: {
+    schema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      properties: {
+        mode: { enum: ['read-only', 'workspace-write'] },
+        network: { type: 'boolean' },
+      },
+      required: ['mode', 'network'],
+      additionalProperties: false,
+    },
+    defaults: { mode: 'read-only', network: false },
+  },
+  capabilities: {
+    cancellation: true,
+    structuredResult: true,
+    usage: true,
+  },
+  constraints: {
+    platforms: ['darwin', 'linux'],
+    executableVersion: '>=1.0.0',
+  },
+} as const;
+```
 
-const runtime = createAgentRuntime({
-  strategies,
-  eventSink,
-  artifactSink,
-  redact,
+### Create, discover, and observe
+
+```ts
+import { createAgentManager } from '@revisium/revo-agent-runtime';
+
+const manager = createAgentManager({
+  definitions: [codexDefinition, claudeDefinition, acpDefinition],
+  limits: {
+    maxCompletedInvocations: 500,
+  },
+  redaction: {
+    secrets: runtimeSecrets,
+  },
 });
 
-const outcome = await runtime.invoke(
+const agents = manager.listAgents();
+const codex = manager.getAgent({ id: 'codex', version: '1.0.0' });
+const availability = await manager.probeAgent({ id: 'codex', version: '1.0.0' });
+
+const stopAll = manager.subscribe({}, (event) => {
+  publishAgentEvent(event);
+});
+```
+
+The registry is immutable. V1 has no `register`, `replace`, latest-version, or fallback API. Construct a new manager to use a
+new definition set.
+
+### Start one exact invocation
+
+The consumer chooses the opaque `invocationId` and exact directory. Revo may use an attempt id and its own nested path; the
+manager does not interpret either value.
+
+```ts
+const roleResultSchema = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  type: 'object',
+  properties: {
+    verdict: { enum: ['completed', 'blocked', 'needs_human'] },
+    output: { type: 'string' },
+    artifacts: { type: 'array', items: { type: 'object' } },
+    nextSteps: { type: 'array', items: { type: 'string' } },
+  },
+  required: ['verdict', 'output', 'artifacts', 'nextSteps'],
+  additionalProperties: false,
+} as const;
+
+const invocationId = attempt.id;
+
+const stopOne = manager.subscribe({ invocationId }, (event) => {
+  renderAttemptEvent(event);
+});
+
+const handle = await manager.start(
   {
-    schemaVersion: 'agent-invocation/v1',
-    identity: { runId, stepKey, attemptId, attemptNo },
-    runner: executionPlan.agent.runner,
-    model: executionPlan.agent.model,
-    permissions: executionPlan.agent.permissions,
-    prompt,
-    resultSchema,
+    invocationId,
+    agent: { id: 'codex', version: '1.0.0' },
+    prompt: 'Implement issue #42 and return the requested JSON object.',
+    workspace: { directory: workspace.path },
+    parameters: { model: 'gpt-5' },
+    permissions: { mode: 'workspace-write', network: false },
+    metadata: {
+      runId: run.id,
+      stepId: step.id,
+      attemptId: attempt.id,
+    },
+    result: { schema: roleResultSchema },
     limits: {
-      idleTimeoutMs: 120_000,
       wallClockTimeoutMs: 900_000,
-      maxEventBytes: 64_000,
-      maxTerminalBytes: 1_000_000,
+      idleTimeoutMs: 120_000,
+    },
+    output: {
+      directory: attempt.agentOutputDirectory,
     },
   },
   {
-    cwd: workspace.path,
     signal,
+    environment: {
+      inherit: ['PATH', 'HOME', 'TMPDIR', 'LANG'],
+      variables: { CI: 'true' },
+      secrets: { OPENAI_API_KEY: apiKey },
+    },
   },
 );
-
-await attempts.record(attemptId, outcome);
 ```
 
-The consumer supplies a complete immutable runner pin. The runtime validates and executes it without reading a mutable runner catalog or deciding which runner, model, workspace, or retry policy to use.
+The child receives no wholesale `process.env`. Only named inherited values and explicit variables are copied; both are
+non-secret and may appear if the child emits them. Credential-like keys must use `secrets`, whose values are invocation-local
+and automatically registered with streaming redaction before spawn.
+
+The output leaf must not exist. The manager creates missing parents, atomically creates that leaf for this invocation, and
+reserves:
+
+```text
+.scratch/               # ephemeral; normally removed after process reap
+events.ndjson
+stdout.log
+stderr.log
+raw-final-response.txt  # only when final response handling fails
+result.json             # atomically published when terminal commit succeeds
+```
+
+Any existing leaf is `output_conflict`; the manager never adopts, overwrites, or suffixes it. `result.json` is published
+exclusively and never replaces an existing path.
+
+### Obtain the result
+
+```ts
+const result = await handle.result();
+
+if (result.status === 'succeeded') {
+  consumeRoleResult(result.value);
+} else {
+  reportAgentFault(result.error);
+}
+```
+
+Success is only a top-level JSON object validated against the supplied draft 2020-12 schema. Missing, malformed, primitive,
+array, oversized, or schema-invalid output returns a typed failed result with a bounded redacted raw-response diagnostic.
+There is no text-success contract.
+
+The terminal result is not event-only. It remains available while retained by this manager:
+
+```ts
+const lookup = manager.getResult(invocationId);
+
+if (lookup.state === 'completed') {
+  consumeCompletedResult(lookup.result);
+}
+
+const sameResult = await manager.waitForResult(invocationId);
+
+const terminalInvocations = manager.listInvocations({
+  statuses: ['succeeded', 'failed', 'cancelled', 'timed_out'],
+});
+
+stopOne();
+stopAll();
+```
+
+Each accepted invocation delivers exactly one process-local `invocation.finished`. Before delivery, the process-local
+completed record exists, so a handler can call `getResult(invocationId)` without a race. A late filesystem failure still
+completes in memory with a typed error; `result.json` or the terminal NDJSON line may then be absent and the audit record is
+incomplete. Completed retention is bounded FIFO; eviction makes an id unknown but never deletes consumer files.
+
+### Cancel an active invocation
+
+Cancellation is a separate flow; it is not required before awaiting an ordinary result.
+
+```ts
+const cancellable = await manager.start(cancellationRequest);
+
+const cancellation = await manager.cancel(cancellable.invocationId, 'Pipeline was cancelled');
+// Equivalent: await cancellable.cancel('Pipeline was cancelled');
+
+const cancelledResult = await cancellable.result();
+```
 
 ## Requirements
 
@@ -92,16 +287,23 @@ pnpm verify
 
 Useful commands:
 
-| Command               | Purpose                                                            |
-| --------------------- | ------------------------------------------------------------------ |
-| `pnpm build`          | Build ESM JavaScript and TypeScript declarations with TypeScript 7 |
-| `pnpm format`         | Format supported repository files with Oxfmt                       |
-| `pnpm format:check`   | Verify formatting without writing files                            |
-| `pnpm lint`           | Run type-aware Oxlint and TypeScript diagnostics                   |
-| `pnpm test`           | Run the Node.js test suite                                         |
-| `pnpm test:cov`       | Run tests and write LCOV coverage                                  |
-| `pnpm verify`         | Run the complete local CI gate                                     |
-| `pnpm ci:local:sonar` | Run verification, Sonar analysis, and open-issue inspection        |
+| Command                    | Purpose                                                                 |
+| -------------------------- | ----------------------------------------------------------------------- |
+| `pnpm build`               | Build ESM JavaScript and TypeScript declarations with TypeScript 7      |
+| `pnpm format`              | Format supported repository files with Oxfmt                            |
+| `pnpm format:check`        | Verify formatting without writing files                                 |
+| `pnpm lint`                | Run type-aware Oxlint and TypeScript diagnostics                        |
+| `pnpm test`                | Run all currently owned Vitest lanes                                    |
+| `pnpm test:package`        | Prove bootstrap entrypoint and package metadata                         |
+| `pnpm test:architecture`   | Prove positive boundaries plus layer, consumer, and cycle probes        |
+| `pnpm test:cov`            | Run Vitest with v8 coverage and write `coverage/lcov.info`              |
+| `pnpm verify:package`      | Validate build metadata, tarball contents, types, ESM, and deep imports |
+| `pnpm verify:architecture` | Run the committed architecture verification harness                     |
+| `pnpm verify`              | Run the complete local CI gate                                          |
+| `pnpm ci:local:sonar`      | Run verification, Sonar analysis, and open-issue inspection             |
+
+Unit, contract, and integration lanes will be added only when their owned production behavior exists. Bootstrap does not
+use empty test scripts or permanent `passWithNoTests`.
 
 ## SonarCloud
 
@@ -118,11 +320,14 @@ An existing environment file can be reused without copying secrets:
 SONAR_ENV_FILE=/absolute/path/to/.env.sonar pnpm ci:local:sonar
 ```
 
-CI runs the same verification gate before Sonar analysis. Pull requests additionally wait for the Quality Gate and fail when open Sonar issues remain.
+CI runs the same verification gate before Sonar analysis. Pull requests additionally wait for the Quality Gate and fail
+when open Sonar issues remain.
 
 ## Package contract
 
-The package is ESM-only, uses explicit exports, emits declarations, and ships only `dist`, `README.md`, `LICENSE`, and package metadata. Package contents and type declarations are validated during `pnpm verify`. The bootstrap entry point is deliberately empty until the first invocation contract is accepted and tested.
+The package is ESM-only, uses explicit exports, emits declarations, and ships only `dist`, `README.md`, `LICENSE`, and
+package metadata. The exact packed tarball is checked through isolated runtime and strict TypeScript consumers. The bootstrap
+entrypoint remains deliberately empty until the first AgentManager slice is implemented and tested.
 
 ## License
 

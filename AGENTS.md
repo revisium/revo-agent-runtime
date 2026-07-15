@@ -11,7 +11,7 @@ This file is the repository-local contract for coding agents. When this reposito
 - Protected base branch: `master`.
 - Primary local gate: `pnpm verify`.
 - Static analysis: SonarCloud through the repository tooling and workflow committed here.
-- The bootstrap package intentionally has no runtime API yet.
+- The bootstrap package intentionally has no runtime API yet. Target AgentManager documents are not exports.
 
 ## Required reading
 
@@ -19,7 +19,7 @@ Before editing, inspect:
 
 1. `README.md` for the public package status and supported commands.
 2. `REPOSITORY.md` for source-of-truth order, ownership boundaries, and dependency direction.
-3. `docs/README.md` and the relevant architecture document or ADR.
+3. `docs/README.md`, the relevant architecture document or ADR, and the normative spec for the touched target behavior.
 4. `VERIFICATION.md` for exact required, conditional, and remote gates.
 5. `REVIEW.md` for the review blockers.
 6. `package.json`, the export map, and the relevant source and tests.
@@ -41,9 +41,17 @@ When architecture, specifications, or ADRs are added, treat their declared sourc
 - Use the smallest sufficient implementation. Add abstractions only for an existing boundary, variation, or test seam.
 - Keep each unit at one abstraction level and give it one bounded responsibility.
 - Keep business decisions separate from process, filesystem, network, provider, and presentation mechanics.
-- Keep the package attempt-scoped. Runner selection, execution planning, workspace allocation, durable retry, persistence, and pipeline transitions remain consumer responsibilities.
+- Keep the package invocation-scoped. Agent selection, execution planning, workspace allocation, durable retry, workflow
+  persistence, path construction, retention, restart recovery, and pipeline transitions remain consumer responsibilities.
 - Keep protocol and provider SDK types behind package-owned adapters. Public contracts must remain provider-neutral and JSON-compatible where they cross a durable boundary.
 - Bound and redact events, terminal output, diagnostics, and artifacts before they reach consumer sinks.
+- Never pass wholesale `process.env`; inherit only named values and register invocation secrets with streaming redaction
+  before spawn.
+- Treat inherited and explicit variable values as nonsecret; reject credential-like names outside the secrets map.
+- Defensively canonicalize and copy definition and invocation JSON. Do not retain caller-owned mutable containers.
+- Atomically claim a non-existing output leaf and publish `result.json` without replacement. Never adopt, overwrite, suffix,
+  rotate, delete consumer evidence, or derive a consumer directory hierarchy; cleanup is limited to manager-owned scratch
+  and temp paths.
 - Treat native command-line runners and ACP as adapters to one invocation contract, not independent execution paths.
 - Do not add a dependency on orchestrator, DBOS, Prisma, Nest, GraphQL, MCP, or `@revisium/revo-scripts`.
 - Model expected failures explicitly with typed results or errors. Never swallow errors silently.
@@ -58,7 +66,8 @@ When architecture, specifications, or ADRs are added, treat their declared sourc
 ## Public package contract
 
 - Public entrypoints are declared explicitly in `package.json`; filesystem layout alone never makes a module public.
-- Public TypeScript changes require runtime tests where behavior exists, type-surface coverage, declaration validation, export validation, and updated README examples.
+- Public TypeScript changes require runtime tests where behavior exists, type-surface coverage, declaration validation,
+  packed-consumer validation, export validation, and updated README examples.
 - Keep ESM-only behavior intentional. Do not add CommonJS compatibility, root barrels, fallback exports, or duplicate entrypoints without an approved compatibility requirement.
 - Runtime dependencies require a demonstrated package responsibility and dependency-DAG review.
 - Do not publish from a local machine or add publishing credentials to repository files.
