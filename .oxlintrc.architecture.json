@@ -1,0 +1,178 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["import"],
+  "rules": {
+    "import/no-cycle": ["error", { "ignoreTypes": false }]
+  },
+  "overrides": [
+    {
+      "files": ["**/src/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(?:^|/)(?:test|scripts|dist|coverage)(?:/|$)",
+                "message": "Production source must not depend on tests, repository tooling, or generated output."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/src/index.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^\\./(?:testing|strategies|platform|runtime/(?:definition|registry|execution))(?:/|$)",
+                "message": "The root entrypoint may expose only the curated public spec and application API."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/src/runtime/spec/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:\\.\\./)+(?:definition|registry|execution|application|strategies|platform|testing)(?:/|$)",
+                "message": "Runtime spec is the portable dependency leaf."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/src/runtime/definition/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:\\.\\./)+(?:registry|execution|application|strategies|platform|testing)(?:/|$)",
+                "message": "Definition identity may depend only on runtime spec and local definition modules."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/src/runtime/registry/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:\\.\\./)+(?:execution|application|strategies|platform|testing)(?:/|$)",
+                "message": "The sealed registry may depend only on runtime spec and definition identity."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/src/runtime/execution/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:\\.\\./)+(?:definition|registry|application|strategies|platform|testing)(?:/|$)",
+                "message": "Execution depends on portable spec and execution-owned ports, not concrete adapters."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/src/strategies/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:\\.\\./)+(?:application|platform|testing)(?:/|$)",
+                "message": "Strategy adapters must not depend on composition, platform adapters, or testing."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/src/platform/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:\\.\\./)+(?:application|strategies|testing)(?:/|$)",
+                "message": "Platform adapters must not depend on composition, strategies, or testing."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/src/application/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:\\.\\./)+testing(?:/|$)",
+                "message": "Production application composition must not depend on testing mechanics."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/test/integration/consumer/**/*.ts", "**/test/support/consumer/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/src/application/**",
+                  "**/src/platform/**",
+                  "**/src/runtime/definition/**",
+                  "**/src/runtime/execution/**",
+                  "**/src/runtime/registry/**",
+                  "**/src/runtime/spec/**",
+                  "**/src/strategies/**",
+                  "**/src/testing/**"
+                ],
+                "message": "Consumer integration tests must use curated package entrypoints instead of private source modules."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

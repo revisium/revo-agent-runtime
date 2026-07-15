@@ -11,8 +11,41 @@ Block the change when any of the following applies:
 - Runtime code selects runners, models, profiles, workspaces, retry policy, or pipeline transitions instead of executing a resolved invocation.
 - Public contracts expose provider SDK, orchestrator, DBOS, Prisma, Nest, GraphQL, MCP, or playbook-owned types.
 - Events, terminal streams, diagnostics, or artifacts can grow without an explicit bound or reach a sink before redaction.
+- The manager registry can mutate after construction, performs implicit latest/fallback lookup, or execution rereads it
+  after snapshotting an exact definition digest.
+- A live accepted invocation can deliver zero or multiple process-local terminal events, omit the completed record before
+  delivery, or return different completed values through handle, lookup, wait, and event paths.
+- Shutdown is not idempotent/concurrency-safe, admits a racing start outside its drain set, resolves without confirmed
+  invocation/probe kill and reap, clears listeners before terminal delivery, rejects because an invocation failed, performs
+  an independent completed-record clear/eviction pass, bypasses normal bounded FIFO, or deletes consumer output directories.
+- Unconfirmed kill/reap does not reject the shared completion with bounded/redacted non-retryable
+  `revo.agent.shutdown_failed`, a later shutdown observes a different settlement, or an affected invocation is falsely
+  completed instead of remaining active, or consumer guidance permits same-domain replacement before ownership resolves.
+- A closed or shutdown-failed manager accepts a new start/probe/subscription, makes registry/state reads or existing handles
+  unusable, or reports closure with anything other than the stable bounded `revo.agent.manager_closed` fault.
+- Late recording failure strands result waiters, recursively retries a failed result commit, claims a missing `result.json`
+  exists, mutates a successfully committed result after terminal-event append failure, or treats filesystem exactly-once as
+  guaranteed.
+- Successful output can be text, a JSON primitive/array, or a JSON object that was not validated against the consumer's
+  draft 2020-12 schema.
+- Completed records or subscriber queues are unbounded, active work can be evicted, or eviction/unknown semantics disagree
+  across manager methods.
+- Output recording adopts an existing leaf, allows two concurrent owners, replaces `result.json`, depends on unsupported
+  atomic-link behavior without failing closed, deletes evidence, or omits bounded raw-response diagnostics.
+- Definitions or accepted requests retain caller-owned JSON containers instead of canonical package-owned snapshots.
+- Argument-template delivery is incoherent, generic parameters do not use exact own-property/canonical JSON rules, expansion
+  is nondeterministic/unbounded, CLI flags are implicit, or missing values are silently omitted.
+- `.scratch` is outside the invocation directory, weakly protected, cleaned before reap, silently retained after controlled
+  cleanup failure, or treated as package-owned durable recovery state.
+- A child inherits wholesale `process.env`, environment keys overlap, secret values are not registered with streaming
+  redaction before spawn, credential-like names enter nonsecret inherit/variables, or unredacted carry buffers survive
+  finalization.
+- Version probing uses regex extraction, accepts non-strict SemVer or non-AND range syntax, leaves output unbounded, or fails
+  to kill and reap on timeout.
+- Limit validation omits minima, per-invocation <= manager relationships, idle <= wall, total argv, or terminal reservation.
 - Native command-line and ACP adapters return incompatible outcome or observability contracts.
 - A deep import, broad root barrel, dependency cycle, or reverse dependency bypasses the intended package DAG.
+- Architecture configuration changes do not include a passing positive graph and temporary representative negative probes.
 - New code uses `any`, `@ts-ignore`, an unchecked assertion, silent error swallowing, or an unbounded external payload.
 - System mechanics and business decisions are mixed into an unreadable unit.
 - A speculative abstraction or compatibility fallback is introduced without an approved requirement.
@@ -30,4 +63,6 @@ Block the change when any of the following applies:
 - CI passed on the same commit.
 - Sonar Quality Gate and issue-level results were inspected when provider access was available.
 - The packed artifact contains only the declared public files.
+- ATTW, package-content validation, isolated ESM and strict TypeScript consumers, and deep-import denial use one exact
+  package tarball created with an isolated temporary npm cache.
 - Documentation changed whenever the public package contract changed.

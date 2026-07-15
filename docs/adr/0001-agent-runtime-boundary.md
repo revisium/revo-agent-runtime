@@ -2,6 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-07-15
+- Refined by: [ADR-0002](./0002-agent-manager-consumer-boundary.md)
+- Narrowly amended by: [ADR-0003](./0003-invocation-output-recording.md)
 
 ## Context
 
@@ -13,7 +15,11 @@ Create `@revisium/revo-agent-runtime` as an independently versioned package for 
 
 The package owns manifest validation, package-owned strategy resolution, native and ACP adapters, process lifecycle, normalized outcomes, and bounded redacted observability. It consumes a complete immutable runner pin and does not select runners or read a mutable runner catalog.
 
-The consuming orchestrator retains execution-plan compilation, runner/model/profile selection, prompts, workspaces, durable retries, pipelines, gates, persistence, and public projections. `@revisium/revo-scripts` remains a sibling package for deterministic system operations, with no dependency in either direction.
+The consuming orchestrator retains execution-plan compilation, runner/model/profile selection, prompts, workspaces, durable retries, pipelines, gates, durable workflow persistence, and public projections. `@revisium/revo-scripts` remains a sibling package for deterministic system operations, with no dependency in either direction.
+
+ADR-0002 refines the consumer boundary with a sealed process-local `AgentManager`. ADR-0003 narrowly assigns bounded,
+redacted invocation-local file recording to the runtime in an exact directory supplied by the consumer. The consumer still
+owns path construction, durable indexing, retention, and restart recovery.
 
 The initial public API is package-neutral. Provider and ACP SDK types remain private implementation details. The initial lifecycle does not pool processes or resume sessions across physical attempts.
 

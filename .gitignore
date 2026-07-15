@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+.architecture-probe-*/
 .sonar/
 *.tgz
 .DS_Store
