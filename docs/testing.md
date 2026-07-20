@@ -166,9 +166,9 @@ Required behavior includes:
 
 ## Architecture proof
 
-Architecture tests distinguish portable spec, definition identity, sealed registry, execution core, strategy adapters,
-platform adapters, application composition, public entrypoint, and test support. They enforce the dependency direction in
-[architecture.md](./architecture.md).
+Architecture tests distinguish type-only portable spec, immutable policy, typed errors, definition behavior, sealed
+registry, execution core, strategy adapters, platform adapters, application composition, public entrypoint, and test
+support. They enforce the dependency direction in [architecture.md](./architecture.md).
 
 The committed architecture harness MUST:
 
@@ -176,7 +176,9 @@ The committed architecture harness MUST:
 2. synthesize a temporary representative forbidden import and prove the configured rule exits non-zero;
 3. synthesize a consumer direct import from a private `runtime/spec` file and prove it exits non-zero;
 4. synthesize a temporary import cycle and prove cycle detection exits non-zero;
-5. remove all probes even after failure.
+5. validate one entity per production leaf, type-only specification leaves, explicit barrels, `.js` specifiers, and the
+   required domain/layer barrel boundaries with representative negative probes;
+6. remove all probes even after failure.
 
 A configuration change is not proven by a green graph that happens to contain no violation.
 

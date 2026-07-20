@@ -1,13 +1,13 @@
 import { expect, test } from 'vitest';
 
-import { inspectPlainJson } from '../../../../src/runtime/definition/plain-json.js';
+import { inspectPlainJson } from '../../../../src/runtime/definition/index.js';
+import { AgentManagerError } from '../../../../src/runtime/errors/index.js';
 import {
-  AgentManagerError,
   M1_FAULT_MESSAGES,
-  type AgentFault,
-} from '../../../../src/runtime/spec/agent-fault.js';
-import { M1_LIMITS } from '../../../../src/runtime/spec/json.js';
-import { M1_MANAGER_LIMITS } from '../../../../src/runtime/spec/manager-options.js';
+  M1_LIMITS,
+  M1_MANAGER_LIMITS,
+} from '../../../../src/runtime/policy/index.js';
+import type { AgentFault } from '../../../../src/runtime/spec/index.js';
 
 const diagnosticMessages = {
   json_array_dense: 'Array must be dense and contain only indexed elements.',

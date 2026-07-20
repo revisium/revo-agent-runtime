@@ -45,8 +45,45 @@
           {
             "patterns": [
               {
-                "regex": "^(?:\\.\\./)+(?:definition|registry|execution|application|strategies|platform|testing)(?:/|$)",
+                "regex": "^(?:\\.\\./)+(?:definition|policy|errors|registry|execution|application|strategies|platform|testing)(?:/|$)",
                 "message": "Runtime spec is the portable dependency leaf."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/src/runtime/policy/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:\\.\\./)+(?:spec|errors|definition|registry|execution|application|strategies|platform|testing)(?:/|$)",
+                "message": "Runtime policy is independent immutable data."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/src/runtime/errors/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:\\.\\./)+spec(?:/|$)",
+                "allowTypeImports": true,
+                "message": "Runtime errors may import specification contracts only as types."
+              },
+              {
+                "regex": "^(?:\\.\\./)+(?:policy|definition|registry|execution|application|strategies|platform|testing)(?:/|$)",
+                "message": "Runtime errors depend only on specification types."
               }
             ]
           }
@@ -62,7 +99,7 @@
             "patterns": [
               {
                 "regex": "^(?:\\.\\./)+(?:registry|execution|application|strategies|platform|testing)(?:/|$)",
-                "message": "Definition identity may depend only on runtime spec and local definition modules."
+                "message": "Definition behavior may depend only on runtime spec, policy, errors, and local definition modules."
               }
             ]
           }

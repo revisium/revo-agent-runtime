@@ -1,17 +1,13 @@
 import { types as utilTypes } from 'node:util';
 
-import {
-  AgentManagerError,
-  M1_FAULT_MESSAGES,
-  type AgentFault,
-  type AgentValidationDetails,
-  type AgentValidationDiagnostic,
-} from '../spec/agent-fault.js';
-
-export interface PlainJsonInspection {
-  readonly depth: number;
-  readonly nodes: number;
-}
+import { AgentManagerError } from '../../errors/index.js';
+import { M1_FAULT_MESSAGES } from '../../policy/index.js';
+import type {
+  AgentFault,
+  AgentValidationDetails,
+  AgentValidationDiagnostic,
+} from '../../spec/index.js';
+import type { PlainJsonInspection } from './plain-json-inspection.js';
 
 const diagnosticMessages = {
   json_array_dense: 'Array must be dense and contain only indexed elements.',

@@ -33,8 +33,9 @@ target is [the AgentManager v1 specification](./specs/agent-manager-v1.spec.md).
 
 ## Target production structure
 
-The first implementation should grow vertically inside this structure. This document does not require empty placeholder
-directories or files.
+The first implementation should grow vertically inside this structure. The accepted
+[internal module structure specification](./specs/internal-module-structure.spec.md) owns the exact PR #4 leaves, barrels,
+and import form. This broader target does not require empty placeholder directories or files.
 
 ```text
 src/
@@ -47,15 +48,23 @@ src/
 │       └── shutdown.ts
 ├── runtime/
 │   ├── spec/
-│   │   ├── agent-definition.ts
-│   │   ├── agent-event.ts
-│   │   ├── agent-fault.ts
-│   │   ├── agent-invocation.ts
-│   │   ├── agent-result.ts
-│   │   └── json.ts
+│   │   ├── json/
+│   │   ├── agent-definition/
+│   │   ├── agent-fault/
+│   │   ├── agent-probe/
+│   │   ├── manager-options/
+│   │   └── index.ts
+│   ├── policy/
+│   │   ├── limits/
+│   │   ├── fault-messages.ts
+│   │   └── index.ts
+│   ├── errors/
+│   │   ├── agent-manager-error.ts
+│   │   └── index.ts
 │   ├── definition/
-│   │   ├── definition-digest.ts
-│   │   └── validate-definition.ts
+│   │   ├── plain-json/
+│   │   ├── definition-digest.ts        # later slice
+│   │   └── validate-definition.ts       # later slice
 │   ├── registry/
 │   │   └── sealed-agent-registry.ts
 │   └── execution/
@@ -90,8 +99,10 @@ src/
 
 | Area                       | Owns                                                                                          | Must not own                                                        |
 | -------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `runtime/spec`             | Provider-neutral JSON-compatible public types, stable statuses, event and error contracts.    | Node APIs, process code, files, strategies, composition, test code. |
-| `runtime/definition`       | Closed definition/template/range validation, RFC 8785 canonicalization, SHA-256 digest.       | Mutable registration, execution, process or filesystem access.      |
+| `runtime/spec`             | Provider-neutral JSON-compatible type-only contracts behind domain and layer barrels.         | Runtime values, Node APIs, behavior, side effects, or test code.    |
+| `runtime/policy`           | Immutable limits, defaults, and stable message values.                                        | Specification, errors, definition behavior, or composition.         |
+| `runtime/errors`           | Typed runtime errors that depend only on specification types.                                 | Policy, definition behavior, process, or composition.               |
+| `runtime/definition`       | Plain-JSON inspection and later closed definition validation, canonicalization, and digest.   | Mutable registration, execution, process or filesystem access.      |
 | `runtime/registry`         | Exact `{ id, version }` lookup over one sealed immutable definition set.                      | Latest/fallback resolution, mutation after construction, execution. |
 | `runtime/execution`        | Input snapshots, bounded argv, one state machine, result validation, ports, and finalization. | Consumer workflow concepts, concrete Node or provider mechanics.    |
 | `strategies/protocol`      | Native stdio and ACP framing behind execution ports.                                          | Manager composition, durable workflow state, direct file policy.    |
@@ -116,25 +127,32 @@ test/
 
 ## Dependency direction
 
-`runtime/spec` is the portable leaf. Definition and registry logic build immutable identity. Execution depends on public
-contracts and its own ports, not concrete process or filesystem implementations. Strategies and platform adapters implement
-those ports. Application composition may depend on all production areas and is the only place that wires them together.
+`runtime/spec` and `runtime/policy` are independent leaves. Errors type-import from specification only. Definition behavior
+may depend on specification types, policy values, and errors. Registry and execution build on those layers; execution uses
+its own ports rather than concrete process or filesystem implementations. Strategies and platform adapters implement those
+ports. Application composition may depend on all production areas and is the only place that wires them together.
 
 ```text
-                         runtime/spec
-                         ^    ^    ^
-                         |    |    |
-runtime/definition ------+    |    +------ runtime/execution
-          ^                   |                ^       ^
-          |                   |                |       |
-runtime/registry -------------+          strategies  platform
-          ^                                      ^       ^
-          +---------------- application ----------+-------+
+runtime/spec       runtime/policy
+      ^                  ^
+      |                  |
+runtime/errors           |
+      ^                  |
+      +--- runtime/definition
+                 ^
+                 |
+          runtime/registry
+                 ^
+                 |
+          runtime/execution <--- strategies / platform
+                 ^                    ^          ^
+                 +------ application-+----------+
 ```
 
 Forbidden directions include:
 
-- `runtime/spec` to any other production area;
+- `runtime/spec` or `runtime/policy` to any other production area;
+- `runtime/errors` to policy, definition, registry, execution, strategies, platform, or application code;
 - definition or registry to execution, strategy, platform, application, or testing code;
 - execution to concrete strategies, platform, application, or testing code;
 - strategy or platform adapters to application or testing code;

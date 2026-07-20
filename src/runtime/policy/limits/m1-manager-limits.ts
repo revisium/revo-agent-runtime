@@ -1,22 +1,3 @@
-import type { AgentDefinitionInput } from './agent-definition.js';
-
-export interface AgentManagerLimits {
-  readonly wallClockTimeoutMs?: number;
-  readonly idleTimeoutMs?: number;
-  readonly maxEventBytes?: number;
-  readonly maxEventsFileBytes?: number;
-  readonly maxStdoutBytes?: number;
-  readonly maxStderrBytes?: number;
-  readonly maxRawResponseBytes?: number;
-  readonly maxCompletedInvocations?: number;
-}
-
-export interface AgentManagerOptions {
-  readonly definitions: readonly AgentDefinitionInput[];
-  readonly limits?: AgentManagerLimits;
-  readonly redaction?: { readonly secrets: readonly string[] };
-}
-
 export const M1_MANAGER_LIMITS = Object.freeze({
   wallClockTimeoutMs: { minimum: 1_000, default: 1_800_000, maximum: 1_800_000 },
   idleTimeoutMs: { minimum: 1_000, default: 300_000, maximum: 300_000 },

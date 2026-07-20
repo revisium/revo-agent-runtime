@@ -1,12 +1,3 @@
-export type JsonPrimitive = string | number | boolean | null;
-export type JsonValue = JsonPrimitive | JsonObject | readonly JsonValue[];
-
-export interface JsonObject {
-  readonly [key: string]: JsonValue;
-}
-
-export type JsonSchema202012 = JsonObject;
-
 export const M1_LIMITS = Object.freeze({
   definitionBytes: 1_048_576,
   schemaBytes: 1_048_576,
