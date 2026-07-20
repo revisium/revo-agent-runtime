@@ -1,8 +1,8 @@
 # Internal module structure specification
 
 - Status: Accepted
-- Version: 1.0.0
-- Accepted: 2026-07-20
+- Version: 1.1.0
+- Accepted: 2026-07-21
 - Baseline: PR #4 head `2a6f3d39fccb6661e6b59806a66d88a5f491ad69`
 - Related decision: [ADR-0007](../adr/0007-separate-contracts-policy-errors-and-behavior.md)
 
@@ -67,26 +67,19 @@ src/
     │   │   ├── json-schema-2020-12.ts
     │   │   └── index.ts
     │   ├── agent-definition/
-    │   │   ├── agent-ref.ts
     │   │   ├── agent-argument-template.ts
     │   │   ├── agent-version-probe.ts
     │   │   ├── agent-definition-contract.ts
-    │   │   ├── agent-definition-input.ts
     │   │   ├── agent-descriptor.ts
     │   │   └── index.ts
     │   ├── agent-fault/
     │   │   ├── agent-validation-diagnostic.ts
-    │   │   ├── agent-validation-details.ts
-    │   │   ├── agent-fault-code.ts
     │   │   ├── agent-fault.ts
     │   │   └── index.ts
     │   ├── agent-probe/
-    │   │   ├── agent-probe-available.ts
-    │   │   ├── agent-probe-unavailable.ts
     │   │   ├── agent-probe-result.ts
     │   │   └── index.ts
     │   ├── manager-options/
-    │   │   ├── agent-manager-limits.ts
     │   │   ├── agent-manager-options.ts
     │   │   └── index.ts
     │   └── index.ts
@@ -118,8 +111,8 @@ No other production leaf or barrel is part of the PR #4 structural-refactor scop
 
 ### 3.2 Entity ownership
 
-Each target leaf in the following table MUST export exactly the stated entity. A row with a private note describes a symbol
-that MUST NOT be re-exported.
+Each target leaf in the following table MUST own exactly the stated entity or cohesive type group. A row with a private
+note describes a symbol that MUST NOT be re-exported.
 
 | Baseline source            | Target leaf                                          | Entity and migration rule                                                                     |
 | -------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -129,23 +122,16 @@ that MUST NOT be re-exported.
 | `spec/json.ts`             | `spec/json/json-object.ts`                           | `JsonObject`                                                                                  |
 | `spec/json.ts`             | `spec/json/json-schema-2020-12.ts`                   | `JsonSchema202012`                                                                            |
 | `spec/json.ts`             | `policy/limits/agent-runtime-limits.ts`              | `AGENT_RUNTIME_LIMITS`                                                                        |
-| `spec/agent-definition.ts` | `spec/agent-definition/agent-ref.ts`                 | `AgentRef`                                                                                    |
 | `spec/agent-definition.ts` | `spec/agent-definition/agent-argument-template.ts`   | `AgentArgumentTemplate`; its eight anonymous variants remain inline                           |
 | `spec/agent-definition.ts` | `spec/agent-definition/agent-version-probe.ts`       | `AgentVersionProbe`                                                                           |
-| `spec/agent-definition.ts` | `spec/agent-definition/agent-definition-contract.ts` | `AgentDefinitionContract`                                                                     |
-| `spec/agent-definition.ts` | `spec/agent-definition/agent-definition-input.ts`    | `AgentDefinitionInput`; `AgentProtocolInput` becomes a private structural type in this file   |
-| `spec/agent-definition.ts` | `spec/agent-definition/agent-descriptor.ts`          | `AgentDescriptor`                                                                             |
-| `spec/agent-fault.ts`      | `spec/agent-fault/agent-validation-diagnostic.ts`    | `AgentValidationDiagnostic`                                                                   |
-| `spec/agent-fault.ts`      | `spec/agent-fault/agent-validation-details.ts`       | `AgentValidationDetails`                                                                      |
-| `spec/agent-fault.ts`      | `spec/agent-fault/agent-fault-code.ts`               | `AgentFaultCode`; replaces the milestone-prefixed fault-code identifier                       |
-| `spec/agent-fault.ts`      | `spec/agent-fault/agent-fault.ts`                    | `AgentFault`                                                                                  |
+| `spec/agent-definition.ts` | `spec/agent-definition/agent-definition-contract.ts` | `AgentDefinitionContract` and `AgentDefinitionInput`; `AgentProtocolInput` remains private    |
+| `spec/agent-definition.ts` | `spec/agent-definition/agent-descriptor.ts`          | `AgentRef` and `AgentDescriptor`                                                              |
+| `spec/agent-fault.ts`      | `spec/agent-fault/agent-validation-diagnostic.ts`    | `AgentValidationDiagnostic` and `AgentValidationDetails`                                      |
+| `spec/agent-fault.ts`      | `spec/agent-fault/agent-fault.ts`                    | `AgentFaultCode` and `AgentFault`; preserves the durable fault-code name                      |
 | `spec/agent-fault.ts`      | `policy/fault-messages.ts`                           | `AGENT_FAULT_MESSAGES`                                                                        |
 | `spec/agent-fault.ts`      | `errors/agent-manager-error.ts`                      | `AgentManagerError`                                                                           |
-| `spec/agent-probe.ts`      | `spec/agent-probe/agent-probe-available.ts`          | `AgentProbeAvailable`                                                                         |
-| `spec/agent-probe.ts`      | `spec/agent-probe/agent-probe-unavailable.ts`        | `AgentProbeUnavailable`                                                                       |
-| `spec/agent-probe.ts`      | `spec/agent-probe/agent-probe-result.ts`             | `AgentProbeResult`                                                                            |
-| `spec/manager-options.ts`  | `spec/manager-options/agent-manager-limits.ts`       | `AgentManagerLimits`                                                                          |
-| `spec/manager-options.ts`  | `spec/manager-options/agent-manager-options.ts`      | `AgentManagerOptions`                                                                         |
+| `spec/agent-probe.ts`      | `spec/agent-probe/agent-probe-result.ts`             | `AgentProbeAvailable`, `AgentProbeUnavailable`, and `AgentProbeResult`                        |
+| `spec/manager-options.ts`  | `spec/manager-options/agent-manager-options.ts`      | `AgentManagerLimits` and `AgentManagerOptions`                                                |
 | `spec/manager-options.ts`  | `policy/limits/agent-manager-limits.ts`              | `AGENT_MANAGER_LIMITS`                                                                        |
 | `definition/plain-json.ts` | `definition/plain-json/plain-json-inspection.ts`     | `PlainJsonInspection`                                                                         |
 | `definition/plain-json.ts` | `definition/plain-json/inspect-plain-json.ts`        | `inspectPlainJson`; private traversal helpers and private traversal types remain in this file |
@@ -223,7 +209,13 @@ The migration MUST NOT change any produced fault, diagnostic, depth, or node cou
 
 ### 3.6 Leaf and barrel rules
 
-Every production leaf MUST export exactly one entity.
+Every production leaf outside `src/runtime/spec` MUST export exactly one entity. This rule remains strict for the
+runtime/behavior layers `src/runtime/policy`, `src/runtime/errors`, `src/runtime/definition`, `src/strategies`, and
+`src/platform`.
+
+A `src/runtime/spec` leaf MAY export multiple types when they form one cohesive domain group under the Common Closure
+Principle: the types share a reason to change and consumers need the group as one contract. This exception applies only to
+type declarations and does not permit runtime values, side effects, or non-type imports.
 
 A barrel `index.ts` MAY re-export more than one entity.
 
@@ -254,7 +246,7 @@ Every relative TypeScript import or re-export specifier MUST end in `.js`.
 The following is a conforming same-domain leaf import:
 
 ```ts
-import type { AgentFaultCode } from './agent-fault-code.js';
+import type { AgentArgumentTemplate } from './agent-argument-template.js';
 ```
 
 The following is a conforming cross-domain import inside the specification layer:
@@ -275,9 +267,11 @@ The following is a conforming domain barrel:
 
 ```ts
 export type { AgentFault } from './agent-fault.js';
-export type { AgentFaultCode } from './agent-fault-code.js';
-export type { AgentValidationDetails } from './agent-validation-details.js';
-export type { AgentValidationDiagnostic } from './agent-validation-diagnostic.js';
+export type { AgentFaultCode } from './agent-fault.js';
+export type {
+  AgentValidationDetails,
+  AgentValidationDiagnostic,
+} from './agent-validation-diagnostic.js';
 ```
 
 The following is a conforming layer barrel:
@@ -351,7 +345,11 @@ The architecture verification MUST reject a runtime value exported by a specific
 
 The architecture verification MUST reject a non-type import in a specification leaf.
 
-The architecture verification MUST inspect every production leaf for the one-export rule.
+The architecture verification MUST enforce the one-export rule for every production leaf outside `src/runtime/spec`,
+including policy, errors, definition, strategies, and platform.
+
+The architecture verification MUST permit multiple exported type declarations in a `src/runtime/spec` leaf while retaining
+the type-only, barrel, and import-boundary rules for that leaf.
 
 The architecture verification MUST reject a leaf import of its own barrel.
 
@@ -407,7 +405,8 @@ Task 6 definition identity MUST migrate before registry consumers.
 
 Tasks 7A–7B definition parsing and complete-set validation MUST migrate after their Task 2B–6 dependencies.
 
-Every newly migrated Task 2B–7B exported entity MUST receive one leaf unless it is a barrel.
+Every newly migrated Task 2B–7B runtime or behavior exported entity MUST receive one leaf unless it is a barrel. A type-only
+`src/runtime/spec` group MUST instead follow the cohesion rule in section 3.6.
 
 Every Task 2B–7B private helper or private structural type MUST remain with its behavior owner.
 

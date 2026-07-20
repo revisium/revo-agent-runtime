@@ -253,7 +253,11 @@ const validateSourceFile = (path: string, sourceFile: SourceFile): void => {
   validateJsonObjectBasePrivacy(path, sourceFile);
   validateSpecSyntax(path, sourceFile);
 
-  if (isProductionLeaf(path) && exportedEntityCount(sourceFile.statements) !== 1) {
+  if (
+    isProductionLeaf(path) &&
+    !isSpecModule(path) &&
+    exportedEntityCount(sourceFile.statements) !== 1
+  ) {
     fail('one-export-per-leaf', path);
   }
 

@@ -178,7 +178,7 @@ const structureProbes: readonly (readonly [SourceModule, string])[] = [
     {
       path: 'src/runtime/spec/agent-fault/agent-fault.ts',
       source:
-        "import type { AgentRef } from '../agent-definition/agent-ref.js';\nexport interface AgentFault { readonly agent: AgentRef }\n",
+        "import type { AgentRef } from '../agent-definition/agent-descriptor.js';\nexport interface AgentFault { readonly agent: AgentRef }\n",
     },
     'cross-domain-barrel-import',
   ],

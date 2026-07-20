@@ -1,5 +1,10 @@
+import type { JsonObject } from '../json/index.js';
 import type { AgentDefinitionContract } from './agent-definition-contract.js';
-import type { AgentRef } from './agent-ref.js';
+
+export interface AgentRef extends JsonObject {
+  readonly id: string;
+  readonly version: string;
+}
 
 export interface AgentDescriptor {
   readonly agent: AgentRef;
