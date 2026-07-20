@@ -53,6 +53,9 @@ src/
 │   │   ├── agent-fault/
 │   │   ├── agent-probe/
 │   │   ├── manager-options/
+│   │   ├── agent-event/              # later target
+│   │   ├── agent-invocation/         # later target
+│   │   ├── agent-result/             # later target
 │   │   └── index.ts
 │   ├── policy/
 │   │   ├── limits/
@@ -128,25 +131,30 @@ test/
 ## Dependency direction
 
 `runtime/spec` and `runtime/policy` are independent leaves. Errors type-import from specification only. Definition behavior
-may depend on specification types, policy values, and errors. Registry and execution build on those layers; execution uses
-its own ports rather than concrete process or filesystem implementations. Strategies and platform adapters implement those
-ports. Application composition may depend on all production areas and is the only place that wires them together.
+may depend on specification types, policy values, and errors. Registry builds immutable identity from definition and
+specification, while execution is a parallel building block over portable contracts and its own ports; neither imports the
+other. Strategies and platform adapters implement execution ports without depending on each other. Application is the sole
+composition root and wires registry, execution, strategies, and platform together.
 
 ```text
-runtime/spec       runtime/policy
-      ^                  ^
-      |                  |
-runtime/errors           |
-      ^                  |
-      +--- runtime/definition
-                 ^
-                 |
-          runtime/registry
-                 ^
-                 |
-          runtime/execution <--- strategies / platform
-                 ^                    ^          ^
-                 +------ application-+----------+
+importer -> dependency
+
+runtime/errors -> runtime/spec (type-only)
+runtime/definition -> runtime/spec
+runtime/definition -> runtime/policy
+runtime/definition -> runtime/errors
+
+runtime/registry -> runtime/spec
+runtime/registry -> runtime/definition
+runtime/execution -> runtime/spec
+
+strategies -> runtime/execution (implements execution ports)
+platform -> runtime/execution (implements execution ports)
+
+application -> runtime/registry
+application -> runtime/execution
+application -> strategies
+application -> platform
 ```
 
 Forbidden directions include:

@@ -186,14 +186,7 @@ const structureProbes: readonly (readonly [SourceModule, string])[] = [
     {
       path: 'src/runtime/definition/plain-json/inspect-plain-json.ts',
       source:
-        "import { M1_LIMITS } from '../../policy/limits/m1-limits.js';\nexport const inspectPlainJson = M1_LIMITS;\n",
-    },
-    'cross-layer-barrel-import',
-  ],
-  [
-    {
-      path: 'src/runtime/definition/plain-json/inspect-plain-json.ts',
-      source: "export const loadLimits = () => import('../../policy/limits/m1-limits.js');\n",
+        "import { AGENT_RUNTIME_LIMITS } from '../../policy/limits/agent-runtime-limits.js';\nexport const inspectPlainJson = AGENT_RUNTIME_LIMITS;\n",
     },
     'cross-layer-barrel-import',
   ],
@@ -201,7 +194,15 @@ const structureProbes: readonly (readonly [SourceModule, string])[] = [
     {
       path: 'src/runtime/definition/plain-json/inspect-plain-json.ts',
       source:
-        "const target = '../../policy/limits/m1-limits.js';\nexport const loadLimits = () => import(target);\n",
+        "export const loadLimits = () => import('../../policy/limits/agent-runtime-limits.js');\n",
+    },
+    'cross-layer-barrel-import',
+  ],
+  [
+    {
+      path: 'src/runtime/definition/plain-json/inspect-plain-json.ts',
+      source:
+        "const target = '../../policy/limits/agent-runtime-limits.js';\nexport const loadLimits = () => import(target);\n",
     },
     'relative-js-suffix',
   ],
@@ -209,7 +210,7 @@ const structureProbes: readonly (readonly [SourceModule, string])[] = [
     {
       path: 'src/runtime/definition/plain-json/inspect-plain-json.ts',
       source:
-        "import limits = require('../../policy/limits/m1-limits.js');\nexport const inspectPlainJson = limits;\n",
+        "import limits = require('../../policy/limits/agent-runtime-limits.js');\nexport const inspectPlainJson = limits;\n",
     },
     'cross-layer-barrel-import',
   ],
@@ -217,7 +218,7 @@ const structureProbes: readonly (readonly [SourceModule, string])[] = [
     {
       path: 'src/runtime/definition/plain-json/plain-json-inspection.ts',
       source:
-        "export type PlainJsonInspection = import('../../policy/limits/m1-limits.js').M1_LIMITS;\n",
+        "export type PlainJsonInspection = import('../../policy/limits/agent-runtime-limits.js').AGENT_RUNTIME_LIMITS;\n",
     },
     'cross-layer-barrel-import',
   ],

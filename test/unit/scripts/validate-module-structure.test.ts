@@ -80,7 +80,8 @@ test('rejects a dynamic cross-layer deep import', () => {
   expectViolation(
     {
       path: 'src/runtime/definition/plain-json/inspect-plain-json.ts',
-      source: "export const loadLimits = () => import('../../policy/limits/m1-limits.js');\n",
+      source:
+        "export const loadLimits = () => import('../../policy/limits/agent-runtime-limits.js');\n",
     },
     'cross-layer-barrel-import',
   );
@@ -101,7 +102,7 @@ test('rejects a dynamic import whose target cannot be checked statically', () =>
     {
       path: 'src/runtime/definition/plain-json/inspect-plain-json.ts',
       source:
-        "const target = '../../policy/limits/m1-limits.js';\nexport const loadLimits = () => import(target);\n",
+        "const target = '../../policy/limits/agent-runtime-limits.js';\nexport const loadLimits = () => import(target);\n",
     },
     'relative-js-suffix',
   );
@@ -112,7 +113,7 @@ test('rejects a cross-layer import-equals dependency', () => {
     {
       path: 'src/runtime/definition/plain-json/inspect-plain-json.ts',
       source:
-        "import limits = require('../../policy/limits/m1-limits.js');\nexport const inspectPlainJson = limits;\n",
+        "import limits = require('../../policy/limits/agent-runtime-limits.js');\nexport const inspectPlainJson = limits;\n",
     },
     'cross-layer-barrel-import',
   );
@@ -123,7 +124,7 @@ test('rejects a cross-layer import type dependency', () => {
     {
       path: 'src/runtime/definition/plain-json/plain-json-inspection.ts',
       source:
-        "export type PlainJsonInspection = import('../../policy/limits/m1-limits.js').M1_LIMITS;\n",
+        "export type PlainJsonInspection = import('../../policy/limits/agent-runtime-limits.js').AGENT_RUNTIME_LIMITS;\n",
     },
     'cross-layer-barrel-import',
   );
@@ -163,7 +164,7 @@ test.each([
   [
     'cross-layer-barrel-import',
     'src/runtime/definition/plain-json/inspect-plain-json.ts',
-    "import { M1_LIMITS } from '../../policy/limits/m1-limits.js';\nexport const inspectPlainJson = M1_LIMITS;\n",
+    "import { AGENT_RUNTIME_LIMITS } from '../../policy/limits/agent-runtime-limits.js';\nexport const inspectPlainJson = AGENT_RUNTIME_LIMITS;\n",
   ],
   [
     'test-layer-barrel-import',

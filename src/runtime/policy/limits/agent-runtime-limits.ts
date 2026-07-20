@@ -1,4 +1,4 @@
-export const M1_LIMITS = Object.freeze({
+export const AGENT_RUNTIME_LIMITS = Object.freeze({
   definitionBytes: 1_048_576,
   schemaBytes: 1_048_576,
   definitions: 1_000,

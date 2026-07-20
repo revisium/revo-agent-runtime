@@ -1,2 +1,2 @@
-export { M1_LIMITS } from './m1-limits.js';
-export { M1_MANAGER_LIMITS } from './m1-manager-limits.js';
+export { AGENT_MANAGER_LIMITS } from './agent-manager-limits.js';
+export { AGENT_RUNTIME_LIMITS } from './agent-runtime-limits.js';

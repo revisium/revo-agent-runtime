@@ -1,7 +1,7 @@
 import { types as utilTypes } from 'node:util';
 
 import { AgentManagerError } from '../../errors/index.js';
-import { M1_FAULT_MESSAGES } from '../../policy/index.js';
+import { AGENT_FAULT_MESSAGES } from '../../policy/index.js';
 import type {
   AgentFault,
   AgentValidationDetails,
@@ -79,8 +79,8 @@ const createFault = (keyword: PlainJsonKeyword, instancePath: string): AgentFaul
     code: 'revo.agent.definition_invalid',
     message:
       keyword === 'unicode_scalar'
-        ? M1_FAULT_MESSAGES.invalidUnicode
-        : M1_FAULT_MESSAGES.definitionInvalid,
+        ? AGENT_FAULT_MESSAGES.invalidUnicode
+        : AGENT_FAULT_MESSAGES.definitionInvalid,
     phase: 'construction',
     retryable: false,
     details,

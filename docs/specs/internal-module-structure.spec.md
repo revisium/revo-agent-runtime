@@ -18,8 +18,8 @@ The migration MUST be structural only.
 
 The migration MUST preserve observable runtime behavior.
 
-The migration MUST preserve the internal contract shapes and literal values at the baseline, except for the required
-`M1FaultCode` to `AgentFaultCode` rename.
+The migration MUST preserve the internal contract shapes and literal values at the baseline, except for the required rename
+of the milestone-prefixed fault-code contract to `AgentFaultCode`.
 
 The migration MUST NOT add a Nest dependency.
 
@@ -92,8 +92,8 @@ src/
     │   └── index.ts
     ├── policy/
     │   ├── limits/
-    │   │   ├── m1-limits.ts
-    │   │   ├── m1-manager-limits.ts
+    │   │   ├── agent-runtime-limits.ts
+    │   │   ├── agent-manager-limits.ts
     │   │   └── index.ts
     │   ├── fault-messages.ts
     │   └── index.ts
@@ -128,7 +128,7 @@ that MUST NOT be re-exported.
 | `spec/json.ts`             | `spec/json/json-value.ts`                            | `JsonValue`                                                                                   |
 | `spec/json.ts`             | `spec/json/json-object.ts`                           | `JsonObject`                                                                                  |
 | `spec/json.ts`             | `spec/json/json-schema-2020-12.ts`                   | `JsonSchema202012`                                                                            |
-| `spec/json.ts`             | `policy/limits/m1-limits.ts`                         | `M1_LIMITS`                                                                                   |
+| `spec/json.ts`             | `policy/limits/agent-runtime-limits.ts`              | `AGENT_RUNTIME_LIMITS`                                                                        |
 | `spec/agent-definition.ts` | `spec/agent-definition/agent-ref.ts`                 | `AgentRef`                                                                                    |
 | `spec/agent-definition.ts` | `spec/agent-definition/agent-argument-template.ts`   | `AgentArgumentTemplate`; its eight anonymous variants remain inline                           |
 | `spec/agent-definition.ts` | `spec/agent-definition/agent-version-probe.ts`       | `AgentVersionProbe`                                                                           |
@@ -137,16 +137,16 @@ that MUST NOT be re-exported.
 | `spec/agent-definition.ts` | `spec/agent-definition/agent-descriptor.ts`          | `AgentDescriptor`                                                                             |
 | `spec/agent-fault.ts`      | `spec/agent-fault/agent-validation-diagnostic.ts`    | `AgentValidationDiagnostic`                                                                   |
 | `spec/agent-fault.ts`      | `spec/agent-fault/agent-validation-details.ts`       | `AgentValidationDetails`                                                                      |
-| `spec/agent-fault.ts`      | `spec/agent-fault/agent-fault-code.ts`               | `AgentFaultCode`; this is the required rename from `M1FaultCode`                              |
+| `spec/agent-fault.ts`      | `spec/agent-fault/agent-fault-code.ts`               | `AgentFaultCode`; replaces the milestone-prefixed fault-code identifier                       |
 | `spec/agent-fault.ts`      | `spec/agent-fault/agent-fault.ts`                    | `AgentFault`                                                                                  |
-| `spec/agent-fault.ts`      | `policy/fault-messages.ts`                           | `M1_FAULT_MESSAGES`                                                                           |
+| `spec/agent-fault.ts`      | `policy/fault-messages.ts`                           | `AGENT_FAULT_MESSAGES`                                                                        |
 | `spec/agent-fault.ts`      | `errors/agent-manager-error.ts`                      | `AgentManagerError`                                                                           |
 | `spec/agent-probe.ts`      | `spec/agent-probe/agent-probe-available.ts`          | `AgentProbeAvailable`                                                                         |
 | `spec/agent-probe.ts`      | `spec/agent-probe/agent-probe-unavailable.ts`        | `AgentProbeUnavailable`                                                                       |
 | `spec/agent-probe.ts`      | `spec/agent-probe/agent-probe-result.ts`             | `AgentProbeResult`                                                                            |
 | `spec/manager-options.ts`  | `spec/manager-options/agent-manager-limits.ts`       | `AgentManagerLimits`                                                                          |
 | `spec/manager-options.ts`  | `spec/manager-options/agent-manager-options.ts`      | `AgentManagerOptions`                                                                         |
-| `spec/manager-options.ts`  | `policy/limits/m1-manager-limits.ts`                 | `M1_MANAGER_LIMITS`                                                                           |
+| `spec/manager-options.ts`  | `policy/limits/agent-manager-limits.ts`              | `AGENT_MANAGER_LIMITS`                                                                        |
 | `definition/plain-json.ts` | `definition/plain-json/plain-json-inspection.ts`     | `PlainJsonInspection`                                                                         |
 | `definition/plain-json.ts` | `definition/plain-json/inspect-plain-json.ts`        | `inspectPlainJson`; private traversal helpers and private traversal types remain in this file |
 
@@ -189,7 +189,7 @@ The recursive JSON contracts MUST have one structural definition of JSON-object 
 
 Each policy leaf MUST export exactly one value.
 
-`M1_LIMITS`, `M1_MANAGER_LIMITS`, and `M1_FAULT_MESSAGES` MUST retain their baseline values.
+`AGENT_RUNTIME_LIMITS`, `AGENT_MANAGER_LIMITS`, and `AGENT_FAULT_MESSAGES` MUST retain their baseline values.
 
 The policy layer MUST NOT import the specification layer.
 
@@ -267,7 +267,7 @@ The following are conforming cross-layer imports from the definition layer:
 
 ```ts
 import { AgentManagerError } from '../../errors/index.js';
-import { M1_FAULT_MESSAGES, M1_LIMITS } from '../../policy/index.js';
+import { AGENT_FAULT_MESSAGES, AGENT_RUNTIME_LIMITS } from '../../policy/index.js';
 import type { AgentValidationDiagnostic } from '../../spec/index.js';
 ```
 
@@ -300,14 +300,17 @@ The plain-JSON unit test MUST import `AgentManagerError` from `../../../../src/r
 
 ### 3.7 Dependency direction
 
-The following diagram uses `importer -> dependency` notation:
+The following diagram is limited to dependencies introduced or exercised by this PR #4 structural split and uses
+`importer -> dependency` notation. It does not replace the broader target graph in
+[the architecture document](../architecture.md).
 
 ```text
-application -> later registry and probe -> definition
 definition -> spec
 definition -> policy
 definition -> errors
 errors -> spec
+later registry and probe -> definition
+application -> later registry and probe
 ```
 
 The specification and policy layers MUST remain independent of each other.
@@ -319,6 +322,10 @@ The definition layer MAY import types from specification, values from policy, an
 Later registry and probe layers MAY depend on specification, policy, errors, and definition.
 
 The application layer MAY compose the preceding runtime layers.
+
+This migration MUST NOT add or remove a dependency edge among `runtime/registry`, `runtime/execution`, `strategies`,
+`platform`, and `application`. In the broader target, registry and execution remain parallel building blocks; strategies and
+platform implement execution ports; application remains the sole composition root.
 
 A dependency MUST NOT point opposite this direction.
 
@@ -416,15 +423,15 @@ Every barrel-visible entity in section 3.2 MUST resolve through every applicable
 
 `JsonObjectBase<Value>` MUST NOT resolve from any barrel.
 
-For barrel resolution, `M1_FAULT_MESSAGES` MUST have only the applicable `src/runtime/policy/index.ts` layer barrel.
+For barrel resolution, `AGENT_FAULT_MESSAGES` MUST have only the applicable `src/runtime/policy/index.ts` layer barrel.
 
 For barrel resolution, `AgentManagerError` MUST have only the applicable `src/runtime/errors/index.ts` layer barrel.
 
-A domain barrel MUST NOT be created for `M1_FAULT_MESSAGES`.
+A domain barrel MUST NOT be created for `AGENT_FAULT_MESSAGES`.
 
 A domain barrel MUST NOT be created for `AgentManagerError`.
 
-`M1FaultCode` MUST no longer exist.
+The milestone-prefixed fault-code identifier MUST no longer exist.
 
 `AgentFaultCode` MUST preserve the exact baseline fault-code union.
 

@@ -1,4 +1,4 @@
-export const M1_FAULT_MESSAGES = Object.freeze({
+export const AGENT_FAULT_MESSAGES = Object.freeze({
   definitionInvalid: 'Agent definition is invalid.',
   invalidUnicode: 'Agent definition contains invalid Unicode.',
   definitionDuplicate: 'Agent definition reference is duplicated.',

@@ -3,9 +3,9 @@ import { expect, test } from 'vitest';
 import { inspectPlainJson } from '../../../../src/runtime/definition/index.js';
 import { AgentManagerError } from '../../../../src/runtime/errors/index.js';
 import {
-  M1_FAULT_MESSAGES,
-  M1_LIMITS,
-  M1_MANAGER_LIMITS,
+  AGENT_FAULT_MESSAGES,
+  AGENT_MANAGER_LIMITS,
+  AGENT_RUNTIME_LIMITS,
 } from '../../../../src/runtime/policy/index.js';
 import type { AgentFault } from '../../../../src/runtime/spec/index.js';
 
@@ -31,7 +31,7 @@ interface FaultExpectation {
 const expectedFault = ({
   instancePath,
   keyword,
-  message = M1_FAULT_MESSAGES.definitionInvalid,
+  message = AGENT_FAULT_MESSAGES.definitionInvalid,
 }: FaultExpectation): AgentFault => ({
   code: 'revo.agent.definition_invalid',
   message,
@@ -105,7 +105,7 @@ test.each([
       expectedFault({
         instancePath: '/definitions/0/nested',
         keyword: 'unicode_scalar',
-        message: M1_FAULT_MESSAGES.invalidUnicode,
+        message: AGENT_FAULT_MESSAGES.invalidUnicode,
       }),
     );
   }
@@ -123,7 +123,7 @@ test('reports a malformed key at its parent without echoing it', () => {
       expectedFault({
         instancePath: '/definitions/0/parameters/defaults',
         keyword: 'unicode_scalar',
-        message: M1_FAULT_MESSAGES.invalidUnicode,
+        message: AGENT_FAULT_MESSAGES.invalidUnicode,
       }),
     );
     expect(JSON.stringify(error.fault)).not.toContain(badKey);
@@ -274,8 +274,8 @@ test('inspects a deeply nested acyclic value without consuming the JavaScript ca
   expect(inspectPlainJson(value, '/definitions/0')).toEqual({ depth: 20_001, nodes: 20_001 });
 });
 
-test('exposes the exact frozen M1 fixed limits', () => {
-  expect(M1_LIMITS).toEqual({
+test('exposes the exact frozen agent runtime limits', () => {
+  expect(AGENT_RUNTIME_LIMITS).toEqual({
     definitionBytes: 1_048_576,
     schemaBytes: 1_048_576,
     definitions: 1_000,
@@ -301,11 +301,11 @@ test('exposes the exact frozen M1 fixed limits', () => {
     redactionValues: 1_000,
     redactionTotalBytes: 65_536,
   });
-  expect(Object.isFrozen(M1_LIMITS)).toBe(true);
+  expect(Object.isFrozen(AGENT_RUNTIME_LIMITS)).toBe(true);
 });
 
-test('exposes the exact frozen M1 configurable limit descriptors', () => {
-  expect(M1_MANAGER_LIMITS).toEqual({
+test('exposes the exact frozen agent manager limit descriptors', () => {
+  expect(AGENT_MANAGER_LIMITS).toEqual({
     wallClockTimeoutMs: { minimum: 1_000, default: 1_800_000, maximum: 1_800_000 },
     idleTimeoutMs: { minimum: 1_000, default: 300_000, maximum: 300_000 },
     maxEventBytes: { minimum: 1_024, default: 65_536, maximum: 65_536 },
@@ -316,11 +316,11 @@ test('exposes the exact frozen M1 configurable limit descriptors', () => {
     maxCompletedInvocations: { minimum: 1, default: 1_000, maximum: 1_000 },
     maxTerminalEventBytes: 2_097_152,
   });
-  expect(Object.isFrozen(M1_MANAGER_LIMITS)).toBe(true);
+  expect(Object.isFrozen(AGENT_MANAGER_LIMITS)).toBe(true);
 });
 
-test('exposes the exact frozen M1 fault messages', () => {
-  expect(M1_FAULT_MESSAGES).toEqual({
+test('exposes the exact frozen agent fault messages', () => {
+  expect(AGENT_FAULT_MESSAGES).toEqual({
     definitionInvalid: 'Agent definition is invalid.',
     invalidUnicode: 'Agent definition contains invalid Unicode.',
     definitionDuplicate: 'Agent definition reference is duplicated.',
@@ -338,5 +338,5 @@ test('exposes the exact frozen M1 fault messages', () => {
     internalConstruction: 'Agent manager construction failed unexpectedly.',
     internalProbe: 'Agent probe failed unexpectedly.',
   });
-  expect(Object.isFrozen(M1_FAULT_MESSAGES)).toBe(true);
+  expect(Object.isFrozen(AGENT_FAULT_MESSAGES)).toBe(true);
 });

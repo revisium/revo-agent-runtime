@@ -1,4 +1,4 @@
-export const M1_MANAGER_LIMITS = Object.freeze({
+export const AGENT_MANAGER_LIMITS = Object.freeze({
   wallClockTimeoutMs: { minimum: 1_000, default: 1_800_000, maximum: 1_800_000 },
   idleTimeoutMs: { minimum: 1_000, default: 300_000, maximum: 300_000 },
   maxEventBytes: { minimum: 1_024, default: 65_536, maximum: 65_536 },
