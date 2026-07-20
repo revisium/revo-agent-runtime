@@ -74,6 +74,13 @@ test('accepts scalar-safe dense plain JSON without mutation', () => {
   expect(value.emoji).toBe('\uD83D\uDE00');
 });
 
+test('accepts two consecutive valid surrogate pairs', () => {
+  expect(inspectPlainJson('\uD83D\uDE00\uD83D\uDE00', '/definitions/0')).toEqual({
+    depth: 1,
+    nodes: 1,
+  });
+});
+
 test('accepts null-prototype objects and preserves paired-surrogate keys', () => {
   const value = { ['\uD83D\uDE00']: true };
   Object.setPrototypeOf(value, null);
@@ -81,7 +88,14 @@ test('accepts null-prototype objects and preserves paired-surrogate keys', () =>
   expect(Reflect.ownKeys(value)).toEqual(['\uD83D\uDE00']);
 });
 
-test.each(['\uD800', '\uDC00', '\uD800A'])('rejects unpaired surrogate value %j', (bad) => {
+test.each([
+  '\uD800',
+  '\uDC00',
+  '\uD800A',
+  '\uD83D\uDE00\uDC00',
+  '\uD83D\uDE00\uD800',
+  '\uD800\uD800',
+])('rejects unpaired surrogate value %j', (bad) => {
   expect(() => inspectPlainJson({ nested: bad }, '/definitions/0')).toThrowError(AgentManagerError);
   try {
     inspectPlainJson({ nested: bad }, '/definitions/0');

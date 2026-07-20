@@ -58,16 +58,10 @@ const appendPointerToken = (path: string, token: string): string =>
 
 const hasPairedSurrogates = (value: string): boolean => {
   for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index);
+    const codePoint = value.codePointAt(index);
 
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const next = value.charCodeAt(index + 1);
-      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
-      index += 1;
-      continue;
-    }
-
-    if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) return false;
+    if (codePoint === undefined || (codePoint >= 0xd800 && codePoint <= 0xdfff)) return false;
+    if (codePoint > 0xffff) index += 1;
   }
 
   return true;
@@ -108,7 +102,7 @@ const assertScalarString = (value: string, path: string): void => {
 const isEnumerableDataProperty = (
   descriptor: PropertyDescriptor | undefined,
 ): descriptor is DataPropertyDescriptor =>
-  descriptor !== undefined && descriptor.enumerable === true && Object.hasOwn(descriptor, 'value');
+  descriptor?.enumerable === true && Object.hasOwn(descriptor, 'value');
 
 const inspectPropertyDescriptor = (
   container: object,
