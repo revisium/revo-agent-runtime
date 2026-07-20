@@ -49,6 +49,11 @@
     "ci:local:sonar": "bash scripts/ci-local-sonar.sh",
     "prepack": "pnpm run build"
   },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "canonicalize": "3.0.0",
+    "zod": "4.4.3"
+  },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
     "@types/node": "24.13.3",
