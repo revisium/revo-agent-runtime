@@ -20,9 +20,13 @@ Separate portable contracts, immutable policy values, typed errors, and behavior
 contract layer is a strictly type-only dependency leaf. Policy is independently importable runtime data. Errors depend on
 contract types, and behavior depends on contracts, policy, and errors.
 
-Use one exported entity per leaf module, with explicit two-level barrels at domain and layer boundaries. Barrel modules and
-private helpers or structural types owned by one behavior are the only exceptions. Anonymous variants remain part of their
-owning exported union instead of becoming artificial exported entities.
+Use one exported entity per leaf module in runtime and behavior layers, with explicit two-level barrels at domain and layer
+boundaries. This rule remains strict for policy, errors, definition, strategies, and platform. In the strictly type-only
+`runtime/spec` layer, group related types in one leaf when they share a domain boundary and are expected to change together,
+following the Common Closure Principle. Specification leaves remain type-only; grouping does not permit runtime values,
+side effects, cross-domain deep imports, or broad barrels. Barrel modules and private helpers or structural types owned by
+one behavior remain the only exceptions outside `runtime/spec`. Anonymous variants remain part of their owning exported
+union instead of becoming artificial exported entities.
 
 Keep the package root empty and add no runtime root barrel, package subpath, or public deep-import path. Rename the
 milestone-prefixed fault-code contract to its durable role-based name. The exact structure, import rules, and migration
@@ -42,7 +46,8 @@ mapping are normative in the related specification.
 - Portable contracts can be checked as a type-only acyclic leaf, while policy, errors, and behavior have visible ownership.
 - Direct leaf imports inside a domain and controlled barrels across boundaries make dependencies reviewable and
   mechanically enforceable.
-- More files and explicit re-exports add navigation and maintenance overhead.
+- Explicit re-exports add navigation and maintenance overhead, while cohesive specification leaves avoid splitting type
+  changes that share one domain reason to change.
 - The structural migration must preserve every existing contract and behavior while updating imports and architecture
   proofs; later milestone work must adopt the same rule without being folded into the initial refactor.
 - No Nest or other application-framework dependency is introduced.
