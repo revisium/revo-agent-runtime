@@ -67,10 +67,13 @@ sealed AgentManager               bounded system operations
 one physical invocation
 ```
 
-Inside this package, portable runtime spec is the dependency leaf; definition and registry build immutable identity;
-execution depends on package-owned ports; strategies and platform code implement those ports; application is the only
-composition layer. The exact target folder and file responsibilities live in `docs/architecture.md` and are enforced by
-`.oxlintrc.architecture.json` plus the architecture verification harness.
+Inside this package, portable runtime spec and immutable policy are independent dependency leaves; errors depend only on
+specification types; definition behavior may depend on spec, policy, and errors. Registry builds immutable identity from
+definition and spec. Execution is a parallel building block over portable contracts and its own ports; neither registry nor
+execution depends on the other. Strategies and platform code implement execution-owned ports, and application is the only
+composition layer that wires registry, execution, strategies, and platform. The accepted PR #4 structure and import rules
+live in `docs/specs/internal-module-structure.spec.md`; broader target responsibilities live in `docs/architecture.md`.
+`.oxlintrc.architecture.json` and the architecture verification harness enforce both.
 
 Production source MUST NOT import from a consumer application, DBOS, Prisma, Nest, GraphQL, MCP, `@revisium/revo-scripts`,
 tests, fixtures, generated output, or repository scripts. Consumers depend on this package only through declared exports.

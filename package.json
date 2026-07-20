@@ -37,9 +37,10 @@
     "lint": "oxlint --type-aware --type-check --deny-warnings --report-unused-disable-directives .",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
+    "test:unit": "vitest run test/unit",
     "test:package": "vitest run test/package",
     "test:architecture": "node --import tsx scripts/verify-architecture.ts",
-    "test": "pnpm run test:package",
+    "test": "pnpm run test:unit && pnpm run test:package",
     "test:cov": "vitest run --coverage",
     "verify:architecture": "pnpm run test:architecture",
     "verify:package": "pnpm run build && publint && node --import tsx scripts/verify-package.ts",
@@ -48,6 +49,11 @@
     "sonar:issues:local": "bash scripts/sonar-issues-local.sh",
     "ci:local:sonar": "bash scripts/ci-local-sonar.sh",
     "prepack": "pnpm run build"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "canonicalize": "3.0.0",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",

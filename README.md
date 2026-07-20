@@ -155,6 +155,8 @@ The consumer owns:
 
 - [AgentManager v1 specification](./docs/specs/agent-manager-v1.spec.md) — exact target types, lifecycle, files, errors, and
   invariants.
+- [Internal module structure](./docs/specs/internal-module-structure.spec.md) — accepted internal layering and module rules;
+  it does not create a public export.
 - [Architecture](./docs/architecture.md) — implementation structure, dependency direction, and ownership boundaries.
 - [Expanded consumer example](./docs/examples/consumer.md) — complete target definition and invocation setup.
 - [ADRs and documentation index](./docs/README.md) — accepted decisions and repository policies.

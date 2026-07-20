@@ -1,0 +1,18 @@
+export const AGENT_FAULT_MESSAGES = Object.freeze({
+  definitionInvalid: 'Agent definition is invalid.',
+  invalidUnicode: 'Agent definition contains invalid Unicode.',
+  definitionDuplicate: 'Agent definition reference is duplicated.',
+  strategyUnsupported: 'Agent strategy is unsupported.',
+  limitInvalid: 'Agent manager limit is invalid.',
+  agentUnknown: 'Agent reference is unknown.',
+  probePlatformUnsupported: 'Agent platform is unsupported.',
+  probeExecutableUnavailable: 'Agent executable is unavailable.',
+  probeStartFailed: 'Agent version probe could not start.',
+  probeTimeout: 'Agent version probe timed out.',
+  probeOutputTooLarge: 'Agent version probe output exceeded its limit.',
+  probeProcessFailed: 'Agent version probe exited unsuccessfully.',
+  probeOutputInvalid: 'Agent version probe output is invalid.',
+  probeVersionMismatch: 'Agent executable version does not satisfy its constraint.',
+  internalConstruction: 'Agent manager construction failed unexpectedly.',
+  internalProbe: 'Agent probe failed unexpectedly.',
+} as const);
