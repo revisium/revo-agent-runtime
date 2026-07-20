@@ -63,6 +63,22 @@ export type NormalizeValidationDiagnosticsIsExact = Expect<
   >
 >;
 
+export type CohesiveSpecificationSurface = readonly [
+  AgentFault,
+  AgentFaultCode,
+  AgentValidationDiagnostic,
+  AgentValidationDetails,
+  AgentProbeAvailable,
+  AgentProbeUnavailable,
+  AgentProbeResult,
+  AgentManagerLimits,
+  AgentManagerOptions,
+  AgentRef,
+  AgentDescriptor,
+  AgentDefinitionContract,
+  AgentDefinitionInput,
+];
+
 export type RuntimeContractSurface = readonly [
   AgentArgumentTemplate,
   AgentDefinitionContract,

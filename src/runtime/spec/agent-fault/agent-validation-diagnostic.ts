@@ -8,3 +8,8 @@ export interface AgentValidationDiagnostic extends JsonObject {
   readonly keyword: string;
   readonly message: string;
 }
+
+export interface AgentValidationDetails extends JsonObject {
+  readonly diagnostics: readonly AgentValidationDiagnostic[];
+  readonly truncated: boolean;
+}

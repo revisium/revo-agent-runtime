@@ -35,6 +35,43 @@ test('accepts explicit type-only and runtime layer boundaries', () => {
   ).not.toThrow();
 });
 
+test('accepts cohesive type groups in specification leaves', () => {
+  expect(() =>
+    validateModuleStructure([
+      {
+        path: 'src/runtime/spec/agent-fault/agent-fault.ts',
+        source:
+          "export type AgentFaultCode = 'revo.agent.internal';\nexport interface AgentFault { readonly code: AgentFaultCode }\n",
+      },
+      {
+        path: 'src/runtime/spec/agent-fault/agent-validation-diagnostic.ts',
+        source:
+          'export interface AgentValidationDiagnostic { readonly message: string }\nexport interface AgentValidationDetails { readonly diagnostics: readonly AgentValidationDiagnostic[] }\n',
+      },
+      {
+        path: 'src/runtime/spec/agent-probe/agent-probe-result.ts',
+        source:
+          "export interface AgentProbeAvailable { readonly status: 'available' }\nexport interface AgentProbeUnavailable { readonly status: 'unavailable' }\nexport type AgentProbeResult = AgentProbeAvailable | AgentProbeUnavailable;\n",
+      },
+      {
+        path: 'src/runtime/spec/manager-options/agent-manager-options.ts',
+        source:
+          'export interface AgentManagerLimits { readonly timeoutMs?: number }\nexport interface AgentManagerOptions { readonly limits?: AgentManagerLimits }\n',
+      },
+      {
+        path: 'src/runtime/spec/agent-definition/agent-descriptor.ts',
+        source:
+          'export interface AgentRef { readonly id: string }\nexport interface AgentDescriptor { readonly agent: AgentRef }\n',
+      },
+      {
+        path: 'src/runtime/spec/agent-definition/agent-definition-contract.ts',
+        source:
+          'export interface AgentDefinitionContract { readonly id: string }\nexport type AgentDefinitionInput = AgentDefinitionContract;\n',
+      },
+    ]),
+  ).not.toThrow();
+});
+
 test('rejects runtime syntax in a specification leaf', () => {
   expectViolation(
     {
@@ -159,7 +196,7 @@ test.each([
   [
     'cross-domain-barrel-import',
     'src/runtime/spec/agent-fault/agent-fault.ts',
-    "import type { AgentRef } from '../agent-definition/agent-ref.js';\nexport interface AgentFault { readonly agent: AgentRef }\n",
+    "import type { AgentRef } from '../agent-definition/agent-descriptor.js';\nexport interface AgentFault { readonly agent: AgentRef }\n",
   ],
   [
     'cross-layer-barrel-import',
