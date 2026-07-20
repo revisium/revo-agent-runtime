@@ -1,4 +1,8 @@
 import type {
+  normalizeValidationDiagnostics,
+  ValidationDiagnosticInput,
+} from '../../src/runtime/definition/index.js';
+import type {
   AgentArgumentTemplate,
   AgentDefinitionContract,
   AgentDefinitionInput,
@@ -39,7 +43,25 @@ type ExpectedAgentFaultCode =
   | 'revo.agent.probe_version_mismatch'
   | 'revo.agent.internal';
 
+type ExpectedValidationDiagnosticInput = {
+  readonly instancePath: string;
+  readonly schemaPath: string;
+  readonly keyword: string;
+  readonly message: string;
+};
+
 export type AgentFaultCodeIsExact = Expect<Equal<AgentFaultCode, ExpectedAgentFaultCode>>;
+
+export type ValidationDiagnosticInputIsExact = Expect<
+  Equal<ValidationDiagnosticInput, ExpectedValidationDiagnosticInput>
+>;
+
+export type NormalizeValidationDiagnosticsIsExact = Expect<
+  Equal<
+    typeof normalizeValidationDiagnostics,
+    (inputs: readonly ValidationDiagnosticInput[]) => AgentValidationDetails
+  >
+>;
 
 export type RuntimeContractSurface = readonly [
   AgentArgumentTemplate,
