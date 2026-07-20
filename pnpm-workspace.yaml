@@ -1,6 +1,2 @@
 allowBuilds:
   esbuild: false # tsx uses the platform package; no install script is required
-# Owner: Task 1 dependency owner.
-# Reason: critical High security hotfix for fast-uri.
-# Expiry: remove after 2026-07-20 10:43 Europe/Moscow (07:43Z) and before Task 13/final M1 closure.
-minimumReleaseAgeExclude: [fast-uri@3.1.4]
