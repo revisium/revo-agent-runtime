@@ -157,6 +157,43 @@ const collectDirectSchemaLocation = (
   });
 };
 
+const collectSchemaLocationDiagnostics = (
+  location: SchemaLocation,
+  value: JsonObject,
+  rootInstancePath: string,
+  diagnostics: ValidationDiagnosticInput[],
+): void => {
+  if (location.pointer === '' && readOwnDataValue(value, '$schema') !== ROOT_DIALECT) {
+    diagnostics.push(diagnostic(rootInstancePath, 'root_dialect'));
+  }
+
+  for (const key of Object.keys(value)) {
+    const keyPath = appendPointerToken(location.instancePath, key);
+    if (!CONSUMER_SCHEMA_PROFILE_KEYWORDS.has(key))
+      diagnostics.push(diagnostic(keyPath, 'keyword_allowlist'));
+    if (location.pointer !== '' && key === '$schema') {
+      diagnostics.push(diagnostic(keyPath, 'root_dialect'));
+    }
+  }
+};
+
+const collectNestedSchemaLocations = (
+  location: SchemaLocation,
+  value: JsonObject,
+  frames: SchemaLocation[],
+  diagnostics: ValidationDiagnosticInput[],
+): void => {
+  for (const key of Object.keys(value).toReversed()) {
+    const nestedValue = readOwnDataValue(value, key);
+    if (key === '$defs' || key === 'properties') {
+      collectNameMapLocations(location, key, nestedValue, frames, diagnostics);
+    }
+    if (key === 'additionalProperties' || key === 'items') {
+      collectDirectSchemaLocation(location, key, nestedValue, frames, diagnostics);
+    }
+  }
+};
+
 const collectProfile = (root: JsonObject, instancePath: string): ProfileCollection => {
   const diagnostics: ValidationDiagnosticInput[] = [];
   const locations = new Map<string, SchemaLocation>();
@@ -166,29 +203,8 @@ const collectProfile = (root: JsonObject, instancePath: string): ProfileCollecti
     locations.set(location.pointer, location);
     if (!isJsonObject(location.value)) continue;
 
-    const keys = Object.keys(location.value);
-    if (location.pointer === '' && readOwnDataValue(location.value, '$schema') !== ROOT_DIALECT) {
-      diagnostics.push(diagnostic(instancePath, 'root_dialect'));
-    }
-
-    for (const key of keys) {
-      const keyPath = appendPointerToken(location.instancePath, key);
-      if (!CONSUMER_SCHEMA_PROFILE_KEYWORDS.has(key))
-        diagnostics.push(diagnostic(keyPath, 'keyword_allowlist'));
-      if (location.pointer !== '' && key === '$schema') {
-        diagnostics.push(diagnostic(keyPath, 'root_dialect'));
-      }
-    }
-
-    for (const key of keys.toReversed()) {
-      const value = readOwnDataValue(location.value, key);
-      if (key === '$defs' || key === 'properties') {
-        collectNameMapLocations(location, key, value, frames, diagnostics);
-      }
-      if (key === 'additionalProperties' || key === 'items') {
-        collectDirectSchemaLocation(location, key, value, frames, diagnostics);
-      }
-    }
+    collectSchemaLocationDiagnostics(location, location.value, instancePath, diagnostics);
+    collectNestedSchemaLocations(location, location.value, frames, diagnostics);
   }
 
   return { diagnostics, locations };
@@ -238,6 +254,50 @@ const resolveReference = (
   return location?.value === value ? pointer : undefined;
 };
 
+const collectReferenceSiblingDiagnostics = (
+  location: SchemaLocation,
+  value: JsonObject,
+  diagnostics: ValidationDiagnosticInput[],
+): void => {
+  const permittedSiblings = location.pointer === '' ? ROOT_REF_SIBLINGS : NESTED_REF_SIBLINGS;
+  for (const key of Object.keys(value)) {
+    if (!permittedSiblings.has(key)) {
+      diagnostics.push(diagnostic(appendPointerToken(location.instancePath, key), 'ref_siblings'));
+    }
+  }
+};
+
+const collectReferenceEdge = (
+  root: JsonObject,
+  location: SchemaLocation,
+  value: JsonObject,
+  locations: ReadonlyMap<string, SchemaLocation>,
+  diagnostics: ValidationDiagnosticInput[],
+): ReferenceEdge | undefined => {
+  const referencePath = appendPointerToken(location.instancePath, '$ref');
+  collectReferenceSiblingDiagnostics(location, value, diagnostics);
+
+  const reference = readOwnDataValue(value, '$ref');
+  if (typeof reference !== 'string' || (reference !== '#' && !reference.startsWith('#/'))) {
+    diagnostics.push(diagnostic(referencePath, 'ref_local'));
+    return undefined;
+  }
+
+  const tokens = decodePointerTokens(reference);
+  if (tokens === undefined) {
+    diagnostics.push(diagnostic(referencePath, 'ref_pointer'));
+    return undefined;
+  }
+
+  const destination = resolveReference(root, tokens, locations);
+  if (destination === undefined) {
+    diagnostics.push(diagnostic(referencePath, 'ref_resolved'));
+    return undefined;
+  }
+
+  return { destination, instancePath: referencePath };
+};
+
 const collectReferenceEdges = (
   root: JsonObject,
   locations: ReadonlyMap<string, SchemaLocation>,
@@ -250,35 +310,8 @@ const collectReferenceEdges = (
   for (const location of locations.values()) {
     if (!isJsonObject(location.value) || !hasOwnDataValue(location.value, '$ref')) continue;
 
-    const referencePath = appendPointerToken(location.instancePath, '$ref');
-    const permittedSiblings = location.pointer === '' ? ROOT_REF_SIBLINGS : NESTED_REF_SIBLINGS;
-    for (const key of Object.keys(location.value)) {
-      if (!permittedSiblings.has(key)) {
-        diagnostics.push(
-          diagnostic(appendPointerToken(location.instancePath, key), 'ref_siblings'),
-        );
-      }
-    }
-
-    const reference = readOwnDataValue(location.value, '$ref');
-    if (typeof reference !== 'string' || (reference !== '#' && !reference.startsWith('#/'))) {
-      diagnostics.push(diagnostic(referencePath, 'ref_local'));
-      continue;
-    }
-
-    const tokens = decodePointerTokens(reference);
-    if (tokens === undefined) {
-      diagnostics.push(diagnostic(referencePath, 'ref_pointer'));
-      continue;
-    }
-
-    const destination = resolveReference(root, tokens, locations);
-    if (destination === undefined) {
-      diagnostics.push(diagnostic(referencePath, 'ref_resolved'));
-      continue;
-    }
-
-    edges.set(location.pointer, { destination, instancePath: referencePath });
+    const edge = collectReferenceEdge(root, location, location.value, locations, diagnostics);
+    if (edge !== undefined) edges.set(location.pointer, edge);
   }
 
   return { diagnostics, edges };
