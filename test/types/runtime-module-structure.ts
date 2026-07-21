@@ -1,4 +1,6 @@
 import type {
+  P1SchemaValidation,
+  validateP1Schema,
   normalizeValidationDiagnostics,
   ValidationDiagnosticInput,
 } from '../../src/runtime/definition/index.js';
@@ -61,6 +63,18 @@ export type NormalizeValidationDiagnosticsIsExact = Expect<
     typeof normalizeValidationDiagnostics,
     (inputs: readonly ValidationDiagnosticInput[]) => AgentValidationDetails
   >
+>;
+
+type ExpectedP1SchemaValidation =
+  | { readonly valid: true; readonly schema: JsonSchema202012 }
+  | { readonly valid: false; readonly diagnostics: AgentValidationDetails };
+
+export type P1SchemaValidationIsExact = Expect<
+  Equal<P1SchemaValidation, ExpectedP1SchemaValidation>
+>;
+
+export type ValidateP1SchemaIsExact = Expect<
+  Equal<typeof validateP1Schema, (schema: unknown, instancePath: string) => P1SchemaValidation>
 >;
 
 export type CohesiveSpecificationSurface = readonly [
