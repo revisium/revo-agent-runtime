@@ -3,8 +3,8 @@ import { expect, test } from 'vitest';
 import {
   canonicalizeJsonBytes,
   inspectPlainJson,
-  validateP1Schema,
-  type P1SchemaValidation,
+  validateConsumerSchemaProfile,
+  type ConsumerSchemaProfileValidation,
 } from '../../../../src/runtime/definition/index.js';
 import { AgentManagerError } from '../../../../src/runtime/errors/index.js';
 import { AGENT_RUNTIME_LIMITS } from '../../../../src/runtime/policy/index.js';
@@ -19,7 +19,7 @@ const instancePath = '/definitions/0/parameters/schema';
 const dialect = 'https://json-schema.org/draft/2020-12/schema';
 
 const diagnosticMessages = {
-  keyword_allowlist: 'Keyword is not allowed by the P1 schema profile.',
+  keyword_allowlist: 'Keyword is not allowed by the consumer-schema profile.',
   ref_acyclic: 'Local reference graph must be acyclic.',
   ref_local: 'Reference must be local to the root schema.',
   ref_pointer: 'Reference must use an unencoded valid JSON Pointer fragment.',
@@ -28,7 +28,7 @@ const diagnosticMessages = {
   root_dialect: 'Schema dialect must be declared exactly at the root.',
   schema_bytes: 'Schema canonical UTF-8 representation exceeds 1 MiB.',
   schema_depth: 'Schema JSON depth exceeds 64.',
-  schema_location: 'Value must be a boolean or object P1 schema.',
+  schema_location: 'Value must be a boolean or object consumer schema.',
   schema_nodes: 'Schema JSON node count exceeds 8,192.',
 } as const;
 
@@ -40,7 +40,7 @@ const root = (body: JsonObject): JsonObject => ({ $schema: dialect, ...body });
 const invalidDiagnostics = (
   diagnostics: readonly ExpectedDiagnostic[],
   truncated = false,
-): P1SchemaValidation =>
+): ConsumerSchemaProfileValidation =>
   Object.freeze({
     valid: false as const,
     diagnostics: Object.freeze({
@@ -60,10 +60,12 @@ const invalidDiagnostics = (
     }) satisfies AgentValidationDetails,
   });
 
-const invalid = (keyword: DiagnosticKeyword, path = instancePath): P1SchemaValidation =>
-  invalidDiagnostics([[keyword, path]]);
+const invalid = (
+  keyword: DiagnosticKeyword,
+  path = instancePath,
+): ConsumerSchemaProfileValidation => invalidDiagnostics([[keyword, path]]);
 
-const valid = (schema: JsonSchema202012): P1SchemaValidation =>
+const valid = (schema: JsonSchema202012): ConsumerSchemaProfileValidation =>
   Object.freeze({ valid: true as const, schema });
 
 const nestedArrays = (count: number): JsonValue => {
@@ -130,7 +132,7 @@ test.each([
   ['boolean root', true, 'root_dialect', instancePath],
   ['array root', [], 'root_dialect', instancePath],
 ] as const)('rejects %s', (_name, schema, keyword, path) => {
-  expect(validateP1Schema(schema, instancePath)).toEqual(invalid(keyword, path));
+  expect(validateConsumerSchemaProfile(schema, instancePath)).toEqual(invalid(keyword, path));
 });
 
 test.each([
@@ -142,7 +144,9 @@ test.each([
 ] as const)(
   'rejects every required out-of-profile keyword with a full verdict: %s',
   (_name, schema, path) => {
-    expect(validateP1Schema(schema, instancePath)).toEqual(invalid('keyword_allowlist', path));
+    expect(validateConsumerSchemaProfile(schema, instancePath)).toEqual(
+      invalid('keyword_allowlist', path),
+    );
   },
 );
 
@@ -176,15 +180,15 @@ test.each([
     multipleOf: 1,
     uniqueItems: true,
   }),
-] as const)('accepts an admitted P1 schema', (schema) => {
-  const result = validateP1Schema(schema, instancePath);
+] as const)('accepts an admitted consumer schema', (schema) => {
+  const result = validateConsumerSchemaProfile(schema, instancePath);
   expect(result).toEqual(valid(schema));
   expect(Object.isFrozen(result)).toBe(true);
 });
 
 test('retains the caller root object on success', () => {
   const schema = root({ type: 'object' });
-  const result = validateP1Schema(schema, instancePath);
+  const result = validateConsumerSchemaProfile(schema, instancePath);
 
   if (!result.valid) throw new Error('Expected an admitted schema.');
   expect(result.schema).toBe(schema);
@@ -193,7 +197,7 @@ test('retains the caller root object on success', () => {
 test('rejects a nonroot reference sibling with a full verdict', () => {
   const schema = root({ properties: { value: { $ref: '#', type: 'string' } } });
 
-  expect(validateP1Schema(schema, instancePath)).toEqual(
+  expect(validateConsumerSchemaProfile(schema, instancePath)).toEqual(
     invalid('ref_siblings', `${instancePath}/properties/value/type`),
   );
 });
@@ -201,7 +205,7 @@ test('rejects a nonroot reference sibling with a full verdict', () => {
 test('rejects a non-string reference with a full verdict', () => {
   const schema = root({ $ref: 1 });
 
-  expect(validateP1Schema(schema, instancePath)).toEqual(
+  expect(validateConsumerSchemaProfile(schema, instancePath)).toEqual(
     invalid('ref_local', `${instancePath}/$ref`),
   );
 });
@@ -209,7 +213,7 @@ test('rejects a non-string reference with a full verdict', () => {
 test('rejects a root self-reference cycle with a full verdict', () => {
   const schema = root({ $ref: '#' });
 
-  expect(validateP1Schema(schema, instancePath)).toEqual(
+  expect(validateConsumerSchemaProfile(schema, instancePath)).toEqual(
     invalid('ref_acyclic', `${instancePath}/$ref`),
   );
 });
@@ -221,7 +225,7 @@ test('returns profile diagnostics before reference failures and cycles', () => {
     $defs: { self: { $ref: '#/$defs/self' } },
   });
 
-  expect(validateP1Schema(schema, instancePath)).toEqual(
+  expect(validateConsumerSchemaProfile(schema, instancePath)).toEqual(
     invalid('keyword_allowlist', `${instancePath}/title`),
   );
 });
@@ -232,7 +236,7 @@ test('returns reference diagnostics before cycle detection', () => {
     $defs: { self: { $ref: '#/$defs/self' } },
   });
 
-  expect(validateP1Schema(schema, instancePath)).toEqual(
+  expect(validateConsumerSchemaProfile(schema, instancePath)).toEqual(
     invalid('ref_local', `${instancePath}/$ref`),
   );
 });
@@ -240,7 +244,7 @@ test('returns reference diagnostics before cycle detection', () => {
 test('rejects a reference to a local value that is not a schema location', () => {
   const schema = root({ properties: { value: { $ref: '#/properties' } } });
 
-  expect(validateP1Schema(schema, instancePath)).toEqual(
+  expect(validateConsumerSchemaProfile(schema, instancePath)).toEqual(
     invalid('ref_resolved', `${instancePath}/properties/value/$ref`),
   );
 });
@@ -265,7 +269,7 @@ test('propagates an inspectPlainJson fault unchanged without invoking a hostile 
     throw new Error('Expected a plain-JSON inspection fault.');
   };
 
-  expect(faultFrom(() => validateP1Schema(schema, instancePath))).toEqual(
+  expect(faultFrom(() => validateConsumerSchemaProfile(schema, instancePath))).toEqual(
     faultFrom(() => inspectPlainJson(schema, instancePath)),
   );
   expect(getterCalls).toBe(0);
@@ -275,7 +279,7 @@ test('short-circuits profile diagnostics after resource admission rejects', () =
   const schema = root({ title: 'out-of-profile', const: nestedArrays(63) });
 
   expect(inspectPlainJson(schema, instancePath).depth).toBe(65);
-  expect(validateP1Schema(schema, instancePath)).toEqual(invalid('schema_depth'));
+  expect(validateConsumerSchemaProfile(schema, instancePath)).toEqual(invalid('schema_depth'));
 });
 
 test('normalizes multiple raw profile diagnostics into UTF-8 order', () => {
@@ -286,7 +290,7 @@ test('normalizes multiple raw profile diagnostics into UTF-8 order', () => {
     },
   });
 
-  expect(validateP1Schema(schema, instancePath)).toEqual(
+  expect(validateConsumerSchemaProfile(schema, instancePath)).toEqual(
     invalidDiagnostics([
       ['keyword_allowlist', `${instancePath}/properties/\uE000/format`],
       ['keyword_allowlist', `${instancePath}/properties/\u{10000}/title`],
@@ -311,7 +315,9 @@ test('bounds a deterministic profile diagnostic collection', () => {
     ],
   );
 
-  expect(validateP1Schema(schema, instancePath)).toEqual(invalidDiagnostics(expected, true));
+  expect(validateConsumerSchemaProfile(schema, instancePath)).toEqual(
+    invalidDiagnostics(expected, true),
+  );
 });
 
 test.each([
@@ -319,7 +325,7 @@ test.each([
   [65, root({ const: nestedArrays(63) }), false],
 ] as const)('enforces schema depth boundary %i', (_depth, schema, admitted) => {
   expect(inspectPlainJson(schema, instancePath).depth).toBe(_depth);
-  const result = validateP1Schema(schema, instancePath);
+  const result = validateConsumerSchemaProfile(schema, instancePath);
   expect(result).toEqual(admitted ? valid(schema) : invalid('schema_depth'));
 });
 
@@ -336,7 +342,7 @@ test.each([
   ],
 ] as const)('enforces schema node boundary %i', (_nodes, schema, admitted) => {
   expect(inspectPlainJson(schema, instancePath).nodes).toBe(_nodes);
-  const result = validateP1Schema(schema, instancePath);
+  const result = validateConsumerSchemaProfile(schema, instancePath);
   expect(result).toEqual(admitted ? valid(schema) : invalid('schema_nodes'));
 });
 
@@ -346,13 +352,13 @@ test.each([
 ] as const)('enforces canonical byte boundary %i', (size, admitted) => {
   const schema = resourceBytesSchema(size);
   expect(canonicalizeJsonBytes(schema).byteLength).toBe(size);
-  expect(validateP1Schema(schema, instancePath)).toEqual(
+  expect(validateConsumerSchemaProfile(schema, instancePath)).toEqual(
     admitted ? valid(schema) : invalid('schema_bytes'),
   );
 });
 
 test('returns a frozen normalized diagnostic verdict', () => {
-  const result = validateP1Schema(root({ title: 'x' }), instancePath);
+  const result = validateConsumerSchemaProfile(root({ title: 'x' }), instancePath);
 
   if (result.valid) throw new Error('Expected a rejected schema.');
   expect(Object.isFrozen(result)).toBe(true);

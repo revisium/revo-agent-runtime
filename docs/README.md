@@ -8,7 +8,7 @@
   layering, barrels, and architecture-enforcement rules. It does not add a package export.
 - [Internal definition canonical-byte adapter specification](./specs/definition-canonical-bytes.spec.md) — accepted target
   for the private RFC 8785 canonical-byte boundary; it does not add a package export or describe shipped behavior.
-- [P1 schema profile specification](./specs/p1-schema-profile.spec.md) — accepted target for bounded consumer-schema
+- [Consumer-schema profile specification](./specs/consumer-schema-profile.spec.md) — accepted target for bounded consumer-schema
   profile admission and local reference validation; it does not compile schemas or describe shipped behavior.
 - [Architecture](./architecture.md) — target folders, file responsibilities, dependency direction, and ownership boundary.
 - [Testing](./testing.md) — proof layers, architecture/package gates, and implementation test requirements.

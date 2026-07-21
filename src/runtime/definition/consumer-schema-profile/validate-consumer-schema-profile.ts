@@ -6,9 +6,9 @@ import {
   normalizeValidationDiagnostics,
   type ValidationDiagnosticInput,
 } from '../validation-diagnostics/index.js';
-import type { P1SchemaValidation } from './p1-schema-validation.js';
+import type { ConsumerSchemaProfileValidation } from './consumer-schema-profile-validation.js';
 
-const P1_KEYWORDS = new Set([
+const CONSUMER_SCHEMA_PROFILE_KEYWORDS = new Set([
   '$schema',
   '$ref',
   '$defs',
@@ -36,7 +36,7 @@ const ROOT_REF_SIBLINGS = new Set(['$schema', '$ref', '$defs']);
 const NESTED_REF_SIBLINGS = new Set(['$ref']);
 
 const diagnosticMessages = {
-  keyword_allowlist: 'Keyword is not allowed by the P1 schema profile.',
+  keyword_allowlist: 'Keyword is not allowed by the consumer-schema profile.',
   ref_acyclic: 'Local reference graph must be acyclic.',
   ref_local: 'Reference must be local to the root schema.',
   ref_pointer: 'Reference must use an unencoded valid JSON Pointer fragment.',
@@ -45,7 +45,7 @@ const diagnosticMessages = {
   root_dialect: 'Schema dialect must be declared exactly at the root.',
   schema_bytes: 'Schema canonical UTF-8 representation exceeds 1 MiB.',
   schema_depth: 'Schema JSON depth exceeds 64.',
-  schema_location: 'Value must be a boolean or object P1 schema.',
+  schema_location: 'Value must be a boolean or object consumer schema.',
   schema_nodes: 'Schema JSON node count exceeds 8,192.',
 } as const;
 
@@ -104,7 +104,7 @@ const diagnostic = (
   message: diagnosticMessages[keyword],
 });
 
-const invalid = (inputs: readonly ValidationDiagnosticInput[]): P1SchemaValidation =>
+const invalid = (inputs: readonly ValidationDiagnosticInput[]): ConsumerSchemaProfileValidation =>
   Object.freeze({ valid: false, diagnostics: normalizeValidationDiagnostics(inputs) });
 
 const collectNameMapLocations = (
@@ -173,7 +173,8 @@ const collectProfile = (root: JsonObject, instancePath: string): ProfileCollecti
 
     for (const key of keys) {
       const keyPath = appendPointerToken(location.instancePath, key);
-      if (!P1_KEYWORDS.has(key)) diagnostics.push(diagnostic(keyPath, 'keyword_allowlist'));
+      if (!CONSUMER_SCHEMA_PROFILE_KEYWORDS.has(key))
+        diagnostics.push(diagnostic(keyPath, 'keyword_allowlist'));
       if (location.pointer !== '' && key === '$schema') {
         diagnostics.push(diagnostic(keyPath, 'root_dialect'));
       }
@@ -335,7 +336,10 @@ const resourceDiagnostics = (
   return diagnostics;
 };
 
-export const validateP1Schema = (schema: unknown, instancePath: string): P1SchemaValidation => {
+export const validateConsumerSchemaProfile = (
+  schema: unknown,
+  instancePath: string,
+): ConsumerSchemaProfileValidation => {
   const inspection = inspectPlainJson(schema, instancePath);
   if (!isJsonSchema(schema)) return invalid([diagnostic(instancePath, 'root_dialect')]);
 

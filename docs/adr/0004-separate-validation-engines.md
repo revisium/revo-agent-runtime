@@ -3,14 +3,14 @@
 - Status: Accepted
 - Date: 2026-07-21
 - Refines: [ADR-0002](./0002-agent-manager-consumer-boundary.md)
-- Related specification: [P1 schema profile](../specs/p1-schema-profile.spec.md)
+- Related specification: [consumer-schema profile](../specs/consumer-schema-profile.spec.md)
 
 ## Context
 
 The manager accepts two materially different validation boundaries. Package-owned
 inputs need contracts that align with the package's TypeScript model. A
 consumer-supplied result schema is untrusted executable data whose dialect and
-resolution must stay deterministic and offline. P1 depth, node, and
+resolution must stay deterministic and offline. The consumer-schema profile's depth, node, and
 canonical-byte limits control resource admission after the existing complete
 `inspectPlainJson` pass; they do not promise a hard time or memory bound for
 inspecting an arbitrary already-created JavaScript value.
@@ -26,7 +26,7 @@ Use Zod for package-owned DTO and input-shape validation, and use Ajv in JSON
 Schema draft 2020-12 mode for consumer-schema compilation and result-instance
 validation. Both engines remain behind package-owned adapters.
 
-The accepted P1 schema profile owns the pre-compilation trust boundary:
+The accepted consumer-schema profile owns the pre-compilation trust boundary:
 resource admission, the closed keyword profile, and local acyclic reference
 resolution. Task 3B defines that boundary only. It neither imports nor invokes
 Ajv; Ajv compilation, execution, and provider-diagnostic mapping are deferred
@@ -49,6 +49,6 @@ to Task 3C.
   provider-neutral.
 - The package carries two validation dependencies and must audit them
   independently.
-- Consumers may need to simplify schemas to the P1 profile.
-- Task 3C must preserve the P1-admitted schema and translate Ajv outcomes into
+- Consumers may need to simplify schemas to the consumer-schema profile.
+- Task 3C must preserve a schema admitted by the consumer-schema profile and translate Ajv outcomes into
   package-owned results without widening the public surface.
