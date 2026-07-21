@@ -1,5 +1,7 @@
 import type {
+  CompiledConsumerSchema,
   ConsumerSchemaProfileValidation,
+  compileConsumerSchema,
   validateConsumerSchemaProfile,
   normalizeValidationDiagnostics,
   ValidationDiagnosticInput,
@@ -77,6 +79,22 @@ export type ValidateConsumerSchemaProfileIsExact = Expect<
   Equal<
     typeof validateConsumerSchemaProfile,
     (schema: unknown, instancePath: string) => ConsumerSchemaProfileValidation
+  >
+>;
+
+export type CompiledConsumerSchemaIsExact = Expect<
+  Equal<
+    CompiledConsumerSchema,
+    {
+      validate(value: JsonValue, valueInstancePath: string): AgentValidationDetails | undefined;
+    }
+  >
+>;
+
+export type CompileConsumerSchemaIsExact = Expect<
+  Equal<
+    typeof compileConsumerSchema,
+    (schema: JsonSchema202012, schemaInstancePath: string) => CompiledConsumerSchema
   >
 >;
 
