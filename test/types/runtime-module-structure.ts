@@ -1,4 +1,6 @@
 import type {
+  ConsumerSchemaProfileValidation,
+  validateConsumerSchemaProfile,
   normalizeValidationDiagnostics,
   ValidationDiagnosticInput,
 } from '../../src/runtime/definition/index.js';
@@ -60,6 +62,21 @@ export type NormalizeValidationDiagnosticsIsExact = Expect<
   Equal<
     typeof normalizeValidationDiagnostics,
     (inputs: readonly ValidationDiagnosticInput[]) => AgentValidationDetails
+  >
+>;
+
+type ExpectedConsumerSchemaProfileValidation =
+  | { readonly valid: true; readonly schema: JsonSchema202012 }
+  | { readonly valid: false; readonly diagnostics: AgentValidationDetails };
+
+export type ConsumerSchemaProfileValidationIsExact = Expect<
+  Equal<ConsumerSchemaProfileValidation, ExpectedConsumerSchemaProfileValidation>
+>;
+
+export type ValidateConsumerSchemaProfileIsExact = Expect<
+  Equal<
+    typeof validateConsumerSchemaProfile,
+    (schema: unknown, instancePath: string) => ConsumerSchemaProfileValidation
   >
 >;
 

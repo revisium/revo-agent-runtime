@@ -23,6 +23,9 @@ test('runtime tree comparison is independent of directory enumeration order', as
   const expectedFiles = [
     'definition/rfc8785/canonicalize-json-bytes.ts',
     'definition/rfc8785/index.ts',
+    'definition/consumer-schema-profile/index.ts',
+    'definition/consumer-schema-profile/consumer-schema-profile-validation.ts',
+    'definition/consumer-schema-profile/validate-consumer-schema-profile.ts',
     'definition/plain-json/index.ts',
     'definition/index.ts',
     'definition/plain-json/inspect-plain-json.ts',
