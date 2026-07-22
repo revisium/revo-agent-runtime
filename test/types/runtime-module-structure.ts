@@ -22,7 +22,13 @@ import type {
   ValidatedManagerConstruction,
 } from '../../src/runtime/definition/index.js';
 import type {
+  ExecutableProbePort,
+  ExecutableResolution,
   parseVersionOutput,
+  ProbeHostPlatform,
+  RunningVersionProbe,
+  VersionProbeObservation,
+  VersionProbeRequest,
   VersionOutputFailureReason,
   VersionOutputResult,
 } from '../../src/runtime/probe/index.js';
@@ -163,6 +169,44 @@ type ExpectedVersionOutputResult =
   | { readonly valid: true; readonly version: StrictSemVer }
   | { readonly valid: false; readonly reason: VersionOutputFailureReason };
 
+type ExpectedProbeHostPlatform = 'darwin' | 'linux' | 'win32' | 'other';
+
+type ExpectedExecutableResolution =
+  | { readonly status: 'resolved'; readonly executable: string }
+  | { readonly status: 'unavailable'; readonly reason: 'not_found' | 'not_launchable' };
+
+type ExpectedVersionProbeRequest = {
+  readonly executable: string;
+  readonly args: readonly string[];
+  readonly shell: false;
+  readonly timeoutMs: number;
+  readonly stdoutLimitBytes: 65_536;
+  readonly stderrLimitBytes: 65_536;
+};
+
+type ExpectedVersionProbeObservation =
+  | {
+      readonly status: 'exited';
+      readonly exitCode: number | null;
+      readonly signal: string | null;
+      readonly stdout: Uint8Array;
+      readonly stderr: Uint8Array;
+      readonly overflow: 'none' | 'stdout' | 'stderr' | 'both';
+    }
+  | { readonly status: 'spawn_failed' };
+
+type ExpectedRunningVersionProbe = {
+  readonly completion: Promise<VersionProbeObservation>;
+  readonly timeout: Promise<void>;
+  terminateAndReap(): Promise<void>;
+};
+
+type ExpectedExecutableProbePort = {
+  hostPlatform(): ProbeHostPlatform;
+  resolveExecutable(request: Readonly<{ command: string }>): Promise<ExecutableResolution>;
+  startVersionProbe(request: VersionProbeRequest): Promise<RunningVersionProbe>;
+};
+
 export type StrictSemVerIsExact = Expect<Equal<StrictSemVer, ExpectedStrictSemVer>>;
 
 export type ComparatorOperatorIsExact = Expect<
@@ -203,6 +247,28 @@ export type VersionOutputFailureReasonIsExact = Expect<
 
 export type VersionOutputResultIsExact = Expect<
   Equal<VersionOutputResult, ExpectedVersionOutputResult>
+>;
+
+export type ProbeHostPlatformIsExact = Expect<Equal<ProbeHostPlatform, ExpectedProbeHostPlatform>>;
+
+export type ExecutableResolutionIsExact = Expect<
+  Equal<ExecutableResolution, ExpectedExecutableResolution>
+>;
+
+export type VersionProbeRequestIsExact = Expect<
+  Equal<VersionProbeRequest, ExpectedVersionProbeRequest>
+>;
+
+export type VersionProbeObservationIsExact = Expect<
+  Equal<VersionProbeObservation, ExpectedVersionProbeObservation>
+>;
+
+export type RunningVersionProbeIsExact = Expect<
+  Equal<RunningVersionProbe, ExpectedRunningVersionProbe>
+>;
+
+export type ExecutableProbePortIsExact = Expect<
+  Equal<ExecutableProbePort, ExpectedExecutableProbePort>
 >;
 
 export type ParseVersionOutputIsExact = Expect<
