@@ -86,6 +86,26 @@ const limitShapeFault = (instancePath: string): AgentFault => ({
   },
 });
 
+const limitRelationFault = (instancePath: string): AgentFault => ({
+  code: 'revo.agent.limit_invalid',
+  message: AGENT_FAULT_MESSAGES.limitInvalid,
+  phase: 'construction',
+  retryable: false,
+  details: {
+    diagnostics: [
+      {
+        instancePath,
+        instancePathTruncated: false,
+        schemaPath: '/limit_relation',
+        schemaPathTruncated: false,
+        keyword: 'limit_relation',
+        message: 'Agent manager limits are not coherent.',
+      },
+    ],
+    truncated: false,
+  },
+});
+
 const nativeDefinition = (overrides: Parameters<typeof buildAgentDefinition>[0] = {}) =>
   buildAgentDefinition(overrides);
 
@@ -286,9 +306,24 @@ test('enforces manager-limit integral values and cross-field reservations', () =
         buildAgentManagerOptions({ limits: { maxEventBytes: Number.POSITIVE_INFINITY } }),
       ),
     ),
-  ).toMatchObject({
+  ).toEqual({
     code: 'revo.agent.limit_invalid',
-    details: { diagnostics: [{ instancePath: '/limits/maxEventBytes', keyword: 'json_finite' }] },
+    message: AGENT_FAULT_MESSAGES.limitInvalid,
+    phase: 'construction',
+    retryable: false,
+    details: {
+      diagnostics: [
+        {
+          instancePath: '/limits/maxEventBytes',
+          instancePathTruncated: false,
+          schemaPath: '/json_finite',
+          schemaPathTruncated: false,
+          keyword: 'json_finite',
+          message: 'Number must be finite.',
+        },
+      ],
+      truncated: false,
+    },
   });
 
   const reservation = 2_097_152 + 65_536 + 2;
@@ -298,25 +333,7 @@ test('enforces manager-limit integral values and cross-field reservations', () =
         buildAgentManagerOptions({ limits: { maxEventsFileBytes: reservation - 1 } }),
       ),
     ),
-  ).toEqual({
-    code: 'revo.agent.limit_invalid',
-    message: AGENT_FAULT_MESSAGES.limitInvalid,
-    phase: 'construction',
-    retryable: false,
-    details: {
-      diagnostics: [
-        {
-          instancePath: '/limits/maxEventsFileBytes',
-          instancePathTruncated: false,
-          schemaPath: '/limit_relation',
-          schemaPathTruncated: false,
-          keyword: 'limit_relation',
-          message: 'Agent manager limits are not coherent.',
-        },
-      ],
-      truncated: false,
-    },
-  });
+  ).toEqual(limitRelationFault('/limits/maxEventsFileBytes'));
   expect(
     validateManagerOptions(
       buildAgentManagerOptions({ limits: { maxEventsFileBytes: reservation } }),
@@ -334,14 +351,14 @@ test('enforces manager-limit integral values and cross-field reservations', () =
         }),
       ),
     ),
-  ).toMatchObject({ code: 'revo.agent.limit_invalid' });
+  ).toEqual(limitRelationFault('/limits/maxEventsFileBytes'));
   expect(
     faultFrom(() =>
       validateManagerOptions(
         buildAgentManagerOptions({ limits: { maxEventsFileBytes: 16_777_217 } }),
       ),
     ),
-  ).toMatchObject({ code: 'revo.agent.limit_invalid' });
+  ).toEqual(limitRelationFault('/limits/maxEventsFileBytes'));
 });
 
 test('accepts an exactly one MiB canonical definition', () => {
@@ -426,12 +443,13 @@ test('propagates consumer-schema profile failures before construction succeeds',
   const definition = buildAgentDefinition({
     parameters: { schema: { ...p1ObjectSchema, patternProperties: {} }, defaults: {} },
   });
-  const fault = faultFrom(() => validateManagerOptions({ definitions: [definition] }));
-
-  expect(fault.code).toBe('revo.agent.definition_invalid');
-  expect(fault.details).toMatchObject({
-    diagnostics: [{ instancePath: '/definitions/0/parameters/schema/patternProperties' }],
-  });
+  expect(faultFrom(() => validateManagerOptions({ definitions: [definition] }))).toEqual(
+    definitionInvalidFault(
+      'keyword_allowlist',
+      '/definitions/0/parameters/schema/patternProperties',
+      'Keyword is not allowed by the consumer-schema profile.',
+    ),
+  );
 });
 
 test('rejects incoherent effective limits and oversized redaction data', () => {
