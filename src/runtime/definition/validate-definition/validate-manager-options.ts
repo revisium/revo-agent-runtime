@@ -58,7 +58,7 @@ interface IndexedDefinition {
 }
 
 const boundedInteger = (minimum: number, maximum: number) =>
-  z.number().finite().int().min(minimum).max(maximum);
+  z.number().int().min(minimum).max(maximum);
 
 const limitsSchema = z.strictObject({
   wallClockTimeoutMs: boundedInteger(
@@ -73,7 +73,7 @@ const limitsSchema = z.strictObject({
     AGENT_MANAGER_LIMITS.maxEventBytes.minimum,
     AGENT_MANAGER_LIMITS.maxEventBytes.maximum,
   ).exactOptional(),
-  maxEventsFileBytes: z.number().finite().int().exactOptional(),
+  maxEventsFileBytes: z.number().int().exactOptional(),
   maxStdoutBytes: boundedInteger(
     AGENT_MANAGER_LIMITS.maxStdoutBytes.minimum,
     AGENT_MANAGER_LIMITS.maxStdoutBytes.maximum,
@@ -323,28 +323,41 @@ const rejectCoherence = (index: number, path: string): never =>
     `/definitions/${index}${path}`,
   );
 
-const assertStrategyCoherence = (definition: AgentDefinitionContract, index: number): void => {
-  const { delivery, protocol } = definition;
-  if (protocol.driver === 'native/stdio-v1') {
-    if (protocol.resultParser === undefined) rejectCoherence(index, '/protocol/resultParser');
-    if (delivery.prompt === 'protocol') rejectCoherence(index, '/delivery/prompt');
-    if (delivery.resultSchema === 'protocol') rejectCoherence(index, '/delivery/resultSchema');
-    if (delivery.result !== 'stdout') rejectCoherence(index, '/delivery/result');
-    const coherentPermission =
-      (protocol.resultParser === 'codex-jsonl/v1' &&
-        protocol.permissionStrategy === 'codex-cli/v1') ||
-      (protocol.resultParser === 'claude-stream-json/v1' &&
-        protocol.permissionStrategy === 'claude-cli/v1');
-    if (!coherentPermission) rejectCoherence(index, '/protocol/permissionStrategy');
-    return;
-  }
+const assertNativeStrategyCoherence = (
+  protocol: AgentDefinitionContract['protocol'],
+  delivery: AgentDefinitionContract['delivery'],
+  index: number,
+): void => {
+  if (protocol.resultParser === undefined) rejectCoherence(index, '/protocol/resultParser');
+  if (delivery.prompt === 'protocol') rejectCoherence(index, '/delivery/prompt');
+  if (delivery.resultSchema === 'protocol') rejectCoherence(index, '/delivery/resultSchema');
+  if (delivery.result !== 'stdout') rejectCoherence(index, '/delivery/result');
+  const coherentPermission =
+    (protocol.resultParser === 'codex-jsonl/v1' &&
+      protocol.permissionStrategy === 'codex-cli/v1') ||
+    (protocol.resultParser === 'claude-stream-json/v1' &&
+      protocol.permissionStrategy === 'claude-cli/v1');
+  if (!coherentPermission) rejectCoherence(index, '/protocol/permissionStrategy');
+};
 
+const assertAcpStrategyCoherence = (
+  protocol: AgentDefinitionContract['protocol'],
+  delivery: AgentDefinitionContract['delivery'],
+  index: number,
+): void => {
   if (protocol.resultParser !== undefined) rejectCoherence(index, '/protocol/resultParser');
   if (delivery.prompt !== 'protocol') rejectCoherence(index, '/delivery/prompt');
   if (delivery.resultSchema !== 'protocol') rejectCoherence(index, '/delivery/resultSchema');
   if (delivery.result !== 'protocol') rejectCoherence(index, '/delivery/result');
   if (protocol.permissionStrategy !== 'acp/v1')
     rejectCoherence(index, '/protocol/permissionStrategy');
+};
+
+const assertStrategyCoherence = (definition: AgentDefinitionContract, index: number): void => {
+  if (definition.protocol.driver === 'native/stdio-v1')
+    return assertNativeStrategyCoherence(definition.protocol, definition.delivery, index);
+
+  return assertAcpStrategyCoherence(definition.protocol, definition.delivery, index);
 };
 
 const assertProbeAndConstraint = (definition: AgentDefinitionContract, index: number): void => {
@@ -456,9 +469,9 @@ const effectiveRedaction = (redaction: z.infer<typeof managerOptionsSchema>['red
 };
 
 function assertAgentDefinitionSnapshot(
-  snapshot: JsonObject,
+  snapshot: unknown,
   index: number,
-): asserts snapshot is JsonObject & AgentDefinitionContract {
+): asserts snapshot is AgentDefinitionContract {
   if (!rawAgentDefinitionSchema.safeParse(snapshot).success) internalFailure();
   try {
     parseAndClassifyAgentDefinition(snapshot, index);
