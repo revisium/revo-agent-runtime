@@ -84,6 +84,27 @@ test('accepts the executable probe port cohesive type group', () => {
   ).not.toThrow();
 });
 
+test('rejects a runtime value in an executable probe port leaf', () => {
+  expectViolation(
+    {
+      path: 'src/runtime/probe/executable-probe-port/executable-probe-port.ts',
+      source: 'export const probePort = true;\n',
+    },
+    'spec-type-only',
+  );
+});
+
+test('rejects a value import in an executable probe port leaf', () => {
+  expectViolation(
+    {
+      path: 'src/runtime/probe/executable-probe-port/executable-probe-port.ts',
+      source:
+        "import { executable } from './executable-resolution.js';\nexport type Executable = typeof executable;\n",
+    },
+    'spec-type-only',
+  );
+});
+
 test('rejects runtime syntax in a specification leaf', () => {
   expectViolation(
     {

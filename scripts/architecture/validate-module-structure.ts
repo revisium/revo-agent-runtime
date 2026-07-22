@@ -67,7 +67,7 @@ const isProductionLeaf = (path: string): boolean =>
 
 const isSpecModule = (path: string): boolean => path.startsWith('src/runtime/spec/');
 
-const allowsCohesiveTypeGroup = (path: string): boolean =>
+const isTypeOnlyCohesionModule = (path: string): boolean =>
   isSpecModule(path) || path.startsWith('src/runtime/probe/executable-probe-port/');
 
 const hasExportModifier = (modifierFlags: ModifierFlags): boolean =>
@@ -154,8 +154,8 @@ const validateJsonObjectBasePrivacy = (path: string, sourceFile: SourceFile): vo
   }
 };
 
-const validateSpecSyntax = (path: string, sourceFile: SourceFile): void => {
-  if (!isSpecModule(path)) return;
+const validateTypeOnlySyntax = (path: string, sourceFile: SourceFile): void => {
+  if (!isTypeOnlyCohesionModule(path)) return;
 
   for (const statement of sourceFile.statements) {
     if (isImportDeclaration(statement)) {
@@ -254,11 +254,11 @@ const validateImportBoundaries = (path: string, references: readonly ModuleRefer
 const validateSourceFile = (path: string, sourceFile: SourceFile): void => {
   validateExplicitBarrel(path, sourceFile);
   validateJsonObjectBasePrivacy(path, sourceFile);
-  validateSpecSyntax(path, sourceFile);
+  validateTypeOnlySyntax(path, sourceFile);
 
   if (
     isProductionLeaf(path) &&
-    !allowsCohesiveTypeGroup(path) &&
+    !isTypeOnlyCohesionModule(path) &&
     exportedEntityCount(sourceFile.statements) !== 1
   ) {
     fail('one-export-per-leaf', path);
