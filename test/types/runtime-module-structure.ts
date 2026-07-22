@@ -15,6 +15,8 @@ import type {
   ValidationDiagnosticInput,
   validateConsumerSchemaProfile,
   VersionComparator,
+  parseAndClassifyAgentDefinition,
+  RawAgentDefinition,
 } from '../../src/runtime/definition/index.js';
 import type {
   parseVersionOutput,
@@ -208,6 +210,12 @@ export type ParseVersionOutputIsExact = Expect<
       readonly prefix?: string | undefined;
     }) => VersionOutputResult
   >
+>;
+
+export type RawAgentDefinitionEqualsInput = Expect<Equal<RawAgentDefinition, AgentDefinitionInput>>;
+
+export type ParseAndClassifyReturnsContract = Expect<
+  Equal<ReturnType<typeof parseAndClassifyAgentDefinition>, AgentDefinitionContract>
 >;
 
 export type CohesiveSpecificationSurface = readonly [
