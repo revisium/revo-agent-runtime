@@ -1,6 +1,27 @@
 import { createHash } from 'node:crypto';
 
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
+
+const compileConsumerSchemaSpy = vi.hoisted(() => vi.fn());
+
+interface ConsumerSchemaValidatorModule {
+  compileConsumerSchema(...arguments_: never[]): unknown;
+}
+
+vi.mock(
+  '../../../../src/runtime/definition/consumer-schema-validator/index.js',
+  async (importOriginal) => {
+    const actual = await importOriginal<ConsumerSchemaValidatorModule>();
+
+    return {
+      ...actual,
+      compileConsumerSchema: (...arguments_: never[]) => {
+        compileConsumerSchemaSpy();
+        return actual.compileConsumerSchema(...arguments_);
+      },
+    };
+  },
+);
 
 import {
   canonicalizeJsonBytes,
@@ -774,6 +795,66 @@ test('returns the snapshot parsed from canonical bytes with its independent dige
   expect(validated.definition).toEqual(expectedSnapshot);
   expect(validated.definitionDigest).toBe(expectedDigest);
   expect(validated.definition).not.toBe(definition);
+});
+
+test('reuses successful compiled schemas by admitted content within one construction', () => {
+  const schema = () => ({ ...p1ObjectSchema });
+  const definitions = [
+    nativeDefinition({
+      id: 'cache-agent-one',
+      parameters: { schema: schema(), defaults: {} },
+      permissions: { schema: schema(), defaults: {} },
+    }),
+    nativeDefinition({
+      id: 'cache-agent-two',
+      parameters: { schema: schema(), defaults: {} },
+      permissions: { schema: schema(), defaults: {} },
+    }),
+  ];
+
+  compileConsumerSchemaSpy.mockClear();
+  expect(validateManagerOptions({ definitions }).definitions).toHaveLength(2);
+  expect(compileConsumerSchemaSpy).toHaveBeenCalledTimes(1);
+});
+
+test('compiles distinct admitted schema contents separately and resets the cache per construction', () => {
+  const objectSchema = () => ({ ...p1ObjectSchema });
+  const namedSchema = () => ({ ...p1ObjectSchema, properties: { name: { type: 'string' } } });
+  const definition = (id: string) =>
+    nativeDefinition({
+      id,
+      parameters: { schema: objectSchema(), defaults: {} },
+      permissions: { schema: namedSchema(), defaults: {} },
+    });
+
+  compileConsumerSchemaSpy.mockClear();
+  expect(
+    validateManagerOptions({ definitions: [definition('cache-agent-one')] }).definitions,
+  ).toHaveLength(1);
+  expect(compileConsumerSchemaSpy).toHaveBeenCalledTimes(2);
+  expect(
+    validateManagerOptions({ definitions: [definition('cache-agent-two')] }).definitions,
+  ).toHaveLength(1);
+  expect(compileConsumerSchemaSpy).toHaveBeenCalledTimes(4);
+});
+
+test('retains occurrence-specific defaults diagnostics when reusing a compiled schema', () => {
+  const schema = { ...p1ObjectSchema, properties: { name: { type: 'string' } } };
+  const definition = nativeDefinition({
+    parameters: { schema, defaults: { name: 'valid' } },
+    permissions: { schema: { ...schema }, defaults: { name: 1 } },
+  });
+
+  compileConsumerSchemaSpy.mockClear();
+  expect(faultFrom(() => validateManagerOptions({ definitions: [definition] }))).toEqual(
+    definitionInvalidFault(
+      'type',
+      '/definitions/0/permissions/defaults/name',
+      'Value does not match the schema type.',
+      '/properties/name/type',
+    ),
+  );
+  expect(compileConsumerSchemaSpy).toHaveBeenCalledTimes(1);
 });
 
 test.each([

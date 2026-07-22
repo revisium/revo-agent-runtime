@@ -12,6 +12,7 @@ import type {
   AgentManagerLimits,
   AgentValidationDetails,
   JsonObject,
+  JsonSchema202012,
   JsonValue,
 } from '../../spec/index.js';
 import {
@@ -19,7 +20,10 @@ import {
   rawAgentDefinitionSchema,
 } from '../agent-definition-schema/index.js';
 import { validateConsumerSchemaProfile } from '../consumer-schema-profile/index.js';
-import { compileConsumerSchema } from '../consumer-schema-validator/index.js';
+import {
+  compileConsumerSchema,
+  type CompiledConsumerSchema,
+} from '../consumer-schema-validator/index.js';
 import { createDefinitionIdentity } from '../definition-digest/index.js';
 import { parseExecutableVersionConstraint } from '../executable-version-constraint/index.js';
 import { inspectPlainJson } from '../plain-json/index.js';
@@ -243,11 +247,28 @@ const asJsonObject = (value: unknown): JsonObject => {
   return internalFailure();
 };
 
+const getCompiledConsumerSchema = (
+  schema: JsonSchema202012,
+  schemaPath: string,
+  compiledSchemas: Map<string, CompiledConsumerSchema>,
+): CompiledConsumerSchema => {
+  const key = JSON.stringify(schema);
+  if (key === undefined) return internalFailure();
+
+  const cached = compiledSchemas.get(key);
+  if (cached !== undefined) return cached;
+
+  const compiled = compileConsumerSchema(schema, schemaPath);
+  compiledSchemas.set(key, compiled);
+  return compiled;
+};
+
 const validateSchemaAndDefaults = (
   schema: unknown,
   defaults: JsonValue | undefined,
   schemaPath: string,
   defaultsPath: string,
+  compiledSchemas: Map<string, CompiledConsumerSchema>,
 ): void => {
   const profile = validateConsumerSchemaProfile(schema, schemaPath);
   if (!profile.valid)
@@ -258,7 +279,7 @@ const validateSchemaAndDefaults = (
     );
 
   if (defaults === undefined) return;
-  const details = compileConsumerSchema(profile.schema, schemaPath).validate(
+  const details = getCompiledConsumerSchema(profile.schema, schemaPath, compiledSchemas).validate(
     defaults,
     defaultsPath,
   );
@@ -352,7 +373,11 @@ const assertProbeAndConstraint = (definition: AgentDefinitionContract, index: nu
     );
 };
 
-const validateOneDefinition = (raw: unknown, index: number): IndexedDefinition => {
+const validateOneDefinition = (
+  raw: unknown,
+  index: number,
+  compiledSchemas: Map<string, CompiledConsumerSchema>,
+): IndexedDefinition => {
   const definition = parseAndClassifyAgentDefinition(raw, index);
   const json = asJsonObject(raw);
   if (canonicalizeJsonBytes(json).byteLength > AGENT_RUNTIME_LIMITS.definitionBytes)
@@ -362,12 +387,14 @@ const validateOneDefinition = (raw: unknown, index: number): IndexedDefinition =
     definition.parameters.defaults,
     `/definitions/${index}/parameters/schema`,
     `/definitions/${index}/parameters/defaults`,
+    compiledSchemas,
   );
   validateSchemaAndDefaults(
     definition.permissions.schema,
     definition.permissions.defaults,
     `/definitions/${index}/permissions/schema`,
     `/definitions/${index}/permissions/defaults`,
+    compiledSchemas,
   );
   assertStrategyCoherence(definition, index);
   assertTemplateCoherence(definition, index);
@@ -460,7 +487,10 @@ const freezeValidatedConstruction = (
 export const validateManagerOptions = (value: unknown): ValidatedManagerConstruction => {
   const plain = inspectManagerOptionsGraph(value);
   const options = parseStrictManagerOptions(plain);
-  const definitions = options.definitions.map(validateOneDefinition);
+  const compiledSchemas = new Map<string, CompiledConsumerSchema>();
+  const definitions = options.definitions.map((definition, index) =>
+    validateOneDefinition(definition, index, compiledSchemas),
+  );
   assertUniqueExactRefs(definitions);
   return freezeValidatedConstruction(options, definitions);
 };
