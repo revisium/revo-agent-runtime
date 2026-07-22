@@ -1,5 +1,6 @@
 import { AGENT_RUNTIME_LIMITS } from '../../policy/index.js';
 import type { AgentValidationDetails, AgentValidationDiagnostic } from '../../spec/index.js';
+import { compareUtf8 } from './compare-utf8.js';
 import type { ValidationDiagnosticInput } from './validation-diagnostic-input.js';
 
 const encoder = new TextEncoder();
@@ -48,21 +49,6 @@ const normalizeDiagnostic = (input: ValidationDiagnosticInput): AgentValidationD
     keyword: truncateToUtf8Bytes(input.keyword, AGENT_RUNTIME_LIMITS.diagnosticKeywordBytes),
     message: truncateToUtf8Bytes(input.message, AGENT_RUNTIME_LIMITS.diagnosticMessageBytes),
   };
-};
-
-const compareUtf8 = (left: string, right: string): number => {
-  const leftBytes = encoder.encode(left);
-  const rightBytes = encoder.encode(right);
-
-  for (const [index, leftByte] of leftBytes.entries()) {
-    const rightByte = rightBytes[index];
-    if (rightByte === undefined) return 1;
-
-    const difference = leftByte - rightByte;
-    if (difference !== 0) return difference;
-  }
-
-  return leftBytes.byteLength - rightBytes.byteLength;
 };
 
 const compareDiagnostics = (
