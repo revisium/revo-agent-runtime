@@ -1,4 +1,4 @@
-import { readdir } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 
 import { expect, test } from 'vitest';
 
@@ -24,6 +24,9 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'definition/consumer-schema-validator/compiled-consumer-schema.ts',
     'definition/consumer-schema-validator/compile-consumer-schema.ts',
     'definition/consumer-schema-validator/index.ts',
+    'definition/definition-digest/create-definition-identity.ts',
+    'definition/definition-digest/definition-identity.ts',
+    'definition/definition-digest/index.ts',
     'definition/executable-version-constraint/comparator-operator.ts',
     'definition/executable-version-constraint/executable-version-constraint.ts',
     'definition/executable-version-constraint/index.ts',
@@ -75,4 +78,13 @@ test('runtime tree comparison is independent of directory enumeration order', as
   ].toSorted();
 
   expect(actualFiles).toEqual(expectedFiles);
+
+  const sources = await Promise.all(
+    actualFiles.map(async (path) => readFile(new URL(path, runtimeRoot), 'utf8')),
+  );
+  const cryptoImporters = actualFiles.filter((path, index) =>
+    sources[index]?.includes("from 'node:crypto'"),
+  );
+
+  expect(cryptoImporters).toEqual(['definition/definition-digest/create-definition-identity.ts']);
 });

@@ -3,6 +3,8 @@ import type {
   compileConsumerSchema,
   ComparatorOperator,
   ConsumerSchemaProfileValidation,
+  createDefinitionIdentity,
+  DefinitionIdentity,
   ExecutableVersionConstraint,
   matchesExecutableVersionConstraint,
   normalizeValidationDiagnostics,
@@ -81,6 +83,19 @@ type ExpectedConsumerSchemaProfileValidation =
 
 export type ConsumerSchemaProfileValidationIsExact = Expect<
   Equal<ConsumerSchemaProfileValidation, ExpectedConsumerSchemaProfileValidation>
+>;
+
+type ExpectedDefinitionIdentity = {
+  readonly digest: string;
+  readonly snapshot: JsonObject;
+};
+
+export type DefinitionIdentityIsExact = Expect<
+  Equal<DefinitionIdentity, ExpectedDefinitionIdentity>
+>;
+
+export type CreateDefinitionIdentityIsExact = Expect<
+  Equal<typeof createDefinitionIdentity, (value: JsonObject) => DefinitionIdentity>
 >;
 
 export type ValidateConsumerSchemaProfileIsExact = Expect<
