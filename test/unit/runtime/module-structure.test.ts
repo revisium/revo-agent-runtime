@@ -21,6 +21,10 @@ test('runtime tree comparison is independent of directory enumeration order', as
 
   const actualFiles = (await listFiles(runtimeRoot)).toSorted();
   const expectedFiles = [
+    'definition/agent-definition-schema/index.ts',
+    'definition/agent-definition-schema/parse-and-classify-agent-definition.ts',
+    'definition/agent-definition-schema/raw-agent-definition-schema.ts',
+    'definition/agent-definition-schema/raw-agent-definition.ts',
     'definition/consumer-schema-validator/compiled-consumer-schema.ts',
     'definition/consumer-schema-validator/compile-consumer-schema.ts',
     'definition/consumer-schema-validator/index.ts',

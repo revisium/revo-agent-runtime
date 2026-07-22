@@ -1,5 +1,10 @@
 export { inspectPlainJson } from './plain-json/index.js';
 export type { PlainJsonInspection } from './plain-json/index.js';
+export {
+  parseAndClassifyAgentDefinition,
+  rawAgentDefinitionSchema,
+} from './agent-definition-schema/index.js';
+export type { RawAgentDefinition } from './agent-definition-schema/index.js';
 export { createDefinitionIdentity } from './definition-digest/index.js';
 export type { DefinitionIdentity } from './definition-digest/index.js';
 export { validateConsumerSchemaProfile } from './consumer-schema-profile/index.js';
