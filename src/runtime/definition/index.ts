@@ -5,3 +5,5 @@ export type { ConsumerSchemaProfileValidation } from './consumer-schema-profile/
 export { canonicalizeJsonBytes } from './rfc8785/index.js';
 export { normalizeValidationDiagnostics } from './validation-diagnostics/index.js';
 export type { ValidationDiagnosticInput } from './validation-diagnostics/index.js';
+export { compileConsumerSchema } from './consumer-schema-validator/index.js';
+export type { CompiledConsumerSchema } from './consumer-schema-validator/index.js';

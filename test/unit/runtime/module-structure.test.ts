@@ -21,6 +21,9 @@ test('runtime tree comparison is independent of directory enumeration order', as
 
   const actualFiles = (await listFiles(runtimeRoot)).toSorted();
   const expectedFiles = [
+    'definition/consumer-schema-validator/compiled-consumer-schema.ts',
+    'definition/consumer-schema-validator/compile-consumer-schema.ts',
+    'definition/consumer-schema-validator/index.ts',
     'definition/rfc8785/canonicalize-json-bytes.ts',
     'definition/rfc8785/index.ts',
     'definition/consumer-schema-profile/index.ts',
