@@ -1,4 +1,8 @@
-import type { AgentDefinitionInput, JsonSchema202012 } from '../../../src/runtime/spec/index.js';
+import type {
+  AgentDefinitionInput,
+  AgentManagerOptions,
+  JsonSchema202012,
+} from '../../../src/runtime/spec/index.js';
 
 export const p1ObjectSchema: JsonSchema202012 = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -28,5 +32,12 @@ export const buildAgentDefinition = (
   permissions: { schema: p1ObjectSchema, defaults: {} },
   capabilities: { cancellation: true, structuredResult: true, usage: true },
   constraints: { platforms: ['linux'], executableVersion: '>=1.0.0 <2.0.0' },
+  ...overrides,
+});
+
+export const buildAgentManagerOptions = (
+  overrides: Partial<AgentManagerOptions> = {},
+): AgentManagerOptions => ({
+  definitions: [buildAgentDefinition()],
   ...overrides,
 });

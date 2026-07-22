@@ -17,6 +17,9 @@ import type {
   VersionComparator,
   parseAndClassifyAgentDefinition,
   RawAgentDefinition,
+  validateManagerOptions,
+  ValidatedDefinition,
+  ValidatedManagerConstruction,
 } from '../../src/runtime/definition/index.js';
 import type {
   parseVersionOutput,
@@ -216,6 +219,29 @@ export type RawAgentDefinitionEqualsInput = Expect<Equal<RawAgentDefinition, Age
 
 export type ParseAndClassifyReturnsContract = Expect<
   Equal<ReturnType<typeof parseAndClassifyAgentDefinition>, AgentDefinitionContract>
+>;
+
+type ExpectedValidatedDefinition = {
+  readonly definition: AgentDefinitionContract;
+  readonly definitionDigest: string;
+};
+
+type ExpectedValidatedManagerConstruction = {
+  readonly definitions: readonly ValidatedDefinition[];
+  readonly limits: Readonly<AgentManagerLimits>;
+  readonly redaction: Readonly<{ readonly secrets: readonly string[] }>;
+};
+
+export type ValidatedDefinitionIsExact = Expect<
+  Equal<ValidatedDefinition, ExpectedValidatedDefinition>
+>;
+
+export type ValidatedManagerConstructionIsExact = Expect<
+  Equal<ValidatedManagerConstruction, ExpectedValidatedManagerConstruction>
+>;
+
+export type ValidateManagerOptionsIsExact = Expect<
+  Equal<typeof validateManagerOptions, (value: unknown) => ValidatedManagerConstruction>
 >;
 
 export type CohesiveSpecificationSurface = readonly [
