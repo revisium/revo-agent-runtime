@@ -4,7 +4,7 @@ const numericIdentifier = '(?:0|[1-9][0-9]*)';
 const prereleaseIdentifier = `(?:${numericIdentifier}|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)`;
 const buildIdentifier = '[0-9A-Za-z-]+';
 const strictSemVerPattern = new RegExp(
-  `^(${numericIdentifier})\\.(${numericIdentifier})\\.(${numericIdentifier})(?:-(${prereleaseIdentifier}(?:\\.${prereleaseIdentifier})*))?(?:\\+(${buildIdentifier}(?:\\.${buildIdentifier})*))?$`,
+  String.raw`^(${numericIdentifier})\.(${numericIdentifier})\.(${numericIdentifier})(?:-(${prereleaseIdentifier}(?:\.${prereleaseIdentifier})*))?(?:\+(${buildIdentifier}(?:\.${buildIdentifier})*))?$`,
 );
 
 export const parseStrictSemVer = (value: string): StrictSemVer | undefined => {
