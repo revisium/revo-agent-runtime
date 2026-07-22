@@ -25,3 +25,6 @@ export { normalizeValidationDiagnostics } from './validation-diagnostics/index.j
 export type { ValidationDiagnosticInput } from './validation-diagnostics/index.js';
 export { compileConsumerSchema } from './consumer-schema-validator/index.js';
 export type { CompiledConsumerSchema } from './consumer-schema-validator/index.js';
+export { validateManagerOptions } from './validate-definition/index.js';
+export type { ValidatedDefinition } from './validate-definition/index.js';
+export type { ValidatedManagerConstruction } from './validate-definition/index.js';
