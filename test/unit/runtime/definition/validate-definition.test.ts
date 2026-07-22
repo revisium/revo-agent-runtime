@@ -48,6 +48,46 @@ const faultFrom = (operation: () => unknown): AgentFault => {
   throw new Error('Expected an AgentManagerError.');
 };
 
+const coherenceFault = (instancePath: string): AgentFault =>
+  definitionInvalidFault(
+    'definition_coherence',
+    instancePath,
+    'Agent definition fields are not coherent.',
+  );
+
+const limitShapeFault = (instancePath: string): AgentFault => ({
+  code: 'revo.agent.limit_invalid',
+  message: AGENT_FAULT_MESSAGES.limitInvalid,
+  phase: 'construction',
+  retryable: false,
+  details: {
+    diagnostics: [
+      {
+        instancePath,
+        instancePathTruncated: false,
+        schemaPath: '/limit_shape',
+        schemaPathTruncated: false,
+        keyword: 'limit_shape',
+        message: 'Value does not satisfy the agent manager limits.',
+      },
+    ],
+    truncated: false,
+  },
+});
+
+const nativeDefinition = (overrides: Parameters<typeof buildAgentDefinition>[0] = {}) =>
+  buildAgentDefinition(overrides);
+
+const acpDefinition = (overrides: Parameters<typeof buildAgentDefinition>[0] = {}) => {
+  const { constraints: _constraints, ...definition } = buildAgentDefinition({
+    protocol: { driver: 'acp/v1', permissionStrategy: 'acp/v1' },
+    delivery: { prompt: 'protocol', resultSchema: 'protocol', result: 'protocol' },
+    launch: { command: '/fixture/bin/agent', args: [] },
+  });
+
+  return { ...definition, ...overrides };
+};
+
 test('returns frozen package-owned snapshots and effective defaults', () => {
   const definitions = [buildAgentDefinition()];
   const secrets = ['secret'];
@@ -120,6 +160,194 @@ test.each([
       'Agent definition fields are not coherent.',
     ),
   );
+});
+
+test('accepts one thousand unique definitions and rejects one thousand one', () => {
+  const thousand = Array.from({ length: 1_000 }, (_, index) =>
+    nativeDefinition({ id: `agent-${index}` }),
+  );
+
+  expect(validateManagerOptions({ definitions: thousand }).definitions).toHaveLength(1_000);
+  expect(
+    faultFrom(() =>
+      validateManagerOptions({
+        definitions: [...thousand, nativeDefinition({ id: 'agent-1000' })],
+      }),
+    ),
+  ).toEqual(
+    definitionInvalidFault(
+      'manager_options_shape',
+      '/definitions',
+      'Value does not satisfy the agent manager options DTO.',
+    ),
+  );
+}, 20_000);
+
+test('accepts and bounds redaction value counts and total bytes', () => {
+  expect(
+    validateManagerOptions(
+      buildAgentManagerOptions({ redaction: { secrets: Array.from({ length: 1_000 }, () => '') } }),
+    ).redaction.secrets,
+  ).toHaveLength(1_000);
+  expect(
+    faultFrom(() =>
+      validateManagerOptions(
+        buildAgentManagerOptions({
+          redaction: { secrets: Array.from({ length: 1_001 }, () => '') },
+        }),
+      ),
+    ),
+  ).toEqual(
+    definitionInvalidFault(
+      'redaction_shape',
+      '/redaction/secrets',
+      'Value does not satisfy the redaction options.',
+    ),
+  );
+  expect(
+    validateManagerOptions(
+      buildAgentManagerOptions({ redaction: { secrets: ['x'.repeat(65_536)] } }),
+    ).redaction.secrets,
+  ).toEqual(['x'.repeat(65_536)]);
+});
+
+test.each([
+  ['wallClockTimeoutMs', 999, 1_000, 1_800_000, 1_800_001],
+  ['idleTimeoutMs', 999, 1_000, 300_000, 300_001],
+  ['maxEventBytes', 1_023, 1_024, 65_536, 65_537],
+  ['maxStdoutBytes', 65_535, 65_536, 8_388_608, 8_388_609],
+  ['maxStderrBytes', 65_535, 65_536, 8_388_608, 8_388_609],
+  ['maxRawResponseBytes', 65_535, 65_536, 1_048_576, 1_048_577],
+  ['maxCompletedInvocations', 0, 1, 1_000, 1_001],
+] as const)(
+  'enforces the minimum and maximum triplet for %s',
+  (field, below, minimum, maximum, above) => {
+    const coherentMinimum =
+      field === 'wallClockTimeoutMs'
+        ? { wallClockTimeoutMs: minimum, idleTimeoutMs: 1_000 }
+        : { [field]: minimum };
+    expect(
+      validateManagerOptions(buildAgentManagerOptions({ limits: coherentMinimum })).limits,
+    ).toMatchObject(coherentMinimum);
+    expect(
+      validateManagerOptions(buildAgentManagerOptions({ limits: { [field]: maximum } })).limits,
+    ).toMatchObject({
+      [field]: maximum,
+    });
+    for (const value of [below, above]) {
+      expect(
+        faultFrom(() =>
+          validateManagerOptions(buildAgentManagerOptions({ limits: { [field]: value } })),
+        ),
+      ).toEqual(limitShapeFault(`/limits/${field}`));
+    }
+  },
+);
+
+test('enforces manager-limit integral values and cross-field reservations', () => {
+  expect(
+    faultFrom(() =>
+      validateManagerOptions(buildAgentManagerOptions({ limits: { maxEventBytes: 1.5 } })),
+    ),
+  ).toEqual(limitShapeFault('/limits/maxEventBytes'));
+  expect(
+    faultFrom(() =>
+      validateManagerOptions(
+        buildAgentManagerOptions({ limits: { maxEventBytes: Number.POSITIVE_INFINITY } }),
+      ),
+    ),
+  ).toMatchObject({
+    code: 'revo.agent.limit_invalid',
+    details: { diagnostics: [{ instancePath: '/limits/maxEventBytes', keyword: 'json_finite' }] },
+  });
+
+  const reservation = 2_097_152 + 65_536 + 2;
+  expect(
+    faultFrom(() =>
+      validateManagerOptions(
+        buildAgentManagerOptions({ limits: { maxEventsFileBytes: reservation - 1 } }),
+      ),
+    ),
+  ).toEqual({
+    code: 'revo.agent.limit_invalid',
+    message: AGENT_FAULT_MESSAGES.limitInvalid,
+    phase: 'construction',
+    retryable: false,
+    details: {
+      diagnostics: [
+        {
+          instancePath: '/limits/maxEventsFileBytes',
+          instancePathTruncated: false,
+          schemaPath: '/limit_relation',
+          schemaPathTruncated: false,
+          keyword: 'limit_relation',
+          message: 'Agent manager limits are not coherent.',
+        },
+      ],
+      truncated: false,
+    },
+  });
+  expect(
+    validateManagerOptions(
+      buildAgentManagerOptions({ limits: { maxEventsFileBytes: reservation } }),
+    ).limits.maxEventsFileBytes,
+  ).toBe(reservation);
+  expect(
+    validateManagerOptions(buildAgentManagerOptions({ limits: { maxEventsFileBytes: 16_777_216 } }))
+      .limits.maxEventsFileBytes,
+  ).toBe(16_777_216);
+  expect(
+    faultFrom(() =>
+      validateManagerOptions(
+        buildAgentManagerOptions({
+          limits: { maxEventBytes: 65_536, maxEventsFileBytes: reservation - 1 },
+        }),
+      ),
+    ),
+  ).toMatchObject({ code: 'revo.agent.limit_invalid' });
+  expect(
+    faultFrom(() =>
+      validateManagerOptions(
+        buildAgentManagerOptions({ limits: { maxEventsFileBytes: 16_777_217 } }),
+      ),
+    ),
+  ).toMatchObject({ code: 'revo.agent.limit_invalid' });
+});
+
+test('accepts an exactly one MiB canonical definition', () => {
+  const emptyDefinition = nativeDefinition({
+    parameters: { schema: { ...p1ObjectSchema, type: 'string', enum: [''] } },
+  });
+  const overhead = new TextEncoder().encode(JSON.stringify(emptyDefinition)).byteLength;
+  const definition = nativeDefinition({
+    parameters: {
+      schema: { ...p1ObjectSchema, type: 'string', enum: ['x'.repeat(1_048_576 - overhead)] },
+    },
+  });
+
+  expect(new TextEncoder().encode(JSON.stringify(definition)).byteLength).toBe(1_048_576);
+  expect(validateManagerOptions({ definitions: [definition] }).definitions).toHaveLength(1);
+});
+
+test('keeps snapshots, limits, and caller-owned nested objects isolated', () => {
+  const launch = {
+    command: '/fixture/bin/agent',
+    args: [{ kind: 'prompt' as const }, { kind: 'result-schema' as const }],
+    versionProbe: { args: ['--version'], stream: 'stdout' as const, timeoutMs: 1_000 },
+  };
+  const definition = nativeDefinition({ launch });
+  const limits = { maxEventBytes: 1_024 };
+  const construction = validateManagerOptions(
+    buildAgentManagerOptions({ definitions: [definition], limits }),
+  );
+
+  launch.command = '/changed';
+  launch.versionProbe.args[0] = '--changed';
+  limits.maxEventBytes = 65_536;
+  expect(construction.definitions[0]?.definition.launch.command).toBe('/fixture/bin/agent');
+  expect(construction.definitions[0]?.definition.launch.versionProbe?.args).toEqual(['--version']);
+  expect(construction.limits.maxEventBytes).toBe(1_024);
+  expect(Object.isFrozen(construction.definitions[0]?.definition.launch)).toBe(true);
 });
 
 test('rejects canonical definitions above the configured byte bound', () => {
@@ -215,3 +443,281 @@ test('rejects incoherent effective limits and oversized redaction data', () => {
     ),
   );
 });
+
+test.each([
+  [
+    'plain-data accessors before DTO parsing',
+    Object.defineProperty({}, 'definitions', { enumerable: true, get: () => [] }),
+    'revo.agent.definition_invalid',
+    '/definitions',
+    'json_property_data',
+  ],
+  [
+    'an unknown top-level DTO key',
+    { definitions: [nativeDefinition()], unexpected: true },
+    'revo.agent.definition_invalid',
+    '/',
+    'manager_options_shape',
+  ],
+  [
+    'an unknown nested limits key',
+    { definitions: [nativeDefinition()], limits: { unexpected: true } },
+    'revo.agent.limit_invalid',
+    '/limits',
+    'limit_shape',
+  ],
+  [
+    'an oversized definition list',
+    {
+      definitions: Array.from({ length: 1_001 }, (_, index) =>
+        nativeDefinition({ id: `agent-${index}` }),
+      ),
+    },
+    'revo.agent.definition_invalid',
+    '/definitions',
+    'manager_options_shape',
+  ],
+] as const)('sanitizes construction faults for %s', (_name, value, code, instancePath, keyword) => {
+  const fault = faultFrom(() => validateManagerOptions(value));
+
+  expect(fault.code).toBe(code);
+  expect(fault.phase).toBe('construction');
+  expect(fault.retryable).toBe(false);
+  expect(fault.details).toMatchObject({ diagnostics: [{ instancePath, keyword }] });
+});
+
+test('classifies an unsupported strategy before coherence validation', () => {
+  const fault = faultFrom(() =>
+    validateManagerOptions({
+      definitions: [
+        nativeDefinition({
+          protocol: { driver: 'future/v1', permissionStrategy: 'codex-cli/v1' },
+          delivery: { prompt: 'protocol', resultSchema: 'protocol', result: 'protocol' },
+        }),
+      ],
+    }),
+  );
+
+  expect(fault).toEqual({
+    code: 'revo.agent.strategy_unsupported',
+    message: AGENT_FAULT_MESSAGES.strategyUnsupported,
+    phase: 'construction',
+    retryable: false,
+  });
+});
+
+test.each([
+  [
+    'argument prompt without exactly one prompt template',
+    nativeDefinition({
+      launch: { command: '/fixture/bin/agent', args: [{ kind: 'result-schema' }] },
+    }),
+  ],
+  [
+    'file prompt without exactly one prompt-file template',
+    nativeDefinition({
+      delivery: { prompt: 'file', resultSchema: 'argument', result: 'stdout' },
+      launch: {
+        command: '/fixture/bin/agent',
+        args: [{ kind: 'prompt' }, { kind: 'result-schema' }],
+      },
+    }),
+  ],
+  [
+    'stdin prompt with a prompt template',
+    nativeDefinition({
+      delivery: { prompt: 'stdin', resultSchema: 'argument', result: 'stdout' },
+    }),
+  ],
+  [
+    'argument result schema without exactly one result-schema template',
+    nativeDefinition({
+      launch: { command: '/fixture/bin/agent', args: [{ kind: 'prompt' }] },
+    }),
+  ],
+  [
+    'file result schema without exactly one result-schema-file template',
+    nativeDefinition({
+      delivery: { prompt: 'argument', resultSchema: 'file', result: 'stdout' },
+      launch: {
+        command: '/fixture/bin/agent',
+        args: [{ kind: 'prompt' }, { kind: 'result-schema' }],
+      },
+    }),
+  ],
+  [
+    'protocol result schema with a result-schema template',
+    acpDefinition({ launch: { command: '/fixture/bin/agent', args: [{ kind: 'result-schema' }] } }),
+  ],
+] as const)('rejects each template-coherence rule: %s', (_name, definition) => {
+  expect(faultFrom(() => validateManagerOptions({ definitions: [definition] }))).toEqual(
+    coherenceFault('/definitions/0/launch/args'),
+  );
+});
+
+test.each([
+  [
+    'native result parser is required',
+    nativeDefinition({
+      protocol: { driver: 'native/stdio-v1', permissionStrategy: 'codex-cli/v1' },
+    }),
+    '/definitions/0/protocol/resultParser',
+  ],
+  [
+    'native prompt delivery cannot be protocol',
+    nativeDefinition({
+      delivery: { prompt: 'protocol', resultSchema: 'argument', result: 'stdout' },
+    }),
+    '/definitions/0/delivery/prompt',
+  ],
+  [
+    'native result-schema delivery cannot be protocol',
+    nativeDefinition({
+      delivery: { prompt: 'argument', resultSchema: 'protocol', result: 'stdout' },
+    }),
+    '/definitions/0/delivery/resultSchema',
+  ],
+  [
+    'native result delivery must be stdout',
+    nativeDefinition({
+      delivery: { prompt: 'argument', resultSchema: 'argument', result: 'protocol' },
+    }),
+    '/definitions/0/delivery/result',
+  ],
+  [
+    'native permission family must match its parser',
+    nativeDefinition({
+      protocol: {
+        driver: 'native/stdio-v1',
+        resultParser: 'codex-jsonl/v1',
+        permissionStrategy: 'claude-cli/v1',
+      },
+    }),
+    '/definitions/0/protocol/permissionStrategy',
+  ],
+  [
+    'ACP must not supply a result parser',
+    acpDefinition({
+      protocol: { driver: 'acp/v1', resultParser: 'codex-jsonl/v1', permissionStrategy: 'acp/v1' },
+    }),
+    '/definitions/0/protocol/resultParser',
+  ],
+  [
+    'ACP prompt delivery must be protocol',
+    acpDefinition({
+      delivery: { prompt: 'argument', resultSchema: 'protocol', result: 'protocol' },
+    }),
+    '/definitions/0/delivery/prompt',
+  ],
+  [
+    'ACP result-schema delivery must be protocol',
+    acpDefinition({
+      delivery: { prompt: 'protocol', resultSchema: 'argument', result: 'protocol' },
+    }),
+    '/definitions/0/delivery/resultSchema',
+  ],
+  [
+    'ACP result delivery must be protocol',
+    acpDefinition({ delivery: { prompt: 'protocol', resultSchema: 'protocol', result: 'stdout' } }),
+    '/definitions/0/delivery/result',
+  ],
+  [
+    'ACP permission family must be ACP',
+    acpDefinition({ protocol: { driver: 'acp/v1', permissionStrategy: 'codex-cli/v1' } }),
+    '/definitions/0/protocol/permissionStrategy',
+  ],
+] as const)(
+  'rejects each native or ACP coherence violation: %s',
+  (_name, definition, instancePath) => {
+    expect(faultFrom(() => validateManagerOptions({ definitions: [definition] }))).toEqual(
+      coherenceFault(instancePath),
+    );
+  },
+);
+
+test.each([
+  nativeDefinition(),
+  nativeDefinition({
+    protocol: {
+      driver: 'native/stdio-v1',
+      resultParser: 'claude-stream-json/v1',
+      permissionStrategy: 'claude-cli/v1',
+    },
+  }),
+  acpDefinition(),
+])('accepts each coherent protocol/parser/permission family', (definition) => {
+  expect(validateManagerOptions({ definitions: [definition] }).definitions).toHaveLength(1);
+});
+
+test('propagates compiled consumer-schema defaults mismatches', () => {
+  const fault = faultFrom(() =>
+    validateManagerOptions({
+      definitions: [
+        nativeDefinition({
+          parameters: {
+            schema: {
+              ...p1ObjectSchema,
+              properties: { name: { type: 'string' } },
+            },
+            defaults: { name: 1 },
+          },
+        }),
+      ],
+    }),
+  );
+
+  expect(fault.code).toBe('revo.agent.definition_invalid');
+  expect(fault.details).toMatchObject({
+    diagnostics: [{ instancePath: '/definitions/0/parameters/defaults/name', keyword: 'type' }],
+  });
+});
+
+test.each([
+  [
+    'version-probe argv larger than one MiB',
+    nativeDefinition({
+      launch: {
+        command: 'x'.repeat(262_144),
+        args: [{ kind: 'prompt' }, { kind: 'result-schema' }],
+        versionProbe: {
+          args: Array.from({ length: 4 }, () => 'x'.repeat(262_144)),
+          stream: 'stdout',
+          timeoutMs: 1_000,
+        },
+      },
+    }),
+    'definition_bytes',
+    '/definitions/0',
+  ],
+  [
+    'an executable constraint without a probe',
+    nativeDefinition({
+      launch: {
+        command: '/fixture/bin/agent',
+        args: [{ kind: 'prompt' }, { kind: 'result-schema' }],
+      },
+    }),
+    'executable_version_constraint',
+    '/definitions/0/constraints/executableVersion',
+  ],
+  [
+    'a malformed executable constraint',
+    nativeDefinition({ constraints: { executableVersion: 'not a constraint' } }),
+    'executable_version_constraint',
+    '/definitions/0/constraints/executableVersion',
+  ],
+] as const)(
+  'rejects probe and constraint contracts: %s',
+  (_name, definition, keyword, instancePath) => {
+    const fault = faultFrom(() => validateManagerOptions({ definitions: [definition] }));
+    expect(fault).toEqual(
+      definitionInvalidFault(
+        keyword,
+        instancePath,
+        keyword === 'definition_bytes'
+          ? 'Definition canonical UTF-8 representation exceeds 1 MiB.'
+          : 'Executable-version constraint is invalid.',
+      ),
+    );
+  },
+);
