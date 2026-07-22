@@ -133,3 +133,14 @@ test('maps a canonical parse invariant failure to the internal construction faul
   expectInternalConstructionFault(() => createIdentity({ value: true }));
   expect(canonicalize).toHaveBeenCalledTimes(1);
 });
+
+test('maps a parsed array root to the internal construction fault', async () => {
+  const canonicalize = vi.fn(() => new TextEncoder().encode('[]'));
+  vi.doMock(canonicalizeModule, () => ({ canonicalizeJsonBytes: canonicalize }));
+
+  const { createDefinitionIdentity: createIdentity } =
+    await import('../../../../src/runtime/definition/index.js');
+
+  expectInternalConstructionFault(() => createIdentity({ value: true }));
+  expect(canonicalize).toHaveBeenCalledTimes(1);
+});
