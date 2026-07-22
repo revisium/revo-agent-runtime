@@ -1,0 +1,1 @@
+export const PROBE_DIAGNOSTIC_PREVIEW_BYTES = 1_024;
