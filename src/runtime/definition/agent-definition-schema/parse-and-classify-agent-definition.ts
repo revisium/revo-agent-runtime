@@ -8,16 +8,16 @@ import type {
 import { inspectPlainJson } from '../plain-json/index.js';
 import { rawAgentDefinitionSchema } from './raw-agent-definition-schema.js';
 
-const DRIVER_IDENTIFIERS = Object.freeze(['native/stdio-v1', 'acp/v1'] as const);
-const RESULT_PARSER_IDENTIFIERS = Object.freeze([
+const DRIVER_IDENTIFIERS: readonly string[] = Object.freeze(['native/stdio-v1', 'acp/v1']);
+const RESULT_PARSER_IDENTIFIERS: readonly string[] = Object.freeze([
   'codex-jsonl/v1',
   'claude-stream-json/v1',
-] as const);
-const PERMISSION_STRATEGY_IDENTIFIERS = Object.freeze([
+]);
+const PERMISSION_STRATEGY_IDENTIFIERS: readonly string[] = Object.freeze([
   'codex-cli/v1',
   'claude-cli/v1',
   'acp/v1',
-] as const);
+]);
 
 const definitionInvalidFault = (): AgentFault =>
   Object.freeze({
@@ -36,17 +36,17 @@ const strategyUnsupportedFault = (): AgentFault =>
   });
 
 const isKnownDriver = (value: string): value is AgentDefinitionContract['protocol']['driver'] =>
-  DRIVER_IDENTIFIERS.some((identifier) => identifier === value);
+  DRIVER_IDENTIFIERS.includes(value);
 
 const isKnownResultParser = (
   value: string,
 ): value is NonNullable<AgentDefinitionContract['protocol']['resultParser']> =>
-  RESULT_PARSER_IDENTIFIERS.some((identifier) => identifier === value);
+  RESULT_PARSER_IDENTIFIERS.includes(value);
 
 const isKnownPermissionStrategy = (
   value: string,
 ): value is AgentDefinitionContract['protocol']['permissionStrategy'] =>
-  PERMISSION_STRATEGY_IDENTIFIERS.some((identifier) => identifier === value);
+  PERMISSION_STRATEGY_IDENTIFIERS.includes(value);
 
 const classifyProtocol = (
   protocol: AgentDefinitionInput['protocol'],
