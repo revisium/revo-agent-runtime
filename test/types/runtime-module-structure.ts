@@ -1,10 +1,18 @@
 import type {
   CompiledConsumerSchema,
-  ConsumerSchemaProfileValidation,
   compileConsumerSchema,
-  validateConsumerSchemaProfile,
+  ComparatorOperator,
+  ConsumerSchemaProfileValidation,
+  ExecutableVersionConstraint,
+  matchesExecutableVersionConstraint,
   normalizeValidationDiagnostics,
+  parseExecutableVersionConstraint,
+  parseStrictSemVer,
+  compareSemVer,
+  StrictSemVer,
   ValidationDiagnosticInput,
+  validateConsumerSchemaProfile,
+  VersionComparator,
 } from '../../src/runtime/definition/index.js';
 import type {
   AgentArgumentTemplate,
@@ -95,6 +103,59 @@ export type CompileConsumerSchemaIsExact = Expect<
   Equal<
     typeof compileConsumerSchema,
     (schema: JsonSchema202012, schemaInstancePath: string) => CompiledConsumerSchema
+  >
+>;
+
+type ExpectedStrictSemVer = {
+  readonly source: string;
+  readonly core: readonly [string, string, string];
+  readonly prerelease: readonly string[];
+  readonly build: readonly string[];
+};
+
+type ExpectedComparatorOperator = '=' | '>' | '>=' | '<' | '<=';
+
+type ExpectedVersionComparator = {
+  readonly operator: ComparatorOperator;
+  readonly version: StrictSemVer;
+};
+
+type ExpectedExecutableVersionConstraint = {
+  readonly source: string;
+  readonly comparators: readonly VersionComparator[];
+};
+
+export type StrictSemVerIsExact = Expect<Equal<StrictSemVer, ExpectedStrictSemVer>>;
+
+export type ComparatorOperatorIsExact = Expect<
+  Equal<ComparatorOperator, ExpectedComparatorOperator>
+>;
+
+export type VersionComparatorIsExact = Expect<Equal<VersionComparator, ExpectedVersionComparator>>;
+
+export type ExecutableVersionConstraintIsExact = Expect<
+  Equal<ExecutableVersionConstraint, ExpectedExecutableVersionConstraint>
+>;
+
+export type ParseStrictSemVerIsExact = Expect<
+  Equal<typeof parseStrictSemVer, (value: string) => StrictSemVer | undefined>
+>;
+
+export type CompareSemVerIsExact = Expect<
+  Equal<typeof compareSemVer, (left: StrictSemVer, right: StrictSemVer) => -1 | 0 | 1>
+>;
+
+export type ParseExecutableVersionConstraintIsExact = Expect<
+  Equal<
+    typeof parseExecutableVersionConstraint,
+    (value: string) => ExecutableVersionConstraint | undefined
+  >
+>;
+
+export type MatchesExecutableVersionConstraintIsExact = Expect<
+  Equal<
+    typeof matchesExecutableVersionConstraint,
+    (version: StrictSemVer, constraint: ExecutableVersionConstraint) => boolean
   >
 >;
 
