@@ -1,12 +1,22 @@
+import { createHash } from 'node:crypto';
+
 import { expect, test } from 'vitest';
 
-import { validateManagerOptions } from '../../../../src/runtime/definition/index.js';
+import {
+  canonicalizeJsonBytes,
+  validateManagerOptions,
+} from '../../../../src/runtime/definition/index.js';
 import { AgentManagerError } from '../../../../src/runtime/errors/index.js';
 import {
   AGENT_FAULT_MESSAGES,
   AGENT_MANAGER_LIMITS,
 } from '../../../../src/runtime/policy/index.js';
-import type { AgentFault, AgentManagerOptions } from '../../../../src/runtime/spec/index.js';
+import type {
+  AgentFault,
+  AgentManagerOptions,
+  JsonObject,
+  JsonValue,
+} from '../../../../src/runtime/spec/index.js';
 import {
   buildAgentDefinition,
   buildAgentManagerOptions,
@@ -17,6 +27,7 @@ const definitionInvalidFault = (
   keyword: string,
   instancePath: string,
   message: string,
+  schemaPath = `/${keyword}`,
 ): AgentFault => ({
   code: 'revo.agent.definition_invalid',
   message: AGENT_FAULT_MESSAGES.definitionInvalid,
@@ -27,7 +38,7 @@ const definitionInvalidFault = (
       {
         instancePath,
         instancePathTruncated: false,
-        schemaPath: `/${keyword}`,
+        schemaPath,
         schemaPathTruncated: false,
         keyword,
         message,
@@ -86,6 +97,25 @@ const acpDefinition = (overrides: Parameters<typeof buildAgentDefinition>[0] = {
   });
 
   return { ...definition, ...overrides };
+};
+
+const isJsonValue = (value: unknown): value is JsonValue => {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every(isJsonValue);
+  if (typeof value === 'object') return Object.values(value).every(isJsonValue);
+  return false;
+};
+
+const isJsonObject = (value: unknown): value is JsonObject =>
+  value !== null &&
+  typeof value === 'object' &&
+  !Array.isArray(value) &&
+  Object.values(value).every(isJsonValue);
+
+const jsonObject = (value: unknown): JsonObject => {
+  if (isJsonObject(value)) return value;
+  throw new Error('Expected a JSON object.');
 };
 
 test('returns frozen package-owned snapshots and effective defaults', () => {
@@ -448,23 +478,25 @@ test.each([
   [
     'plain-data accessors before DTO parsing',
     Object.defineProperty({}, 'definitions', { enumerable: true, get: () => [] }),
-    'revo.agent.definition_invalid',
-    '/definitions',
-    'json_property_data',
+    definitionInvalidFault(
+      'json_property_data',
+      '/definitions',
+      'Property must be an own enumerable data property.',
+    ),
   ],
   [
     'an unknown top-level DTO key',
     { definitions: [nativeDefinition()], unexpected: true },
-    'revo.agent.definition_invalid',
-    '/',
-    'manager_options_shape',
+    definitionInvalidFault(
+      'manager_options_shape',
+      '/',
+      'Value does not satisfy the agent manager options DTO.',
+    ),
   ],
   [
     'an unknown nested limits key',
     { definitions: [nativeDefinition()], limits: { unexpected: true } },
-    'revo.agent.limit_invalid',
-    '/limits',
-    'limit_shape',
+    limitShapeFault('/limits'),
   ],
   [
     'an oversized definition list',
@@ -473,17 +505,16 @@ test.each([
         nativeDefinition({ id: `agent-${index}` }),
       ),
     },
-    'revo.agent.definition_invalid',
-    '/definitions',
-    'manager_options_shape',
+    definitionInvalidFault(
+      'manager_options_shape',
+      '/definitions',
+      'Value does not satisfy the agent manager options DTO.',
+    ),
   ],
-] as const)('sanitizes construction faults for %s', (_name, value, code, instancePath, keyword) => {
+] as const)('sanitizes construction faults for %s', (_name, value, expectedFault) => {
   const fault = faultFrom(() => validateManagerOptions(value));
 
-  expect(fault.code).toBe(code);
-  expect(fault.phase).toBe('construction');
-  expect(fault.retryable).toBe(false);
-  expect(fault.details).toMatchObject({ diagnostics: [{ instancePath, keyword }] });
+  expect(fault).toEqual(expectedFault);
 });
 
 test('classifies an unsupported strategy before coherence validation', () => {
@@ -649,27 +680,82 @@ test.each([
   expect(validateManagerOptions({ definitions: [definition] }).definitions).toHaveLength(1);
 });
 
-test('propagates compiled consumer-schema defaults mismatches', () => {
-  const fault = faultFrom(() =>
-    validateManagerOptions({
-      definitions: [
-        nativeDefinition({
-          parameters: {
-            schema: {
-              ...p1ObjectSchema,
-              properties: { name: { type: 'string' } },
-            },
-            defaults: { name: 1 },
-          },
-        }),
-      ],
-    }),
-  );
+test.each([
+  nativeDefinition({
+    delivery: { prompt: 'file', resultSchema: 'argument', result: 'stdout' },
+    launch: {
+      command: '/fixture/bin/agent',
+      args: [{ kind: 'prompt-file' }, { kind: 'result-schema' }],
+      versionProbe: { args: ['--version'], stream: 'stdout', timeoutMs: 1_000 },
+    },
+  }),
+  nativeDefinition({
+    delivery: { prompt: 'stdin', resultSchema: 'argument', result: 'stdout' },
+    launch: {
+      command: '/fixture/bin/agent',
+      args: [{ kind: 'result-schema' }],
+      versionProbe: { args: ['--version'], stream: 'stdout', timeoutMs: 1_000 },
+    },
+  }),
+  nativeDefinition({
+    delivery: { prompt: 'argument', resultSchema: 'file', result: 'stdout' },
+    launch: {
+      command: '/fixture/bin/agent',
+      args: [{ kind: 'prompt' }, { kind: 'result-schema-file' }],
+      versionProbe: { args: ['--version'], stream: 'stdout', timeoutMs: 1_000 },
+    },
+  }),
+])('accepts coherent native delivery and template variants', (definition) => {
+  expect(validateManagerOptions({ definitions: [definition] }).definitions).toHaveLength(1);
+});
 
-  expect(fault.code).toBe('revo.agent.definition_invalid');
-  expect(fault.details).toMatchObject({
-    diagnostics: [{ instancePath: '/definitions/0/parameters/defaults/name', keyword: 'type' }],
+test('propagates compiled consumer-schema defaults mismatches', () => {
+  const schema = { ...p1ObjectSchema, properties: { name: { type: 'string' } } };
+  for (const [domain, definition, instancePath] of [
+    [
+      'parameters',
+      nativeDefinition({ parameters: { schema, defaults: { name: 1 } } }),
+      '/definitions/0/parameters/defaults/name',
+    ],
+    [
+      'permissions',
+      nativeDefinition({ permissions: { schema, defaults: { name: 1 } } }),
+      '/definitions/0/permissions/defaults/name',
+    ],
+  ] as const) {
+    const fault = faultFrom(() => validateManagerOptions({ definitions: [definition] }));
+    expect(fault).toEqual(
+      definitionInvalidFault(
+        'type',
+        instancePath,
+        'Value does not match the schema type.',
+        '/properties/name/type',
+      ),
+    );
+    expect(domain).toBeDefined();
+  }
+});
+
+test('returns the snapshot parsed from canonical bytes with its independent digest', () => {
+  const definition = nativeDefinition({
+    id: 'canonical-agent',
+    launch: {
+      command: '/fixture/bin/agent',
+      args: [{ kind: 'result-schema' }, { kind: 'prompt' }],
+      versionProbe: { args: ['--version'], stream: 'stdout', timeoutMs: 1_000 },
+    },
   });
+  const canonicalBytes = canonicalizeJsonBytes(jsonObject(definition));
+  const parsed: unknown = JSON.parse(
+    new TextDecoder('utf-8', { fatal: true }).decode(canonicalBytes),
+  );
+  const expectedSnapshot = jsonObject(parsed);
+  const expectedDigest = createHash('sha256').update(canonicalBytes).digest('hex');
+  const validated = validateManagerOptions({ definitions: [definition] }).definitions[0]!;
+
+  expect(validated.definition).toEqual(expectedSnapshot);
+  expect(validated.definitionDigest).toBe(expectedDigest);
+  expect(validated.definition).not.toBe(definition);
 });
 
 test.each([
