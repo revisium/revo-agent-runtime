@@ -21,7 +21,7 @@ export type {
   ExecutableVersionConstraint,
   VersionComparator,
 } from './executable-version-constraint/index.js';
-export { normalizeValidationDiagnostics } from './validation-diagnostics/index.js';
+export { compareUtf8, normalizeValidationDiagnostics } from './validation-diagnostics/index.js';
 export type { ValidationDiagnosticInput } from './validation-diagnostics/index.js';
 export { compileConsumerSchema } from './consumer-schema-validator/index.js';
 export type { CompiledConsumerSchema } from './consumer-schema-validator/index.js';
