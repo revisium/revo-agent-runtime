@@ -17,6 +17,11 @@ import type {
   VersionComparator,
 } from '../../src/runtime/definition/index.js';
 import type {
+  parseVersionOutput,
+  VersionOutputFailureReason,
+  VersionOutputResult,
+} from '../../src/runtime/probe/index.js';
+import type {
   AgentArgumentTemplate,
   AgentDefinitionContract,
   AgentDefinitionInput,
@@ -140,6 +145,19 @@ type ExpectedExecutableVersionConstraint = {
   readonly comparators: readonly VersionComparator[];
 };
 
+type ExpectedVersionOutputFailureReason =
+  | 'invalid_utf8'
+  | 'nul'
+  | 'line_break'
+  | 'surrounding_whitespace'
+  | 'prefix_mismatch'
+  | 'empty_version'
+  | 'invalid_semver';
+
+type ExpectedVersionOutputResult =
+  | { readonly valid: true; readonly version: StrictSemVer }
+  | { readonly valid: false; readonly reason: VersionOutputFailureReason };
+
 export type StrictSemVerIsExact = Expect<Equal<StrictSemVer, ExpectedStrictSemVer>>;
 
 export type ComparatorOperatorIsExact = Expect<
@@ -171,6 +189,24 @@ export type MatchesExecutableVersionConstraintIsExact = Expect<
   Equal<
     typeof matchesExecutableVersionConstraint,
     (version: StrictSemVer, constraint: ExecutableVersionConstraint) => boolean
+  >
+>;
+
+export type VersionOutputFailureReasonIsExact = Expect<
+  Equal<VersionOutputFailureReason, ExpectedVersionOutputFailureReason>
+>;
+
+export type VersionOutputResultIsExact = Expect<
+  Equal<VersionOutputResult, ExpectedVersionOutputResult>
+>;
+
+export type ParseVersionOutputIsExact = Expect<
+  Equal<
+    typeof parseVersionOutput,
+    (input: {
+      readonly bytes: Uint8Array;
+      readonly prefix?: string | undefined;
+    }) => VersionOutputResult
   >
 >;
 
