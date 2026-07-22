@@ -72,6 +72,18 @@ test('accepts cohesive type groups in specification leaves', () => {
   ).not.toThrow();
 });
 
+test('accepts the executable probe port cohesive type group', () => {
+  expect(() =>
+    validateModuleStructure([
+      {
+        path: 'src/runtime/probe/executable-probe-port/executable-probe-port.ts',
+        source:
+          "export type ProbeHostPlatform = 'linux';\nexport interface ExecutableProbePort { hostPlatform(): ProbeHostPlatform }\n",
+      },
+    ]),
+  ).not.toThrow();
+});
+
 test('rejects runtime syntax in a specification leaf', () => {
   expectViolation(
     {

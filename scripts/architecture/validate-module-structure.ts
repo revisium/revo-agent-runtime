@@ -67,6 +67,9 @@ const isProductionLeaf = (path: string): boolean =>
 
 const isSpecModule = (path: string): boolean => path.startsWith('src/runtime/spec/');
 
+const allowsCohesiveTypeGroup = (path: string): boolean =>
+  isSpecModule(path) || path.startsWith('src/runtime/probe/executable-probe-port/');
+
 const hasExportModifier = (modifierFlags: ModifierFlags): boolean =>
   (modifierFlags & ModifierFlags.Export) !== 0;
 
@@ -255,7 +258,7 @@ const validateSourceFile = (path: string, sourceFile: SourceFile): void => {
 
   if (
     isProductionLeaf(path) &&
-    !isSpecModule(path) &&
+    !allowsCohesiveTypeGroup(path) &&
     exportedEntityCount(sourceFile.statements) !== 1
   ) {
     fail('one-export-per-leaf', path);
