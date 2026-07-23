@@ -71,36 +71,36 @@ const copyObservation = (observation: VersionProbeObservation): VersionProbeObse
 };
 
 export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecutableProbeControls {
-  readonly #platform: ProbeHostPlatform;
-  readonly #resolutionQueue: (ExecutableResolution | Error)[] = [];
-  readonly #versionStartQueue: ('running' | Error)[] = [];
-  readonly #probes = new Map<number, PendingProbe>();
-  readonly #callLog: ProbePortCall[] = [];
-  #hostPlatformReadCount = 0;
-  #nextProbeId = 1;
-  #activeProbeCount = 0;
-  #maximumActiveProbeCount = 0;
+  private readonly platform: ProbeHostPlatform;
+  private readonly resolutionQueue: (ExecutableResolution | Error)[] = [];
+  private readonly versionStartQueue: ('running' | Error)[] = [];
+  private readonly probes = new Map<number, PendingProbe>();
+  private readonly callLog: ProbePortCall[] = [];
+  private hostPlatformReadCountValue = 0;
+  private nextProbeId = 1;
+  private activeProbeCount = 0;
+  private maximumActiveProbeCount = 0;
 
   constructor({ platform }: Readonly<{ platform: ProbeHostPlatform }>) {
-    this.#platform = platform;
+    this.platform = platform;
   }
 
   hostPlatform(): ProbeHostPlatform {
-    this.#hostPlatformReadCount += 1;
-    return this.#platform;
+    this.hostPlatformReadCountValue += 1;
+    return this.platform;
   }
 
   enqueueResolution(result: ExecutableResolution | Error): void {
-    this.#resolutionQueue.push(result);
+    this.resolutionQueue.push(result);
   }
 
   enqueueVersionStart(result: 'running' | Error): void {
-    this.#versionStartQueue.push(result);
+    this.versionStartQueue.push(result);
   }
 
   async resolveExecutable(request: Readonly<{ command: string }>): Promise<ExecutableResolution> {
-    this.#record(Object.freeze({ type: 'resolve', command: request.command }));
-    const result = this.#take(this.#resolutionQueue, 'resolution');
+    this.record(Object.freeze({ type: 'resolve', command: request.command }));
+    const result = this.take(this.resolutionQueue, 'resolution');
 
     if (result instanceof Error) {
       throw result;
@@ -110,7 +110,7 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
   }
 
   async startVersionProbe(request: VersionProbeRequest): Promise<RunningVersionProbe> {
-    this.#record(
+    this.record(
       Object.freeze({
         type: 'start-version',
         executable: request.executable,
@@ -121,14 +121,14 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
         stderrLimitBytes: request.stderrLimitBytes,
       }),
     );
-    const result = this.#take(this.#versionStartQueue, 'version start');
+    const result = this.take(this.versionStartQueue, 'version start');
 
     if (result instanceof Error) {
       throw result;
     }
 
-    const probeId = this.#nextProbeId;
-    this.#nextProbeId += 1;
+    const probeId = this.nextProbeId;
+    this.nextProbeId += 1;
     const pendingProbe: PendingProbe = {
       completion: deferred<VersionProbeObservation>(),
       timeout: deferred<void>(),
@@ -138,25 +138,25 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
       terminationSettled: false,
       active: true,
     };
-    this.#probes.set(probeId, pendingProbe);
-    this.#activeProbeCount += 1;
-    this.#maximumActiveProbeCount = Math.max(this.#maximumActiveProbeCount, this.#activeProbeCount);
+    this.probes.set(probeId, pendingProbe);
+    this.activeProbeCount += 1;
+    this.maximumActiveProbeCount = Math.max(this.maximumActiveProbeCount, this.activeProbeCount);
 
     return {
       completion: pendingProbe.completion.promise,
       timeout: pendingProbe.timeout.promise,
-      terminateAndReap: () => this.#terminateAndReap(probeId),
+      terminateAndReap: () => this.terminateAndReap(probeId),
     };
   }
 
   settleCompletion(probeId: number, observation: VersionProbeObservation | Error): void {
-    const probe = this.#probe(probeId);
+    const probe = this.probe(probeId);
     if (probe.completionSettled) {
       throw new Error(`Completion for probe ${probeId} is already settled`);
     }
 
     probe.completionSettled = true;
-    this.#release(probe);
+    this.release(probe);
     if (observation instanceof Error) {
       probe.completion.reject(observation);
       return;
@@ -166,7 +166,7 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
   }
 
   fireTimeout(probeId: number): void {
-    const probe = this.#probe(probeId);
+    const probe = this.probe(probeId);
     if (probe.timeoutSettled) {
       throw new Error(`Timeout for probe ${probeId} is already settled`);
     }
@@ -176,7 +176,7 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
   }
 
   settleTermination(probeId: number, result?: Error): void {
-    const probe = this.#probe(probeId);
+    const probe = this.probe(probeId);
     if (probe.termination === undefined) {
       throw new Error(`Termination for probe ${probeId} has not started`);
     }
@@ -186,7 +186,7 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
 
     probe.terminationSettled = true;
     if (result === undefined) {
-      this.#release(probe);
+      this.release(probe);
       probe.termination.resolve(undefined);
       return;
     }
@@ -195,24 +195,24 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
   }
 
   calls(): readonly ProbePortCall[] {
-    return Object.freeze([...this.#callLog]);
+    return Object.freeze([...this.callLog]);
   }
 
   hostPlatformReadCount(): number {
-    return this.#hostPlatformReadCount;
+    return this.hostPlatformReadCountValue;
   }
 
   activeVersionProbes(): number {
-    return this.#activeProbeCount;
+    return this.activeProbeCount;
   }
 
   maximumActiveVersionProbes(): number {
-    return this.#maximumActiveProbeCount;
+    return this.maximumActiveProbeCount;
   }
 
-  #terminateAndReap(probeId: number): Promise<void> {
-    const probe = this.#probe(probeId);
-    this.#record(Object.freeze({ type: 'terminate-and-reap', probeId }));
+  private terminateAndReap(probeId: number): Promise<void> {
+    const probe = this.probe(probeId);
+    this.record(Object.freeze({ type: 'terminate-and-reap', probeId }));
     if (probe.termination === undefined) {
       probe.termination = deferred<void>();
     }
@@ -220,7 +220,7 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
     return probe.termination.promise;
   }
 
-  #take<Result>(queue: Result[], name: string): Result {
+  private take<Result>(queue: Result[], name: string): Result {
     const result = queue.shift();
     if (result === undefined) {
       throw new Error(`No ${name} result is queued`);
@@ -229,12 +229,12 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
     return result;
   }
 
-  #record(call: ProbePortCall): void {
-    this.#callLog.push(call);
+  private record(call: ProbePortCall): void {
+    this.callLog.push(call);
   }
 
-  #probe(probeId: number): PendingProbe {
-    const probe = this.#probes.get(probeId);
+  private probe(probeId: number): PendingProbe {
+    const probe = this.probes.get(probeId);
     if (probe === undefined) {
       throw new Error(`Unknown probe id ${probeId}`);
     }
@@ -242,12 +242,12 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
     return probe;
   }
 
-  #release(probe: PendingProbe): void {
+  private release(probe: PendingProbe): void {
     if (!probe.active) {
       return;
     }
 
     probe.active = false;
-    this.#activeProbeCount -= 1;
+    this.activeProbeCount -= 1;
   }
 }

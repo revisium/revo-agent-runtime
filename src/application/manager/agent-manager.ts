@@ -9,19 +9,19 @@ interface M1AgentDiscovery {
 }
 
 class InternalM1AgentDiscovery implements M1AgentDiscovery {
-  readonly #registry: SealedAgentRegistry;
+  private readonly registry: SealedAgentRegistry;
 
   constructor(registry: SealedAgentRegistry) {
-    this.#registry = registry;
+    this.registry = registry;
     Object.freeze(this);
   }
 
   listAgents(): readonly AgentDescriptor[] {
-    return this.#registry.listAgents();
+    return this.registry.listAgents();
   }
 
   getAgent(agent: AgentRef): AgentDescriptor | undefined {
-    return this.#registry.getAgent(agent);
+    return this.registry.getAgent(agent);
   }
 }
 
