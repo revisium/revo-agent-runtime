@@ -1,7 +1,8 @@
 # Expanded target consumer example
 
 > [!IMPORTANT]
-> This example describes the draft AgentManager v1 target. The bootstrap package still exports an empty root.
+> This example describes the draft AgentManager v1 target. The root package export is still empty; implemented definition,
+> registry, and executable-probe slices remain private.
 
 The consumer stores and supplies complete versioned definitions. Definitions are JSON data, but every selected protocol
 driver, result parser, and permission strategy is package code. The normative fields and limits are defined by the
@@ -107,8 +108,15 @@ import { codexDefinition, roleResultSchema } from './agents/codex.js';
 
 const manager = createAgentManager({
   definitions: [codexDefinition],
+  activeStateSink: {
+    save: (snapshot, context) => activeInvocationRepository.save(snapshot, context),
+    remove: (invocationId, context) => activeInvocationRepository.remove(invocationId, context),
+  },
   limits: { maxCompletedInvocations: 500 },
 });
+
+const activeSnapshots = await activeInvocationRepository.listForLocalManager();
+await manager.initialize(activeSnapshots);
 
 const stopAll = manager.subscribe({}, (event) => publishAgentEvent(event));
 const stopOne = manager.subscribe({ invocationId: attempt.id }, (event) =>
@@ -155,4 +163,13 @@ await manager.shutdown('Consumer is stopping');
 The output directory leaf must not exist before `start()`. The manager claims it for one invocation and records bounded,
 redacted `events.ndjson`, `stdout.log`, `stderr.log`, optional failure-only `raw-final-response.txt`, and `result.json`.
 Live events are future-only; retained completion remains available through `getResult()` and `waitForResult()` until bounded
-process-local eviction. Durable indexing, retention, and restart recovery remain consumer responsibilities.
+process-local eviction.
+
+`activeInvocationRepository` is consumer code. It stores only the current `running | cancelling` snapshots supplied through
+the sink, honors each operation context's abort signal, and loads the rows selected for this local manager before
+initialization. For a live invocation, the runtime removes its row only after the owned POSIX process group is confirmed gone.
+During initialization it may instead remove a row whose recorded leader is definitely absent, without claiming descendant
+cleanup. Results and completed history stay in the existing result/output and consumer workflow layers. The consumer also
+owns row integrity/provenance, DBOS, retries, distributed locks/races, durable indexing, retention, and recovery policy. The
+exact local process identity and cleanup rules are defined by
+[ADR-0006](../adr/0006-consumer-backed-active-invocation-recovery.md).

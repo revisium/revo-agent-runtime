@@ -14,7 +14,7 @@ invocation across two implementations.
 ## Decision
 
 Narrowly amend ADR-0001: the runtime records invocation-local output files, while the consumer still owns path construction,
-indexing, retention, restart recovery, and every durable workflow decision.
+indexing, retention, result recovery, and every durable workflow decision.
 
 Every start request supplies one exact output directory whose leaf must not exist. The manager treats it as opaque, creates
 missing parents, then atomically creates the leaf non-recursively. `EEXIST` always fails with `output_conflict`; the manager
@@ -47,7 +47,9 @@ event, delivers exactly one process-local `invocation.finished`, and resolves wa
 
 Failure to append the terminal event after a successful result commit adds a bounded process-local diagnostic and cannot
 mutate that result. Exactly-one is a live manager delivery invariant, not a filesystem claim. Missing `result.json` or a
-missing terminal NDJSON record means the consumer has an incomplete audit record for restart recovery.
+missing terminal NDJSON record means the consumer has an incomplete audit record for result recovery. Active-process
+reconciliation is separate and defined by
+[ADR-0006](./0006-consumer-backed-active-invocation-recovery.md).
 
 ## Consequences
 
@@ -59,7 +61,8 @@ missing terminal NDJSON record means the consumer has an incomplete audit record
 - Files are an invocation audit record, not a package-owned database or workflow index.
 - A live terminal result may outlive a failed audit write; consumers must treat absent `result.json` or terminal NDJSON as
   incomplete recovery evidence rather than inventing success.
-- Restart recovery remains out of v1 even though the consumer can retain the exact directory path.
+- Result recovery remains consumer-owned even though the consumer can retain the exact directory path.
+  [ADR-0006](./0006-consumer-backed-active-invocation-recovery.md) adds only consumer-backed active-process cleanup.
 
 ## Rejected alternatives
 

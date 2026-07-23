@@ -11,7 +11,8 @@ This file is the repository-local contract for coding agents. When this reposito
 - Protected base branch: `master`.
 - Primary local gate: `pnpm verify`.
 - Static analysis: SonarCloud through the repository tooling and workflow committed here.
-- The bootstrap package intentionally has no runtime API yet. Target AgentManager documents are not exports.
+- The root package export intentionally has no runtime API yet. Internal definition, registry, and executable-probe slices
+  are implemented and tested; target AgentManager documents are not exports.
 
 ## Required reading
 
@@ -42,7 +43,8 @@ When architecture, specifications, or ADRs are added, treat their declared sourc
 - Keep each unit at one abstraction level and give it one bounded responsibility.
 - Keep business decisions separate from process, filesystem, network, provider, and presentation mechanics.
 - Keep the package invocation-scoped. Agent selection, execution planning, workspace allocation, durable retry, workflow
-  persistence, path construction, retention, restart recovery, and pipeline transitions remain consumer responsibilities.
+  persistence, active-row storage/loading, recovery policy, path construction, retention, and pipeline transitions remain
+  consumer responsibilities. The package owns only bounded local POSIX reconciliation of snapshots the consumer supplies.
 - Keep protocol and provider SDK types behind package-owned adapters. Public contracts must remain provider-neutral and JSON-compatible where they cross a durable boundary.
 - Bound and redact events, terminal output, diagnostics, and artifacts before they reach consumer sinks.
 - Never pass wholesale `process.env`; inherit only named values and register invocation secrets with streaming redaction

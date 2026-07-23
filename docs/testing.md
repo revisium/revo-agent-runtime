@@ -4,7 +4,8 @@ This document defines how behavior in `@revisium/revo-agent-runtime` is proven. 
 [VERIFICATION.md](../VERIFICATION.md).
 
 The policy adapts the library-level rules from `@revisium/revo-scripts` to an agent runtime. Host DBOS, pipeline, MCP,
-GraphQL, UI, and durable-recovery layers do not belong in this package.
+GraphQL, UI, active-row repository, distributed coordination, and durable result-recovery layers do not belong in this
+package. Package-owned local process reconciliation is tested here.
 
 ## Principles
 
@@ -44,20 +45,23 @@ GraphQL, UI, and durable-recovery layers do not belong in this package.
 
 ## Test layers
 
-| Layer        | Owns                                                                                                      | Must not own                                                  |
-| ------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Unit         | Pure validation, canonicalization, digest, redaction, limits, parsing, filters, and retention decisions.  | Package export claims or broad process lifecycle.             |
-| Contract     | Manager discovery, exact lookup, preflight, lifecycle, events, results, cancel/shutdown, stable faults.   | Concrete Node process/filesystem behavior or private shape.   |
-| Integration  | Real temporary process, filesystem, native/ACP framing, file atomicity, and consumer flow.                | Revo workflow policy, durable retry, or public product APIs.  |
-| Architecture | Dependency direction, cycle absence, forbidden imports, test-to-production direction, and probe efficacy. | Runtime behavior or built package resolution.                 |
-| Package      | Built declarations, root export map, ESM resolution, packed contents, and deep-import denial.             | Invocation semantics or future API behavior before it exists. |
+| Layer        | Owns                                                                                                                                         | Must not own                                                  |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Unit         | Pure validation, canonicalization, digest/fingerprint records, redaction, limits, parsing, filters, and retention decisions.                 | Package export claims or broad process lifecycle.             |
+| Contract     | Manager initialization, discovery, exact lookup, preflight, lifecycle, state-sink ordering, events, results, cancel/shutdown, stable faults. | Concrete Node process/filesystem behavior or private shape.   |
+| Integration  | Real temporary process/group, OS inspection, filesystem, native/ACP framing, file atomicity, and consumer flow.                              | Revo workflow policy, durable retry, or public product APIs.  |
+| Architecture | Dependency direction, cycle absence, forbidden imports, test-to-production direction, and probe efficacy.                                    | Runtime behavior or built package resolution.                 |
+| Package      | Built declarations, root export map, ESM resolution, packed contents, and deep-import denial.                                                | Invocation semantics or future API behavior before it exists. |
 
-Only the package layer exists during bootstrap. Unit, contract, and integration scripts are added when their owned behavior
-exists; the repository does not keep empty lanes or permanent `passWithNoTests` configuration.
+Unit, architecture, and package lanes currently prove the implemented private definition, registry, and executable-probe
+slices plus the intentionally empty root export. Contract and integration scripts are added when their owned AgentManager
+or concrete process/filesystem behavior exists; the repository does not keep empty lanes or permanent `passWithNoTests`
+configuration.
 
 ## Definition and registry proof
 
-The first definition/registry slice requires tests for:
+Definition, registry, and executable-probe tests must cover each implemented behavior below. Items that depend on execution
+or the public AgentManager remain target requirements until those slices exist:
 
 - closed draft 2020-12 schemas and stable validation diagnostics;
 - RFC 8785 canonicalization and lowercase SHA-256 digest generation over the complete definition;
@@ -80,6 +84,29 @@ Generic registry tests use arbitrary agent ids. They MUST NOT pass because an im
 
 Manager tests must prove:
 
+- initialization is one-shot and concurrency-safe, copies the first caller input, and gates every non-registry manager
+  operation except shutdown until its shared completion succeeds;
+- duplicate and structurally malformed active snapshots reject before any process inspection, signal, or sink call;
+- unknown/digest-mismatched pins are preserved as independent row failures without inspection, valid rows still reconcile,
+  and aggregate initialization failure occurs only after independent work completes;
+- consumer row selection/provenance is trusted input while the fingerprint proves only current process identity against PID
+  reuse/drift, never package-established ownership;
+- active-state operations and total initialization obey their configured deadlines, abort sink contexts, preserve current
+  and unprocessed rows on expiry, and cannot apply a late timed-out mutation;
+- active snapshots contain exactly invocation id, execution pin, `running | cancelling`, and process identity; they contain
+  no result, terminal status, prompt, credential, environment, metadata, output directory, or consumer workflow field;
+- `running` is saved after process-identity capture and before an accepted handle is returned; `cancelling` is attempted
+  before the first cancellation signal; leader exit sweeps/confirms the owned group before removal or finalization;
+- initial save failure kills and reaps the just-spawned owned process before start rejects, and no handle or known untracked
+  process remains;
+- cancellation save failure emits a bounded diagnostic but still kills/reaps through the live child handle, then attempts
+  removal; it cannot by itself force `shutdown_failed` or host termination;
+- active-row removal failure emits one bounded diagnostic, leaves a stale consumer row, and cannot change or delay the
+  existing terminal result semantics;
+- initialization removes definitely missing rows, never signals or removes live fingerprint/PID mismatches, terminates and
+  reaps identity matches before removal, and preserves rows plus fails closed on inspection, termination, or sink uncertainty;
+- initialization of native Codex, native Claude, and ACP-over-stdio rows performs cleanup only and never recreates handles,
+  events, result waiters, completed records, stdio, or ACP sessions;
 - `invocationId` validation and uniqueness across active and retained completed records;
 - exact agent pin `{ agentId, agentVersion, definitionDigest }` is captured once and execution does not reread the registry;
 - metadata, parameters, permissions, result schema, limits, and environment are package-owned snapshots unaffected by caller
@@ -89,8 +116,8 @@ Manager tests must prove:
 - no wholesale process environment inheritance, no inherited variables by default, duplicate environment-key rejection,
   credential-like-name rejection in nonsecret inherit/variables, secret auto-redaction before spawn, split-chunk redaction,
   and unredacted-buffer disposal;
-- post-acceptance spawn, process, protocol, output, parsing, validation, timeout, and cancellation failures resolve typed
-  terminal results rather than rejecting result waiters;
+- pre-handle spawn failures reject start after cleanup; post-acceptance process, protocol, output, parsing, validation,
+  timeout, and cancellation failures resolve typed terminal results rather than rejecting result waiters;
 - one subscription can observe all invocations or exactly one filtered invocation;
 - per-invocation sequence ordering and exactly one process-local `invocation.finished` delivery;
 - subscriber failure isolation and no hidden async event buffer;
@@ -100,9 +127,13 @@ Manager tests must prove:
 - bounded FIFO completion eviction never removes active work, makes evicted ids unknown, and permits reuse only after
   eviction;
 - cancel is idempotent and terminal races commit exactly one outcome;
+- cancellation before spawn settles cancelled without sink/signal; cancellation after spawn but before initial snapshot uses
+  the live child handle, writes no snapshot, and does not confuse persisted supervision state with invocation status;
 - shutdown is idempotent, the first call creates one shared fulfillment/rejection, and only its copied/bounded/redacted reason
   is used; the first close atomically partitions racing starts into accepted-and-drained or `manager_closed` without a
   handle/process;
+- shutdown before initialization closes an empty manager; shutdown during initialization stops new rows, aborts/waits only
+  to the initialization deadline, and confirms every recovery process already signalled without hanging indefinitely;
 - after closing begins, new start/probe operations reject and subscribe throws `revo.agent.manager_closed`, while exact
   registry reads, process-local list/get/result/wait APIs, existing handles, manager cancel, and idempotent unsubscribe remain
   usable;
@@ -115,6 +146,9 @@ Manager tests must prove:
   probe count; every later shutdown observes the same rejection;
 - after shutdown failure the manager remains failed-closed, registry/state reads remain available, and an unreaped invocation
   stays active without a false terminal result;
+- natural leader exit with unconfirmed descendant cleanup preserves the active row and nonterminal invocation with typed
+  `process_cleanup_failed`; confirmed later cleanup may finalize failed, while continued uncertainty becomes
+  `shutdown_failed`;
 - late stream/raw recording failure replaces the provisional result with `revo.agent.output_write_failed`, while `.scratch`
   cleanup failure produces `revo.agent.scratch_cleanup_failed`;
 - result commit failure leaves `result.json` absent, commits the same failed value in memory without recursive persistence,
@@ -143,7 +177,21 @@ Integration tests use package-owned narrow process/filesystem seams and real tem
 
 Required behavior includes:
 
-- spawn, stdin, stdout, stderr, exit, signal, timeout, cancellation, process-tree kill, and reaping;
+- separate `darwin`/`linux` process-group spawn, stdin, stdout, stderr, exit, signal, timeout, cancellation,
+  process-tree kill, and reaping;
+- process fingerprint capture and recovery recomputation use the same versioned canonical OS identity fields, produce exact
+  `sha256:<64 lowercase hex>`, use exact byte comparison, and never include argv, environment, prompts,
+  credentials, metadata, or application `startedAt`;
+- inability to capture required identity after spawn kills and reaps before rejection; recovery inspection uncertainty sends
+  no signal, preserves the row, and fails closed;
+- recovered identity match sends process-group `SIGTERM`, performs a bounded wait, escalates to group `SIGKILL`, and confirms
+  termination; a PID/PGID alone is never sufficient authority;
+- unsupported-platform empty initialization preserves existing non-recovery execution, while non-empty recovery fails closed
+  without inspection, signal, sink mutation, or a Windows fingerprint/process-tree promise;
+- a missing recorded leader with possible surviving descendants removes the stale row without signalling the group and does
+  not report descendant cleanup;
+- natural leader exit sweeps and terminates all in-memory owned group descendants before row removal and finalization;
+  unconfirmed cleanup preserves the row and cannot publish terminal completion;
 - shutdown kills and reaps every owned invocation process and every racing in-flight probe process before resolving, with no
   accepted invocation or probe left orphaned; an interrupted probe rejects `manager_closed` only after reap;
 - a kill/reap confirmation failure does not report successful shutdown, clear listeners, or synthesize invocation
@@ -157,8 +205,10 @@ Required behavior includes:
 - never adopt, overwrite, delete, rotate, or suffix an existing output leaf;
 - bounded `events.ndjson`, `stdout.log`, `stderr.log`, and failure-only `raw-final-response.txt` with explicit truncation
   diagnostics or markers;
-- relational limit validation, including idle <= wall and an events-file reservation for one truncation diagnostic, one
-  terminal event, and both newline bytes;
+- relational limit validation, including active-state operation <= initialization, idle <= wall, and an events-file
+  reservation for one truncation diagnostic, one terminal event, and both newline bytes;
+- invocation wall-clock timing starts at successful spawn and includes post-spawn identity/save latency rather than starting
+  at logical acceptance or handle return;
 - exclusive same-directory result temp creation, file flush, non-replacing hard link, supported directory flush, temp unlink,
   `EEXIST`/unsupported-filesystem failure, and concurrent publication without replacement;
 - required normal finalization order plus every late-I/O branch where process-local completion survives an incomplete audit
@@ -203,7 +253,8 @@ tests, and README examples are introduced together.
 
 When the target API is implemented, package/type-surface proof MUST include the factory
 `createAgentManager(options): AgentManager`, public `AgentManagerError` with its readonly `AgentFault`, the complete manager
-surface including `shutdown(reason?: string): Promise<void>`, and the complete invocation-handle surface.
+surface including `initialize(snapshots)`, `shutdown(reason?: string): Promise<void>`, the `ActiveInvocationStateSink` and
+snapshot contracts, and the complete invocation-handle surface.
 
 ## Coverage and quality metrics
 
