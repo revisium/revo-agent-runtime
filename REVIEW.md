@@ -9,7 +9,24 @@ Block the change when any of the following applies:
 - Behavior or public type changes are not covered by tests at the appropriate boundary.
 - Package exports, declarations, README examples, and implementation describe different public surfaces.
 - Runtime code selects runners, models, profiles, workspaces, retry policy, or pipeline transitions instead of executing a resolved invocation.
-- Public contracts expose provider SDK, orchestrator, DBOS, Prisma, Nest, GraphQL, MCP, or playbook-owned types.
+- Public contracts expose provider SDK, orchestrator, DBOS, Prisma, Nest, GraphQL, MCP, Kubernetes, claim/lease, host, or
+  playbook-owned types.
+- Initialization is repeatable, performs process work before whole-input structural/duplicate validation, lets one row block
+  independent valid rows, silently prunes unknown/mismatched pins, lacks operation/total timeouts, or does not fail closed on
+  inspection/termination/sink uncertainty.
+- Active snapshots contain results, terminal history, prompts, credentials, environment, output paths, or consumer workflow
+  data; or the package reads a database instead of accepting consumer-loaded rows and a `save`/`remove` sink.
+- A POSIX invocation that reaches `running` returns a handle before bounded fingerprint capture and active-state save;
+  capture/save failure leaves a known process untracked; cancellation of an invocation with a saved `running` row signals
+  before attempting the bounded `cancelling` save; a sink outage prevents live kill/reap; or removal failure changes
+  invocation result semantics.
+- Recovery signals by persisted PID/process-group id alone, accepts a fingerprint derived from caller-controlled data,
+  signals or removes a live identity mismatch, treats consumer selection as package-proven ownership, signals after uncertain
+  inspection, or claims descendant cleanup after the identity-matched leader is gone.
+- Leader exit removes active state or finalizes before the owned group is confirmed descendant-free; unconfirmed group
+  cleanup produces a terminal result, prunes the row, or omits typed `process_cleanup_failed` evidence.
+- Shutdown before/during initialization can admit work, hang beyond the initialization deadline, or resolve without settling
+  every recovery process already signalled.
 - Events, terminal streams, diagnostics, or artifacts can grow without an explicit bound or reach a sink before redaction.
 - The manager registry can mutate after construction, performs implicit latest/fallback lookup, or execution rereads it
   after snapshotting an exact definition digest.
@@ -20,7 +37,7 @@ Block the change when any of the following applies:
   an independent completed-record clear/eviction pass, bypasses normal bounded FIFO, or deletes consumer output directories.
 - Unconfirmed kill/reap does not reject the shared completion with bounded/redacted non-retryable
   `revo.agent.shutdown_failed`, a later shutdown observes a different settlement, or an affected invocation is falsely
-  completed instead of remaining active, or consumer guidance permits same-domain replacement before ownership resolves.
+  completed instead of remaining active, or consumer guidance permits same-domain replacement before cleanup resolves.
 - A closed or shutdown-failed manager accepts a new start/probe/subscription, makes registry/state reads or existing handles
   unusable, or reports closure with anything other than the stable bounded `revo.agent.manager_closed` fault.
 - Late recording failure strands result waiters, recursively retries a failed result commit, claims a missing `result.json`
@@ -42,7 +59,8 @@ Block the change when any of the following applies:
   finalization.
 - Version probing uses regex extraction, accepts non-strict SemVer or non-AND range syntax, leaves output unbounded, or fails
   to kill and reap on timeout.
-- Limit validation omits minima, per-invocation <= manager relationships, idle <= wall, total argv, or terminal reservation.
+- Limit validation omits active-operation/initialization minima and relationship, per-invocation <= manager relationships,
+  idle <= wall, total argv, or terminal reservation.
 - Native command-line and ACP adapters return incompatible outcome or observability contracts.
 - A deep import, broad root barrel, dependency cycle, or reverse dependency bypasses the intended package DAG.
 - Architecture configuration changes do not include a passing positive graph and temporary representative negative probes.

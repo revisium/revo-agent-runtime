@@ -31,7 +31,15 @@ import { createAgentManager } from '@revisium/revo-agent-runtime';
 
 import { codexDefinition, roleResultSchema } from './agents/codex.js';
 
-const manager = createAgentManager({ definitions: [codexDefinition] });
+const manager = createAgentManager({
+  definitions: [codexDefinition],
+  activeStateSink: {
+    save: (snapshot, context) => activeInvocationRepository.save(snapshot, context),
+    remove: (invocationId, context) => activeInvocationRepository.remove(invocationId, context),
+  },
+});
+
+await manager.initialize(await activeInvocationRepository.listForLocalManager());
 
 const unsubscribe = manager.subscribe({}, (event) => {
   if (event.type === 'invocation.output') {
@@ -67,6 +75,12 @@ await manager.shutdown('Consumer is stopping');
 - `result()` waits for the terminal result; `getResult()` retrieves a retained result after completion.
 - `cancel()` stops one invocation; `shutdown()` closes the manager and drains every accepted invocation.
 - Success is a top-level JSON object validated against the supplied draft 2020-12 schema. There is no text-success result.
+
+The consumer owns the active-row repository and loads rows before initialization. The runtime writes only `running` or
+`cancelling` process snapshots, bounds state operations/initialization, and cleans up identity-matched non-reconnectable
+local POSIX processes after restart. See
+[ADR-0006](./docs/adr/0006-consumer-backed-active-invocation-recovery.md) for fingerprint and group-kill rules; active rows
+never contain results or history.
 
 ## Data-driven agents
 
@@ -114,6 +128,7 @@ export declare class AgentManagerError extends Error {
 export interface AgentManager {
   listAgents(): readonly AgentDescriptor[];
   getAgent(agent: AgentRef): AgentDescriptor | undefined;
+  initialize(snapshots: readonly ActiveInvocationSnapshot[]): Promise<void>;
   probeAgent(agent: AgentRef): Promise<AgentProbeResult>;
 
   subscribe(filter: AgentEventFilter, listener: AgentEventListener): Unsubscribe;
@@ -141,6 +156,7 @@ The package owns:
 
 - immutable definition validation, exact registry reads, executable probes, and execution pins;
 - native and ACP process lifecycle, events, files, structured results, cancellation, shutdown, and reaping;
+- local process fingerprints, active-state notifications, and cleanup of consumer-supplied active snapshots;
 - package-owned protocol, result-parser, and permission strategies;
 - bounds and redaction before subscriber delivery or file writes.
 
@@ -148,7 +164,8 @@ The consumer owns:
 
 - definition storage and rollout plus exact agent, model, prompt, workspace, permission, and result-schema selection;
 - invocation ids and any run/step/attempt model, scheduling, retry, pipeline, gate, or product verdict;
-- output path construction, durable indexing, retention, restart recovery, and user-facing log projection;
+- active-row storage/loading, DBOS, distributed coordination, output path construction, durable result/history indexing,
+  retention, recovery policy, and user-facing log projection;
 - credential selection, billing, Git, GitHub, and other deterministic system operations.
 
 ## Documentation
@@ -198,7 +215,7 @@ Quality Gate and fail when open Sonar issues remain.
 ## Package contract
 
 The package is ESM-only, uses explicit exports, emits declarations, and ships only `dist`, `README.md`, `LICENSE`, and
-package metadata. The bootstrap entrypoint stays empty until the first AgentManager slice is implemented and tested.
+package metadata. The bootstrap entrypoint stays empty until a public AgentManager slice is implemented and tested.
 
 ## License
 

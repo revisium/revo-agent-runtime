@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-07-15
 - Refines: [ADR-0001](./0001-agent-runtime-boundary.md)
+- Recovery refined by: [ADR-0006](./0006-consumer-backed-active-invocation-recovery.md)
 
 ## Context
 
@@ -50,14 +51,19 @@ terminal-event delivery, then clears listeners on success. Racing `start()` call
 rejected without a handle or process. New starts, probes, and subscriptions fail with the stable
 `revo.agent.manager_closed` fault; pure registry reads, process-local state reads, and existing handles remain usable.
 
-If process ownership cannot be confirmed, the shared completion rejects with non-retryable
+If process kill/reap cannot be confirmed, the shared completion rejects with non-retryable
 `revo.agent.shutdown_failed`. The manager remains permanently failed-closed, an unreaped invocation remains active rather
 than falsely completed, and later shutdown calls observe the same rejection. The consumer escalates host termination and
-does not construct a replacement in the same supervision domain until ownership is resolved.
+does not construct a replacement in the same supervision domain until process cleanup is externally resolved.
 
 The completed registry uses bounded FIFO retention. Construction may lower the package default but cannot increase it.
 When capacity is exceeded, the oldest completed record is evicted and becomes `unknown`; an evicted identifier may be
-reused. Active records are never evicted. Durable indexing, retention, and restart recovery remain consumer responsibilities.
+reused. Active records are never evicted. Durable result indexing and retention remain consumer responsibilities.
+
+ADR-0006 refines restart recovery without adding a package-owned store. The consumer supplies an active-state sink and one
+loaded set of active process snapshots to asynchronous initialization. The manager verifies and cleans up local
+non-reconnectable processes; the consumer still owns row selection, durable storage, coordination, retries, and recovery
+policy.
 
 ## Consequences
 
@@ -69,10 +75,10 @@ reused. Active records are never evicted. Durable indexing, retention, and resta
 - A terminal event is a notification, not the only result storage mechanism.
 - Hosts get one explicit shutdown barrier. It does not independently clear completed records, but drain completions follow
   normal bounded FIFO and may evict older records; handles retain resolved results and consumer output directories remain.
-- Process restart loses the in-memory registry. The consumer uses its durable workflow state and output directory to
-  recover according to a future, separately specified recovery contract.
+- Process restart loses the in-memory registry and retained results. The consumer loads active process rows for a new manager;
+  ADR-0006 defines the package's local cleanup contract without moving workflow or result recovery into the package.
 - Safe-domain manager replacement, host-termination escalation, retries, scheduling, orchestration, workflow transitions,
-  restart recovery, and cross-process fan-in stay outside this package.
+  durable row ownership, and cross-process fan-in stay outside this package.
 
 ## Rejected alternatives
 

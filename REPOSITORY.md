@@ -16,7 +16,8 @@ Use this order when sources disagree:
 5. `docs/architecture.md` explains current architecture and target dependency direction.
 6. `README.md` is the consumer-facing summary and MUST NOT claim unimplemented behavior is available.
 
-The current root export is intentionally empty. The AgentManager v1 specification is a draft target, not a shipped API.
+The current root export is intentionally empty. Internal definition, registry, and executable-probe slices are implemented
+and tested, but remain private. The AgentManager v1 specification is a draft target, not a shipped API.
 
 ## Ownership boundary
 
@@ -28,8 +29,10 @@ The package target owns:
 - native command-line and ACP adapters;
 - one invocation lifecycle, process stdio, deadlines, cancellation, and reaping;
 - idempotent process-local shutdown with one shared settlement that drains accepted work, confirms owned invocation/probe
-  kill and reap, and fails closed when ownership cannot be confirmed;
+  kill and reap, and fails closed when cleanup cannot be confirmed;
 - process-local active and bounded retained-completed records;
+- bounded local `darwin`/`linux` process identity, consumer-backed active-state notifications, and one-shot cleanup of
+  consumer-supplied active snapshots;
 - normalized results, usage, diagnostics, ordered subscriptions, and stable faults;
 - bounds and redaction before subscriber delivery and file writes;
 - conflict-safe recording of invocation-local files in one exact consumer-supplied directory.
@@ -42,9 +45,10 @@ The consuming host owns:
 - classification of explicit inherit/variables as nonsecret and credential values under `secrets`;
 - immutable execution-plan compilation and persistence;
 - opaque invocation-id generation and any run/step/attempt metadata;
-- path construction, durable output indexing, retention, restart recovery, and public projections;
+- active-row storage and loading, distributed coordination, path construction, durable output/result indexing, retention,
+  recovery policy, and public projections;
 - durable retry, replay, scheduling, pipelines, gates, and workflow transitions;
-- host-termination escalation after shutdown failure, with no replacement in the same supervision domain until ownership is
+- host-termination escalation after shutdown failure, with no replacement in the same supervision domain until cleanup is
   resolved, plus safe-domain replacement and restart-recovery policy;
 - billing ledgers and product verdict policy.
 
@@ -75,8 +79,9 @@ composition layer that wires registry, execution, strategies, and platform. The 
 live in `docs/specs/internal-module-structure.spec.md`; broader target responsibilities live in `docs/architecture.md`.
 `.oxlintrc.architecture.json` and the architecture verification harness enforce both.
 
-Production source MUST NOT import from a consumer application, DBOS, Prisma, Nest, GraphQL, MCP, `@revisium/revo-scripts`,
-tests, fixtures, generated output, or repository scripts. Consumers depend on this package only through declared exports.
+Production source MUST NOT import from a consumer application, DBOS, Prisma, Nest, GraphQL, MCP, Kubernetes,
+`@revisium/revo-scripts`, tests, fixtures, generated output, or repository scripts. The public recovery contract MUST NOT
+expose claims, leases, host ids, or consumer database types. Consumers depend on this package only through declared exports.
 
 ## Public surface
 
@@ -93,7 +98,9 @@ The manager target accepts one exact non-existing directory leaf per invocation.
 leaf without adoption, and reserves `.scratch`, `events.ndjson`, `stdout.log`, `stderr.log`, failure-only
 `raw-final-response.txt`, and exclusive `result.json`. It treats the path as opaque and never constructs consumer hierarchy,
 replaces evidence, applies retention, or scans directories for restart recovery. Controlled completion attempts `.scratch`
-cleanup; consumer recovery or retention owns crash residue by removing the invocation directory.
+cleanup; consumer result recovery or retention owns crash residue by removing the invocation directory. Separately, the
+consumer may persist only active process snapshots through the package sink and supply those rows to one-shot manager
+initialization. Those rows never contain results or completed history.
 
 Late filesystem failure does not strand process-local completion. `result.json` or the terminal NDJSON line may be absent,
 which is an incomplete consumer audit record; the live manager still commits and exposes one typed terminal result.

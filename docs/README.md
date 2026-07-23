@@ -2,8 +2,8 @@
 
 ## Target contract
 
-- [AgentManager v1 specification](./specs/agent-manager-v1.spec.md) — normative draft public API, lifecycle, shutdown,
-  results, events, files, bounds, errors, and invariants. It is not implemented yet.
+- [AgentManager v1 specification](./specs/agent-manager-v1.spec.md) — normative draft public API, initialization, local
+  process recovery, lifecycle, shutdown, results, events, files, bounds, errors, and invariants. It is not implemented yet.
 - [Internal module structure specification](./specs/internal-module-structure.spec.md) — accepted internal ownership,
   layering, barrels, and architecture-enforcement rules. It does not add a package export.
 - [Internal definition canonical-byte adapter specification](./specs/definition-canonical-bytes.spec.md) — accepted target
@@ -23,6 +23,8 @@
 - [ADR-0004](./adr/0004-separate-validation-engines.md) — separate package-input and consumer-schema validation.
 - [ADR-0005](./adr/0005-audited-jcs-definition-identity.md) — use an audited RFC 8785 provider for definition-identity
   canonical bytes.
+- [ADR-0006](./adr/0006-consumer-backed-active-invocation-recovery.md) — reconcile consumer-backed active invocation rows and
+  safely clean up non-reconnectable local processes after restart.
 - [ADR-0007](./adr/0007-separate-contracts-policy-errors-and-behavior.md) — separate portable contracts, immutable policy,
   typed errors, and behavior behind explicit internal barrels.
 
@@ -32,5 +34,6 @@
 - [Verification contract](../VERIFICATION.md) — executable local and remote quality gates.
 - [Review contract](../REVIEW.md) — blocking review conditions and expected evidence.
 
-The repository is in bootstrap. Target documents do not create a public API. Only implemented source, tests, declarations,
+The root package export is still intentionally empty. Internal definition, registry, and executable-probe slices are
+implemented and tested, while target documents do not create a public API. Only implemented source, tests, declarations,
 and declared package exports describe available runtime behavior.
