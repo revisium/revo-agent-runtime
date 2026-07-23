@@ -295,6 +295,26 @@ test('maps unsuccessful process exit before selected output parsing', async () =
   );
 });
 
+test('maps a bounded process signal without exposing probe output', async () => {
+  const probeTarget = target();
+  const port = new FakeExecutableProbePort({ platform: 'linux' });
+  resolved(port);
+  port.enqueueVersionStart('running');
+  const pending = probeExecutable(probeTarget, port);
+  await Promise.resolve();
+  port.settleCompletion(1, exited({ exitCode: null, signal: 'SIGTERM' }));
+
+  await expect(pending).resolves.toEqual(
+    unavailable(
+      probeTarget,
+      'revo.agent.probe_process_failed',
+      AGENT_FAULT_MESSAGES.probeProcessFailed,
+      false,
+      { exitCode: null, signal: 'SIGTERM' },
+    ),
+  );
+});
+
 const outputCases = [
   [new Uint8Array([0xc3, 0x28]), 'invalid_utf8', 'agent '],
   [encoder.encode('agent 1.2.3\0'), 'nul', 'agent '],
@@ -419,6 +439,21 @@ test('rejects unexpected port failures and failed reap with the stable internal 
   await new Promise((resolve) => setTimeout(resolve, 0));
   port.settleTermination(1, new Error('raw reap failure'));
   await expectInternalProbeFailure(pending);
+});
+
+test('normalizes an AgentManagerError rejected by the port to the evaluator-owned fault', async () => {
+  const probeTarget = target();
+  const port = new FakeExecutableProbePort({ platform: 'linux' });
+  port.enqueueResolution(
+    new AgentManagerError({
+      code: 'revo.agent.definition_invalid',
+      message: 'Port-owned failure that must not escape.',
+      phase: 'construction',
+      retryable: false,
+    }),
+  );
+
+  await expectInternalProbeFailure(probeExecutable(probeTarget, port));
 });
 
 test.each([

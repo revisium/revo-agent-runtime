@@ -15,6 +15,7 @@ import { parseVersionOutput } from '../version-output/parse-version-output.js';
 import type { ProbeTarget } from './probe-target.js';
 
 const encoder = new TextEncoder();
+const evaluatorInternalErrors = new WeakSet<AgentManagerError>();
 
 type ProbeFaultCode = Extract<
   AgentFault['code'],
@@ -30,7 +31,7 @@ type ProbeFaultCode = Extract<
 type ProbeFaultDetails = Readonly<Record<string, string | number | boolean | null>>;
 
 const internalFailure = (): never => {
-  throw new AgentManagerError(
+  const error = new AgentManagerError(
     Object.freeze({
       code: 'revo.agent.internal',
       message: AGENT_FAULT_MESSAGES.internalProbe,
@@ -38,6 +39,8 @@ const internalFailure = (): never => {
       retryable: false,
     }),
   );
+  evaluatorInternalErrors.add(error);
+  throw error;
 };
 
 const unavailable = (
@@ -263,7 +266,7 @@ export const probeExecutable = async (
       return available(target, resolution.executable);
     return await evaluateVersionProbe(target, resolution.executable, port);
   } catch (error: unknown) {
-    if (error instanceof AgentManagerError) throw error;
+    if (error instanceof AgentManagerError && evaluatorInternalErrors.has(error)) throw error;
     return internalFailure();
   }
 };
