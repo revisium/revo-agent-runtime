@@ -19,6 +19,7 @@ export interface FakeExecutableProbeControls {
   fireTimeout(probeId: number): void;
   settleTermination(probeId: number, result?: Error): void;
   calls(): readonly ProbePortCall[];
+  hostPlatformReadCount(): number;
   activeVersionProbes(): number;
   maximumActiveVersionProbes(): number;
 }
@@ -75,6 +76,7 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
   readonly #versionStartQueue: ('running' | Error)[] = [];
   readonly #probes = new Map<number, PendingProbe>();
   readonly #callLog: ProbePortCall[] = [];
+  #hostPlatformReadCount = 0;
   #nextProbeId = 1;
   #activeProbeCount = 0;
   #maximumActiveProbeCount = 0;
@@ -84,6 +86,7 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
   }
 
   hostPlatform(): ProbeHostPlatform {
+    this.#hostPlatformReadCount += 1;
     return this.#platform;
   }
 
@@ -193,6 +196,10 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
 
   calls(): readonly ProbePortCall[] {
     return Object.freeze([...this.#callLog]);
+  }
+
+  hostPlatformReadCount(): number {
+    return this.#hostPlatformReadCount;
   }
 
   activeVersionProbes(): number {

@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 
-import { ProbeAdmission } from '../../../../src/application/manager/probe-admission.js';
+import { ProbeAdmission } from '../../../../src/application/manager/index.js';
 
 interface Activity {
   active: number;
