@@ -1,6 +1,8 @@
+import type { InvocationInputSnapshot } from './input-snapshot.js';
+
 export interface InvocationExecutionPorts {
   readonly execution: {
-    start(): Promise<{
+    start(snapshot: InvocationInputSnapshot): Promise<{
       readonly completion: Promise<{ readonly status: 'completed' | 'cancelled' }>;
       requestCancellation(): Promise<void>;
     }>;

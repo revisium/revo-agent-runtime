@@ -21,7 +21,10 @@ import type {
   ValidatedDefinition,
   ValidatedManagerConstruction,
 } from '../../src/runtime/definition/index.js';
-import type { InvocationExecutionPorts } from '../../src/runtime/execution/index.js';
+import type {
+  InvocationExecutionPorts,
+  InvocationInputSnapshot,
+} from '../../src/runtime/execution/index.js';
 import type {
   ExecutableProbePort,
   ExecutableResolution,
@@ -350,7 +353,7 @@ export type RuntimeContractSurface = readonly [
 
 type ExpectedInvocationExecutionPorts = {
   readonly execution: {
-    start(): Promise<{
+    start(snapshot: InvocationInputSnapshot): Promise<{
       readonly completion: Promise<{ readonly status: 'completed' | 'cancelled' }>;
       requestCancellation(): Promise<void>;
     }>;
