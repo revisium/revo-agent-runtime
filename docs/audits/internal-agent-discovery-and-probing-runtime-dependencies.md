@@ -1,6 +1,6 @@
-# M1 runtime dependency audit
+# Internal agent discovery and probing runtime dependency audit
 
-This audit records reproducible evidence for the internal M1 identity, discovery, and fake-probe slice. It does not
+This audit records reproducible evidence for the internal agent discovery and probing slice. It does not
 represent a public package API or an online verification result by itself.
 
 ## Final dependency baseline
@@ -37,8 +37,8 @@ Run from the repository root with Node 24 and Corepack pnpm 11.13.0:
 
 ```bash
 corepack pnpm install --frozen-lockfile --ignore-scripts
-node --import tsx scripts/verify-m1-dependencies.ts
-node --import tsx scripts/verify-m1-advisories.ts
+corepack pnpm verify:internal-agent-discovery-and-probing:dependencies
+corepack pnpm verify:internal-agent-discovery-and-probing:advisories
 corepack pnpm audit --prod
 ```
 

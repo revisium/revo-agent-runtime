@@ -14,7 +14,7 @@ const assertFinalDependencyBaseline = (workspace: string, lock: string): void =>
   assert.equal(
     workspace,
     FINAL_WORKSPACE,
-    'Workspace must match the final M1 dependency baseline.',
+    'Workspace must match the final internal agent discovery and probing dependency baseline.',
   );
   assert.equal(
     workspace.includes('ajv>fast-uri'),

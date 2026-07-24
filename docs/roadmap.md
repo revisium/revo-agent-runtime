@@ -1,7 +1,7 @@
 # AgentManager cross-repository extraction roadmap
 
 - Status: Approved roadmap
-- Implementation: M1 internal identity, discovery, and fake-probe slice implemented and tested; M2–M5 deferred
+- Implementation: internal agent discovery and probing slice implemented and tested; M2–M5 deferred
 - Target package: `@revisium/revo-agent-runtime`
 - Publication: npm publication remains disabled through M5
 - Source repository: `revo-agent-runtime`
@@ -34,7 +34,8 @@ The roadmap carries these approved constraints:
    declarations, examples, conformance, and package proof agree.
 5. AgentManager MUST NOT be called complete until native Codex, native Claude, and ACP instantiate and pass one shared
    conformance harness, in addition to their wire-specific tests.
-6. R0 and G0 are non-waivable. M1 additionally requires closure of only the R1 evidence or contradiction that directly
+6. R0 and G0 are non-waivable. The internal agent discovery and probing stage additionally requires closure
+   of only the R1 evidence or contradiction that directly
    affects its executable-probe literals and platform-unavailable contract. Full provider and platform conformance research
    remains non-waivable before the M3 and M4 surfaces that consume it.
 7. The root session orchestrates human gates. The package reports technical results and typed faults; it does not approve,
@@ -113,7 +114,8 @@ changing the draft.
 ### G0 — Human contract approval
 
 G0 is non-waivable. The complete program requires one human-approved decision for every checkbox. Fixed decision 6 permits
-M1 to enter after only its governing subset plus the stage-local R1 check is approved; the dated record below identifies
+the internal agent discovery and probing stage to enter after only its governing subset plus the stage-local R1
+check is approved; the dated record below identifies
 that subset. Every remaining checkbox must close before the later milestone that consumes it.
 
 - [x] The supported JSON Schema draft 2020-12 surface is closed precisely, including unknown properties, `$ref`, vocabularies,
@@ -135,27 +137,30 @@ that subset. Every remaining checkbox must close before the later milestone that
 - [ ] Shared-conformance evidence is classified as deterministic real-process fixtures, credentialed live-provider runs, or a
       required combination; missing credentials are never reported as a pass.
 
-#### M1 entry decision record — 2026-07-20
+#### Internal agent discovery and probing entry decision record — 2026-07-20
 
-Human approval closed only the G0/R1 decisions needed to enter M1; unchecked G0 items remain mandatory before the later
-milestone that consumes them.
+Human approval closed only the G0/R1 decisions needed to enter the internal agent discovery and probing stage;
+unchecked G0 items remain mandatory before the later milestone that consumes them.
 
-- [x] Package DTO and consumer-schema engines are `zod@4.4.3` and `ajv@8.20.0`; the closed P1 profile is the M1 schema
-      surface ([ADR-0004](./adr/0004-separate-validation-engines.md)).
+- [x] Package DTO and consumer-schema engines are `zod@4.4.3` and `ajv@8.20.0`; the closed P1 profile is
+      this stage's schema surface ([ADR-0004](./adr/0004-separate-validation-engines.md)).
 - [x] RFC 8785 identity uses exactly `canonicalize@3.0.0`. A project-owned audit means checked-in repeatable evidence for
       the frozen lock and installed tree, artifact integrity/license, runtime DAG/install scripts, Node/ESM/types, production
       advisories, and RFC expected/hostile vectors ([ADR-0005](./adr/0005-audited-jcs-definition-identity.md)).
 - [x] Explicit probing has one manager-scoped active physical-probe bound of eight and the approved FIFO/batch-wave behavior;
-      M1 verifies it only through the package port and deterministic fake.
-- [x] The stage-local R1 review found no M1 contradiction. From the `revo-agent-runtime` repository root,
+      the stage verifies it only through the package port and deterministic fake.
+- [x] The stage-local R1 review found no contradiction affecting internal agent discovery and probing. From the
+      `revo-agent-runtime` repository root,
       `../orchestrator/src/control-plane/run-profile-contract.ts` defines `RunnerManifest` without a version-probe field and
       `../orchestrator/src/runners/runner-manifest.ts` pins only `executionFields.command`; there is no
-      legacy manifest version-probe behavior for M1 to preserve. M1 therefore makes no platform-support claim. Real PATH,
+      legacy manifest version-probe behavior for this stage to preserve. The stage therefore makes no platform-support
+      claim. Real PATH,
       process, OS/filesystem, provider-version, wire, permission, cancellation, and completion evidence remains required by
       M3/M4.
 
-The dirty or untracked state of these approved planning documents is intentional working-tree context, not an M1 entry
-blocker. The AgentManager v1 specification remains Draft, and this decision record does not represent M1 as implemented.
+The dirty or untracked state of these approved planning documents is intentional working-tree context, not an
+internal agent discovery and probing stage entry blocker. The AgentManager v1 specification remains Draft, and this
+decision record does not represent the stage as implemented.
 
 No implementation milestone starts until its governing G0 decisions are approved. A later R1 contradiction returns to R0
 and requires a new G0 approval for the affected decisions.
@@ -182,9 +187,9 @@ stable preflight or construction outcome and documentation, not a skipped test d
 | Darwin on each supported filesystem  | Direct spawn, process-group termination, confirmed reap, timeout, and cancellation.          | The same exclusive publication and owner-only evidence, including directory flush support.                                            | Every provider declared supported on this cell. |
 | Windows on each supported filesystem | Direct spawn, process-tree termination mechanism, confirmed reap, timeout, and cancellation. | Equivalent owner-only scratch and non-replacing publication evidence or an approved fail-closed unsupported outcome.                  | Every provider declared supported on this cell. |
 
-**Partial exit for M1:** executable-probe literals and the stable platform-unavailable partition have no unresolved
-contradiction. Missing provider wire, permission, cancellation, process-ownership, or filesystem evidence does not block M1
-because M1 uses only a fake executable-probe port.
+**Partial exit for internal agent discovery and probing:** executable-probe literals and the stable
+platform-unavailable partition have no unresolved contradiction. Missing provider wire, permission, cancellation,
+process-ownership, or filesystem evidence does not block this stage because it uses only a fake executable-probe port.
 
 **Full exit for M3/M4:** all supported cells have reproducible observations and bounded fixtures; exact provider versions are
 recorded; every unsupported cell has a stable contract; and every contradiction has completed the R0/G0 loop. Full R1 is
@@ -201,7 +206,7 @@ G0 non-waivable human contract approval
         |                         | R1 provider/platform R&D |
         |                         | probe contradiction ----+----> R0 / G0
         v                         +-------------------------+
-M1 identity and discovery                    |
+Internal agent discovery and probing                    |
         |                                    | full evidence before M3/M4
         v                                    |
 M2 internal fake-port lifecycle/result       |
@@ -229,11 +234,11 @@ M3 real process/files/security/supervision <-+
 M4 lanes may be developed in parallel after M3 freezes the shared harness, while merges may remain sequential. Completion of
 one M4 lane does not relax the other two.
 
-### M1 — Identity and discovery
+### Internal agent discovery and probing
 
-**Entry:** the G0 decisions that govern M1 are approved. R1 has no unresolved contradiction affecting executable-probe
-literals or the platform-unavailable result partition. The dated M1 entry decision record above is the file-backed evidence
-for this gate. Full R1 completion is not an M1 entry condition.
+**Entry:** the G0 decisions that govern this stage are approved. R1 has no unresolved contradiction affecting executable-probe
+literals or the platform-unavailable result partition. The dated internal agent discovery and probing entry decision
+record above is the file-backed evidence for this gate. Full R1 completion is not an entry condition for this stage.
 
 **Owns:** strict package DTO validation; the hardened P1 consumer-schema profile; complete-set all-or-nothing definition
 validation; canonical package-owned copies; RFC 8785 digest; sealed exact registry; deterministic unsigned-UTF-8 listing;
@@ -242,17 +247,18 @@ explicit single and batch probes; and one bounded fair executable-probe schedule
 **Exit:** unit and contract tests prove P1 profile and resource rejection, bounded normalized diagnostics, duplicate and
 incoherent definitions, exact lookup without latest/fallback, caller mutation isolation, deterministic digests/order,
 batch prevalidation and duplicate coalescing, shared FIFO fairness and the fixed active bound of eight, strict version
-parsing, bounded probe output, requested timeout termination/reap, and stable probe precedence through the fake port. M1
-checks only static definition/template/delivery/probe-literal coherence. Dynamic parameter/default/prompt/schema argv
+parsing, bounded probe output, requested timeout termination/reap, and stable probe precedence through the fake
+port. The stage checks only static definition/template/delivery/probe-literal coherence. Dynamic
+parameter/default/prompt/schema argv
 expansion belongs to M2. Provider permission expansion belongs to M4. Real probe process ownership and integration belong to
 M3. Architecture verification proves the intended dependency direction. The root export is still empty.
 
-**Status:** The private M1 slice is implemented and tested. The package remains unpublished and the root export remains
+**Status:** This private slice is implemented and tested. The package remains unpublished and the root export remains
 empty; this milestone does not make the public AgentManager available or advance M2–M5.
 
 ### M2 — Internal fake-port lifecycle and result
 
-**Entry:** M1 green.
+**Entry:** internal agent discovery and probing is green.
 
 **Owns:** an internal AgentManager composition using deterministic fake execution and file ports; dynamic
 parameter/default/prompt/schema argv expansion; the accepted-to-terminal state machine; immutable request snapshots; result
@@ -364,17 +370,17 @@ merge, it runs the complete target-repository gate from [VERIFICATION.md](../VER
 unsupported provider/platform cell are reported as blocked, skipped, or unsupported according to the approved matrix, never
 as passed.
 
-| Stage       | Minimum proof before exit                                                                                                                                                      |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| R0/G0       | Documentation consistency across ADRs, specification, architecture, testing, review policy, and this roadmap; recorded human approval for every G0 item.                       |
-| R1          | Reproducible version/protocol/platform observations, bounded fixtures, complete supported/unsupported matrix, and completed R0/G0 loop for contradictions.                     |
-| M1          | Unit/contract definition/identity/P1/registry/single-and-batch fake-probe tests, architecture positive and negative probes, and full `pnpm verify`.                            |
-| M2          | Base shared conformance harness against deterministic fake ports, lifecycle/result contract tests, architecture proof, and full `pnpm verify`; no real-success claim.          |
-| M3          | Extended harness against real temporary process/filesystem fixtures, security/redaction/bounds/race/finalization tests on supported cells, and full `pnpm verify`.             |
-| M4a/M4b/M4c | The same extended harness instantiated by each adapter, wire-specific tests, required R1 evidence class, and full `pnpm verify` for each merged lane.                          |
-| M5          | Complete runtime/contract/integration/package/type/declaration/export/packed-consumer/coverage/architecture evidence from one exact head and tarball, plus full `pnpm verify`. |
-| G1          | Exact orchestrator head, artifact identity, approved dependency and lockfile diff, successful isolated consumer install, mapping/durable-gate results, and human acceptance.   |
-| C1          | Merge and activation of only the G1-approved head, provider cutover tests, legacy-path absence proof, and the orchestrator's complete `pnpm verify`.                           |
+| Stage                                | Minimum proof before exit                                                                                                                                                      |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| R0/G0                                | Documentation consistency across ADRs, specification, architecture, testing, review policy, and this roadmap; recorded human approval for every G0 item.                       |
+| R1                                   | Reproducible version/protocol/platform observations, bounded fixtures, complete supported/unsupported matrix, and completed R0/G0 loop for contradictions.                     |
+| Internal agent discovery and probing | Unit/contract definition/identity/P1/registry/single-and-batch fake-probe tests, architecture positive and negative probes, and full `pnpm verify`.                            |
+| M2                                   | Base shared conformance harness against deterministic fake ports, lifecycle/result contract tests, architecture proof, and full `pnpm verify`; no real-success claim.          |
+| M3                                   | Extended harness against real temporary process/filesystem fixtures, security/redaction/bounds/race/finalization tests on supported cells, and full `pnpm verify`.             |
+| M4a/M4b/M4c                          | The same extended harness instantiated by each adapter, wire-specific tests, required R1 evidence class, and full `pnpm verify` for each merged lane.                          |
+| M5                                   | Complete runtime/contract/integration/package/type/declaration/export/packed-consumer/coverage/architecture evidence from one exact head and tarball, plus full `pnpm verify`. |
+| G1                                   | Exact orchestrator head, artifact identity, approved dependency and lockfile diff, successful isolated consumer install, mapping/durable-gate results, and human acceptance.   |
+| C1                                   | Merge and activation of only the G1-approved head, provider cutover tests, legacy-path absence proof, and the orchestrator's complete `pnpm verify`.                           |
 
 No milestone may weaken required tests, bounds, public types, or package gates to become green. M5 remains unpublished even
 after all local verification passes.
@@ -410,22 +416,22 @@ not edited in place.
 
 These decisions are deliberately unresolved until their owning gate. They MUST NOT be guessed by an implementation role.
 
-| Required by | Decision                                                                                                                                                                                             |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| G0          | Acceptance of the closed P1 schema profile and separate Zod/Ajv boundary; selection and audit of the exact-pinned external RFC 8785 implementation before M1 implementation.                         |
-| G0          | Observable cancellation/shutdown behavior for definitions without protocol cancellation.                                                                                                             |
-| G0          | Acceptance commit, output-claim, shutdown-race, and cleanup ordering.                                                                                                                                |
-| G0          | Complete fault and terminal precedence across concurrent failure sources.                                                                                                                            |
-| G0          | Exact streaming redaction patterns, carry/overlap rules, and replacement semantics.                                                                                                                  |
-| G0          | Workspace/CWD existence, symlink, realpath, and normalization policy.                                                                                                                                |
-| G0          | Package versus consumer ownership of active/probe/protocol/listener/write bounds.                                                                                                                    |
-| G0          | Exact idle-activity definition; legacy heartbeat/operation behavior is not automatically inherited.                                                                                                  |
-| G0          | Proposed provider versions, supported OS/filesystem cells, and stable unsupported behavior for R1.                                                                                                   |
-| G0          | Required deterministic versus credentialed evidence for shared conformance.                                                                                                                          |
-| R1/M1       | Approval of any executable-probe or platform-unavailable observation that changes a G0 decision, the draft spec, or an accepted ADR.                                                                 |
-| R1/M3-M4    | Full provider, process-ownership, filesystem, permission, cancellation, and supported-cell evidence before the consuming milestone.                                                                  |
-| M3          | Acceptance of any residual platform limitation after the approved fail-closed behavior is implemented and tested.                                                                                    |
-| G1          | Exact orchestrator candidate head, unpublished artifact delivery, version/commit/digest, dependency and lockfile, mapping/durable-gate results, and artifact/package-pin or host rollback procedure. |
-| C1          | Authorization for the one-way orchestrator cutover and removal of replaced legacy execution paths.                                                                                                   |
+| Required by                               | Decision                                                                                                                                                                                                                    |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G0                                        | Acceptance of the closed P1 schema profile and separate Zod/Ajv boundary; selection and audit of the exact-pinned external RFC 8785 implementation before implementation of the internal agent discovery and probing stage. |
+| G0                                        | Observable cancellation/shutdown behavior for definitions without protocol cancellation.                                                                                                                                    |
+| G0                                        | Acceptance commit, output-claim, shutdown-race, and cleanup ordering.                                                                                                                                                       |
+| G0                                        | Complete fault and terminal precedence across concurrent failure sources.                                                                                                                                                   |
+| G0                                        | Exact streaming redaction patterns, carry/overlap rules, and replacement semantics.                                                                                                                                         |
+| G0                                        | Workspace/CWD existence, symlink, realpath, and normalization policy.                                                                                                                                                       |
+| G0                                        | Package versus consumer ownership of active/probe/protocol/listener/write bounds.                                                                                                                                           |
+| G0                                        | Exact idle-activity definition; legacy heartbeat/operation behavior is not automatically inherited.                                                                                                                         |
+| G0                                        | Proposed provider versions, supported OS/filesystem cells, and stable unsupported behavior for R1.                                                                                                                          |
+| G0                                        | Required deterministic versus credentialed evidence for shared conformance.                                                                                                                                                 |
+| R1 / internal agent discovery and probing | Approval of any executable-probe or platform-unavailable observation that changes a G0 decision, the draft spec, or an accepted ADR.                                                                                        |
+| R1/M3-M4                                  | Full provider, process-ownership, filesystem, permission, cancellation, and supported-cell evidence before the consuming milestone.                                                                                         |
+| M3                                        | Acceptance of any residual platform limitation after the approved fail-closed behavior is implemented and tested.                                                                                                           |
+| G1                                        | Exact orchestrator candidate head, unpublished artifact delivery, version/commit/digest, dependency and lockfile, mapping/durable-gate results, and artifact/package-pin or host rollback procedure.                        |
+| C1                                        | Authorization for the one-way orchestrator cutover and removal of replaced legacy execution paths.                                                                                                                          |
 
 Until the relevant decision is approved, its milestone is blocked rather than partially passed.

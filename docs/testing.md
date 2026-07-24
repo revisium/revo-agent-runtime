@@ -53,8 +53,7 @@ package. Package-owned local process reconciliation is tested here.
 | Architecture | Dependency direction, cycle absence, forbidden imports, test-to-production direction, and probe efficacy.                                    | Runtime behavior or built package resolution.                 |
 | Package      | Built declarations, root export map, ESM resolution, packed contents, and deep-import denial.                                                | Invocation semantics or future API behavior before it exists. |
 
-Unit, narrow contract, architecture, and package lanes currently prove the implemented private M1 identity, discovery, and
-fake-probe slice plus the intentionally empty root export. The npm package remains unpublished; the complete public
+Unit, narrow contract, architecture, and package lanes currently prove the implemented private internal agent discovery and probing slice plus the intentionally empty root export. The npm package remains unpublished; the complete public
 AgentManager and M2–M5 remain deferred. Integration scripts are added when their owned process/filesystem behavior exists;
 the repository does not keep empty lanes or permanent `passWithNoTests` configuration.
 
