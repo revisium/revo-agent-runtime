@@ -26,9 +26,8 @@ class InternalInvocationLifecycleManager {
     if (this.activeIds.has(snapshot.invocationId))
       return Object.freeze({ status: 'rejected', reason: 'duplicate_invocation' });
     this.activeIds.add(snapshot.invocationId);
-    const lifecycle = new InvocationLifecycle(this.ports, snapshot, (settlement) => {
+    const lifecycle = new InvocationLifecycle(this.ports, snapshot, () => {
       this.activeIds.delete(snapshot.invocationId);
-      void settlement;
     });
     lifecycle.begin();
     return Object.freeze({ status: 'accepted', lifecycle });

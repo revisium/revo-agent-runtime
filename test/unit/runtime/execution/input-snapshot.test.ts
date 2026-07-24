@@ -183,3 +183,28 @@ test('rejects an oversized metadata key and deep over-budget graph while travers
     InvocationInputSnapshot.create({ invocationId: 'deep-over-budget', metadata: deep }),
   ).toBeUndefined();
 });
+
+test('accounts astral Unicode scalars like JSON serialization', () => {
+  const metadata = { key: '😀' };
+  const serializedBytes = new TextEncoder().encode(JSON.stringify(metadata)).byteLength;
+  expect(serializedBytes).toBe(14);
+  expect(InvocationInputSnapshot.create({ invocationId: 'astral-😀', metadata })).toBeDefined();
+});
+
+test('rejects lone surrogates in invocation ids and metadata keys or values', () => {
+  for (const surrogate of ['\ud800', '\udc00']) {
+    expect(InvocationInputSnapshot.create({ invocationId: surrogate })).toBeUndefined();
+    expect(
+      InvocationInputSnapshot.create({
+        invocationId: 'metadata-value',
+        metadata: { value: surrogate },
+      }),
+    ).toBeUndefined();
+    expect(
+      InvocationInputSnapshot.create({
+        invocationId: 'metadata-key',
+        metadata: { [surrogate]: 'value' },
+      }),
+    ).toBeUndefined();
+  }
+});

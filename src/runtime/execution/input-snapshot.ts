@@ -59,39 +59,47 @@ const createRecord = (): MutableSnapshotRecord => {
   return record;
 };
 
+const codePointAt = (value: string, index: number): number | undefined => {
+  const codePoint = value.codePointAt(index);
+  if (codePoint === undefined || (codePoint >= 0xd800 && codePoint <= 0xdfff)) return undefined;
+  return codePoint;
+};
+
 const validString = (value: string): boolean => {
   for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index);
-    if (code >= 0xd800 && code <= 0xdbff) {
-      const next = value.charCodeAt(index + 1);
-      if (next < 0xdc00 || next > 0xdfff) return false;
-      index += 1;
-    } else if (code >= 0xdc00 && code <= 0xdfff) return false;
+    const codePoint = codePointAt(value, index);
+    if (codePoint === undefined) return false;
+    if (codePoint > 0xffff) index += 1;
   }
   return true;
+};
+
+const jsonCodePointBytes = (codePoint: number): number => {
+  if (codePoint === 0x22 || codePoint === 0x5c) return 2;
+  if (
+    codePoint === 0x08 ||
+    codePoint === 0x09 ||
+    codePoint === 0x0a ||
+    codePoint === 0x0c ||
+    codePoint === 0x0d
+  )
+    return 2;
+  if (codePoint <= 0x1f) return 6;
+  if (codePoint <= 0x7f) return 1;
+  if (codePoint <= 0x7ff) return 2;
+  if (codePoint <= 0xffff) return 3;
+  return 4;
 };
 
 const jsonStringBytes = (value: string, remaining: number): number | undefined => {
   let bytes = 2;
   if (bytes > remaining) return undefined;
   for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index);
-    let added: number;
-    if (code === 0x22 || code === 0x5c) added = 2;
-    else if (code === 0x08 || code === 0x09 || code === 0x0a || code === 0x0c || code === 0x0d)
-      added = 2;
-    else if (code <= 0x1f) added = 6;
-    else if (code >= 0xd800 && code <= 0xdbff) {
-      const next = value.charCodeAt(index + 1);
-      if (next < 0xdc00 || next > 0xdfff) return undefined;
-      added = 4;
-      index += 1;
-    } else if (code >= 0xdc00 && code <= 0xdfff) return undefined;
-    else if (code <= 0x7f) added = 1;
-    else if (code <= 0x7ff) added = 2;
-    else added = 3;
-    bytes += added;
+    const codePoint = codePointAt(value, index);
+    if (codePoint === undefined) return undefined;
+    bytes += jsonCodePointBytes(codePoint);
     if (bytes > remaining) return undefined;
+    if (codePoint > 0xffff) index += 1;
   }
   return bytes;
 };
@@ -102,14 +110,10 @@ const scalarJsonBytes = (
 ): number | undefined => {
   if (typeof value === 'string') return jsonStringBytes(value, remaining);
   if (typeof value === 'number' && !Number.isFinite(value)) return undefined;
-  const text =
-    value === null
-      ? 'null'
-      : typeof value === 'boolean'
-        ? String(value)
-        : Object.is(value, -0)
-          ? '0'
-          : String(value);
+  let text: string;
+  if (value === null) text = 'null';
+  else if (typeof value === 'boolean') text = String(value);
+  else text = Object.is(value, -0) ? '0' : String(value);
   const bytes = encoder.encode(text).byteLength;
   return bytes <= remaining ? bytes : undefined;
 };
@@ -169,6 +173,154 @@ const inspectArrayLength = (value: readonly unknown[]): number | undefined => {
   return length;
 };
 
+interface CopyState {
+  readonly active: WeakSet<object>;
+  readonly frames: CopyFrame[];
+  bytes: number;
+  entries: number;
+  values: number;
+}
+
+type FrameStep =
+  | Readonly<{ status: 'entry'; key: string; value: unknown }>
+  | Readonly<{ status: 'complete' }>
+  | Readonly<{ status: 'invalid' }>;
+
+const validateDenseArrayKeys = (frame: ArrayFrame): boolean => {
+  let observed = 0;
+  for (const key of enumerableKeys(frame.source)) {
+    observed += 1;
+    if (
+      observed > frame.length ||
+      key !== String(observed - 1) ||
+      !ownEnumerableData(frame.source, key).valid
+    )
+      return false;
+  }
+  return true;
+};
+
+const nextFrameEntry = (frame: CopyFrame): FrameStep => {
+  if (frame.kind === 'object') {
+    const next = frame.iterator.next();
+    if (next.done) return Object.freeze({ status: 'complete' });
+    const read = ownEnumerableData(frame.source, next.value);
+    return read.valid
+      ? Object.freeze({ status: 'entry', key: next.value, value: read.value })
+      : Object.freeze({ status: 'invalid' });
+  }
+  if (frame.index >= frame.length) {
+    if (!frame.validatedEnumerableKeys && !validateDenseArrayKeys(frame))
+      return Object.freeze({ status: 'invalid' });
+    frame.validatedEnumerableKeys = true;
+    return Object.freeze({ status: 'complete' });
+  }
+  const key = String(frame.index);
+  const read = ownEnumerableData(frame.source, key);
+  if (!read.valid) return Object.freeze({ status: 'invalid' });
+  frame.index += 1;
+  return Object.freeze({ status: 'entry', key, value: read.value });
+};
+
+const closeFrame = (state: CopyState): boolean => {
+  const frame = state.frames.at(-1);
+  if (frame === undefined) return false;
+  state.bytes += 1;
+  if (state.bytes > maximumMetadataBytes) return false;
+  Object.freeze(frame.target);
+  state.active.delete(frame.activeSource);
+  state.frames.pop();
+  return true;
+};
+
+const reserveEntry = (state: CopyState, frame: CopyFrame, key: string): boolean => {
+  frame.entries += 1;
+  state.entries += 1;
+  state.values += 1;
+  if (
+    frame.entries > maximumTraversalValues ||
+    state.entries > maximumTraversalValues ||
+    state.values > maximumTraversalValues
+  )
+    return false;
+  if (frame.entries > 1) state.bytes += 1;
+  if (frame.kind === 'object') {
+    const keyBytes = jsonStringBytes(key, maximumMetadataBytes - state.bytes);
+    if (keyBytes === undefined) return false;
+    state.bytes += keyBytes + 1;
+  }
+  return state.bytes <= maximumMetadataBytes;
+};
+
+const createChildFrame = (
+  value: object,
+  depth: number,
+): Readonly<{ frame: CopyFrame; target: MutableContainer }> | undefined => {
+  if (Array.isArray(value)) {
+    const length = inspectArrayLength(value);
+    if (length === undefined) return undefined;
+    const target: MutableSnapshotJson[] = [];
+    return Object.freeze({
+      target,
+      frame: {
+        activeSource: value,
+        depth,
+        kind: 'array',
+        source: value,
+        target,
+        entries: 0,
+        length,
+        index: 0,
+        validatedEnumerableKeys: false,
+      },
+    });
+  }
+  if (!isPlainObservedObject(value)) return undefined;
+  const target = createRecord();
+  return Object.freeze({
+    target,
+    frame: {
+      activeSource: value,
+      depth,
+      kind: 'object',
+      source: value,
+      target,
+      iterator: enumerableKeys(value),
+      entries: 0,
+    },
+  });
+};
+
+const appendEntry = (
+  state: CopyState,
+  frame: CopyFrame,
+  entry: Extract<FrameStep, { status: 'entry' }>,
+): boolean => {
+  if (!reserveEntry(state, frame, entry.key)) return false;
+  if (isScalar(entry.value)) {
+    const scalarBytes = scalarJsonBytes(entry.value, maximumMetadataBytes - state.bytes);
+    if (scalarBytes === undefined) return false;
+    state.bytes += scalarBytes;
+    appendProperty(frame.target, entry.key, entry.value);
+    return true;
+  }
+  if (
+    typeof entry.value !== 'object' ||
+    entry.value === null ||
+    state.active.has(entry.value) ||
+    frame.depth >= maximumTraversalDepth
+  )
+    return false;
+  const child = createChildFrame(entry.value, frame.depth + 1);
+  if (child === undefined) return false;
+  state.bytes += 1;
+  if (state.bytes > maximumMetadataBytes) return false;
+  appendProperty(frame.target, entry.key, child.target);
+  state.active.add(entry.value);
+  state.frames.push(child.frame);
+  return true;
+};
+
 const copyMetadata = (source: unknown): SnapshotRecord | undefined => {
   try {
     if (
@@ -179,139 +331,33 @@ const copyMetadata = (source: unknown): SnapshotRecord | undefined => {
     )
       return undefined;
     const root = createRecord();
-    const active = new WeakSet<object>([source]);
-    const frames: CopyFrame[] = [
-      {
-        activeSource: source,
-        depth: 1,
-        kind: 'object',
-        source,
-        target: root,
-        iterator: enumerableKeys(source),
-        entries: 0,
-      },
-    ];
-    let bytes = 1;
-    let values = 1;
-    let entries = 0;
-
-    while (frames.length > 0) {
-      const frame = frames.at(-1);
-      if (frame === undefined) return undefined;
-      let key: string;
-      let value: unknown;
-      if (frame.kind === 'object') {
-        const next = frame.iterator.next();
-        if (!next.done) {
-          key = next.value;
-          const read = ownEnumerableData(frame.source, key);
-          if (!read.valid) return undefined;
-          value = read.value;
-        } else {
-          bytes += 1;
-          if (bytes > maximumMetadataBytes) return undefined;
-          Object.freeze(frame.target);
-          active.delete(frame.activeSource);
-          frames.pop();
-          continue;
-        }
-      } else if (frame.index < frame.length) {
-        key = String(frame.index);
-        const read = ownEnumerableData(frame.source, key);
-        if (!read.valid) return undefined;
-        value = read.value;
-        frame.index += 1;
-      } else {
-        if (!frame.validatedEnumerableKeys) {
-          let observed = 0;
-          for (const observedKey of enumerableKeys(frame.source)) {
-            observed += 1;
-            if (
-              observed > frame.length ||
-              observedKey !== String(observed - 1) ||
-              !ownEnumerableData(frame.source, observedKey).valid
-            )
-              return undefined;
-          }
-          frame.validatedEnumerableKeys = true;
-        }
-        bytes += 1;
-        if (bytes > maximumMetadataBytes) return undefined;
-        Object.freeze(frame.target);
-        active.delete(frame.activeSource);
-        frames.pop();
-        continue;
-      }
-      frame.entries += 1;
-      entries += 1;
-      values += 1;
-      if (
-        frame.entries > maximumTraversalValues ||
-        entries > maximumTraversalValues ||
-        values > maximumTraversalValues
-      )
-        return undefined;
-      if (frame.entries > 1) {
-        bytes += 1;
-        if (bytes > maximumMetadataBytes) return undefined;
-      }
-      if (frame.kind === 'object') {
-        const keyBytes = jsonStringBytes(key, maximumMetadataBytes - bytes);
-        if (keyBytes === undefined) return undefined;
-        bytes += keyBytes + 1;
-        if (bytes > maximumMetadataBytes) return undefined;
-      }
-
-      if (isScalar(value)) {
-        const scalarBytes = scalarJsonBytes(value, maximumMetadataBytes - bytes);
-        if (scalarBytes === undefined) return undefined;
-        bytes += scalarBytes;
-        appendProperty(frame.target, key, value);
-        continue;
-      }
-      if (
-        typeof value !== 'object' ||
-        value === null ||
-        active.has(value) ||
-        frame.depth >= maximumTraversalDepth
-      )
-        return undefined;
-
-      let target: MutableContainer;
-      let child: CopyFrame;
-      if (Array.isArray(value)) {
-        const length = inspectArrayLength(value);
-        if (length === undefined) return undefined;
-        target = [];
-        child = {
-          activeSource: value,
-          depth: frame.depth + 1,
-          kind: 'array',
-          source: value,
-          target,
-          entries: 0,
-          length,
-          index: 0,
-          validatedEnumerableKeys: false,
-        };
-      } else {
-        if (!isPlainObservedObject(value)) return undefined;
-        target = createRecord();
-        child = {
-          activeSource: value,
-          depth: frame.depth + 1,
+    const state: CopyState = {
+      active: new WeakSet<object>([source]),
+      frames: [
+        {
+          activeSource: source,
+          depth: 1,
           kind: 'object',
-          source: value,
-          target,
-          iterator: enumerableKeys(value),
+          source,
+          target: root,
+          iterator: enumerableKeys(source),
           entries: 0,
-        };
+        },
+      ],
+      bytes: 1,
+      entries: 0,
+      values: 1,
+    };
+    while (state.frames.length > 0) {
+      const frame = state.frames.at(-1);
+      if (frame === undefined) return undefined;
+      const step = nextFrameEntry(frame);
+      if (step.status === 'invalid') return undefined;
+      if (step.status === 'complete') {
+        if (!closeFrame(state)) return undefined;
+        continue;
       }
-      bytes += 1;
-      if (bytes > maximumMetadataBytes) return undefined;
-      appendProperty(frame.target, key, target);
-      active.add(value);
-      frames.push(child);
+      if (!appendEntry(state, frame, step)) return undefined;
     }
     return root;
   } catch {
