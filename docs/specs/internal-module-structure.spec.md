@@ -27,7 +27,7 @@ The migration MUST NOT add another application-framework dependency.
 
 ## 2. Current baseline
 
-> **Informative:** PR #4 is titled “M1 Tasks 1-2A: exact dependencies and portable JSON contracts.” Its exact head is the
+> **Informative:** PR #4 established the exact dependencies and portable JSON contracts. Its exact head is the
 > commit recorded in the header. At that head, `src/index.ts` exports nothing; the package has no public runtime API.
 
 The baseline modules relevant to this migration are:

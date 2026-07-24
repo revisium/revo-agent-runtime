@@ -105,7 +105,7 @@ validateModuleStructure([
   ...(await collectTypeScriptModules(join(root, 'src'))),
   ...(await collectTypeScriptModules(join(root, 'test'))),
 ]);
-runArchitectureLint(['src', 'test/package']);
+runArchitectureLint(['src', 'test/support', 'test/unit', 'test/contract', 'test/package']);
 
 const structureProbes: readonly (readonly [SourceModule, string])[] = [
   [
@@ -253,6 +253,65 @@ for (const [module, expectedRule] of structureProbes) {
 const probeRoot = await mkdtemp(join(root, '.architecture-probe-'));
 
 try {
+  const allowedProbe = join(probeRoot, 'src/runtime/probe/allowed.ts');
+  const supportedTest = join(probeRoot, 'test/support/architecture/allowed.ts');
+  const unitTest = join(probeRoot, 'test/unit/architecture/allowed.ts');
+  const contractTest = join(probeRoot, 'test/contract/architecture/allowed.ts');
+  const packageTest = join(probeRoot, 'test/package/allowed.ts');
+  await mkdir(dirname(allowedProbe), { recursive: true });
+  await mkdir(dirname(supportedTest), { recursive: true });
+  await mkdir(dirname(unitTest), { recursive: true });
+  await mkdir(dirname(contractTest), { recursive: true });
+  await mkdir(dirname(packageTest), { recursive: true });
+  await writeFile(
+    allowedProbe,
+    "import { validateManagerOptions } from '../../definition/index.js';\nimport type { AgentRef } from '../../spec/index.js';\nvoid validateManagerOptions;\nexport type AllowedProbe = AgentRef;\n",
+  );
+  await writeFile(
+    supportedTest,
+    "import type { AgentRef } from '../../../src/runtime/spec/index.js';\nexport type SupportedAgent = AgentRef;\n",
+  );
+  await writeFile(
+    unitTest,
+    "import type { SupportedAgent } from '../../support/architecture/allowed.js';\nexport type UnitAgent = SupportedAgent;\n",
+  );
+  await writeFile(
+    contractTest,
+    "import type { SupportedAgent } from '../../support/architecture/allowed.js';\nexport type ContractAgent = SupportedAgent;\n",
+  );
+  await writeFile(
+    packageTest,
+    "import type { AgentRef } from '../../src/runtime/spec/index.js';\nexport type PackageAgent = AgentRef;\n",
+  );
+  runArchitectureLint([
+    relative(root, allowedProbe),
+    relative(root, supportedTest),
+    relative(root, unitTest),
+    relative(root, contractTest),
+    relative(root, packageTest),
+  ]);
+
+  const forbiddenDefinitionProbe = join(probeRoot, 'src/runtime/definition/forbidden.ts');
+  const forbiddenProbeRegistry = join(probeRoot, 'src/runtime/probe/forbidden-registry.ts');
+  const forbiddenRootProbe = join(probeRoot, 'src/index.ts');
+  await mkdir(dirname(forbiddenDefinitionProbe), { recursive: true });
+  await mkdir(dirname(forbiddenProbeRegistry), { recursive: true });
+  await writeFile(
+    forbiddenDefinitionProbe,
+    "import { probe } from '../probe/executable-probe.js';\nexport const leaked = probe;\n",
+  );
+  await writeFile(
+    forbiddenProbeRegistry,
+    "import { registry } from '../registry/sealed-agent-registry.js';\nexport const leaked = registry;\n",
+  );
+  await writeFile(
+    forbiddenRootProbe,
+    "import { probe } from './runtime/probe/executable-probe.js';\nexport const leaked = probe;\n",
+  );
+  expectArchitectureFailure([relative(root, forbiddenDefinitionProbe)], 'no-restricted-imports');
+  expectArchitectureFailure([relative(root, forbiddenProbeRegistry)], 'no-restricted-imports');
+  expectArchitectureFailure([relative(root, forbiddenRootProbe)], 'no-restricted-imports');
+
   const forbiddenSpec = join(probeRoot, 'src/runtime/spec/forbidden.ts');
   const forbiddenApplication = join(probeRoot, 'src/application/manager.ts');
   await mkdir(dirname(forbiddenSpec), { recursive: true });

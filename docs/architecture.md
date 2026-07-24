@@ -7,9 +7,9 @@ Codex, native Claude, and ACP will share one registry-access, executable-probing
 shutdown/reaping, JSON-result, output-file, and local active-process reconciliation boundary without taking ownership of
 consumer orchestration or durable workflow state.
 
-The AgentManager and active-process recovery described here remain a target. The root package export is still empty, while
-internal definition, registry, and executable-probe slices are implemented and tested. The normative public target is
-[the AgentManager v1 specification](./specs/agent-manager-v1.spec.md).
+Only the private agent discovery and executable probing responsibility is implemented and tested. The npm package remains
+unpublished, the root package export remains empty, and the complete public AgentManager plus the remaining lifecycle, process, provider-adapter, and public-package work remain target or
+deferred. The normative public target is [the AgentManager v1 specification](./specs/agent-manager-v1.spec.md).
 
 ## Consumer flow
 
@@ -173,6 +173,9 @@ runtime/definition -> runtime/errors
 
 runtime/registry -> runtime/spec
 runtime/registry -> runtime/definition
+runtime/probe -> runtime/spec
+runtime/probe -> runtime/policy
+runtime/probe -> runtime/errors
 runtime/probe -> runtime/definition
 runtime/execution -> runtime/spec
 
@@ -190,7 +193,8 @@ Forbidden directions include:
 
 - `runtime/spec` or `runtime/policy` to any other production area;
 - `runtime/errors` to policy, definition, registry, execution, strategies, platform, or application code;
-- definition, registry, or probe to execution, strategy, platform, application, or testing code;
+- definition to probe, registry, execution, strategy, platform, application, or testing code;
+- probe to registry, execution, strategy, platform, application, or testing code;
 - execution to concrete strategies, platform, application, or testing code;
 - strategy or platform adapters to application or testing code;
 - production code to repository scripts, tests, generated output, or consumer applications;

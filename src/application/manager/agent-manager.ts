@@ -7,12 +7,12 @@ import { SealedAgentRegistry } from '../../runtime/registry/index.js';
 import type { AgentDescriptor, AgentProbeResult, AgentRef } from '../../runtime/spec/index.js';
 import { ProbeAdmission } from './probe-admission.js';
 
-interface M1AgentDiscovery {
+interface AgentDiscovery {
   listAgents(): readonly AgentDescriptor[];
   getAgent(agent: AgentRef): AgentDescriptor | undefined;
 }
 
-interface M1AgentManager extends M1AgentDiscovery {
+interface ProbeableAgentDiscovery extends AgentDiscovery {
   probeAgent(agent: AgentRef): Promise<AgentProbeResult>;
   probeAgents(refs: readonly AgentRef[]): Promise<readonly AgentProbeResult[]>;
 }
@@ -94,7 +94,7 @@ const inspectBatchRefs = (value: unknown): BatchInspection => {
   }
 };
 
-class InternalM1AgentManager implements M1AgentManager {
+class InternalProbeableAgentDiscovery implements ProbeableAgentDiscovery {
   private readonly admission = new ProbeAdmission();
   private readonly probePort: ExecutableProbePort;
   private readonly registry: SealedAgentRegistry;
@@ -193,12 +193,12 @@ class InternalM1AgentManager implements M1AgentManager {
   }
 }
 
-export const createM1AgentManager = (
+export const createProbeableAgentDiscovery = (
   options: unknown,
   probePort: ExecutableProbePort,
-): M1AgentManager => {
+): ProbeableAgentDiscovery => {
   const validated = validateManagerOptions(options);
   const registry = SealedAgentRegistry.create(validated.definitions);
 
-  return new InternalM1AgentManager(registry, probePort);
+  return new InternalProbeableAgentDiscovery(registry, probePort);
 };

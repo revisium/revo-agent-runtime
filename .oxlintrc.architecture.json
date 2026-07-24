@@ -13,7 +13,7 @@
           {
             "patterns": [
               {
-                "regex": "(?:^|/)(?:test|scripts|dist|coverage)(?:/|$)",
+                "regex": "(?:^|/)(?:test|scripts|dist|coverage|generated)(?:/|$)",
                 "message": "Production source must not depend on tests, repository tooling, or generated output."
               }
             ]
@@ -29,7 +29,7 @@
           {
             "patterns": [
               {
-                "regex": "^\\./(?:testing|strategies|platform|runtime/(?:definition|registry|execution))(?:/|$)",
+                "regex": "^\\./(?:testing|strategies|platform|runtime/(?:definition|registry|probe|execution))(?:/|$)",
                 "message": "The root entrypoint may expose only the curated public spec and application API."
               }
             ]
@@ -98,8 +98,24 @@
           {
             "patterns": [
               {
-                "regex": "^(?:\\.\\./)+(?:registry|execution|application|strategies|platform|testing)(?:/|$)",
+                "regex": "^(?:\\.\\./)+(?:probe|registry|execution|application|strategies|platform|testing)(?:/|$)",
                 "message": "Definition behavior may depend only on runtime spec, policy, errors, and local definition modules."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/src/runtime/probe/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:\\.\\./)+(?:registry|execution|application|strategies|platform|testing)(?:/|$)",
+                "message": "Executable probing may depend only on runtime spec, policy, errors, definition, and local probe modules."
               }
             ]
           }
