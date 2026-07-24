@@ -53,14 +53,14 @@ package. Package-owned local process reconciliation is tested here.
 | Architecture | Dependency direction, cycle absence, forbidden imports, test-to-production direction, and probe efficacy.                                    | Runtime behavior or built package resolution.                 |
 | Package      | Built declarations, root export map, ESM resolution, packed contents, and deep-import denial.                                                | Invocation semantics or future API behavior before it exists. |
 
-Unit, narrow contract, architecture, and package lanes currently prove the implemented private internal agent discovery and probing slice plus the intentionally empty root export. The npm package remains unpublished; the complete public
-AgentManager and M2–M5 remain deferred. Integration scripts are added when their owned process/filesystem behavior exists;
+Unit, narrow contract, architecture, and package lanes currently prove the implemented private agent discovery and executable probing responsibility plus the intentionally empty root export. The npm package remains unpublished; the complete public
+AgentManager and the remaining lifecycle, process, provider-adapter, and public-package work remain deferred. Integration scripts are added when their owned process/filesystem behavior exists;
 the repository does not keep empty lanes or permanent `passWithNoTests` configuration.
 
 ## Definition and registry proof
 
 Definition, registry, and executable-probe tests must cover each implemented behavior below. Items that depend on execution
-or the public AgentManager remain target requirements until those slices exist:
+or the public AgentManager remain target requirements until those responsibilities are implemented:
 
 - closed draft 2020-12 schemas and stable validation diagnostics;
 - RFC 8785 canonicalization and lowercase SHA-256 digest generation over the complete definition;

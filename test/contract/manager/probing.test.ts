@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 
 import * as managerModule from '../../../src/application/manager/index.js';
-import { createM1AgentManager } from '../../../src/application/manager/index.js';
+import { createProbeableAgentDiscovery } from '../../../src/application/manager/index.js';
 import { AgentManagerError } from '../../../src/runtime/errors/index.js';
 import { AGENT_FAULT_MESSAGES } from '../../../src/runtime/policy/index.js';
 import type { AgentDefinitionInput, AgentRef } from '../../../src/runtime/spec/index.js';
@@ -36,9 +36,9 @@ const withVersionProbe = (id: string, version = '1.0.0'): AgentDefinitionInput =
     launch: { ...buildAgentDefinition().launch, command: `/fixture/bin/${id}` },
   });
 
-const managerWithDefinitions = (definitions: readonly AgentDefinitionInput[]) => {
+const discoveryWithDefinitions = (definitions: readonly AgentDefinitionInput[]) => {
   const port = new FakeExecutableProbePort({ platform: 'linux' });
-  return { manager: createM1AgentManager({ definitions }, port), port };
+  return { discovery: createProbeableAgentDiscovery({ definitions }, port), port };
 };
 
 const exited = () => ({
@@ -88,15 +88,15 @@ const expectPortUnobserved = (port: FakeExecutableProbePort): void => {
 };
 
 test('renames the internal discovery factory without retaining an alias', () => {
-  expect(managerModule).toHaveProperty('createM1AgentManager');
-  expect(managerModule).not.toHaveProperty('createM1AgentDiscovery');
+  expect(managerModule).toHaveProperty('createProbeableAgentDiscovery');
+  expect(managerModule).not.toHaveProperty('createAgentDiscovery');
 });
 
 test('probes one exact agent through a new admitted physical operation', async () => {
-  const { manager, port } = managerWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
   port.enqueueResolution({ status: 'resolved', executable: '/resolved/a' });
 
-  const result = await manager.probeAgent(reference('a'));
+  const result = await discovery.probeAgent(reference('a'));
 
   expect(result).toMatchObject({
     status: 'available',
@@ -108,24 +108,24 @@ test('probes one exact agent through a new admitted physical operation', async (
 });
 
 test('propagates the evaluator-owned internal fault through one probe without raw error text', async () => {
-  const { manager, port } = managerWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
   port.enqueueResolution(new Error('single raw port failure'));
 
-  const operation = manager.probeAgent(reference('a'));
+  const operation = discovery.probeAgent(reference('a'));
   expect(operation).toBeInstanceOf(Promise);
   await expectFault(operation, internalProbeFault, 'single raw port failure');
 });
 
 test('rejects malformed and unknown single references asynchronously before port observation', async () => {
-  const { manager, port } = managerWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
 
   const malformedReference = reference('a');
   Reflect.deleteProperty(malformedReference, 'version');
-  const malformed = manager.probeAgent(malformedReference);
+  const malformed = discovery.probeAgent(malformedReference);
   expect(malformed).toBeInstanceOf(Promise);
   await expectFault(malformed, unknownFault({ operation: 'probeAgent' }));
   await expectFault(
-    manager.probeAgent(reference('missing')),
+    discovery.probeAgent(reference('missing')),
     unknownFault({ operation: 'probeAgent' }),
   );
 
@@ -133,7 +133,7 @@ test('rejects malformed and unknown single references asynchronously before port
 });
 
 test('rejects malformed outer batch containers before registry or port observation', async () => {
-  const { manager, port } = managerWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
   const customPrototype: AgentRef[] = [reference('a')];
   Object.setPrototypeOf(customPrototype, null);
   const sparse = new Array<AgentRef>(1);
@@ -142,7 +142,7 @@ test('rejects malformed outer batch containers before registry or port observati
       throw new Error('outer-inspection-trap');
     },
   });
-  const operations = [customPrototype, sparse, trapped].map((refs) => manager.probeAgents(refs));
+  const operations = [customPrototype, sparse, trapped].map((refs) => discovery.probeAgents(refs));
 
   for (const operation of operations) expect(operation).toBeInstanceOf(Promise);
   await Promise.all(
@@ -155,26 +155,26 @@ test('rejects malformed outer batch containers before registry or port observati
 });
 
 test('accepts a transparent array proxy when its observable shape is ordinary', async () => {
-  const { manager, port } = managerWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
   port.enqueueResolution({ status: 'resolved', executable: '/resolved/a' });
 
-  const result = await manager.probeAgents(new Proxy([reference('a')], {}));
+  const result = await discovery.probeAgents(new Proxy([reference('a')], {}));
 
   expect(result).toHaveLength(1);
   expect(port.calls()).toEqual([{ type: 'resolve', command: '/fixture/bin/a' }]);
 });
 
 test('prevalidates every batch input in order before it admits physical work', async () => {
-  const { manager, port } = managerWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
   const malformedReference = reference('bad');
   Reflect.deleteProperty(malformedReference, 'version');
 
   await expectFault(
-    manager.probeAgents([reference('a'), malformedReference, reference('missing')]),
+    discovery.probeAgents([reference('a'), malformedReference, reference('missing')]),
     unknownFault({ operation: 'probeAgents', index: 1 }),
   );
   await expectFault(
-    manager.probeAgents([reference('a'), reference('missing'), malformedReference]),
+    discovery.probeAgents([reference('a'), reference('missing'), malformedReference]),
     unknownFault({ operation: 'probeAgents', index: 1 }),
   );
 
@@ -182,18 +182,18 @@ test('prevalidates every batch input in order before it admits physical work', a
 });
 
 test('bounds batch length before effects and permits exactly one thousand duplicate refs', async () => {
-  const { manager, port } = managerWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
   const tooMany = Array.from({ length: 1_001 }, () => reference('a'));
   const sparseTooMany = new Array<AgentRef>(1_001);
 
-  await expectFault(manager.probeAgents(tooMany), {
+  await expectFault(discovery.probeAgents(tooMany), {
     code: 'revo.agent.limit_invalid',
     message: AGENT_FAULT_MESSAGES.limitInvalid,
     phase: 'probing',
     retryable: false,
     details: { operation: 'probeAgents', limit: 1_000 },
   });
-  await expectFault(manager.probeAgents(sparseTooMany), {
+  await expectFault(discovery.probeAgents(sparseTooMany), {
     code: 'revo.agent.limit_invalid',
     message: AGENT_FAULT_MESSAGES.limitInvalid,
     phase: 'probing',
@@ -203,16 +203,16 @@ test('bounds batch length before effects and permits exactly one thousand duplic
   expectPortUnobserved(port);
 
   port.enqueueResolution({ status: 'resolved', executable: '/resolved/a' });
-  const result = await manager.probeAgents(Array.from({ length: 1_000 }, () => reference('a')));
+  const result = await discovery.probeAgents(Array.from({ length: 1_000 }, () => reference('a')));
   expect(result).toHaveLength(1_000);
   expect(result.every((item) => item === result[0])).toBe(true);
   expect(port.calls()).toEqual([{ type: 'resolve', command: '/fixture/bin/a' }]);
 });
 
 test('returns package-owned frozen empty batch output without effects', async () => {
-  const { manager, port } = managerWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
 
-  const result = await manager.probeAgents([]);
+  const result = await discovery.probeAgents([]);
 
   expect(result).toEqual([]);
   expect(Object.isFrozen(result)).toBe(true);
@@ -225,10 +225,10 @@ test('preserves input order, unavailable positions, and duplicate result identit
     ...withoutVersionProbe('unavailable'),
     constraints: { platforms: ['darwin'] },
   });
-  const { manager, port } = managerWithDefinitions([available, unavailable]);
+  const { discovery, port } = discoveryWithDefinitions([available, unavailable]);
   port.enqueueResolution({ status: 'resolved', executable: '/resolved/available' });
 
-  const result = await manager.probeAgents([
+  const result = await discovery.probeAgents([
     reference('available'),
     reference('unavailable'),
     reference('available'),
@@ -249,14 +249,14 @@ test('preserves input order, unavailable positions, and duplicate result identit
 });
 
 test('does not cache or coalesce physical work across calls', async () => {
-  const { manager, port } = managerWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
   for (let count = 0; count < 4; count += 1)
     port.enqueueResolution({ status: 'resolved', executable: `/resolved/a-${count}` });
 
-  const singleOne = await manager.probeAgent(reference('a'));
-  const singleTwo = await manager.probeAgent(reference('a'));
-  const batchOne = await manager.probeAgents([reference('a')]);
-  const batchTwo = await manager.probeAgents([reference('a')]);
+  const singleOne = await discovery.probeAgent(reference('a'));
+  const singleTwo = await discovery.probeAgent(reference('a'));
+  const batchOne = await discovery.probeAgents([reference('a')]);
+  const batchTwo = await discovery.probeAgents([reference('a')]);
 
   expect(singleOne).not.toBe(singleTwo);
   expect(singleOne).not.toBe(batchOne[0]);
@@ -270,7 +270,7 @@ test('does not cache or coalesce physical work across calls', async () => {
 });
 
 test('propagates the evaluator-owned internal fault after the whole batch wave settles', async () => {
-  const { manager, port } = managerWithDefinitions([
+  const { discovery, port } = discoveryWithDefinitions([
     withoutVersionProbe('bad'),
     withVersionProbe('held'),
   ]);
@@ -278,7 +278,7 @@ test('propagates the evaluator-owned internal fault after the whole batch wave s
   port.enqueueResolution({ status: 'resolved', executable: '/resolved/held' });
   port.enqueueVersionStart('running');
 
-  const batch = manager.probeAgents([reference('bad'), reference('held')]);
+  const batch = discovery.probeAgents([reference('bad'), reference('held')]);
   let settled = false;
   void batch.then(
     () => {
@@ -309,11 +309,11 @@ test('propagates the evaluator-owned internal fault after the whole batch wave s
   await expectFault(batch, internalProbeFault, 'raw port failure');
 });
 
-test('shares one FIFO cap across manager APIs and yields before a later batch wave', async () => {
+test('shares one FIFO cap across private discovery APIs and yields before a later batch wave', async () => {
   const batchDefinitions = Array.from({ length: 9 }, (_, index) =>
     withVersionProbe(`batch-${index}`),
   );
-  const { manager, port } = managerWithDefinitions([
+  const { discovery, port } = discoveryWithDefinitions([
     ...batchDefinitions,
     withVersionProbe('single'),
   ]);
@@ -322,14 +322,14 @@ test('shares one FIFO cap across manager APIs and yields before a later batch wa
     port.enqueueVersionStart('running');
   }
 
-  const batch = manager.probeAgents(
+  const batch = discovery.probeAgents(
     batchDefinitions.map(({ id, version }) => reference(id, version)),
   );
   await flushMicrotasks();
   expect(port.calls().filter(({ type }) => type === 'start-version')).toHaveLength(8);
   expect(port.maximumActiveVersionProbes()).toBe(8);
 
-  const single = manager.probeAgent(reference('single'));
+  const single = discovery.probeAgent(reference('single'));
   for (let probeId = 1; probeId <= 8; probeId += 1) port.settleCompletion(probeId, exited());
   await flushMicrotasks();
 

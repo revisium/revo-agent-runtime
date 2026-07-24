@@ -1,6 +1,6 @@
-# Internal agent discovery and probing runtime dependency audit
+# Private agent discovery and executable probing runtime dependency audit
 
-This audit records reproducible evidence for the internal agent discovery and probing slice. It does not
+This audit records reproducible evidence for the Private agent discovery and executable probing implementation. It does not
 represent a public package API or an online verification result by itself.
 
 ## Final dependency baseline
@@ -37,8 +37,8 @@ Run from the repository root with Node 24 and Corepack pnpm 11.13.0:
 
 ```bash
 corepack pnpm install --frozen-lockfile --ignore-scripts
-corepack pnpm verify:internal-agent-discovery-and-probing:dependencies
-corepack pnpm verify:internal-agent-discovery-and-probing:advisories
+corepack pnpm verify:private-agent-discovery-and-executable-probing:dependencies
+corepack pnpm verify:private-agent-discovery-and-executable-probing:advisories
 corepack pnpm audit --prod
 ```
 

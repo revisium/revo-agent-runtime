@@ -12,9 +12,9 @@
 </div>
 
 > [!IMPORTANT]
-> This repository is in bootstrap. The internal agent discovery and probing slice is implemented and tested, but
+> This repository is in bootstrap. The private agent discovery and executable probing responsibility is implemented and tested, but
 > the npm package is not published and its root export is intentionally empty. The API below, the complete public
-> AgentManager, and M2–M5 work remain target or deferred rather than available code.
+> AgentManager, and the remaining lifecycle, process, provider-adapter, and public-package work remain target or deferred rather than available code.
 
 ## About
 
@@ -216,7 +216,7 @@ Quality Gate and fail when open Sonar issues remain.
 ## Package contract
 
 The package is ESM-only, uses explicit exports, emits declarations, and ships only `dist`, `README.md`, `LICENSE`, and
-package metadata. The bootstrap entrypoint stays empty until a public AgentManager slice is implemented and tested.
+package metadata. The bootstrap entrypoint stays empty until a public AgentManager responsibility is implemented and tested.
 
 ## License
 

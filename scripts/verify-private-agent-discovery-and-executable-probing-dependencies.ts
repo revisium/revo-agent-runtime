@@ -39,7 +39,7 @@ const assertFinalDependencyBaseline = (
   assert.equal(
     workspace,
     FINAL_WORKSPACE,
-    'Workspace must match the final internal agent discovery and probing dependency baseline.',
+    'Workspace must match the final private agent discovery and executable probing dependency baseline.',
   );
   assert.equal(
     workspace.includes('ajv>fast-uri'),
@@ -139,4 +139,6 @@ assert.equal(z.strictObject({ value: z.string() }).parse({ value: 'ok' }).value,
 assert.equal(createAjv2020().validate({ type: 'string' }, 'ok'), true);
 assert.equal(canonicalize({ b: 2, a: 1 }), '{"a":1,"b":2}');
 
-console.log('Internal agent discovery and probing dependency installed-tree audit passed.');
+console.log(
+  'Private agent discovery and executable probing dependency installed-tree audit passed.',
+);
