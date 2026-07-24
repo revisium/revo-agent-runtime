@@ -32,10 +32,14 @@ const exited = (
   ...overrides,
 });
 
-test('returns the configured provider-neutral host platform', () => {
+test('returns the configured provider-neutral host platform and counts every read', () => {
   const port = new FakeExecutableProbePort({ platform: 'linux' });
 
+  expect(port.hostPlatformReadCount()).toBe(0);
   expect(port.hostPlatform()).toBe('linux');
+  expect(port.hostPlatformReadCount()).toBe(1);
+  expect(port.hostPlatform()).toBe('linux');
+  expect(port.hostPlatformReadCount()).toBe(2);
 });
 
 test('resolves queued executable scripts in FIFO order and retains queued errors', async () => {
