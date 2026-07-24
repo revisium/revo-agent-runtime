@@ -21,6 +21,7 @@ import type {
   ValidatedDefinition,
   ValidatedManagerConstruction,
 } from '../../src/runtime/definition/index.js';
+import type { InvocationExecutionPorts } from '../../src/runtime/execution/index.js';
 import type {
   ExecutableProbePort,
   ExecutableResolution,
@@ -346,3 +347,25 @@ export type RuntimeContractSurface = readonly [
   JsonSchema202012,
   JsonValue,
 ];
+
+type ExpectedInvocationExecutionPorts = {
+  readonly execution: {
+    start(): Promise<{
+      readonly completion: Promise<{ readonly status: 'completed' | 'cancelled' }>;
+      requestCancellation(): Promise<void>;
+    }>;
+  };
+  readonly clock: {
+    now(): number;
+    schedule(delayMs: number, callback: () => void): () => void;
+  };
+  readonly output: {
+    prepare(): Promise<void>;
+    recordTerminalResult(): Promise<void>;
+    recordEvent(): Promise<void>;
+  };
+};
+
+export type InvocationExecutionPortsIsExact = Expect<
+  Equal<InvocationExecutionPorts, ExpectedInvocationExecutionPorts>
+>;
