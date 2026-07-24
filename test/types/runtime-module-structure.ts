@@ -24,6 +24,8 @@ import type {
 import type {
   InvocationExecutionPorts,
   InvocationInputSnapshot,
+  InvocationTerminalObservation,
+  NormalizedInvocationOutcome,
 } from '../../src/runtime/execution/index.js';
 import type {
   ExecutableProbePort,
@@ -354,7 +356,7 @@ export type RuntimeContractSurface = readonly [
 type ExpectedInvocationExecutionPorts = {
   readonly execution: {
     start(snapshot: InvocationInputSnapshot): Promise<{
-      readonly completion: Promise<{ readonly status: 'completed' | 'cancelled' }>;
+      readonly completion: Promise<InvocationTerminalObservation>;
       requestCancellation(): Promise<void>;
     }>;
   };
@@ -364,11 +366,42 @@ type ExpectedInvocationExecutionPorts = {
   };
   readonly output: {
     prepare(): Promise<void>;
-    recordTerminalResult(): Promise<void>;
+    recordTerminalResult(outcome: NormalizedInvocationOutcome): Promise<void>;
     recordEvent(): Promise<void>;
   };
 };
 
 export type InvocationExecutionPortsIsExact = Expect<
   Equal<InvocationExecutionPorts, ExpectedInvocationExecutionPorts>
+>;
+
+type ExpectedRawResponseDiagnostic = {
+  readonly byteLength: number;
+  readonly truncated: boolean;
+};
+
+type ExpectedNormalizedInvocationOutcome =
+  | { readonly status: 'succeeded'; readonly value: JsonObject }
+  | {
+      readonly status: 'failed';
+      readonly reason:
+        | 'execution_failed'
+        | 'response_missing'
+        | 'response_empty'
+        | 'response_too_large'
+        | 'response_invalid_utf8'
+        | 'response_invalid_json'
+        | 'response_json_primitive'
+        | 'response_json_array'
+        | 'response_schema_mismatch'
+        | 'response_schema_validation_failed'
+        | 'output_write_failed';
+      readonly diagnostics?: AgentValidationDetails;
+      readonly rawResponse?: ExpectedRawResponseDiagnostic;
+    }
+  | { readonly status: 'cancelled' }
+  | { readonly status: 'timed_out' };
+
+export type NormalizedInvocationOutcomeIsExact = Expect<
+  Equal<NormalizedInvocationOutcome, ExpectedNormalizedInvocationOutcome>
 >;

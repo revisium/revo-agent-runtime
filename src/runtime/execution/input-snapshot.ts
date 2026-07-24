@@ -175,6 +175,7 @@ const inspectArrayLength = (value: readonly unknown[]): number | undefined => {
 
 interface CopyState {
   readonly active: WeakSet<object>;
+  readonly maximumBytes: number;
   readonly frames: CopyFrame[];
   bytes: number;
   entries: number;
@@ -226,7 +227,7 @@ const closeFrame = (state: CopyState): boolean => {
   const frame = state.frames.at(-1);
   if (frame === undefined) return false;
   state.bytes += 1;
-  if (state.bytes > maximumMetadataBytes) return false;
+  if (state.bytes > state.maximumBytes) return false;
   Object.freeze(frame.target);
   state.active.delete(frame.activeSource);
   state.frames.pop();
@@ -245,11 +246,11 @@ const reserveEntry = (state: CopyState, frame: CopyFrame, key: string): boolean 
     return false;
   if (frame.entries > 1) state.bytes += 1;
   if (frame.kind === 'object') {
-    const keyBytes = jsonStringBytes(key, maximumMetadataBytes - state.bytes);
+    const keyBytes = jsonStringBytes(key, state.maximumBytes - state.bytes);
     if (keyBytes === undefined) return false;
     state.bytes += keyBytes + 1;
   }
-  return state.bytes <= maximumMetadataBytes;
+  return state.bytes <= state.maximumBytes;
 };
 
 const createChildFrame = (
@@ -298,7 +299,7 @@ const appendEntry = (
 ): boolean => {
   if (!reserveEntry(state, frame, entry.key)) return false;
   if (isScalar(entry.value)) {
-    const scalarBytes = scalarJsonBytes(entry.value, maximumMetadataBytes - state.bytes);
+    const scalarBytes = scalarJsonBytes(entry.value, state.maximumBytes - state.bytes);
     if (scalarBytes === undefined) return false;
     state.bytes += scalarBytes;
     appendProperty(frame.target, entry.key, entry.value);
@@ -314,14 +315,17 @@ const appendEntry = (
   const child = createChildFrame(entry.value, frame.depth + 1);
   if (child === undefined) return false;
   state.bytes += 1;
-  if (state.bytes > maximumMetadataBytes) return false;
+  if (state.bytes > state.maximumBytes) return false;
   appendProperty(frame.target, entry.key, child.target);
   state.active.add(entry.value);
   state.frames.push(child.frame);
   return true;
 };
 
-const copyMetadata = (source: unknown): SnapshotRecord | undefined => {
+const copyMetadata = (
+  source: unknown,
+  maximumBytes = maximumMetadataBytes,
+): SnapshotRecord | undefined => {
   try {
     if (
       typeof source !== 'object' ||
@@ -345,6 +349,7 @@ const copyMetadata = (source: unknown): SnapshotRecord | undefined => {
         },
       ],
       bytes: 1,
+      maximumBytes,
       entries: 0,
       values: 1,
     };
@@ -379,8 +384,11 @@ const readRequest = (value: unknown): Readonly<Record<string, unknown>> | undefi
     for (const key in value) {
       entries += 1;
       if (
-        entries > 3 ||
-        (key !== 'invocationId' && key !== 'metadata' && key !== 'wallClockTimeoutMs')
+        entries > 4 ||
+        (key !== 'invocationId' &&
+          key !== 'metadata' &&
+          key !== 'resultSchema' &&
+          key !== 'wallClockTimeoutMs')
       )
         return undefined;
       const read = ownEnumerableData(value, key);
@@ -396,17 +404,20 @@ const readRequest = (value: unknown): Readonly<Record<string, unknown>> | undefi
 export class InvocationInputSnapshot {
   readonly invocationId: string;
   readonly metadata: SnapshotRecord | undefined;
+  readonly resultSchema: SnapshotRecord;
   readonly wallClockTimeoutMs: number;
 
   private constructor(
     input: Readonly<{
       invocationId: string;
       metadata: SnapshotRecord | undefined;
+      resultSchema: SnapshotRecord;
       wallClockTimeoutMs: number;
     }>,
   ) {
     this.invocationId = input.invocationId;
     this.metadata = input.metadata;
+    this.resultSchema = input.resultSchema;
     this.wallClockTimeoutMs = input.wallClockTimeoutMs;
     Object.freeze(this);
   }
@@ -427,6 +438,11 @@ export class InvocationInputSnapshot {
       return undefined;
     const metadata = input.metadata === undefined ? undefined : copyMetadata(input.metadata);
     if (input.metadata !== undefined && metadata === undefined) return undefined;
+    const resultSchema = copyMetadata(
+      input.resultSchema,
+      AGENT_MANAGER_LIMITS.maxRawResponseBytes.default,
+    );
+    if (input.resultSchema === undefined || resultSchema === undefined) return undefined;
     const deadline = input.wallClockTimeoutMs ?? AGENT_MANAGER_LIMITS.wallClockTimeoutMs.default;
     if (
       typeof deadline !== 'number' ||
@@ -436,7 +452,12 @@ export class InvocationInputSnapshot {
     )
       return undefined;
     return new InvocationInputSnapshot(
-      Object.freeze({ invocationId: input.invocationId, metadata, wallClockTimeoutMs: deadline }),
+      Object.freeze({
+        invocationId: input.invocationId,
+        metadata,
+        resultSchema,
+        wallClockTimeoutMs: deadline,
+      }),
     );
   }
 }

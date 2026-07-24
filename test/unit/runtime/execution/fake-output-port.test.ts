@@ -1,9 +1,15 @@
 import { expect, test } from 'vitest';
 
+import type { NormalizedInvocationOutcome } from '../../../../src/runtime/execution/index.js';
 import {
   FakeInvocationOutputPort,
   type InvocationOutputCall,
 } from '../../../support/execution/fake-output-port.js';
+
+const outcome: NormalizedInvocationOutcome = Object.freeze({
+  status: 'succeeded',
+  value: Object.freeze({ accepted: true }),
+});
 
 test('runs independently scripted logical output operations in FIFO order', async () => {
   const output = new FakeInvocationOutputPort();
@@ -20,16 +26,16 @@ test('runs independently scripted logical output operations in FIFO order', asyn
 
   await expect(output.prepare()).rejects.toBe(prepareFailure);
   await expect(output.prepare()).resolves.toBeUndefined();
-  await expect(output.recordTerminalResult()).rejects.toBe(terminalFailure);
-  await expect(output.recordTerminalResult()).resolves.toBeUndefined();
+  await expect(output.recordTerminalResult(outcome)).rejects.toBe(terminalFailure);
+  await expect(output.recordTerminalResult(outcome)).resolves.toBeUndefined();
   await expect(output.recordEvent()).rejects.toBe(eventFailure);
   await expect(output.recordEvent()).resolves.toBeUndefined();
 
   expect(output.calls()).toEqual([
     { type: 'prepare' },
     { type: 'prepare' },
-    { type: 'record-terminal-result' },
-    { type: 'record-terminal-result' },
+    { type: 'record-terminal-result', outcome },
+    { type: 'record-terminal-result', outcome },
     { type: 'record-event' },
     { type: 'record-event' },
   ] satisfies readonly InvocationOutputCall[]);
@@ -46,7 +52,7 @@ test('returns frozen copied call logs and fails loudly without an outcome', asyn
   expect(Object.isFrozen(calls[0])).toBe(true);
   expect(calls).toEqual([{ type: 'prepare' }] satisfies readonly InvocationOutputCall[]);
   await expect(output.prepare()).rejects.toThrow('No prepare outcome is queued');
-  await expect(output.recordTerminalResult()).rejects.toThrow(
+  await expect(output.recordTerminalResult(outcome)).rejects.toThrow(
     'No terminal-result recording outcome is queued',
   );
   await expect(output.recordEvent()).rejects.toThrow('No event recording outcome is queued');
@@ -60,4 +66,22 @@ test('performs no setup or side effect until a logical operation is called', () 
   output.enqueueEventRecording();
 
   expect(output.calls()).toEqual([]);
+});
+
+test('records a detached frozen candidate before resolving a pending terminal commit', async () => {
+  const output = new FakeInvocationOutputPort();
+  output.enqueuePendingTerminalResultRecording();
+  const pending = output.recordTerminalResult(outcome);
+
+  expect(output.calls()).toEqual([{ type: 'record-terminal-result', outcome }]);
+  expect(output.recordedTerminalResults()).toEqual([]);
+  output.fulfilPendingTerminalResultRecording(1);
+  await pending;
+
+  const recorded = output.recordedTerminalResults();
+  expect(recorded).toEqual([outcome]);
+  expect(Object.isFrozen(recorded[0])).toBe(true);
+  expect(Object.isFrozen(recorded[0]?.status === 'succeeded' ? recorded[0].value : undefined)).toBe(
+    true,
+  );
 });

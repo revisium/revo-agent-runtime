@@ -14,7 +14,7 @@ export interface FakeInvocationExecutionControls {
   rejectPendingStart(startId: number, error: Error): void;
   settleCancellationRequest(executionId: number): void;
   rejectCancellationRequest(executionId: number, error: Error): void;
-  settleNaturalCompletion(executionId: number): void;
+  settleNaturalCompletion(executionId: number, rawResponse?: Uint8Array): void;
   confirmCancellation(executionId: number): void;
   settleCompletionFailure(executionId: number, error: Error): void;
   calls(): readonly InvocationExecutionCall[];
@@ -112,12 +112,16 @@ export class FakeInvocationExecutionPort
     execution.cancellationRequest?.reject(error);
   }
 
-  settleNaturalCompletion(executionId: number): void {
+  settleNaturalCompletion(executionId: number, rawResponse?: Uint8Array): void {
     const execution = this.execution(executionId);
     this.requireUnsettledCompletion(executionId, execution);
     this.rejectPendingCancellationForNaturalCompletion(execution);
     execution.completionSettled = true;
-    execution.completion.resolve(Object.freeze({ status: 'completed' }));
+    execution.completion.resolve(
+      rawResponse === undefined
+        ? Object.freeze({ status: 'completed' })
+        : Object.freeze({ status: 'completed', rawResponse: new Uint8Array(rawResponse) }),
+    );
   }
 
   confirmCancellation(executionId: number): void {
