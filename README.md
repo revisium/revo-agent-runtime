@@ -12,8 +12,9 @@
 </div>
 
 > [!IMPORTANT]
-> This repository is in bootstrap. The npm package is not published, its root export is intentionally empty, and the API
-> below is a target specification rather than available code.
+> This repository is in bootstrap. The internal M1 identity, discovery, and fake-probe slice is implemented and tested, but
+> the npm package is not published and its root export is intentionally empty. The API below, the complete public
+> AgentManager, and M2–M5 work remain target or deferred rather than available code.
 
 ## About
 

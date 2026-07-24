@@ -53,10 +53,10 @@ package. Package-owned local process reconciliation is tested here.
 | Architecture | Dependency direction, cycle absence, forbidden imports, test-to-production direction, and probe efficacy.                                    | Runtime behavior or built package resolution.                 |
 | Package      | Built declarations, root export map, ESM resolution, packed contents, and deep-import denial.                                                | Invocation semantics or future API behavior before it exists. |
 
-Unit, architecture, and package lanes currently prove the implemented private definition, registry, and executable-probe
-slices plus the intentionally empty root export. Contract and integration scripts are added when their owned AgentManager
-or concrete process/filesystem behavior exists; the repository does not keep empty lanes or permanent `passWithNoTests`
-configuration.
+Unit, narrow contract, architecture, and package lanes currently prove the implemented private M1 identity, discovery, and
+fake-probe slice plus the intentionally empty root export. The npm package remains unpublished; the complete public
+AgentManager and M2–M5 remain deferred. Integration scripts are added when their owned process/filesystem behavior exists;
+the repository does not keep empty lanes or permanent `passWithNoTests` configuration.
 
 ## Definition and registry proof
 
@@ -223,7 +223,8 @@ support. They enforce the dependency direction in [architecture.md](./architectu
 The committed architecture harness MUST:
 
 1. lint the current positive production and owned-test graph;
-2. synthesize a temporary representative forbidden import and prove the configured rule exits non-zero;
+2. synthesize temporary definition-to-probe, probe-to-registry, and root-to-probe imports and prove each configured rule
+   exits non-zero;
 3. synthesize a consumer direct import from a private `runtime/spec` file and prove it exits non-zero;
 4. synthesize a temporary import cycle and prove cycle detection exits non-zero;
 5. validate one entity per production leaf, type-only specification leaves, explicit barrels, `.js` specifiers, and the
