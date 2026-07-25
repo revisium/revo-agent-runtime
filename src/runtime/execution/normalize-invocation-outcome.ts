@@ -19,7 +19,7 @@ const freezeJsonValue = (root: JsonValue): void => {
   ];
   while (frames.length > 0) {
     const frame = frames.pop();
-    if (frame === undefined || frame.value === null || typeof frame.value !== 'object') continue;
+    if (frame?.value === null || typeof frame?.value !== 'object') continue;
     if (frame.visited) {
       Object.freeze(frame.value);
       continue;
