@@ -2,6 +2,11 @@ import { expect, test } from 'vitest';
 
 import { InvocationInputSnapshot } from '../../../../src/runtime/execution/index.js';
 
+const resultSchema = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  type: 'object',
+};
+
 test('copies and freezes caller metadata without retaining nested containers', () => {
   const nested = { values: [1, 2] };
   Object.defineProperty(nested, '__proto__', {
@@ -11,6 +16,7 @@ test('copies and freezes caller metadata without retaining nested containers', (
   });
   const metadata = { nested };
   const snapshot = InvocationInputSnapshot.create({
+    resultSchema,
     invocationId: 'invocation-1',
     metadata,
     wallClockTimeoutMs: 1_000,
@@ -37,14 +43,18 @@ test('rejects hostile and invalid snapshots without exposing an error', () => {
   const accessor = {};
   Object.defineProperty(accessor, 'value', { enumerable: true, get: () => 1 });
 
-  expect(InvocationInputSnapshot.create({ invocationId: '' })).toBeUndefined();
-  expect(InvocationInputSnapshot.create({ invocationId: 'id', metadata: cyclic })).toBeUndefined();
+  expect(InvocationInputSnapshot.create({ resultSchema, invocationId: '' })).toBeUndefined();
   expect(
-    InvocationInputSnapshot.create({ invocationId: 'id', metadata: accessor }),
+    InvocationInputSnapshot.create({ resultSchema, invocationId: 'id', metadata: cyclic }),
   ).toBeUndefined();
-  expect(InvocationInputSnapshot.create({ invocationId: 'id', metadata: [1] })).toBeUndefined();
   expect(
-    InvocationInputSnapshot.create({ invocationId: 'id', wallClockTimeoutMs: 999 }),
+    InvocationInputSnapshot.create({ resultSchema, invocationId: 'id', metadata: accessor }),
+  ).toBeUndefined();
+  expect(
+    InvocationInputSnapshot.create({ resultSchema, invocationId: 'id', metadata: [1] }),
+  ).toBeUndefined();
+  expect(
+    InvocationInputSnapshot.create({ resultSchema, invocationId: 'id', wallClockTimeoutMs: 999 }),
   ).toBeUndefined();
 });
 
@@ -52,7 +62,7 @@ test('uses iterative copy and freezing for a deep byte-valid metadata graph', ()
   let metadata: unknown = 'end';
   for (let index = 0; index < 2_000; index += 1) metadata = { next: metadata };
 
-  const snapshot = InvocationInputSnapshot.create({ invocationId: 'deep', metadata });
+  const snapshot = InvocationInputSnapshot.create({ resultSchema, invocationId: 'deep', metadata });
   expect(snapshot?.invocationId).toBe('deep');
   expect(snapshot?.wallClockTimeoutMs).toBe(1_800_000);
 });
@@ -60,7 +70,7 @@ test('uses iterative copy and freezing for a deep byte-valid metadata graph', ()
 test('accepts transparent reflective Proxy views without retaining their source containers', () => {
   const nested = { value: 'before' };
   const metadata = new Proxy({ nested: new Proxy(nested, {}) }, {});
-  const request = new Proxy({ invocationId: 'proxy', metadata }, {});
+  const request = new Proxy({ invocationId: 'proxy', metadata, resultSchema }, {});
   const snapshot = InvocationInputSnapshot.create(request);
 
   expect(snapshot?.metadata).toEqual({ nested: { value: 'before' } });
@@ -78,12 +88,15 @@ test('fails closed when reflective Proxy traps throw', () => {
     },
   );
 
-  expect(InvocationInputSnapshot.create({ invocationId: 'proxy-trap', metadata })).toBeUndefined();
+  expect(
+    InvocationInputSnapshot.create({ resultSchema, invocationId: 'proxy-trap', metadata }),
+  ).toBeUndefined();
 });
 
 test('allows acyclic aliases while copying each occurrence independently', () => {
   const shared = { value: [1] };
   const snapshot = InvocationInputSnapshot.create({
+    resultSchema,
     invocationId: 'alias',
     metadata: { left: shared, right: shared },
   });
@@ -110,11 +123,14 @@ test('rejects oversized strings and collections during admission', () => {
 
   expect(
     InvocationInputSnapshot.create({
+      resultSchema,
       invocationId: 'large-string',
       metadata: { value: 'x'.repeat(65_536) },
     }),
   ).toBeUndefined();
-  expect(InvocationInputSnapshot.create({ invocationId: 'wide', metadata: wide })).toBeUndefined();
+  expect(
+    InvocationInputSnapshot.create({ resultSchema, invocationId: 'wide', metadata: wide }),
+  ).toBeUndefined();
 });
 
 test('matches JSON short-control escape bytes at the metadata boundary', () => {
@@ -123,7 +139,11 @@ test('matches JSON short-control escape bytes at the metadata boundary', () => {
     const metadata = { value: escape.repeat(20_000) };
     expect(new TextEncoder().encode(JSON.stringify(metadata)).byteLength).toBe(40_012);
     expect(
-      InvocationInputSnapshot.create({ invocationId: `short-${escape.charCodeAt(0)}`, metadata }),
+      InvocationInputSnapshot.create({
+        resultSchema,
+        invocationId: `short-${escape.charCodeAt(0)}`,
+        metadata,
+      }),
     ).toBeDefined();
   }
 
@@ -132,16 +152,24 @@ test('matches JSON short-control escape bytes at the metadata boundary', () => {
   expect(new TextEncoder().encode(JSON.stringify(atLimit)).byteLength).toBe(65_536);
   expect(new TextEncoder().encode(JSON.stringify(overLimit)).byteLength).toBe(65_538);
   expect(
-    InvocationInputSnapshot.create({ invocationId: 'at-limit', metadata: atLimit }),
+    InvocationInputSnapshot.create({ resultSchema, invocationId: 'at-limit', metadata: atLimit }),
   ).toBeDefined();
   expect(
-    InvocationInputSnapshot.create({ invocationId: 'over-limit', metadata: overLimit }),
+    InvocationInputSnapshot.create({
+      resultSchema,
+      invocationId: 'over-limit',
+      metadata: overLimit,
+    }),
   ).toBeUndefined();
 });
 
 test('rejects an oversized invocation id before bounded validation and encoding', () => {
-  expect(InvocationInputSnapshot.create({ invocationId: 'x'.repeat(257) })).toBeUndefined();
-  expect(InvocationInputSnapshot.create({ invocationId: '😀'.repeat(129) })).toBeUndefined();
+  expect(
+    InvocationInputSnapshot.create({ resultSchema, invocationId: 'x'.repeat(257) }),
+  ).toBeUndefined();
+  expect(
+    InvocationInputSnapshot.create({ resultSchema, invocationId: '😀'.repeat(129) }),
+  ).toBeUndefined();
 });
 
 test('rejects nested sparse arrays, non-finite values, and accessor-producing reflective views', () => {
@@ -156,13 +184,21 @@ test('rejects nested sparse arrays, non-finite values, and accessor-producing re
   );
 
   expect(
-    InvocationInputSnapshot.create({ invocationId: 'sparse', metadata: { sparse } }),
+    InvocationInputSnapshot.create({ resultSchema, invocationId: 'sparse', metadata: { sparse } }),
   ).toBeUndefined();
   expect(
-    InvocationInputSnapshot.create({ invocationId: 'infinite', metadata: { value: Infinity } }),
+    InvocationInputSnapshot.create({
+      resultSchema,
+      invocationId: 'infinite',
+      metadata: { value: Infinity },
+    }),
   ).toBeUndefined();
   expect(
-    InvocationInputSnapshot.create({ invocationId: 'accessor', metadata: accessorView }),
+    InvocationInputSnapshot.create({
+      resultSchema,
+      invocationId: 'accessor',
+      metadata: accessorView,
+    }),
   ).toBeUndefined();
 });
 
@@ -177,10 +213,18 @@ test('rejects an oversized metadata key and deep over-budget graph while travers
   }
 
   expect(
-    InvocationInputSnapshot.create({ invocationId: 'large-key', metadata: { [oversizedKey]: 1 } }),
+    InvocationInputSnapshot.create({
+      resultSchema,
+      invocationId: 'large-key',
+      metadata: { [oversizedKey]: 1 },
+    }),
   ).toBeUndefined();
   expect(
-    InvocationInputSnapshot.create({ invocationId: 'deep-over-budget', metadata: deep }),
+    InvocationInputSnapshot.create({
+      resultSchema,
+      invocationId: 'deep-over-budget',
+      metadata: deep,
+    }),
   ).toBeUndefined();
 });
 
@@ -188,20 +232,26 @@ test('accounts astral Unicode scalars like JSON serialization', () => {
   const metadata = { key: '😀' };
   const serializedBytes = new TextEncoder().encode(JSON.stringify(metadata)).byteLength;
   expect(serializedBytes).toBe(14);
-  expect(InvocationInputSnapshot.create({ invocationId: 'astral-😀', metadata })).toBeDefined();
+  expect(
+    InvocationInputSnapshot.create({ resultSchema, invocationId: 'astral-😀', metadata }),
+  ).toBeDefined();
 });
 
 test('rejects lone surrogates in invocation ids and metadata keys or values', () => {
   for (const surrogate of ['\ud800', '\udc00']) {
-    expect(InvocationInputSnapshot.create({ invocationId: surrogate })).toBeUndefined();
+    expect(
+      InvocationInputSnapshot.create({ resultSchema, invocationId: surrogate }),
+    ).toBeUndefined();
     expect(
       InvocationInputSnapshot.create({
+        resultSchema,
         invocationId: 'metadata-value',
         metadata: { value: surrogate },
       }),
     ).toBeUndefined();
     expect(
       InvocationInputSnapshot.create({
+        resultSchema,
         invocationId: 'metadata-key',
         metadata: { [surrogate]: 'value' },
       }),

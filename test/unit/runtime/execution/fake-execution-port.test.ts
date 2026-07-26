@@ -7,9 +7,14 @@ import {
 } from '../../../support/execution/fake-execution-port.js';
 
 const testSnapshot = (): InvocationInputSnapshot => {
-  const snapshot = InvocationInputSnapshot.create({ invocationId: 'test' });
+  const snapshot = InvocationInputSnapshot.create({ resultSchema, invocationId: 'test' });
   if (snapshot === undefined) throw new Error('Unable to create test snapshot');
   return snapshot;
+};
+
+const resultSchema = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  type: 'object',
 };
 
 test('starts queued executions in FIFO order and exposes frozen copied calls', async () => {

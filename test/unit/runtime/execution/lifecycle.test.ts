@@ -16,6 +16,7 @@ const flush = async (): Promise<void> => {
 
 const snapshot = (): InvocationInputSnapshot => {
   const value = InvocationInputSnapshot.create({
+    resultSchema,
     invocationId: 'lifecycle',
     wallClockTimeoutMs: 1_000,
   });
@@ -28,13 +29,20 @@ const startLifecycle = (
   clock = new FakeInvocationClock({ initialNowMs: 0 }),
 ) => {
   const settlements: Array<{ readonly status: string }> = [];
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
   const lifecycle = new InvocationLifecycle(
-    { execution, clock, output: new FakeInvocationOutputPort() },
+    { execution, clock, output },
     snapshot(),
     (settlement) => settlements.push(settlement),
   );
   lifecycle.begin();
   return { lifecycle, settlements, clock };
+};
+
+const resultSchema = {
+  $schema: 'https://json-schema.org/draft/2020-12/schema',
+  type: 'object',
 };
 
 test('queues cancellation during a deferred start and cancels exactly once after it runs', async () => {
@@ -67,7 +75,7 @@ test('settles a deferred start rejection once after queued cancellation', async 
   execution.rejectPendingStart(1, new Error('start failed'));
   await expect(cancellation).rejects.toThrow('start failed');
   await flush();
-  expect(settlements).toEqual([{ status: 'failed' }]);
+  expect(settlements).toEqual([{ status: 'failed', reason: 'execution_failed' }]);
 });
 
 test('uses confirmed cancellation rather than a deadline fire as the terminal outcome', async () => {
@@ -92,13 +100,13 @@ test('lets same-turn natural completion win over a rejected pending cancellation
   await flush();
   const cancellation = lifecycle.requestCancellation();
   await flush();
-  execution.settleNaturalCompletion(1);
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
   await expect(cancellation).rejects.toThrow(
     'Execution completed before cancellation request was accepted',
   );
   await flush();
-  expect(settlements).toEqual([{ status: 'completed' }]);
-  expect(lifecycle.terminalSettlement()).toEqual({ status: 'completed' });
+  expect(settlements).toEqual([{ status: 'succeeded', value: {} }]);
+  expect(lifecycle.terminalSettlement()).toEqual({ status: 'succeeded', value: {} });
 });
 
 test('moves accepted through starting and running before natural completion', async () => {
@@ -110,9 +118,9 @@ test('moves accepted through starting and running before natural completion', as
   await flush();
   expect(lifecycle.currentState()).toBe('running');
   expect(clock.pendingActionCount()).toBe(1);
-  execution.settleNaturalCompletion(1);
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
   await flush();
-  expect(settlements).toEqual([{ status: 'completed' }]);
+  expect(settlements).toEqual([{ status: 'succeeded', value: {} }]);
   expect(lifecycle.currentState()).toBe('terminal');
   expect(clock.pendingActionCount()).toBe(0);
 });
@@ -125,8 +133,8 @@ test('commits failed once when execution completion rejects', async () => {
   execution.settleCompletionFailure(1, new Error('completion failed'));
   await flush();
 
-  expect(lifecycle.terminalSettlement()).toEqual({ status: 'failed' });
-  expect(settlements).toEqual([{ status: 'failed' }]);
+  expect(lifecycle.terminalSettlement()).toEqual({ status: 'failed', reason: 'execution_failed' });
+  expect(settlements).toEqual([{ status: 'failed', reason: 'execution_failed' }]);
 });
 
 test('keeps fulfilled caller cancellation nonterminal until execution confirms it', async () => {
@@ -150,14 +158,14 @@ test('preserves the first terminal settlement when late controls arrive', async 
   execution.enqueueStart('running');
   const { lifecycle, settlements, clock } = startLifecycle(execution);
   await flush();
-  execution.settleNaturalCompletion(1);
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
   await flush();
   clock.advanceBy(1_000);
   await flush();
 
   expect(() => execution.settleNaturalCompletion(1)).toThrow('already settled');
-  expect(settlements).toEqual([{ status: 'completed' }]);
-  expect(lifecycle.terminalSettlement()).toEqual({ status: 'completed' });
+  expect(settlements).toEqual([{ status: 'succeeded', value: {} }]);
+  expect(lifecycle.terminalSettlement()).toEqual({ status: 'succeeded', value: {} });
 });
 
 test('lets completion failure win while caller cancellation is pending', async () => {
@@ -171,8 +179,8 @@ test('lets completion failure win while caller cancellation is pending', async (
   await expect(cancellation).rejects.toThrow('completion failure');
   await flush();
 
-  expect(settlements).toEqual([{ status: 'failed' }]);
-  expect(lifecycle.terminalSettlement()).toEqual({ status: 'failed' });
+  expect(settlements).toEqual([{ status: 'failed', reason: 'execution_failed' }]);
+  expect(lifecycle.terminalSettlement()).toEqual({ status: 'failed', reason: 'execution_failed' });
 });
 
 test('settles a standalone rejected cancellation request as failed after microtask arbitration', async () => {
@@ -186,6 +194,6 @@ test('settles a standalone rejected cancellation request as failed after microta
   await expect(cancellation).rejects.toThrow('cancellation rejected');
   await flush();
 
-  expect(settlements).toEqual([{ status: 'failed' }]);
-  expect(lifecycle.terminalSettlement()).toEqual({ status: 'failed' });
+  expect(settlements).toEqual([{ status: 'failed', reason: 'execution_failed' }]);
+  expect(lifecycle.terminalSettlement()).toEqual({ status: 'failed', reason: 'execution_failed' });
 });

@@ -245,3 +245,18 @@ test.each([
     }
   },
 );
+
+test('compiles an owned schema snapshot that ignores later caller mutation', () => {
+  const mutableSchema = {
+    $schema: dialect,
+    type: 'object',
+    properties: { enabled: { type: 'boolean' } },
+    required: ['enabled'],
+  };
+  const compiled = compileConsumerSchema(mutableSchema, schemaPath);
+  mutableSchema.required = [];
+  mutableSchema.properties = { enabled: { type: 'string' } };
+
+  expect(compiled.validate({}, valuePath)?.diagnostics[0]?.keyword).toBe('required');
+  expect(compiled.validate({ enabled: true }, valuePath)).toBeUndefined();
+});

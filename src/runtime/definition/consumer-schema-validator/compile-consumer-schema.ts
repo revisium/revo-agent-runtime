@@ -8,6 +8,8 @@ import type {
   JsonSchema202012,
   JsonValue,
 } from '../../spec/index.js';
+import { inspectPlainJson } from '../plain-json/index.js';
+import { canonicalizeJsonBytes } from '../rfc8785/index.js';
 import {
   normalizeValidationDiagnostics,
   type ValidationDiagnosticInput,
@@ -126,6 +128,32 @@ const createAjv = (): Ajv2020Instance =>
     messages: true,
   });
 
+const parseCanonicalJson = (canonicalBytes: Uint8Array): unknown =>
+  JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(canonicalBytes));
+
+const isJsonObject = (value: unknown): value is JsonSchema202012 =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isJsonArray = (value: JsonValue): value is readonly JsonValue[] => Array.isArray(value);
+
+const freezeJsonValue = (value: JsonValue): void => {
+  if (value === null || typeof value !== 'object') return;
+  if (isJsonArray(value)) {
+    for (const item of value) freezeJsonValue(item);
+  } else {
+    for (const item of Object.values(value)) freezeJsonValue(item);
+  }
+  Object.freeze(value);
+};
+
+const createOwnedSchemaSnapshot = (schema: JsonSchema202012): JsonSchema202012 => {
+  const parsed = parseCanonicalJson(canonicalizeJsonBytes(schema));
+  inspectPlainJson(parsed, '/resultSchema');
+  if (!isJsonObject(parsed)) throw new Error('Consumer schema must be an object.');
+  freezeJsonValue(parsed);
+  return parsed;
+};
+
 const compilationFault = (schemaInstancePath: string): AgentFault => ({
   code: 'revo.agent.definition_invalid',
   message: AGENT_FAULT_MESSAGES.definitionInvalid,
@@ -142,7 +170,7 @@ const compilationFault = (schemaInstancePath: string): AgentFault => ({
 
 const compileSchema = (schema: JsonSchema202012, schemaInstancePath: string) => {
   try {
-    return createAjv().compile(schema);
+    return createAjv().compile(createOwnedSchemaSnapshot(schema));
   } catch {
     throw new AgentManagerError(compilationFault(schemaInstancePath));
   }
