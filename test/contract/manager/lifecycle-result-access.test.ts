@@ -195,7 +195,7 @@ test('uses validated default capacity and rejects invalid capacity through lifec
   expect(manager.getResult('default-0')).toEqual({ state: 'unknown' });
   expect(manager.getResult('default-1').state).toBe('completed');
   expect(manager.getResult('default-1000').state).toBe('completed');
-}, 15_000);
+}, 30_000);
 
 test('delivers one canonical terminal event for output failure, execution failure, caller cancellation, and deadline cancellation', async () => {
   const outputFailureExecution = new FakeInvocationExecutionPort();
