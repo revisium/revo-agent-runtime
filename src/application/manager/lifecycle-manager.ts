@@ -138,9 +138,7 @@ class InternalInvocationLifecycleManager {
     if (active !== undefined) return active.completion.promise;
 
     const result = this.completed.get(invocationId);
-    return Promise.resolve(
-      result === undefined ? Object.freeze({ state: 'unknown' } as const) : result,
-    );
+    return Promise.resolve(result ?? Object.freeze({ state: 'unknown' } as const));
   }
 
   subscribe(filter: unknown, listener: TerminalEventListener): TerminalSubscriptionAdmission {
