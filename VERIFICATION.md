@@ -23,7 +23,7 @@ profile diagnostic while accepting the ESM-only package. The gate includes:
 1. Oxfmt formatting verification.
 2. Strict TypeScript 7 typechecking.
 3. Type-aware Oxlint with compiler diagnostics and unused-suppression detection.
-4. Every currently owned Vitest lane; bootstrap owns only the package lane.
+4. Every currently owned Vitest lane: the private unit, contract, and package lanes.
 5. Vitest v8 coverage with `coverage/lcov.info` and configured thresholds.
 6. Architecture lint over the positive graph plus temporary layer-import, consumer-private-import, and cycle probes.
 7. ESM JavaScript and declaration build.

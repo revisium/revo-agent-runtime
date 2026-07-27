@@ -12,9 +12,10 @@
 </div>
 
 > [!IMPORTANT]
-> This repository is in bootstrap. The private agent discovery and executable probing responsibility is implemented and tested, but
-> the npm package is not published and its root export is intentionally empty. The API below, the complete public
-> AgentManager, and the remaining lifecycle, process, provider-adapter, and public-package work remain target or deferred rather than available code.
+> This repository is in bootstrap. Private agent discovery and executable probing, together with private deterministic
+> lifecycle/result conformance, are implemented and tested. The npm package is not published and its root export is
+> intentionally empty. The API below, the complete public AgentManager, real process/filesystem/security/cancellation/shutdown
+> mechanics, provider adapters, and public-package work remain target or deferred rather than available code.
 
 ## About
 

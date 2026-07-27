@@ -16,8 +16,9 @@ Use this order when sources disagree:
 5. `docs/architecture.md` explains current architecture and target dependency direction.
 6. `README.md` is the consumer-facing summary and MUST NOT claim unimplemented behavior is available.
 
-The current root export is intentionally empty. Internal definition, registry, and executable-probe slices are implemented
-and tested, but remain private. The AgentManager v1 specification is a draft target, not a shipped API.
+The current root export is intentionally empty. Internal definition, registry, executable-probe, and deterministic
+lifecycle/result slices are implemented and tested, but remain private. The AgentManager v1 specification is a draft target,
+not a shipped API.
 
 ## Ownership boundary
 

@@ -34,6 +34,6 @@
 - [Verification contract](../VERIFICATION.md) — executable local and remote quality gates.
 - [Review contract](../REVIEW.md) — blocking review conditions and expected evidence.
 
-The root package export is still intentionally empty. Internal definition, registry, and executable-probe slices are
-implemented and tested, while target documents do not create a public API. Only implemented source, tests, declarations,
-and declared package exports describe available runtime behavior.
+The root package export is still intentionally empty. Internal definition, registry, executable-probe, and private
+deterministic lifecycle/result slices are implemented and tested, while target documents do not create a public API. Only
+implemented source, tests, declarations, and declared package exports describe available runtime behavior.
