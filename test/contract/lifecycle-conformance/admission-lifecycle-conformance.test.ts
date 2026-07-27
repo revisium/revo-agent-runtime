@@ -1,0 +1,114 @@
+import { expect, test } from 'vitest';
+
+import { createLifecycleConformanceSubject } from '../../support/lifecycle-conformance/create-lifecycle-conformance-subject.js';
+import { waitForLifecycleConformanceQuiescence } from '../../support/lifecycle-conformance/wait-for-lifecycle-conformance-quiescence.js';
+
+test('rejects invalid preflight inputs without accepting an invocation', async () => {
+  const invalidRequest = createLifecycleConformanceSubject();
+  const invalidRequestEvents: unknown[] = [];
+  invalidRequest.manager.subscribe({}, (event) => invalidRequestEvents.push(event));
+  await expect(invalidRequest.start(invalidRequest.createInput(''))).resolves.toEqual({
+    status: 'rejected',
+    reason: 'invalid_request',
+  });
+  expect(invalidRequest.output.calls()).toEqual([]);
+  expect(invalidRequest.execution.calls()).toEqual([]);
+  expect(invalidRequest.manager.getResult('')).toEqual({ state: 'unknown' });
+  expect(invalidRequestEvents).toEqual([]);
+
+  const invalidSchema = createLifecycleConformanceSubject();
+  const invalidSchemaEvents: unknown[] = [];
+  invalidSchema.manager.subscribe({}, (event) => invalidSchemaEvents.push(event));
+  await expect(
+    invalidSchema.start(
+      invalidSchema.createInput('invalid-schema', {
+        resultSchema: { $schema: 'https://json-schema.org/draft/2020-12/schema', format: 'email' },
+      }),
+    ),
+  ).resolves.toEqual({ status: 'rejected', reason: 'invalid_result_schema' });
+  expect(invalidSchema.output.calls()).toEqual([]);
+  expect(invalidSchema.execution.calls()).toEqual([]);
+  expect(invalidSchema.manager.getResult('invalid-schema')).toEqual({ state: 'unknown' });
+  expect(invalidSchemaEvents).toEqual([]);
+
+  const unavailableOutput = createLifecycleConformanceSubject();
+  const unavailableOutputEvents: unknown[] = [];
+  unavailableOutput.manager.subscribe({}, (event) => unavailableOutputEvents.push(event));
+  unavailableOutput.output.enqueuePrepare(new Error('output unavailable'));
+  await expect(
+    unavailableOutput.start(unavailableOutput.createInput('output-unavailable')),
+  ).resolves.toEqual({
+    status: 'rejected',
+    reason: 'output_prepare_failed',
+  });
+  expect(unavailableOutput.execution.calls()).toEqual([]);
+  expect(unavailableOutput.manager.getResult('output-unavailable')).toEqual({ state: 'unknown' });
+  expect(unavailableOutputEvents).toEqual([]);
+});
+
+test('accepts only one concurrent invocation and snapshots caller-owned input', async () => {
+  const subject = createLifecycleConformanceSubject();
+  const metadata = { nested: { state: 'accepted' } };
+  subject.output.enqueuePrepare();
+  subject.output.enqueuePrepare();
+  subject.output.enqueueTerminalResultRecording();
+  subject.execution.enqueueStart('running');
+  const input = subject.createInput('same-id', { metadata });
+
+  const admissions = await Promise.all([subject.start(input), subject.start(input)]);
+  const accepted = admissions.find((admission) => admission.status === 'accepted');
+  const rejected = admissions.find((admission) => admission.status === 'rejected');
+  expect(accepted?.status).toBe('accepted');
+  expect(rejected).toEqual({ status: 'rejected', reason: 'duplicate_invocation' });
+  expect(subject.execution.calls()).toEqual([{ type: 'start' }]);
+
+  metadata.nested.state = 'mutated';
+  expect(subject.execution.startedSnapshots()[0]?.metadata).toEqual({
+    nested: { state: 'accepted' },
+  });
+  await waitForLifecycleConformanceQuiescence();
+  subject.execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
+  await waitForLifecycleConformanceQuiescence();
+  if (accepted?.status !== 'accepted')
+    throw new Error('Expected the concurrent invocation to be accepted.');
+  await expect(accepted.handle.result()).resolves.toEqual({ status: 'succeeded', value: {} });
+});
+
+test('cancels one pending accepted invocation exactly once after start confirmation', async () => {
+  const subject = createLifecycleConformanceSubject();
+  subject.output.enqueuePrepare();
+  subject.output.enqueuePrepare();
+  subject.output.enqueueTerminalResultRecording();
+  subject.execution.enqueuePendingStart();
+
+  const accepted = await subject.start(subject.createInput('pending-cancellation'));
+  if (accepted.status !== 'accepted') throw new Error('Expected pending invocation acceptance.');
+  const cancellation = accepted.lifecycle.requestCancellation();
+  expect(accepted.lifecycle.currentState()).toBe('cancelling');
+  expect(subject.manager.getResult('pending-cancellation')).toEqual({ state: 'active' });
+  expect(subject.output.recordedTerminalResults()).toEqual([]);
+
+  subject.execution.fulfilPendingStart(1);
+  await waitForLifecycleConformanceQuiescence();
+  expect(subject.execution.calls()).toEqual([
+    { type: 'start' },
+    { type: 'request-cancellation', executionId: 1 },
+  ]);
+  subject.execution.settleCancellationRequest(1);
+  await expect(cancellation).resolves.toBeUndefined();
+  expect(subject.manager.getResult('pending-cancellation')).toEqual({ state: 'active' });
+  await expect(subject.start(subject.createInput('pending-cancellation'))).resolves.toEqual({
+    status: 'rejected',
+    reason: 'duplicate_invocation',
+  });
+
+  subject.execution.confirmCancellation(1);
+  await waitForLifecycleConformanceQuiescence();
+  const result = await accepted.handle.result();
+  expect(result).toEqual({ status: 'cancelled' });
+  expect(subject.output.recordedTerminalResults()).toEqual([result]);
+  expect(subject.execution.calls()).toEqual([
+    { type: 'start' },
+    { type: 'request-cancellation', executionId: 1 },
+  ]);
+});
