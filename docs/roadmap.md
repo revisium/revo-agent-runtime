@@ -1,7 +1,7 @@
 # AgentManager cross-repository extraction roadmap
 
 - Status: Approved roadmap
-- Implementation: Private agent discovery and executable probing is implemented and tested; the remaining lifecycle, process, provider-adapter, and public-package work remains deferred
+- Implementation: Private agent discovery and executable probing, plus private deterministic lifecycle/result conformance, are implemented and tested; real process, filesystem, security, cancellation, shutdown, provider-adapter, and public-package work remains deferred
 - Target package: `@revisium/revo-agent-runtime`
 - Publication: npm publication remains disabled until the Complete unpublished public package candidate is approved
 - Source repository: `revo-agent-runtime`
@@ -259,10 +259,14 @@ conformance work items. Real probe process ownership and integration belong to R
 and shutdown conformance. Architecture verification proves the intended dependency direction. The root export is still empty.
 
 **Status:** This private discovery-and-probing implementation is tested. The package remains unpublished and the root export
-remains empty; this roadmap responsibility does not make the public AgentManager available or advance the remaining lifecycle,
-process, provider-adapter, and public-package work.
+remains empty; this roadmap responsibility does not make the public AgentManager available or advance the remaining real
+process/filesystem/security/cancellation/shutdown, provider-adapter, and public-package work.
 
 ### Deterministic lifecycle and result conformance
+
+**Status:** Implemented and tested privately through PR #24–28, ending at `01a5d55`. It proves only deterministic fake
+execution/file ports and a provider-neutral base shared conformance harness; it does not prove a real child process, secure
+filesystem publication, production cancellation/kill/reap/shutdown, streaming redaction, provider success, or a public export.
 
 **Entry:** Private agent discovery and executable probing is green.
 

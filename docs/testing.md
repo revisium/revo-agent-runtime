@@ -53,9 +53,14 @@ package. Package-owned local process reconciliation is tested here.
 | Architecture | Dependency direction, cycle absence, forbidden imports, test-to-production direction, and probe efficacy.                                    | Runtime behavior or built package resolution.                 |
 | Package      | Built declarations, root export map, ESM resolution, packed contents, and deep-import denial.                                                | Invocation semantics or future API behavior before it exists. |
 
-Unit, narrow contract, architecture, and package lanes currently prove the implemented private agent discovery and executable probing responsibility plus the intentionally empty root export. The npm package remains unpublished; the complete public
-AgentManager and the remaining lifecycle, process, provider-adapter, and public-package work remain deferred. Integration scripts are added when their owned process/filesystem behavior exists;
-the repository does not keep empty lanes or permanent `passWithNoTests` configuration.
+Unit and contract lanes currently prove the implemented private discovery/probing responsibility and the private deterministic
+lifecycle/result proof. The architecture lane proves dependency direction, cycle/import probes, and test-to-production
+direction; the package lane proves the intentionally empty root export, built declarations, ESM resolution, packed contents,
+and deep-import denial. The lifecycle conformance harness is provider-neutral and uses deterministic fake ports; it is not
+integration proof of real process/filesystem behavior or a public API. The npm package remains unpublished; the complete public
+AgentManager and real process/filesystem/security/cancellation/shutdown, provider-adapter, and public-package work remain
+deferred. Integration scripts are added when their owned process/filesystem behavior exists; the repository does not keep empty
+lanes or permanent `passWithNoTests` configuration.
 
 ## Definition and registry proof
 

@@ -7,9 +7,10 @@ Codex, native Claude, and ACP will share one registry-access, executable-probing
 shutdown/reaping, JSON-result, output-file, and local active-process reconciliation boundary without taking ownership of
 consumer orchestration or durable workflow state.
 
-Only the private agent discovery and executable probing responsibility is implemented and tested. The npm package remains
-unpublished, the root package export remains empty, and the complete public AgentManager plus the remaining lifecycle, process, provider-adapter, and public-package work remain target or
-deferred. The normative public target is [the AgentManager v1 specification](./specs/agent-manager-v1.spec.md).
+Private agent discovery and executable probing, plus private deterministic lifecycle/result conformance through fake
+execution and file ports, are implemented and tested. The npm package remains unpublished and the root package export remains
+empty. The complete public AgentManager and real process/filesystem/security/cancellation/shutdown, provider-adapter, and
+public-package work remain target or deferred. The normative public target is [the AgentManager v1 specification](./specs/agent-manager-v1.spec.md).
 
 ## Consumer flow
 
@@ -147,11 +148,11 @@ Tests mirror behavior rather than production folders:
 
 ```text
 test/
-├── unit/          # current private definition, registry, probe, and tooling behavior
-├── contract/      # introduced only with public runtime behavior
+├── unit/          # current private definition, registry, probe, lifecycle, and tooling behavior
+├── contract/      # current private deterministic lifecycle/result conformance; future public-runtime contract
 ├── integration/   # introduced only with process/filesystem/consumer behavior
 ├── package/       # current empty root entrypoint and metadata proof
-└── support/       # current narrow definition builders and executable-probe fake
+└── support/       # current narrow definition/probe fakes and lifecycle-conformance support
 ```
 
 ## Dependency direction
