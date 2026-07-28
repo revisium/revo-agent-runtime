@@ -25,7 +25,8 @@ not a shipped API.
 The package target owns:
 
 - validation and digesting of a complete immutable versioned definition set;
-- pure exact registry reads and bounded executable probing through one sealed manager;
+- pure exact registry reads and bounded executable probing through one sealed manager, plus fresh resolved-path and strict-
+  SemVer preflight before each invocation claims output or spawns;
 - package-owned protocol, parser, and permission strategies;
 - native command-line and ACP adapters;
 - one invocation lifecycle, process stdio, deadlines, cancellation, and reaping;
@@ -34,7 +35,7 @@ The package target owns:
 - process-local active and bounded retained-completed records;
 - bounded local `darwin`/`linux` process identity, consumer-backed active-state notifications, and one-shot cleanup of
   consumer-supplied active snapshots;
-- normalized results, usage, diagnostics, ordered subscriptions, and stable faults;
+- normalized results, usage, bounded redacted technical evidence, lifecycle-only ordered subscriptions, and stable faults;
 - bounds and redaction before subscriber delivery and file writes;
 - conflict-safe recording of invocation-local files in one exact consumer-supplied directory.
 
@@ -104,4 +105,5 @@ consumer may persist only active process snapshots through the package sink and 
 initialization. Those rows never contain results or completed history.
 
 Late filesystem failure does not strand process-local completion. `result.json` or the terminal NDJSON line may be absent,
-which is an incomplete consumer audit record; the live manager still commits and exposes one typed terminal result.
+which is an incomplete consumer audit record; the live manager still commits and exposes one typed terminal result. A terminal
+lifecycle event signals result availability through the result APIs; it does not carry output, diagnostics, files, or a result.

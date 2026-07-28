@@ -6,7 +6,8 @@
 - Schema dialect: JSON Schema draft 2020-12
 - Related decisions: [ADR-0002](../adr/0002-agent-manager-consumer-boundary.md),
   [ADR-0003](../adr/0003-invocation-output-recording.md),
-  [ADR-0006](../adr/0006-consumer-backed-active-invocation-recovery.md)
+  [ADR-0006](../adr/0006-consumer-backed-active-invocation-recovery.md), and
+  [ADR-0008](../adr/0008-real-mechanics-supervision-boundary.md)
 
 This document is normative for the target v1 API. `MUST`, `MUST NOT`, `SHOULD`, and `MAY` are requirements terms. The
 package currently exports no runtime values or types; these declarations describe the contract to implement and test.
@@ -69,7 +70,7 @@ interface AgentDefinition {
   readonly launch: {
     readonly command: string;
     readonly args: readonly AgentArgumentTemplate[];
-    readonly versionProbe?: AgentVersionProbe;
+    readonly versionProbe: AgentVersionProbe;
   };
   readonly protocol: {
     readonly driver: 'native/stdio-v1' | 'acp/v1';
@@ -118,7 +119,7 @@ the canonical bytes into package-owned data, and deep-freezes that parsed copy. 
 array, or buffer reference. Starting an invocation snapshots the exact `agentId`, `agentVersion`, and `definitionDigest`;
 execution MUST NOT reread the registry.
 
-`native/stdio-v1` definitions MUST select a package-owned result parser. `acp/v1` obtains the result through ACP and MUST
+Every target-v1 definition MUST provide `launch.versionProbe`; it is not optional even when `constraints.executableVersion` is absent. `native/stdio-v1` definitions MUST select a package-owned result parser. `acp/v1` obtains the result through ACP and MUST
 omit `resultParser`. Unknown strategy ids and incoherent combinations fail manager construction.
 
 `native/stdio-v1` requires `delivery.result: 'stdout'` and forbids protocol delivery for prompt and result schema. `acp/v1`
@@ -213,7 +214,7 @@ interface AgentProbeAvailable {
   readonly agent: AgentRef;
   readonly definitionDigest: string;
   readonly executable: string;
-  readonly reportedVersion?: string;
+  readonly reportedVersion: string;
 }
 
 interface AgentProbeUnavailable {
@@ -246,8 +247,10 @@ The consumer already owns durable output coordinates, and they are not required 
 values MUST be defensively copied, plain JSON-compatible data within the existing id/string bounds.
 
 `listAgents()` is deterministic and sorted by id, then version. `getAgent()` uses exact identity. `probeAgent()` checks the
-exact definition's executable and optional version constraint without starting an invocation. Probe unavailability is a
-typed result, not an exception; an unknown exact ref rejects with `revo.agent.agent_unknown`.
+exact definition's resolved executable and required strict-SemVer version probe without starting an invocation. Probe
+unavailability is a typed result, not an exception; an unknown exact ref rejects with `revo.agent.agent_unknown`. On an
+available result, `executable` is the resolved absolute path and `reportedVersion` is the strict-SemVer proof; this evidence
+does not expose the command string, argv, environment, fingerprint, or provider output.
 
 A version probe invokes the definition command directly without a shell and uses only `versionProbe.args`. Both stdout and
 stderr are independently capped at 64 KiB. The probe must exit zero before its timeout; timeout kills and reaps the process.
@@ -266,7 +269,7 @@ whitespace, prefix, empty remainder, or SemVer parse failure -> `revo.agent.prob
 and `||` syntax are rejected at manager construction. Every comparator must match the extracted version. Probe args obey the
 same item, per-argument, and total argv bounds as invocation args.
 
-An executable-version constraint requires a version probe. A present prefix must be non-empty and within its byte bound.
+Every definition requires a version probe. An executable-version constraint is checked against that required probe. A present prefix must be non-empty and within its byte bound.
 Definitions with an invalid timeout, prefix, comparator expression, or incoherent constraint fail manager construction.
 
 ### Initialization and active-process recovery
@@ -352,8 +355,8 @@ those cases, so mismatch is never treated as proof that the recorded invocation 
 
 `startedAt` is an RFC 3339 application timestamp captured after spawn for observability only. It does not establish process
 identity and is never substituted for OS creation identity. If the platform cannot capture the required identity after
-spawn, start kills and reaps the owned child and rejects. If recovery inspection cannot obtain the required fields, it sends
-no signal and preserves the row.
+accepted spawn, the invocation kills and reaps the owned child, then exposes one typed terminal result through its accepted
+handle/result paths. If recovery inspection cannot obtain the required fields, it sends no signal and preserves the row.
 
 ## 4. Starting an invocation
 
@@ -406,13 +409,31 @@ interface AgentInvocationHandle {
 Such identifiers MAY be placed in `metadata`, which the manager stores and returns without interpreting.
 
 `start()` requires successful initialization and an exact agent ref. It validates the request, result schema, parameters,
-permissions, limits, workspace, and output path; reserves the id; prepares the output directory; starts and records the
-owned process; and only then returns a handle. An id is unique among active and retained completed records. Duplicate ids
-fail preflight. Once a completed record has been evicted, its id MAY be reused.
+permissions, limits, workspace, and output path; reserves the id; proves the current launch executable and version; claims
+the output leaf; starts and records the owned process; and only then returns a handle. An id is unique among active and
+retained completed records. Duplicate ids fail preflight. Once a completed record has been evicted, its id MAY be reused.
 
-Acceptance is atomic with manager shutdown. If shutdown begins while `start()` is in preflight or pre-handle process setup,
-exactly one outcome is allowed: either the active snapshot is saved, the invocation is accepted into the active registry and
-included in shutdown, or `start()` rejects without a handle and any process it spawned is killed and reaped.
+Immediately before output-leaf claim and invocation spawn, the manager checks the definition's platform constraint, freshly
+resolves `launch.command`, and executes the required `launch.versionProbe` against that resolution. The probe uses the strict
+SemVer extraction and comparator rules in section 3; a previous `probeAgent()` result is never launch authority. A supported
+platform and successful version proof produce immutable launch evidence containing only the resolved absolute executable path
+and reported strict-SemVer version. The invocation launches that resolved absolute path without another resolution. An
+unsupported platform fails with `revo.agent.platform_unsupported`; a resolve/probe/version failure uses its stable probe
+fault. All of those failures occur before output-leaf claim and invocation spawn, preserve consumer evidence, and return no
+handle. This fresh launch proof is distinct from ADR-0006 post-spawn fingerprinting, which protects recovery identity rather
+than executable eligibility.
+
+Output-leaf claim and process-local active registration form one synchronous acceptance transition. After the leaf creation
+succeeds, the manager registers the `starting` invocation in its active registry immediately, without an `await`, cancellation
+checkpoint, listener delivery, or other re-entrant boundary between those two steps. This transition also places the accepted
+invocation in the manager's shutdown drain set. The active registry is distinct from the post-spawn consumer-backed active
+snapshot; the latter cannot exist before there is a process. This contract defines no separate registry-insertion failure
+behavior.
+
+Shutdown and start arbitrate at that one transition. If shutdown commits before it, `start()` rejects with no output-leaf
+claim, handle, or invocation process. If the transition commits first, shutdown drains that invocation under the ordinary
+typed cancellation, terminal-arbitration, finalization, and reap rules; it cannot reject it as an unaccepted start. There is
+no separately cancellable interval after output-leaf claim and before active registration.
 
 Before returning the handle, the manager canonical-serializes and parses package-owned copies of metadata, effective
 parameters, effective permissions, the result schema, and effective limits. It copies the prompt, paths, and environment
@@ -427,7 +448,9 @@ MUST NOT overwrite, delete, rotate, or suffix consumer-owned or committed paths;
 `.scratch` and temporary publication paths inside the newly claimed leaf.
 
 Workspace and output directories MUST be normalized absolute paths. The manager does not require one to contain the other
-and does not infer a hierarchy.
+and does not infer a hierarchy. Trust, existence, directory-type, symlink, realpath, mount, and consumer-path provenance
+policy beyond the exact non-existing output-leaf claim are deferred; this draft does not claim that a supplied parent or
+workspace is trusted merely because it is absolute.
 
 The child environment is explicit. Nothing from `process.env` is inherited by default, and the child never receives a
 wholesale copy. `environment.inherit` names individual host variables to capture during preflight; missing named variables
@@ -450,12 +473,13 @@ On `darwin` and `linux`, the manager launches the invocation in a separate proce
 `activeStateOperationTimeoutMs` deadline bounds the complete post-spawn inspect, fingerprint, and initial `save` sequence. It
 inspects the new child immediately, captures the package fingerprint and application `startedAt`, and calls
 `activeStateSink.save({ invocationId, pin, state: 'running', process }, context)` with the remaining deadline. The active
-snapshot MUST be saved before the handle is returned. A timeout or unavailable identity rejects with
-`revo.agent.process_identity_failed`; a failed/timed-out sink save rejects with `revo.agent.active_state_failed`. In both
-cases the runtime first kills and reaps the live child/process group. If that cleanup cannot be confirmed, the manager
-becomes permanently failed-closed and the consumer must terminate the supervision domain; it MUST NOT continue with a known
-untracked process. On unsupported platforms, this active-state sequence is skipped and the existing non-recovery start path
-remains available.
+snapshot MUST be saved before the handle is returned. A timeout or unavailable identity fails with
+`revo.agent.process_identity_failed`; a failed/timed-out sink save fails with `revo.agent.active_state_failed`. In both
+cases the runtime first kills and reaps the live child/process group. These are terminal invocation faults after acceptance,
+not `start()` rejections. If cleanup cannot be confirmed, the manager becomes permanently failed-closed and the consumer must
+terminate the supervision domain; its accepted invocation still resolves one typed terminal failure that reports the cleanup
+fault and MUST NOT imply confirmed process cleanup. On unsupported platforms, this active-state sequence is skipped and the
+existing non-recovery start path remains available.
 
 The invocation wall-clock deadline begins when process spawn succeeds, before identity inspection and active-state save. It
 does not begin at preflight, logical acceptance, or handle return. Post-spawn setup therefore consumes invocation wall-clock
@@ -468,10 +492,13 @@ only after it is terminal and no live process remains; the usual save-before-han
 reach `running`. `running | cancelling` in `ActiveInvocationSnapshot` describes persisted process supervision only; it is
 distinct from the broader `AgentInvocationStatus` state machine.
 
-Preflight, spawn, process-identity capture, or initial active-state save failures reject `start()` with `AgentManagerError`
-and no handle. Once the saved snapshot and handle commit acceptance, later process, protocol, timeout, cancellation, output,
-result parsing, and result validation failures resolve the handle with a typed terminal `AgentInvocationResult`; they do not
-reject `result()`.
+Only failures before the synchronous acceptance transition reject `start()` with `AgentManagerError` and no handle. After
+that transition, `start()` returns an accepted handle even when its result has already settled: spawn failure finalizes one
+typed `revo.agent.spawn_failed` result; process-identity capture failure finalizes one typed
+`revo.agent.process_identity_failed` result after cleanup; and initial active-state-save failure finalizes one typed
+`revo.agent.active_state_failed` result after cleanup. The same handle, `getResult`, and `waitForResult` paths expose that
+one immutable terminal value. Later process, protocol, timeout, cancellation, output, result parsing, and result validation
+failures follow the same typed terminal-result rule; `result()` never rejects for an invocation failure.
 
 ## 5. State and lifecycle
 
@@ -519,7 +546,9 @@ running  -> cancelling -> cancelled
 ```
 
 Failures may transition `accepted`, `starting`, `running`, or `cancelling` to `failed`. Exactly one terminal transition is
-allowed. Cancellation racing with natural completion resolves to whichever terminal transition commits first.
+allowed. Cancellation, deadline, process/protocol, cleanup, and finalization candidates arbitrate through one atomic terminal
+commit: the first candidate to commit determines the immutable terminal result; later candidates cannot replace it. The
+specification intentionally does not infer a priority from arrival order before that commit.
 
 Only `running` and `cancelling` have consumer-backed active snapshots, and only on supported local POSIX platforms. These are
 process-supervision states, not a persisted copy of `AgentInvocationStatus`. For an invocation with a saved `running` row,
@@ -538,10 +567,9 @@ successful shutdown cleanup may then remove the row and finalize the invocation 
 uncertainty produces `shutdown_failed` and no false terminal result.
 
 After confirmed process-group termination, the manager calls `activeStateSink.remove(invocationId, context)` before result
-collection/finalization continues. Removal does not wait for or store a result. One rejected or timed-out removal emits a
-bounded `invocation.diagnostic` with code `revo.agent.active_state_remove_failed`, leaves the stale consumer row for later
-initialization, and MUST NOT replace or mutate the invocation's terminal result. Active snapshots have no terminal,
-completed, or pending-ack state.
+collection/finalization continues. Removal does not wait for or store a result. One rejected or timed-out removal leaves the
+stale consumer row for later initialization and MUST NOT replace or mutate the invocation's terminal result. It is bounded
+redacted technical evidence, not a public event payload. Active snapshots have no terminal, completed, or pending-ack state.
 
 ## 6. Result contract
 
@@ -573,10 +601,16 @@ interface AgentCommittedOutputFiles extends AgentOutputFiles {
   readonly result: 'result.json';
 }
 
+interface AgentLaunchEvidence {
+  readonly executable: string;
+  readonly reportedVersion: string;
+}
+
 interface AgentInvocationResultBase {
   readonly schemaVersion: 'agent-invocation-result/v1';
   readonly invocationId: string;
   readonly pin: AgentExecutionPin;
+  readonly launch: AgentLaunchEvidence;
   readonly metadata?: JsonObject;
   readonly acceptedAt: string;
   readonly startedAt?: string;
@@ -675,6 +709,7 @@ type AgentFaultCode =
   | 'revo.agent.probe_output_too_large'
   | 'revo.agent.probe_output_invalid'
   | 'revo.agent.probe_version_mismatch'
+  | 'revo.agent.platform_unsupported'
   | 'revo.agent.spawn_failed'
   | 'revo.agent.process_failed'
   | 'revo.agent.process_cleanup_failed'
@@ -716,7 +751,9 @@ declare class AgentManagerError extends Error {
 
 Error messages and details are bounded and redacted. They MUST NOT contain secret values, unbounded stdout/stderr, or an
 unbounded raw provider response. Explicitly non-secret inherited and variable environment values have no confidentiality
-guarantee. JSON Schema diagnostics use JSON Pointer paths and bounded messages.
+guarantee. Launch evidence contains only the resolved absolute executable path and strict-SemVer version; faults do not expose
+command arguments, environment, prompts, credentials, fingerprints, or provider output. JSON Schema diagnostics use JSON
+Pointer paths and bounded messages.
 
 ## 8. Events and subscriptions
 
@@ -732,21 +769,8 @@ interface AgentEventBase {
 type AgentEvent =
   | (AgentEventBase & { readonly type: 'invocation.accepted' })
   | (AgentEventBase & { readonly type: 'invocation.started' })
-  | (AgentEventBase & {
-      readonly type: 'invocation.output';
-      readonly stream: 'stdout' | 'stderr';
-      readonly text: string;
-    })
-  | (AgentEventBase & {
-      readonly type: 'invocation.diagnostic';
-      readonly code: string;
-      readonly message: string;
-    })
-  | (AgentEventBase & { readonly type: 'invocation.cancelling'; readonly reason?: string })
-  | (AgentEventBase & {
-      readonly type: 'invocation.finished';
-      readonly result: AgentInvocationResult;
-    });
+  | (AgentEventBase & { readonly type: 'invocation.cancelling' })
+  | (AgentEventBase & { readonly type: 'invocation.finished' });
 
 interface AgentEventFilter {
   readonly invocationId?: string;
@@ -758,17 +782,26 @@ type Unsubscribe = () => void;
 type AgentEventListener = (event: AgentEvent) => void;
 ```
 
-`subscribe(filter, listener)` observes all matching future events. `{}` observes every invocation; `{ invocationId }`
-observes one. Delivery is ordered per invocation by strictly increasing `sequence`. Listener failure is isolated, converted
-to a bounded diagnostic for other listeners, and MUST NOT change invocation outcome. The failing listener is unsubscribed
-before that diagnostic is delivered, preventing recursive failure. Delivery is synchronous after the applicable internal
-recording attempt; a slow listener applies consumer-side latency but cannot create an unbounded package queue. V1 does not
-expose `AsyncIterable`.
+`subscribe(filter, listener)` observes all matching future lifecycle events. `{}` observes every invocation; `{ invocationId }`
+observes one. Delivery is ordered per invocation by strictly increasing `sequence`. Listener failure is isolated and MUST NOT
+change invocation outcome; it is not re-emitted as a public diagnostic event. Delivery is synchronous after the applicable
+internal recording attempt; a slow listener applies consumer-side latency but cannot create an unbounded package queue. V1
+does not expose `AsyncIterable`. Active-run numeric capacity and event-fanout limits are deliberately deferred rather than
+invented by this draft.
 
 Every accepted invocation delivers exactly one process-local `invocation.finished` while the manager process remains alive.
-Before delivery, the manager MUST make the completed record visible to `getResult`. The terminal event carries the same
-immutable result value returned by the handle and manager result APIs. Filesystem recording is best-effort only after a late
-I/O failure and does not weaken process-local terminal delivery.
+Before delivery, the manager MUST make the completed record visible to `getResult`. The terminal event signals result
+availability; it does not carry the result or file manifest. Filesystem recording is best-effort only after a late I/O failure
+and does not weaken process-local terminal delivery.
+
+| Surface                                 | Carries                                                                                                                                                              | Must not carry                                                                                                        |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Public subscription and `events.ndjson` | The lifecycle type, invocation id, pin, sequence, and timestamp. `invocation.finished` signals that `getResult` is ready.                                            | Output bytes, stream names, diagnostics, cancellation text, raw responses, result objects, faults, or file manifests. |
+| Handle and manager result APIs          | The immutable bounded redacted `AgentInvocationResult`, including typed terminal fault, raw-response diagnostic when applicable, launch evidence, and file manifest. | Live unbounded streams or an unredacted provider response.                                                            |
+| Reserved output files                   | Bounded redacted stdout, stderr, lifecycle NDJSON, failure-only raw response, and atomically published normalized result.                                            | A second public event payload or consumer-owned retention/indexing state.                                             |
+
+The same matrix applies to every adapter. A terminal result remains available through `result()`, `getResult`, and
+`waitForResult`; event delivery is never a result transport.
 
 ## 9. Manager methods
 
@@ -907,9 +940,9 @@ terminalReservation = maxTerminalEventBytes + maxEventBytes + 2 newline bytes
 maxTerminalEventBytes = 2 MiB
 ```
 
-The non-terminal events budget is `maxEventsFileBytes - terminalReservation`. The reserved tail holds at most one bounded
-truncation diagnostic and one terminal event. The terminal event bound is fixed so a 1 MiB result plus bounded metadata,
-diagnostics, and envelope fits.
+The non-terminal events budget is `maxEventsFileBytes - terminalReservation`. The reserved tail retains the existing byte
+allocation for at most one bounded final non-terminal lifecycle event and one terminal lifecycle event. The terminal-event
+bound remains fixed even though the event is no longer a result transport; no existing byte/file guarantee is weakened.
 
 Additional fixed hard bounds are:
 
@@ -943,16 +976,60 @@ content bounds and the per-argument, argument-count, and total-argv bounds. The 
 bytes. Environment counts are across inherited names, variables, and secrets after duplicate detection.
 Version-probe timeout must be between 1,000 and 30,000 ms inclusive.
 
-Idle activity means bounded stdout or stderr bytes, a valid protocol frame, or a process exit. Subscriber work, file flushes,
-and internal timers do not reset the idle deadline. The wall-clock deadline starts when process spawn succeeds, before
-post-spawn identity/save work or handle return, and is authoritative even when an injected test clock stalls.
+The idle deadline is terminal-only: it begins at successful invocation spawn and ends only when the invocation reaches a
+committed terminal state. Stdout/stderr bytes, valid protocol frames, subscriber work, file flushes, and internal timers do
+not reset or extend it. The wall-clock deadline also starts when process spawn succeeds, before post-spawn identity/save work
+or handle return, and is authoritative even when an injected test clock stalls. If an idle or wall deadline races another
+terminal candidate, section 5's first-commit arbitration applies.
 
-Redaction runs before every subscriber delivery and every file write. It covers configured literal secrets and built-in
-credential-like patterns. Truncation is explicit:
+Redaction runs before every subscriber delivery, result/fault construction, and file write. A configured secret is a
+non-empty UTF-8 byte sequence and is matched as that exact literal byte sequence: it receives no normalization, decoding
+substitution, or case folding. Every replacement is the exact literal `[REDACTED]`.
+
+The built-in grammar is byte-oriented and has no escape parsing:
+
+```text
+KEY       = API_KEY | API_TOKEN | ACCESS_TOKEN | AUTH_TOKEN | CLIENT_SECRET | PASSWORD
+KEY-VALUE = KEY OWS ("=" | ":") OWS (UNQUOTED | DQUOTED | SQUOTED)
+UNQUOTED  = one or more bytes up to the first WSP, ",", ";", or "&"
+DQUOTED   = '"' zero or more non-'"' bytes '"'
+SQUOTED   = "'" zero or more non-"'" bytes "'"
+HEADER    = (Authorization | Proxy-Authorization) OWS ":" OWS LINE-VALUE
+BEARER    = "Bearer" WSP TOKEN
+PEM       = complete bounded BEGIN delimiter, bytes, matching complete bounded END delimiter
+```
+
+`KEY`, `Authorization`, and `Proxy-Authorization` names compare ASCII case-insensitively; no other built-in token is case
+insensitive. The complete `KEY` allowlist is `API_KEY`, `API_TOKEN`, `ACCESS_TOKEN`, `AUTH_TOKEN`, `CLIENT_SECRET`, and
+`PASSWORD`; it does not use substring matching. Therefore `api_key` and `Client_Secret` match, while `TOKEN`, `SECRET`,
+`CREDENTIAL`, `PASSWORD_HASH`, `X_API_KEY`, `API_KEY_ID`, and `CLIENT_SECRET_VALUE` do not match this built-in rule.
+`OWS` is ASCII space or tab, `WSP` is one or more ASCII spaces or tabs, `LINE-VALUE` ends at CR or LF, and `TOKEN` ends at
+WSP, comma, semicolon, ampersand, CR, or LF. A named header replaces its full value; a bare `Bearer` form replaces only its
+following token. `KEY-VALUE` retains its key and separator but replaces the one value. `PEM` begins and ends only at complete
+delimiters of at most 128 UTF-8 bytes in the form `-----BEGIN <LABEL> PRIVATE KEY-----` and
+`-----END <same LABEL> PRIVATE KEY-----`, where `<LABEL>` contains only uppercase ASCII letters, digits, and spaces. It
+replaces the complete block. Incomplete delimiters are not PEM matches.
+
+Redaction state is independent for `stdout`, `stderr`, and protocol. In normal state, the matcher selects the leftmost
+candidate and, at one start offset, the longest candidate; an exact literal and a built-in form use that same overlap rule.
+It emits only bytes that cannot begin a later match and keeps at most 64 KiB of undecided UTF-8 candidate bytes per channel.
+For a complete candidate, it emits the permitted structural prefix, exactly one `[REDACTED]`, and any safe delimiter that is
+not part of the value.
+
+If a malformed or unterminated built-in candidate would exceed that 64 KiB carry limit, the channel emits exactly one
+`[REDACTED]`, enters discard-until-delimiter state, and discards every candidate byte without writing it to any sink. For an
+unquoted key value or bare Bearer token, a safe delimiter is WSP, comma, semicolon, ampersand, CR, or LF; for a quoted value,
+it is the matching quote; for a named header, it is CR or LF; for PEM, it is the matching complete END delimiter. The safe
+delimiter ends discard state and normal matching resumes after it. At channel end, discard state clears without another marker.
+This overflow transition neither persists a candidate tail nor fails the invocation.
+
+At final flush, a remaining candidate within the carry limit is emitted as its permitted structural prefix plus exactly one
+`[REDACTED]`; a discard-state channel emits no additional marker. Finalization then best-effort clears mutable carry buffers
+and invocation secret copies. No unredacted carry or secret copy may survive finalization. Truncation is explicit:
 
 - stdout and stderr end with one bounded truncation marker within their file limit;
-- the events recorder reserves one terminal-event slot for `invocation.finished`, emits one bounded
-  `invocation.diagnostic` truncation event, and suppresses later non-terminal events when its budget is exhausted;
+- the events recorder reserves one terminal-event slot for `invocation.finished`, records lifecycle-only events, and
+  suppresses later non-terminal lifecycle events when its budget is exhausted;
 - raw response diagnostics contain a bounded preview and `truncated: true` when applicable;
 - an oversized final response fails with `revo.agent.result_too_large`.
 
@@ -998,10 +1075,10 @@ Terminal process-local completion MUST proceed even when late recording fails. F
 8. if the result commit fails, create the same in-memory `revo.agent.output_write_failed` result with `files.result` absent;
    do not recursively retry result persistence;
 9. add the immutable in-memory completed record and apply FIFO eviction;
-10. best-effort append and flush the one `invocation.finished` record to `events.ndjson`;
-11. if that terminal filesystem append fails, deliver one bounded process-local diagnostic before the terminal event; the
-    append failure cannot mutate a successfully committed result;
-12. deliver exactly one process-local `invocation.finished`, then resolve handle and manager result waiters.
+10. best-effort append and flush the one lifecycle-only `invocation.finished` record to `events.ndjson`;
+11. if that terminal filesystem append fails, retain bounded redacted technical evidence without creating a public diagnostic
+    event; the append failure cannot mutate a successfully committed result;
+12. deliver exactly one lifecycle-only process-local `invocation.finished`, then resolve handle and manager result waiters.
 
 Exactly-one terminal delivery is a process-local invariant, not a promise that the terminal line reached the filesystem.
 A handler receiving it MUST observe `{ state: 'completed', result }` from `getResult(invocationId)`. `result.json` may be
@@ -1068,7 +1145,11 @@ stopAll();
 - reconnection to native CLI or ACP-over-stdio invocations after manager restart;
 - reconnectable ACP socket/daemon transport;
 - package-owned run, step, attempt, retry, pipeline, or scheduling concepts;
-- async iterators, replayable subscriber cursors, or cross-process fan-in;
+- async iterators, replayable subscriber cursors, cross-process fan-in, active-run numeric capacity, or event-fanout limits;
+- filesystem trust and provenance policy for consumer-supplied workspaces and output parents, including realpath, symlink,
+  mount, and network-filesystem support beyond the exact non-existing-leaf rule;
+- supported platform/filesystem cells, Windows process-tree/recovery behavior, CI evidence, and provider-version/wire
+  conformance; unsupported cells are not implementation successes;
 - process pooling or ACP session reuse across invocations;
 - consumer-defined protocol, parser, or permission strategy injection;
 - text-success results.

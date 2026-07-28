@@ -79,6 +79,9 @@ or the public AgentManager remain target requirements until those responsibiliti
 - absence of implicit latest selection or fallback;
 - deterministic list order and direct no-shell probe behavior with bounded stdout/stderr, exact stream/prefix extraction,
   strict SemVer 2.0.0, AND-only comparator ranges, exit/timeout kill and reap, and every stable probe fault;
+- every target definition requires `launch.versionProbe`, and each start freshly resolves and proves its absolute executable
+  path plus strict-SemVer version before output-leaf claim/invocation spawn; cached probe evidence and ADR-0006 fingerprints
+  cannot stand in for that preflight;
 - snapshot identity remains stable when unrelated definitions are added.
 
 Generic registry tests use arbitrary agent ids. They MUST NOT pass because an implementation branches on `codex` or
@@ -101,8 +104,9 @@ Manager tests must prove:
   no result, terminal status, prompt, credential, environment, metadata, output directory, or consumer workflow field;
 - `running` is saved after process-identity capture and before an accepted handle is returned; `cancelling` is attempted
   before the first cancellation signal; leader exit sweeps/confirms the owned group before removal or finalization;
-- initial save failure kills and reaps the just-spawned owned process before start rejects, and no handle or known untracked
-  process remains;
+- post-acceptance spawn, identity-capture, and initial-save failures clean up and finalize one typed terminal result through
+  the accepted handle, lookup, and wait paths rather than rejecting `start()`; an unconfirmed cleanup reports its typed fault
+  and leaves the manager permanently failed-closed for host termination;
 - cancellation save failure emits a bounded diagnostic but still kills/reaps through the live child handle, then attempts
   removal; it cannot by itself force `shutdown_failed` or host termination;
 - active-row removal failure emits one bounded diagnostic, leaves a stale consumer row, and cannot change or delay the
@@ -117,15 +121,25 @@ Manager tests must prove:
   mutation after acceptance;
 - parameter, permission, result-schema, workspace, relational-limit, environment, and output-path preflight failures reject
   before acceptance;
+- output-leaf claim and `starting` active-registry insertion are one synchronous no-await acceptance transition; shutdown
+  before it leaves no leaf, handle, or process, while shutdown after it drains the registered invocation through typed
+  terminal handling;
 - no wholesale process environment inheritance, no inherited variables by default, duplicate environment-key rejection,
   credential-like-name rejection in nonsecret inherit/variables, secret auto-redaction before spawn, split-chunk redaction,
-  and unredacted-buffer disposal;
-- pre-handle spawn failures reject start after cleanup; post-acceptance process, protocol, output, parsing, validation,
+  exact-literal matching, named Authorization/Proxy-Authorization, bare Bearer, and bounded PEM grammar; every ASCII-case
+  variation of the exact key allowlist `API_KEY`, `API_TOKEN`, `ACCESS_TOKEN`, `AUTH_TOKEN`, `CLIENT_SECRET`, and `PASSWORD`;
+  exclusion of near matches including `TOKEN`, `SECRET`, `CREDENTIAL`, `PASSWORD_HASH`, `X_API_KEY`, `API_KEY_ID`, and
+  `CLIENT_SECRET_VALUE`; per-channel 64 KiB carry, leftmost-longest overlap selection, final carry flush, and best-effort
+  unredacted-buffer disposal;
+- a malformed or unterminated built-in candidate that would exceed the carry limit emits exactly one `[REDACTED]`, discards
+  bytes through its grammar-specific safe delimiter or channel end, persists no tail, and does not fail the invocation;
+- only pre-acceptance failures reject `start()`; post-acceptance spawn, process, protocol, output, parsing, validation,
   timeout, and cancellation failures resolve typed terminal results rather than rejecting result waiters;
 - one subscription can observe all invocations or exactly one filtered invocation;
-- per-invocation sequence ordering and exactly one process-local `invocation.finished` delivery;
+- per-invocation sequence ordering and exactly one lifecycle-only process-local `invocation.finished` delivery;
 - subscriber failure isolation and no hidden async event buffer;
-- handle result, `waitForResult`, completed `getResult`, and terminal event expose the same completed value;
+- handle result, `waitForResult`, and completed `getResult` expose the same completed value; the terminal event carries no
+  result, file, stream, or diagnostic payload;
 - a terminal event handler can synchronously observe the completed lookup;
 - filtered listing covers active and retained terminal invocations without a separate completed-run collection;
 - bounded FIFO completion eviction never removes active work, makes evicted ids unknown, and permits reuse only after
@@ -157,8 +171,8 @@ Manager tests must prove:
   cleanup failure produces `revo.agent.scratch_cleanup_failed`;
 - result commit failure leaves `result.json` absent, commits the same failed value in memory without recursive persistence,
   and still resolves every process-local result channel;
-- terminal NDJSON append failure after a successful result commit emits a bounded process-local diagnostic, cannot mutate the
-  result, and still delivers one terminal event.
+- terminal NDJSON append failure after a successful result commit retains bounded redacted technical evidence, cannot mutate
+  the result, and still delivers one terminal lifecycle event without a public diagnostic payload.
 
 ## Result proof
 
@@ -169,6 +183,8 @@ Result tests must partition:
 - no text-success path;
 - raw-response preview and failure-only file for extraction, parse, object, and validation failures;
 - redaction before object validation, subscriber delivery, diagnostics, raw preview, and every file write;
+- launch evidence exposes only the freshly resolved executable path and strict-SemVer version, while recovery fingerprint
+  evidence remains private to ADR-0006 process identity;
 - the result files contract includes `result.json` only when atomic commit succeeded;
 - stable bounded errors without secret values or unbounded provider output; explicitly nonsecret inherit/variable values are
   not promised confidentiality;
@@ -186,12 +202,14 @@ Required behavior includes:
 - process fingerprint capture and recovery recomputation use the same versioned canonical OS identity fields, produce exact
   `sha256:<64 lowercase hex>`, use exact byte comparison, and never include argv, environment, prompts,
   credentials, metadata, or application `startedAt`;
-- inability to capture required identity after spawn kills and reaps before rejection; recovery inspection uncertainty sends
-  no signal, preserves the row, and fails closed;
+- inability to capture required identity after accepted spawn kills and reaps before one typed terminal result; recovery
+  inspection uncertainty sends no signal, preserves the row, and fails closed;
 - recovered identity match sends process-group `SIGTERM`, performs a bounded wait, escalates to group `SIGKILL`, and confirms
   termination; a PID/PGID alone is never sufficient authority;
 - unsupported-platform empty initialization preserves existing non-recovery execution, while non-empty recovery fails closed
   without inspection, signal, sink mutation, or a Windows fingerprint/process-tree promise;
+- unsupported invocation platforms fail with `revo.agent.platform_unsupported` before the manager claims an output leaf or
+  spawns the invocation; supported-cell closure is still required before a platform conformance claim;
 - a missing recorded leader with possible surviving descendants removes the stale row without signalling the group and does
   not report descendant cleanup;
 - natural leader exit sweeps and terminates all in-memory owned group descendants before row removal and finalization;
@@ -210,9 +228,11 @@ Required behavior includes:
 - bounded `events.ndjson`, `stdout.log`, `stderr.log`, and failure-only `raw-final-response.txt` with explicit truncation
   diagnostics or markers;
 - relational limit validation, including active-state operation <= initialization, idle <= wall, and an events-file
-  reservation for one truncation diagnostic, one terminal event, and both newline bytes;
+  reservation for one final non-terminal lifecycle event, one terminal lifecycle event, and both newline bytes;
 - invocation wall-clock timing starts at successful spawn and includes post-spawn identity/save latency rather than starting
   at logical acceptance or handle return;
+- idle timing is terminal-only: stream/protocol activity never resets it, and deadline/cancellation/process/finalization
+  races use one first-terminal-commit arbitration without mutating a committed result;
 - exclusive same-directory result temp creation, file flush, non-replacing hard link, supported directory flush, temp unlink,
   `EEXIST`/unsupported-filesystem failure, and concurrent publication without replacement;
 - required normal finalization order plus every late-I/O branch where process-local completion survives an incomplete audit

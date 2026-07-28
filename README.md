@@ -44,8 +44,11 @@ const manager = createAgentManager({
 await manager.initialize(await activeInvocationRepository.listForLocalManager());
 
 const unsubscribe = manager.subscribe({}, (event) => {
-  if (event.type === 'invocation.output') {
-    process.stdout.write(event.text);
+  if (event.type === 'invocation.finished') {
+    const lookup = manager.getResult(event.invocationId);
+    if (lookup.state === 'completed') {
+      consumeResult(lookup.result);
+    }
   }
 });
 
@@ -72,8 +75,10 @@ await manager.shutdown('Consumer is stopping');
 ```
 
 - `subscribe({})` observes future events for every invocation; filter by `invocationId` for one.
-- `invocation.output` carries bounded redacted live stdout/stderr events.
-- The manager records `events.ndjson`, `stdout.log`, `stderr.log`, and `result.json` under `output.directory`.
+- Events are lifecycle-only. `invocation.finished` signals that `getResult()` can read the terminal result; streams and
+  diagnostics are not event payloads.
+- The manager records bounded redacted `events.ndjson`, `stdout.log`, `stderr.log`, optional failure-only
+  `raw-final-response.txt`, and `result.json` under `output.directory`.
 - `result()` waits for the terminal result; `getResult()` retrieves a retained result after completion.
 - `cancel()` stops one invocation; `shutdown()` closes the manager and drains every accepted invocation.
 - Success is a top-level JSON object validated against the supplied draft 2020-12 schema. There is no text-success result.
@@ -156,8 +161,8 @@ export interface AgentInvocationHandle {
 
 The package owns:
 
-- immutable definition validation, exact registry reads, executable probes, and execution pins;
-- native and ACP process lifecycle, events, files, structured results, cancellation, shutdown, and reaping;
+- immutable definition validation, exact registry reads, fresh executable/version preflight, and execution pins;
+- native and ACP process lifecycle, lifecycle-only events, files, structured results, cancellation, shutdown, and reaping;
 - local process fingerprints, active-state notifications, and cleanup of consumer-supplied active snapshots;
 - package-owned protocol, result-parser, and permission strategies;
 - bounds and redaction before subscriber delivery or file writes.

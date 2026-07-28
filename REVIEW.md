@@ -27,11 +27,15 @@ Block the change when any of the following applies:
   cleanup produces a terminal result, prunes the row, or omits typed `process_cleanup_failed` evidence.
 - Shutdown before/during initialization can admit work, hang beyond the initialization deadline, or resolve without settling
   every recovery process already signalled.
-- Events, terminal streams, diagnostics, or artifacts can grow without an explicit bound or reach a sink before redaction.
+- Lifecycle events, terminal streams, diagnostics, or artifacts can grow without an explicit bound or reach a sink before
+  redaction; or an event carries output, diagnostics, files, or a full result instead of lifecycle notification only.
+- A malformed or unterminated built-in redaction candidate can exceed per-channel carry, emit more than one replacement,
+  persist an unredacted tail, or fail an otherwise valid invocation instead of discarding through its safe delimiter/end.
 - The manager registry can mutate after construction, performs implicit latest/fallback lookup, or execution rereads it
   after snapshotting an exact definition digest.
 - A live accepted invocation can deliver zero or multiple process-local terminal events, omit the completed record before
-  delivery, or return different completed values through handle, lookup, wait, and event paths.
+  delivery, or make the terminal result unavailable or inconsistent through handle, lookup, and wait paths. The event itself
+  is only an availability notification.
 - Shutdown is not idempotent/concurrency-safe, admits a racing start outside its drain set, resolves without confirmed
   invocation/probe kill and reap, clears listeners before terminal delivery, rejects because an invocation failed, performs
   an independent completed-record clear/eviction pass, bypasses normal bounded FIFO, or deletes consumer output directories.
@@ -49,6 +53,8 @@ Block the change when any of the following applies:
   across manager methods.
 - Output recording adopts an existing leaf, allows two concurrent owners, replaces `result.json`, depends on unsupported
   atomic-link behavior without failing closed, deletes evidence, or omits bounded raw-response diagnostics.
+- Output-leaf claim and private active registration are separated by an await or cancellable/re-entrant checkpoint, allowing
+  shutdown to observe a claimed but unregistered invocation.
 - Definitions or accepted requests retain caller-owned JSON containers instead of canonical package-owned snapshots.
 - Argument-template delivery is incoherent, generic parameters do not use exact own-property/canonical JSON rules, expansion
   is nondeterministic/unbounded, CLI flags are implicit, or missing values are silently omitted.
@@ -57,8 +63,9 @@ Block the change when any of the following applies:
 - A child inherits wholesale `process.env`, environment keys overlap, secret values are not registered with streaming
   redaction before spawn, credential-like names enter nonsecret inherit/variables, or unredacted carry buffers survive
   finalization.
-- Version probing uses regex extraction, accepts non-strict SemVer or non-AND range syntax, leaves output unbounded, or fails
-  to kill and reap on timeout.
+- Version probing uses regex extraction, accepts non-strict SemVer or non-AND range syntax, leaves output unbounded, fails to
+  kill and reap on timeout, is not required/fresh immediately before output claim and invocation spawn, or lets an
+  unsupported platform claim output or spawn.
 - Limit validation omits active-operation/initialization minima and relationship, per-invocation <= manager relationships,
   idle <= wall, total argv, or terminal reservation.
 - Native command-line and ACP adapters return incompatible outcome or observability contracts.
