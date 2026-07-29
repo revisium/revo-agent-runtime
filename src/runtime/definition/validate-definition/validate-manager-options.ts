@@ -362,23 +362,18 @@ const assertStrategyCoherence = (definition: AgentDefinitionContract, index: num
 
 const assertProbeAndConstraint = (definition: AgentDefinitionContract, index: number): void => {
   const probe = definition.launch.versionProbe;
-  if (probe !== undefined) {
-    const bytes =
-      encoder.encode(definition.launch.command).byteLength +
-      probe.args.reduce((total, argument) => total + encoder.encode(argument).byteLength, 0);
-    if (bytes > AGENT_RUNTIME_LIMITS.argvBytes)
-      rejectDiagnostic(
-        'revo.agent.definition_invalid',
-        'probe_argv_bytes',
-        `/definitions/${index}/launch/versionProbe/args`,
-      );
-  }
+  const bytes =
+    encoder.encode(definition.launch.command).byteLength +
+    probe.args.reduce((total, argument) => total + encoder.encode(argument).byteLength, 0);
+  if (bytes > AGENT_RUNTIME_LIMITS.argvBytes)
+    rejectDiagnostic(
+      'revo.agent.definition_invalid',
+      'probe_argv_bytes',
+      `/definitions/${index}/launch/versionProbe/args`,
+    );
 
   const constraint = definition.constraints?.executableVersion;
-  if (
-    constraint !== undefined &&
-    (probe === undefined || parseExecutableVersionConstraint(constraint) === undefined)
-  )
+  if (constraint !== undefined && parseExecutableVersionConstraint(constraint) === undefined)
     rejectDiagnostic(
       'revo.agent.definition_invalid',
       'executable_version_constraint',

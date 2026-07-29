@@ -58,7 +58,7 @@ test.each([
       ...value,
       launch: {
         ...value.launch,
-        versionProbe: { ...value.launch.versionProbe!, unexpected: true },
+        versionProbe: { ...value.launch.versionProbe, unexpected: true },
       },
     }),
   ],
@@ -135,6 +135,11 @@ test.each([
 });
 
 test.each([
+  (() => {
+    const definition = buildAgentDefinition();
+    const { versionProbe: _versionProbe, ...launch } = definition.launch;
+    return { ...definition, launch };
+  })(),
   (() => {
     const definition = buildAgentDefinition();
     return {

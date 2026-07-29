@@ -1,12 +1,9 @@
-import type { NormalizedInvocationOutcome } from '../../runtime/execution/index.js';
-
 const maximumInvocationIdBytes = 256;
 const encoder = new TextEncoder();
 
 type TerminalInvocationEvent = Readonly<{
   type: 'invocation.finished';
   invocationId: string;
-  result: NormalizedInvocationOutcome;
 }>;
 
 type TerminalEventListener = (event: TerminalInvocationEvent) => void;

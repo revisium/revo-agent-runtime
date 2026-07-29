@@ -14,7 +14,7 @@ export type ProbePortCall =
 
 export interface FakeExecutableProbeControls {
   enqueueResolution(result: ExecutableResolution | Error): void;
-  enqueueVersionStart(result: 'running' | Error): void;
+  enqueueVersionStart(result: 'running' | VersionProbeObservation | Error): void;
   settleCompletion(probeId: number, observation: VersionProbeObservation | Error): void;
   fireTimeout(probeId: number): void;
   settleTermination(probeId: number, result?: Error): void;
@@ -73,7 +73,7 @@ const copyObservation = (observation: VersionProbeObservation): VersionProbeObse
 export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecutableProbeControls {
   private readonly platform: ProbeHostPlatform;
   private readonly resolutionQueue: (ExecutableResolution | Error)[] = [];
-  private readonly versionStartQueue: ('running' | Error)[] = [];
+  private readonly versionStartQueue: ('running' | VersionProbeObservation | Error)[] = [];
   private readonly probes = new Map<number, PendingProbe>();
   private readonly callLog: ProbePortCall[] = [];
   private hostPlatformReadCountValue = 0;
@@ -94,7 +94,7 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
     this.resolutionQueue.push(result);
   }
 
-  enqueueVersionStart(result: 'running' | Error): void {
+  enqueueVersionStart(result: 'running' | VersionProbeObservation | Error): void {
     this.versionStartQueue.push(result);
   }
 
@@ -105,7 +105,6 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
     if (result instanceof Error) {
       throw result;
     }
-
     return result;
   }
 
@@ -125,6 +124,13 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
 
     if (result instanceof Error) {
       throw result;
+    }
+    if (result !== 'running') {
+      return {
+        completion: Promise.resolve(copyObservation(result)),
+        timeout: new Promise<void>(() => undefined),
+        terminateAndReap: async () => undefined,
+      };
     }
 
     const probeId = this.nextProbeId;

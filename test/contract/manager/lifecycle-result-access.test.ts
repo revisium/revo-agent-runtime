@@ -42,7 +42,7 @@ test('publishes a completed canonical result before synchronous terminal deliver
   );
   let handleResolved = false;
   let waiterResolved = false;
-  let eventResult: unknown;
+  let eventDelivered = false;
   const handleResult = accepted.handle.result().then((result) => {
     handleResolved = true;
     return result;
@@ -55,10 +55,10 @@ test('publishes a completed canonical result before synchronous terminal deliver
     const lookup = manager.getResult(event.invocationId);
     expect(lookup.state).toBe('completed');
     if (lookup.state !== 'completed') throw new Error('Expected completed result lookup.');
-    expect(lookup.result).toBe(event.result);
+    expect('result' in event).toBe(false);
     expect(handleResolved).toBe(false);
     expect(waiterResolved).toBe(false);
-    eventResult = event.result;
+    eventDelivered = true;
   });
 
   await flush();
@@ -67,9 +67,9 @@ test('publishes a completed canonical result before synchronous terminal deliver
 
   const handleOutcome = await handleResult;
   const waiterOutcome = await activeWaiter;
-  expect(handleOutcome).toBe(eventResult);
-  expect(waiterOutcome).toBe(eventResult);
-  expect(await manager.waitForResult('ordered')).toBe(eventResult);
+  expect(eventDelivered).toBe(true);
+  expect(waiterOutcome).toBe(handleOutcome);
+  expect(await manager.waitForResult('ordered')).toBe(handleOutcome);
   expect(Object.isFrozen(handleOutcome)).toBe(true);
   if (handleOutcome.status === 'succeeded') expect(Object.isFrozen(handleOutcome.value)).toBe(true);
 });
@@ -209,7 +209,7 @@ test('delivers one canonical terminal event for output failure, execution failur
     output: outputFailureOutput,
   });
   const outputFailureEvents: unknown[] = [];
-  outputFailureManager.subscribe({}, (event) => outputFailureEvents.push(event.result));
+  outputFailureManager.subscribe({}, (event) => outputFailureEvents.push(event.invocationId));
   const outputFailure = expectAcceptedInvocation(
     await outputFailureManager.start({ resultSchema, invocationId: 'output-failure-event' }),
   );
@@ -217,7 +217,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   outputFailureExecution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
   await flush();
   const outputFailureResult = await outputFailure.handle.result();
-  expect(outputFailureEvents).toEqual([outputFailureResult]);
+  expect(outputFailureEvents).toEqual(['output-failure-event']);
   expect(outputFailureResult).toEqual({ status: 'failed', reason: 'output_write_failed' });
 
   const executionFailureExecution = new FakeInvocationExecutionPort();
@@ -231,7 +231,7 @@ test('delivers one canonical terminal event for output failure, execution failur
     output: executionFailureOutput,
   });
   const executionFailureEvents: unknown[] = [];
-  executionFailureManager.subscribe({}, (event) => executionFailureEvents.push(event.result));
+  executionFailureManager.subscribe({}, (event) => executionFailureEvents.push(event.invocationId));
   const executionFailure = expectAcceptedInvocation(
     await executionFailureManager.start({ resultSchema, invocationId: 'execution-failure-event' }),
   );
@@ -239,7 +239,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   executionFailureExecution.settleCompletionFailure(1, new Error('execution failed'));
   await flush();
   const executionFailureResult = await executionFailure.handle.result();
-  expect(executionFailureEvents).toEqual([executionFailureResult]);
+  expect(executionFailureEvents).toEqual(['execution-failure-event']);
   expect(executionFailureResult).toEqual({ status: 'failed', reason: 'execution_failed' });
 
   const cancellationExecution = new FakeInvocationExecutionPort();
@@ -253,7 +253,7 @@ test('delivers one canonical terminal event for output failure, execution failur
     output: cancellationOutput,
   });
   const cancellationEvents: unknown[] = [];
-  cancellationManager.subscribe({}, (event) => cancellationEvents.push(event.result));
+  cancellationManager.subscribe({}, (event) => cancellationEvents.push(event.invocationId));
   const cancellation = expectAcceptedInvocation(
     await cancellationManager.start({ resultSchema, invocationId: 'caller-cancel-event' }),
   );
@@ -265,7 +265,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   cancellationExecution.confirmCancellation(1);
   await flush();
   const cancellationResult = await cancellation.handle.result();
-  expect(cancellationEvents).toEqual([cancellationResult]);
+  expect(cancellationEvents).toEqual(['caller-cancel-event']);
   expect(cancellationResult).toEqual({ status: 'cancelled' });
 
   const deadlineExecution = new FakeInvocationExecutionPort();
@@ -280,7 +280,7 @@ test('delivers one canonical terminal event for output failure, execution failur
     output: deadlineOutput,
   });
   const deadlineEvents: unknown[] = [];
-  deadlineManager.subscribe({}, (event) => deadlineEvents.push(event.result));
+  deadlineManager.subscribe({}, (event) => deadlineEvents.push(event.invocationId));
   const deadline = expectAcceptedInvocation(
     await deadlineManager.start({
       resultSchema,
@@ -295,7 +295,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   deadlineExecution.confirmCancellation(1);
   await flush();
   const deadlineResult = await deadline.handle.result();
-  expect(deadlineEvents).toEqual([deadlineResult]);
+  expect(deadlineEvents).toEqual(['deadline-cancel-event']);
   expect(deadlineResult).toEqual({ status: 'timed_out' });
 });
 
@@ -325,12 +325,12 @@ test('isolates a throwing listener without stranding manager handle or active wa
     const lookup = manager.getResult(event.invocationId);
     expect(lookup.state).toBe('completed');
     if (lookup.state !== 'completed') throw new Error('Expected completed result lookup.');
-    expect(lookup.result).toBe(event.result);
+    expect('result' in event).toBe(false);
     if (event.invocationId === 'first') {
       expect(handleResolved).toBe(false);
       expect(waiterResolved).toBe(false);
     }
-    independentResults.push(event.result);
+    independentResults.push(lookup.result);
   });
   expect(throwingAdmission.state).toBe('subscribed');
   expect(independentAdmission.state).toBe('subscribed');
@@ -378,9 +378,9 @@ test('exposes subscription capacity refusal without changing terminal result set
     { execution, clock: new FakeInvocationClock({ initialNowMs: 0 }), output },
   );
   const received: unknown[] = [];
-  const acceptedListener = manager.subscribe({}, (event) => received.push(event.result));
+  const acceptedListener = manager.subscribe({}, (event) => received.push(event.invocationId));
   const refusedCalls: unknown[] = [];
-  const rejectedListener = manager.subscribe({}, (event) => refusedCalls.push(event.result));
+  const rejectedListener = manager.subscribe({}, (event) => refusedCalls.push(event.invocationId));
   expect(acceptedListener.state).toBe('subscribed');
   expect(rejectedListener).toEqual({ state: 'rejected', reason: 'capacity' });
 
@@ -392,7 +392,7 @@ test('exposes subscription capacity refusal without changing terminal result set
   await flush();
 
   const result = await accepted.handle.result();
-  expect(received).toEqual([result]);
+  expect(received).toEqual(['subscription-capacity']);
   expect(refusedCalls).toEqual([]);
   expect(await manager.waitForResult('subscription-capacity')).toBe(result);
 });

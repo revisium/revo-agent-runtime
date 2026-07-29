@@ -70,6 +70,7 @@ type ExpectedAgentFaultCode =
   | 'revo.agent.strategy_unsupported'
   | 'revo.agent.limit_invalid'
   | 'revo.agent.agent_unknown'
+  | 'revo.agent.platform_unsupported'
   | 'revo.agent.probe_platform_unsupported'
   | 'revo.agent.probe_spawn_failed'
   | 'revo.agent.probe_timeout'

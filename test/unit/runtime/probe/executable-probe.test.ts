@@ -125,27 +125,6 @@ test.each(['not_found', 'not_launchable'] as const)(
   },
 );
 
-test('returns frozen availability without starting a probe when the definition has no version probe', async () => {
-  const probeTarget = target({
-    launch: { command: 'fixture-agent', args: [{ kind: 'prompt' }, { kind: 'result-schema' }] },
-    constraints: { platforms: ['linux'] },
-  });
-  const port = new FakeExecutableProbePort({ platform: 'linux' });
-  resolved(port);
-
-  const result = await probeExecutable(probeTarget, port);
-
-  expect(result).toEqual({
-    status: 'available',
-    agent: { id: 'fixture-agent', version: '1.0.0' },
-    definitionDigest: probeTarget.definitionDigest,
-    executable: '/links/fixture-agent',
-  });
-  expect(port.calls()).toEqual([{ type: 'resolve', command: 'fixture-agent' }]);
-  expect(Object.isFrozen(result)).toBe(true);
-  expect(Object.isFrozen(result.agent)).toBe(true);
-});
-
 test('freezes every unavailable result constituent independently of the target', async () => {
   const probeTarget = target();
   const port = new FakeExecutableProbePort({ platform: 'other' });

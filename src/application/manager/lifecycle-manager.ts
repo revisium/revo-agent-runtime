@@ -3,6 +3,7 @@ import {
   validateConsumerSchemaProfile,
   validateManagerOptions,
 } from '../../runtime/definition/index.js';
+import { AgentManagerError } from '../../runtime/errors/index.js';
 import {
   InvocationInputSnapshot,
   InvocationLifecycle,
@@ -10,6 +11,10 @@ import {
   type NormalizedInvocationOutcome,
   type ResultSchemaValidator,
 } from '../../runtime/execution/index.js';
+import { AGENT_FAULT_MESSAGES } from '../../runtime/policy/index.js';
+import { probeExecutable } from '../../runtime/probe/index.js';
+import type { ExecutableProbePort } from '../../runtime/probe/index.js';
+import { SealedAgentRegistry } from '../../runtime/registry/index.js';
 import type { JsonObject } from '../../runtime/spec/index.js';
 import { CompletedInvocations } from './completed-invocations.js';
 import { TerminalSubscriptions } from './subscriptions.js';
@@ -18,7 +23,8 @@ type RejectionReason =
   | 'invalid_request'
   | 'invalid_result_schema'
   | 'duplicate_invocation'
-  | 'output_prepare_failed';
+  | 'output_prepare_failed'
+  | 'preflight_failed';
 
 type LifecycleResultLookup =
   | Readonly<{ state: 'active' }>
@@ -28,7 +34,6 @@ type LifecycleWaitResult = NormalizedInvocationOutcome | Readonly<{ state: 'unkn
 type TerminalInvocationEvent = Readonly<{
   type: 'invocation.finished';
   invocationId: string;
-  result: NormalizedInvocationOutcome;
 }>;
 type TerminalEventListener = (event: TerminalInvocationEvent) => void;
 type TerminalSubscriptionAdmission = ReturnType<TerminalSubscriptions['subscribe']>;
@@ -42,6 +47,9 @@ interface ActiveInvocation {
   readonly completion: Deferred<NormalizedInvocationOutcome>;
   readonly lifecycle: InvocationLifecycle;
 }
+
+type LifecycleManagerPorts = InvocationExecutionPorts &
+  Readonly<{ executableProbe?: ExecutableProbePort }>;
 
 type LifecycleStartOutcome =
   | Readonly<{ status: 'rejected'; reason: RejectionReason }>
@@ -90,10 +98,12 @@ const createHandle = (
 
 class InternalInvocationLifecycleManager {
   private readonly active = new Map<string, ActiveInvocation>();
+  private readonly pending = new Set<string>();
   constructor(
-    private readonly ports: InvocationExecutionPorts,
+    private readonly ports: LifecycleManagerPorts,
     private readonly completed: CompletedInvocations,
     private readonly subscriptions: TerminalSubscriptions,
+    private readonly registry: SealedAgentRegistry,
   ) {}
 
   async start(input: unknown): Promise<LifecycleStartOutcome> {
@@ -103,25 +113,32 @@ class InternalInvocationLifecycleManager {
     const resultSchemaValidator = createResultSchemaValidator(snapshot);
     if (resultSchemaValidator === undefined)
       return Object.freeze({ status: 'rejected', reason: 'invalid_result_schema' });
-    try {
-      await this.ports.output.prepare();
-    } catch {
-      return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
-    }
-    if (this.active.has(snapshot.invocationId) || this.completed.has(snapshot.invocationId))
+    if (!this.reserve(snapshot.invocationId))
       return Object.freeze({ status: 'rejected', reason: 'duplicate_invocation' });
+    try {
+      if (!(await this.preflight(snapshot)))
+        return Object.freeze({ status: 'rejected', reason: 'preflight_failed' });
+      try {
+        await this.ports.output.prepare();
+      } catch {
+        return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
+      }
 
-    const completion = createDeferred<NormalizedInvocationOutcome>();
-    const lifecycle = new InvocationLifecycle(
-      this.ports,
-      snapshot,
-      (outcome) => this.complete(snapshot.invocationId, completion, outcome),
-      resultSchemaValidator,
-    );
-    this.active.set(snapshot.invocationId, Object.freeze({ completion, lifecycle }));
-    const handle = createHandle(snapshot.invocationId, completion);
-    lifecycle.begin();
-    return Object.freeze({ status: 'accepted', handle, lifecycle });
+      const completion = createDeferred<NormalizedInvocationOutcome>();
+      const lifecycle = new InvocationLifecycle(
+        this.ports,
+        snapshot,
+        (outcome) => this.complete(snapshot.invocationId, completion, outcome),
+        resultSchemaValidator,
+      );
+      this.active.set(snapshot.invocationId, Object.freeze({ completion, lifecycle }));
+      this.pending.delete(snapshot.invocationId);
+      const handle = createHandle(snapshot.invocationId, completion);
+      lifecycle.begin();
+      return Object.freeze({ status: 'accepted', handle, lifecycle });
+    } finally {
+      this.pending.delete(snapshot.invocationId);
+    }
   }
 
   getResult(invocationId: string): LifecycleResultLookup {
@@ -155,7 +172,6 @@ class InternalInvocationLifecycleManager {
     const event: TerminalInvocationEvent = Object.freeze({
       type: 'invocation.finished',
       invocationId,
-      result: outcome,
     });
     try {
       this.subscriptions.deliver(event);
@@ -163,11 +179,42 @@ class InternalInvocationLifecycleManager {
       completion.resolve(outcome);
     }
   }
+
+  private async preflight(snapshot: InvocationInputSnapshot): Promise<boolean> {
+    if (snapshot.agent === undefined) return this.registry.listAgents().length === 0;
+    const target = this.registry.getDefinition(snapshot.agent);
+    if (target === undefined) return false;
+    const port = this.ports.executableProbe;
+    if (port === undefined) return false;
+    const result = await probeExecutable(target, port);
+    if (result.status === 'available') return true;
+    if (result.error.code !== 'revo.agent.probe_platform_unsupported') return false;
+    throw new AgentManagerError(
+      Object.freeze({
+        code: 'revo.agent.platform_unsupported',
+        message: AGENT_FAULT_MESSAGES.platformUnsupported,
+        phase: 'preflight',
+        retryable: false,
+        ...(result.error.details === undefined ? {} : { details: result.error.details }),
+      }),
+    );
+  }
+
+  private reserve(invocationId: string): boolean {
+    if (
+      this.pending.has(invocationId) ||
+      this.active.has(invocationId) ||
+      this.completed.has(invocationId)
+    )
+      return false;
+    this.pending.add(invocationId);
+    return true;
+  }
 }
 
 export const createInvocationLifecycleManager = (
   options: unknown,
-  ports: InvocationExecutionPorts,
+  ports: LifecycleManagerPorts,
 ): Readonly<{
   getResult(invocationId: string): LifecycleResultLookup;
   start(input: unknown): Promise<LifecycleStartOutcome>;
@@ -180,5 +227,8 @@ export const createInvocationLifecycleManager = (
     throw new Error('Validated completed invocation capacity is required.');
   const completed = new CompletedInvocations(capacity);
   const subscriptions = new TerminalSubscriptions(capacity);
-  return Object.freeze(new InternalInvocationLifecycleManager(ports, completed, subscriptions));
+  const registry = SealedAgentRegistry.create(validated.definitions);
+  return Object.freeze(
+    new InternalInvocationLifecycleManager(ports, completed, subscriptions, registry),
+  );
 };

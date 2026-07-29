@@ -1,17 +1,12 @@
 import { expect, test } from 'vitest';
 
 import { TerminalSubscriptions } from '../../../../src/application/manager/subscriptions.js';
-import type { NormalizedInvocationOutcome } from '../../../../src/runtime/execution/index.js';
 
 type TerminalInvocationEvent = Parameters<TerminalSubscriptions['deliver']>[0];
 type SubscriptionAdmission = ReturnType<TerminalSubscriptions['subscribe']>;
 
 const event = (invocationId: string): TerminalInvocationEvent => {
-  const result: NormalizedInvocationOutcome = Object.freeze({
-    status: 'succeeded',
-    value: Object.freeze({ invocationId }),
-  });
-  return Object.freeze({ type: 'invocation.finished', invocationId, result });
+  return Object.freeze({ type: 'invocation.finished', invocationId });
 };
 
 const expectSubscribed = (admission: SubscriptionAdmission): (() => void) => {

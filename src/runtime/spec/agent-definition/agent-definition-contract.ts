@@ -11,7 +11,7 @@ export interface AgentDefinitionContract {
   readonly launch: {
     readonly command: string;
     readonly args: readonly AgentArgumentTemplate[];
-    readonly versionProbe?: AgentVersionProbe;
+    readonly versionProbe: AgentVersionProbe;
   };
   readonly protocol: {
     readonly driver: 'native/stdio-v1' | 'acp/v1';
