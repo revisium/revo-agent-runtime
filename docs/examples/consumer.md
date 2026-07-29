@@ -171,7 +171,13 @@ process-local eviction.
 the sink, honors each operation context's abort signal, and loads the rows selected for this local manager before
 initialization. For a live invocation, the runtime removes its row only after the owned POSIX process group is confirmed gone.
 During initialization it may instead remove a row whose recorded leader is definitely absent, without claiming descendant
-cleanup. Results and completed history stay in the existing result/output and consumer workflow layers. The consumer also
-owns row integrity/provenance, DBOS, retries, distributed locks/races, durable indexing, retention, and recovery policy. The
-exact local process identity and cleanup rules are defined by
-[ADR-0006](../adr/0006-consumer-backed-active-invocation-recovery.md).
+cleanup. If an already-dispatched `save` receives an aborted signal, the repository fulfils that same promise only after every
+write made by that save is quiesced. The runtime treats that post-abort fulfilment as confirmation before it calls the
+absent-row-safe, idempotent `remove`; a rejection or no fulfilment inside the bounded quiescence window leaves quiescence
+unknown, so it neither removes nor reuses the id and a fresh manager must reconcile the selected rows. Results and completed
+history stay in the existing result/output and consumer workflow layers. The consumer also owns row integrity/provenance,
+DBOS, retries, distributed locks/races, durable indexing, retention, and recovery policy. The exact local process identity and
+cleanup rules are defined by [ADR-0006](../adr/0006-consumer-backed-active-invocation-recovery.md). Signal authority,
+pre-acceptance boundaries, and the normative active-state sink outcome are defined by
+[ADR-0009](../adr/0009-process-signal-authority.md) and the
+[AgentManager v1 specification](../specs/agent-manager-v1.spec.md#signal-authority-and-context-specific-outcomes).

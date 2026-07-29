@@ -21,7 +21,8 @@ an unimplemented target appear shipped. The root export remains empty until all 
 The boundary is already decided by [ADR-0001](./adr/0001-agent-runtime-boundary.md),
 [ADR-0002](./adr/0002-agent-manager-consumer-boundary.md),
 [ADR-0003](./adr/0003-invocation-output-recording.md), and refined by
-[ADR-0008](./adr/0008-real-mechanics-supervision-boundary.md). Research may refine the draft specification. A finding that
+[ADR-0008](./adr/0008-real-mechanics-supervision-boundary.md) and
+[ADR-0009](./adr/0009-process-signal-authority.md). Research may refine the draft specification. A finding that
 changes an accepted decision requires a new refining, amending, or superseding ADR and human approval before implementation
 continues.
 
@@ -53,6 +54,9 @@ The roadmap carries these approved constraints:
     streams, raw response, typed terminal result, and exact invocation files remain their own contracts.
 12. This documentation decision records no implementation, provider/CI/platform conformance, or root export. Active-run
     numeric capacity and event fanout remain deferred rather than receiving invented values.
+13. ADR-0009 requires Option A pre-acceptance cleanup: confirmed cleanup rejects `start()` without public invocation, while
+    unconfirmed identity/save reap retains a private guard/reservation for shutdown retry and external consumer resolution.
+    A rejected setup leaf is consumer-owned quarantined residue; retry uses a fresh output path.
 
 ## 3. Extraction approaches
 
@@ -222,7 +226,7 @@ roadmap does not claim that research is complete.
 
 | Sequence | Target responsibility                 | Entry gate                                                                                 | Exit boundary                                                                                                                                                                                 |
 | -------- | ------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1        | Documentation contract                | Approved documentation scope.                                                              | ADR-0008, draft spec, roadmap, and required consistency surfaces agree; no code or conformance claim follows.                                                                                 |
+| 1        | Documentation contract                | Approved documentation scope.                                                              | ADR-0008, ADR-0009, draft spec, roadmap, and required consistency surfaces agree; no code or conformance claim follows.                                                                       |
 | 2        | Foundation                            | Documentation contract.                                                                    | Private multi-invocation supervision, fresh launch preflight boundary, lifecycle/result API seam, and deterministic tests exist without claiming real cancellation or filesystem publication. |
 | 3        | Cancellation, deadlines, and shutdown | Foundation plus full Provider and platform conformance research.                           | The approved terminal-only idle, first-commit arbitration, cancellation, kill/reap, and shutdown rules pass their owning real-process tests.                                                  |
 | 4        | Filesystem publication                | Cancellation/deadline/shutdown stage plus full Provider and platform conformance research. | Exact leaf claim, bounded redacted evidence, scratch lifecycle, and non-replacing `result.json` publication pass their owning filesystem tests.                                               |
@@ -247,14 +251,26 @@ Filesystem publication
         v
 Supported-cell closure
         |
-        +--> Native Codex adapter conformance --+
-        +--> Native Claude adapter conformance -+--> Complete unpublished public package candidate
-        +--> ACP adapter conformance ----------+                 |
-                                                               v
-                         Human approval of the exact package artifact and consumer candidate
-                                                               |
-                                                               v
-                                             One-way orchestrator cutover
+        v
+Provider-neutral frozen real-process harness
+        |
+        v
+Native Codex adapter conformance
+        |
+        v
+Native Claude adapter conformance
+        |
+        v
+ACP adapter conformance
+        |
+        v
+Complete unpublished public package candidate
+        |
+        v
+Human approval of the exact package artifact and consumer candidate
+        |
+        v
+One-way orchestrator cutover
 
 Provider and platform conformance research --> Cancellation, deadlines, and shutdown
 Provider and platform conformance research --> Filesystem publication
@@ -265,9 +281,8 @@ Provider and platform conformance research --> ACP adapter conformance
 Contract-research contradiction -----------> Contract decision research and Human approval of contract decisions
 ```
 
-The three provider adapter conformance work items may be developed in parallel after Real process, filesystem, security,
-cancellation, and shutdown conformance freezes the shared harness, while merges may remain sequential. Completion of one provider
-adapter conformance work item does not relax the other two.
+After the provider-neutral frozen real-process harness, provider adapters are strict: Native Codex, then Native Claude, then
+ACP. Completion of one adapter does not relax the next adapter's evidence or its full harness suite.
 
 ### Private agent discovery and executable probing
 
@@ -325,36 +340,45 @@ files; non-replacing result publication; idle/wall deadlines; cancellation; proc
 and late-finalization failure behavior.
 
 **Exit:** the base harness is extended with real temporary process and filesystem scenarios. It proves all approved contract-precedence and security decisions, acceptance/shutdown races, subscriber failure isolation, terminal delivery ordering, scratch cleanup,
-late I/O branches, fail-closed shutdown ownership, and supported platform cells. A deterministic reference adapter passes the
-extended harness. This is shared infrastructure proof, not provider completion. The root export remains empty.
+late I/O branches, fail-closed shutdown ownership, and supported platform cells. The provider-neutral frozen real-process
+harness proves Option A pre-acceptance rejection, private guard/reservation on unconfirmed reap, bounded shutdown retry, and
+consumer-owned quarantined rejected-setup leaves. It also proves C1 cancellation-cleanup faults and S1 maybe-persisted
+initial-save removal/reconciliation, including post-abort fulfilled-save quiescence, confirmed removal before id release, the
+per-invocation serialized active-state lane, and both late-save-race outcomes, before Native Codex adapter conformance begins.
+This is shared infrastructure proof, not provider completion. The root export remains empty.
 
 ### Native Codex adapter conformance
 
-**Entry:** Real process, filesystem, security, cancellation, and shutdown conformance harness frozen and Codex provider/platform evidence approved.
+**Entry:** The provider-neutral frozen real-process harness passes; Codex provider/platform evidence is approved. Native
+Codex is the first real provider adapter after that shared proof.
 
-**Exit:** the native Codex adapter instantiates the same extended harness without exclusions and passes Codex-specific argv,
-permission, JSONL hostile/malformed/overflow, terminal selection, failure classification, usage, cancellation, and version
-tests. No Codex-specific public contract is added.
+**Exit:** the native Codex adapter instantiates the provider-neutral frozen real-process harness without exclusions and
+passes Codex-specific argv, permission, JSONL hostile/malformed/overflow, terminal selection, failure classification, usage,
+cancellation, and version tests. No Codex-specific public contract is added.
 
 ### Native Claude adapter conformance
 
-**Entry:** Real process, filesystem, security, cancellation, and shutdown conformance harness frozen and Claude provider/platform evidence approved.
+**Entry:** Native Codex adapter conformance passed the provider-neutral frozen real-process harness; Claude provider/platform
+evidence is approved.
 
-**Exit:** the native Claude adapter instantiates the same extended harness without exclusions and passes Claude-specific
-argv, permission/tool, stream-json hostile/malformed/overflow, terminal envelope, denial/error, usage, cancellation, and
-version tests. Orchestrator role/worktree policy remains outside the adapter.
+**Exit:** the native Claude adapter instantiates the provider-neutral frozen real-process harness without exclusions and
+passes Claude-specific argv, permission/tool, stream-json hostile/malformed/overflow, terminal envelope, denial/error,
+usage, cancellation, and version tests. Orchestrator role/worktree policy remains outside the adapter.
 
 ### ACP adapter conformance
 
-**Entry:** Real process, filesystem, security, cancellation, and shutdown conformance harness frozen and ACP provider/platform evidence approved.
+**Entry:** Native Claude adapter conformance passed the provider-neutral frozen real-process harness; ACP provider/platform
+evidence is approved.
 
-**Exit:** the ACP adapter uses a real invocation-scoped stdio process connector, instantiates the same extended harness without
-exclusions, and passes ACP-specific framing, correlation, hostile input, permissions, cancellation/close, diagnostics,
-bounds, completion barrier, and session/process isolation tests. Pooling and cross-invocation session reuse remain deferred.
+**Exit:** the ACP adapter uses a real invocation-scoped stdio process connector, instantiates the provider-neutral frozen
+real-process harness without exclusions, and passes ACP-specific framing, correlation, hostile input, permissions,
+cancellation/close, diagnostics, bounds, completion barrier, and session/process isolation tests. Pooling and
+cross-invocation session reuse remain deferred.
 
 ### Complete unpublished public package candidate
 
-**Entry:** Native Codex adapter conformance, Native Claude adapter conformance, and ACP adapter conformance all pass the same extended harness and their wire-specific suites.
+**Entry:** Native Codex, then Native Claude, then ACP adapter conformance each pass the provider-neutral frozen real-process
+harness and their wire-specific suites.
 
 **Owns:** the complete curated root exports, public types, declarations, consumer examples, final documentation reconciliation,
 and exact packed-package proof.
@@ -441,18 +465,18 @@ not edited in place.
 
 ## 10. Risks and controls
 
-| Risk                                                 | Consequence                                                                                                                     | Control                                                                                                                                                                                                                                                                                                                                |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Provider CLI or ACP drift                            | Parsers or permission/cancellation mappings silently stop matching real tools.                                                  | Provider and platform conformance research exact versions and fixtures; strict probes; wire-specific tests; a definition/package version change for changed behavior.                                                                                                                                                                  |
-| A first provider shapes the core                     | Later adapters require parallel result or lifecycle paths.                                                                      | The shared harness is established by Deterministic lifecycle and result conformance and Real process, filesystem, security, cancellation, and shutdown conformance before all provider adapter conformance work; no provider-id branches in the manager; all three provider adapter conformance work items instantiate the same suite. |
-| Legacy unbounded buffers or queues are copied        | Memory, audit files, or subscriber delivery can grow without limit.                                                             | Port behavior only; Human approval of contract decisions owns every collection/byte bound; Real process, filesystem, security, cancellation, and shutdown conformance proves truncation and backpressure behavior.                                                                                                                     |
-| Cross-platform process ownership cannot be confirmed | Shutdown can falsely report safety while a child survives.                                                                      | Provider and platform conformance research support matrix; Real process, filesystem, security, cancellation, and shutdown conformance real kill/reap tests; fail-closed `shutdown_failed`; unsupported cells are explicit.                                                                                                             |
-| Filesystem atomicity differs                         | Existing evidence can be overwritten or a result can be falsely claimed durable.                                                | Provider and platform conformance research filesystem matrix; exclusive leaf and hard-link proof; late-I/O typed completion; no adoption or replacing rename.                                                                                                                                                                          |
-| Secret redaction misses chunk boundaries             | Credentials reach events, files, faults, or completed records.                                                                  | Human approval of contract decisions algorithm decision; Real process, filesystem, security, cancellation, and shutdown conformance split/overlap/final-carry tests before every sink.                                                                                                                                                 |
-| Public API is exposed incrementally                  | Consumers bind to partial or contradictory declarations.                                                                        | Empty root until all provider adapter conformance work is complete; one Complete unpublished public package candidate export and packed-consumer gate.                                                                                                                                                                                 |
-| Unpublished cross-repo consumption is not exact      | One-way orchestrator cutover tests a different artifact from the reviewed Complete unpublished public package candidate output. | Human approval of the exact package artifact and consumer candidate version, commit, tarball digest, dependency, and lockfile acceptance.                                                                                                                                                                                              |
-| Human-gate policy leaks into the package             | Process-local completion begins driving durable workflow transitions.                                                           | Provider-neutral JSON result only; One-way orchestrator cutover consumer mapping tests; durable gate creation/resume stays in orchestrator.                                                                                                                                                                                            |
-| Sequential merges are mistaken for completeness      | One adapter or narrow test lane is reported as the finished AgentManager.                                                       | Roadmap responsibility status is explicit; only the Complete unpublished public package candidate after all three provider adapter conformance work items may claim completeness.                                                                                                                                                      |
+| Risk                                                 | Consequence                                                                                                                     | Control                                                                                                                                                                                                                    |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Provider CLI or ACP drift                            | Parsers or permission/cancellation mappings silently stop matching real tools.                                                  | Provider and platform conformance research exact versions and fixtures; strict probes; wire-specific tests; a definition/package version change for changed behavior.                                                      |
+| A first provider shapes the core                     | Later adapters require parallel result or lifecycle paths.                                                                      | The provider-neutral frozen real-process harness is established before the strict Native Codex, Native Claude, ACP sequence; no provider-id branches in the manager; every adapter instantiates that same suite.           |
+| Legacy unbounded buffers or queues are copied        | Memory, audit files, or subscriber delivery can grow without limit.                                                             | Port behavior only; Human approval of contract decisions owns every collection/byte bound; Real process, filesystem, security, cancellation, and shutdown conformance proves truncation and backpressure behavior.         |
+| Cross-platform process ownership cannot be confirmed | Shutdown can falsely report safety while a child survives.                                                                      | Provider and platform conformance research support matrix; Real process, filesystem, security, cancellation, and shutdown conformance real kill/reap tests; fail-closed `shutdown_failed`; unsupported cells are explicit. |
+| Filesystem atomicity differs                         | Existing evidence can be overwritten or a result can be falsely claimed durable.                                                | Provider and platform conformance research filesystem matrix; exclusive leaf and hard-link proof; late-I/O typed completion; no adoption or replacing rename.                                                              |
+| Secret redaction misses chunk boundaries             | Credentials reach events, files, faults, or completed records.                                                                  | Human approval of contract decisions algorithm decision; Real process, filesystem, security, cancellation, and shutdown conformance split/overlap/final-carry tests before every sink.                                     |
+| Public API is exposed incrementally                  | Consumers bind to partial or contradictory declarations.                                                                        | Empty root until all provider adapter conformance work is complete; one Complete unpublished public package candidate export and packed-consumer gate.                                                                     |
+| Unpublished cross-repo consumption is not exact      | One-way orchestrator cutover tests a different artifact from the reviewed Complete unpublished public package candidate output. | Human approval of the exact package artifact and consumer candidate version, commit, tarball digest, dependency, and lockfile acceptance.                                                                                  |
+| Human-gate policy leaks into the package             | Process-local completion begins driving durable workflow transitions.                                                           | Provider-neutral JSON result only; One-way orchestrator cutover consumer mapping tests; durable gate creation/resume stays in orchestrator.                                                                                |
+| Sequential merges are mistaken for completeness      | One adapter or narrow test lane is reported as the finished AgentManager.                                                       | Roadmap responsibility status is explicit; only the Complete unpublished public package candidate after all three provider adapter conformance work items may claim completeness.                                          |
 
 ## 11. Open human decisions ordered by roadmap responsibility
 

@@ -29,6 +29,8 @@
   typed errors, and behavior behind explicit internal barrels.
 - [ADR-0008](./adr/0008-real-mechanics-supervision-boundary.md) — refine private multi-invocation process supervision,
   fresh launch evidence, and lifecycle-only event ownership.
+- [ADR-0009](./adr/0009-process-signal-authority.md) — отделить корреляцию сохранённой строки от права сигнализировать
+  процесс и зафиксировать Option A pre-acceptance lifecycle.
 
 ## Repository policy
 
