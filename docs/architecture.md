@@ -207,26 +207,27 @@ probes. A green empty graph alone is not accepted as evidence that the rules wor
 ## AgentManager boundary
 
 The manager owns a sealed definition registry and one process-local supervision domain. It may initialize from one
-consumer-supplied active snapshot set, list and probe agents,
-subscribe to events from all or one invocation, start and cancel work, list active and retained completed invocations,
-return the same terminal result through handle, lookup, wait, and terminal-event paths, and shut down every process it owns.
+consumer-supplied active snapshot set, list and probe agents, subscribe to lifecycle events from all or one invocation,
+start and cancel work, list active and retained completed invocations, return the same terminal result through handle,
+lookup, and wait paths, and shut down every process it owns. One manager may supervise multiple invocations; each accepted
+invocation owns one root process tree through private `ProcessManager` and `ManagedProcess` mechanics.
 
 The complete method set is summarized here only by responsibility; the
 [AgentManager v1 specification](./specs/agent-manager-v1.spec.md) owns signatures and behavior.
 
-| Responsibility             | API surface                                                      |
-| -------------------------- | ---------------------------------------------------------------- |
-| Composition and faults     | `createAgentManager`, `AgentManagerError`                        |
-| Local recovery barrier     | `initialize` with consumer-loaded active snapshots               |
-| Pure sealed-registry reads | `listAgents`, `getAgent`                                         |
-| Process-creating probe     | `probeAgent`                                                     |
-| Future event observation   | `subscribe` plus returned `Unsubscribe`                          |
-| Invocation acceptance      | `start` -> `AgentInvocationHandle`                               |
-| Process-local state reads  | `listInvocations`, `getInvocation`, `getResult`, `waitForResult` |
-| Handle synchronization     | handle `result`                                                  |
-| Cancellation               | handle `cancel`, manager `cancel`                                |
-| Process-local shutdown     | manager `shutdown`                                               |
-| Handle identity            | `invocationId`, immutable execution `pin`                        |
+| Responsibility               | API surface                                                      |
+| ---------------------------- | ---------------------------------------------------------------- |
+| Composition and faults       | `createAgentManager`, `AgentManagerError`                        |
+| Local recovery barrier       | `initialize` with consumer-loaded active snapshots               |
+| Pure sealed-registry reads   | `listAgents`, `getAgent`                                         |
+| Process-creating probe       | `probeAgent`                                                     |
+| Future lifecycle observation | `subscribe` plus returned `Unsubscribe`                          |
+| Invocation acceptance        | `start` -> `AgentInvocationHandle`                               |
+| Process-local state reads    | `listInvocations`, `getInvocation`, `getResult`, `waitForResult` |
+| Handle synchronization       | handle `result`                                                  |
+| Cancellation                 | handle `cancel`, manager `cancel`                                |
+| Process-local shutdown       | manager `shutdown`                                               |
+| Handle identity              | `invocationId`, immutable execution `pin`                        |
 
 Construction accepts an `ActiveInvocationStateSink` with `save` and `remove` only. The consumer loads active rows and passes
 them to `initialize()`; the manager never queries a database. Initialization is one-shot and concurrency-safe. Before it
@@ -268,6 +269,15 @@ credentials. No child receives wholesale `process.env`; secret values join strea
 discarded after finalization. Inherited and variable values are deliberately non-confidential and cannot use credential-like
 names.
 
+Immediately before output-leaf claim and invocation spawn, the manager checks platform eligibility, freshly resolves the
+definition command, and proves its required strict-SemVer version probe. It launches that resolved absolute executable and
+retains only path/version launch evidence. A preflight failure, including `revo.agent.platform_unsupported`, occurs before
+claim or spawn. This proof is separate from ADR-0006 post-spawn process fingerprinting, which establishes recovery identity.
+Output-leaf claim and insertion of the `starting` invocation into the private active registry are one synchronous,
+non-re-entrant acceptance transition. Shutdown either wins before that transition, leaving no leaf, handle, or process, or
+drains the registered invocation through ordinary typed terminal handling; the consumer-backed post-spawn snapshot is a
+separate later operation.
+
 Definitions are data; protocol drivers, result parsers, permission translators, process execution, and filesystem behavior
 are package code. Adding an agent that uses existing strategies requires a new versioned definition, not an agent-id branch
 in manager or consumer code. Adding genuinely new protocol or parsing behavior requires a package change and conformance
@@ -285,9 +295,10 @@ Active-state recovery v1 is local POSIX functionality for `darwin` and `linux`. 
 process group. A bounded post-spawn sequence inspects the new child and creates opaque `sha256:<lowercase hex>` over
 canonical, versioned, package-owned OS identity fields: process creation identity/time, resolved executable identity/path,
 PID/process group, and local boot/session discriminator when supplied. It never fingerprints argv, environment, prompt,
-credentials, or caller data. Invocation wall-clock time starts at successful spawn. Capture/save timeout kills and reaps
-before start rejects. Unsupported platforms keep the existing non-recovery invocation path but accept only an empty recovery
-set; v1 makes no Windows fingerprint or process-tree recovery promise.
+credentials, or caller data. Invocation wall-clock time starts at successful spawn. After acceptance, capture/save timeout
+kills and reaps before the handle exposes one typed terminal result rather than a `start()` rejection. Unsupported platforms
+keep the existing non-recovery invocation path but accept only an empty recovery set; v1 makes no Windows fingerprint or
+process-tree recovery promise.
 
 The consumer-supplied row list is trusted selection/provenance input. The package does not prove ownership; exact fingerprint
 comparison only protects against PID reuse and identity drift. An unknown/mismatched pin or live fingerprint mismatch is
@@ -321,11 +332,13 @@ same-directory temp plus non-replacing hard link. The manager never derives hier
 chooses retention for consumer evidence. Controlled completion deletes only manager-owned scratch/temp paths; crash residue
 may survive until consumer result recovery or retention removes the directory.
 
-Events, stream data, result diagnostics, and files are bounded and redacted before leaving their owning boundary. The event
-recorder reserves a relationally valid tail for one truncation diagnostic and one terminal event. Late I/O failure may leave
-`result.json` absent or omit the terminal NDJSON line; those are incomplete audit records. The live manager still commits one
-completed record and delivers exactly one process-local `invocation.finished`. Synchronous listeners do not create hidden
-queues; listener failures are isolated from execution.
+Events, stream data, result diagnostics, and files are bounded and redacted before leaving their owning boundary. Public
+events and `events.ndjson` are lifecycle-only: `invocation.finished` signals result availability, while streams, diagnostics,
+files, and results remain in the bounded file and result contracts. The event recorder reserves a relationally valid terminal
+event tail. Late I/O failure may leave `result.json` absent or omit the terminal NDJSON line; those are incomplete audit
+records. The live manager still commits one completed record and delivers exactly one process-local `invocation.finished`.
+Synchronous listeners do not create hidden queues; listener failures are isolated from execution. Active-run capacity and
+event fanout remain deferred; this document does not invent numeric limits for them.
 
 ## ACP boundary
 

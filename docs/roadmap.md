@@ -19,9 +19,11 @@ their respective contract status. This roadmap may be revised when explicit rese
 an unimplemented target appear shipped. The root export remains empty until all provider adapter conformance work is complete.
 
 The boundary is already decided by [ADR-0001](./adr/0001-agent-runtime-boundary.md),
-[ADR-0002](./adr/0002-agent-manager-consumer-boundary.md), and
-[ADR-0003](./adr/0003-invocation-output-recording.md). Research may refine the draft specification. A finding that changes an
-accepted decision requires a new refining, amending, or superseding ADR and human approval before implementation continues.
+[ADR-0002](./adr/0002-agent-manager-consumer-boundary.md),
+[ADR-0003](./adr/0003-invocation-output-recording.md), and refined by
+[ADR-0008](./adr/0008-real-mechanics-supervision-boundary.md). Research may refine the draft specification. A finding that
+changes an accepted decision requires a new refining, amending, or superseding ADR and human approval before implementation
+continues.
 
 ## 2. Fixed decisions
 
@@ -42,6 +44,15 @@ The roadmap carries these approved constraints:
    persist, resume, or advance a durable human gate.
 8. Cross-repository cutover is one-way. One-way orchestrator cutover does not introduce dual routing, compatibility fallbacks, or implicit provider
    selection.
+9. One process-local manager may supervise multiple consumer invocations, but every accepted invocation has one root process
+   tree. `ProcessManager` and `ManagedProcess` remain private TypeScript/Node mechanics.
+10. `launch.versionProbe` is required. Each start freshly resolves and proves strict SemVer immediately before output-leaf
+    claim and invocation spawn, then launches the resolved absolute executable. Path/version launch evidence and ADR-0006
+    post-spawn process fingerprints have separate purposes.
+11. Events are lifecycle-only; `invocation.finished` signals result availability through the result APIs. Bounded redacted
+    streams, raw response, typed terminal result, and exact invocation files remain their own contracts.
+12. This documentation decision records no implementation, provider/CI/platform conformance, or root export. Active-run
+    numeric capacity and event fanout remain deferred rather than receiving invented values.
 
 ## 3. Extraction approaches
 
@@ -101,11 +112,11 @@ All paths in the following table are **sibling-repository paths**, relative to t
 
 **Entry:** the current draft specification, accepted ADRs, architecture, testing policy, and the legacy evidence matrix above.
 
-Contract decision research produces evidence-backed answers for contract gaps. It does not write production code. At minimum it must research closed
-JSON Schema semantics and evaluator responsibility; RFC 8785 implementation responsibility; cancellation when a definition
-declares no protocol cancellation; the acceptance/output-claim commit boundary; fault precedence; streaming redaction;
-workspace/CWD and symlink policy; manager-owned concurrency and listener bounds; idle-activity semantics; and public
-unsupported-platform behavior.
+Contract decision research produces evidence-backed answers for remaining contract gaps. It does not write production code.
+The approved real-mechanics documentation contract now owns fresh version-probe preflight, lifecycle-only events,
+first-commit terminal arbitration, terminal-only idle timing, and the exact streaming-redaction algorithm. Remaining research
+covers cancellation when a definition declares no protocol cancellation; filesystem trust; active-run capacity/event fanout;
+and public platform, CI, and provider support.
 
 **Exit:** every Human approval of contract decisions item has one explicit decision, supporting source or experiment, affected
 specification clauses, and an identified verification owner. If evidence contradicts an accepted ADR, Contract decision research
@@ -121,18 +132,19 @@ the later roadmap responsibility that consumes it.
 - [x] The supported JSON Schema draft 2020-12 surface is closed precisely, including unknown properties, `$ref`, vocabularies,
       formats, and bounded diagnostics; the evaluator and RFC 8785 dependency or package-owned implementation are approved.
 - [ ] `capabilities.cancellation: false` has one observable manager-cancel and shutdown behavior.
-- [ ] Acceptance is located relative to id reservation, output-leaf claim, active registration, shutdown racing, cleanup, and
-      handle return; every losing path has explicit evidence ownership.
-- [ ] Simultaneous cancellation, wall/idle timeout, process exit, protocol failure, result failure, scratch cleanup failure,
-      and result-publication failure have a complete fault/terminal precedence rule.
-- [ ] Streaming redaction defines literal and built-in patterns, replacement text, per-channel carry behavior, overlap rules,
-      buffer disposal, and all pre-sink applications.
+- [x] Acceptance is located relative to id reservation, fresh launch proof, output-leaf claim, active registration, shutdown
+      racing, cleanup, and handle return; every losing path has explicit evidence ownership.
+- [x] Simultaneous cancellation, wall/idle timeout, process exit, protocol failure, result failure, scratch cleanup failure,
+      and result-publication failure use one first-terminal-commit arbitration rule without inferring an unapproved
+      pre-commit priority.
+- [x] Streaming redaction defines literal and built-in patterns, `[REDACTED]` replacement text, per-channel 64 KiB carry,
+      leftmost-longest overlap selection, final flush, mutable-buffer clearing, and all pre-sink applications.
 - [ ] Workspace and CWD rules define absolute normalization, existence, directory type, symlink/realpath behavior, and the
       intentionally absent workspace/output containment requirement.
-- [ ] Active invocation, in-flight probe, pending protocol request, listener, and internal transport-write bounds are either
-      package limits or explicitly consumer-governed with a reason.
-- [ ] Idle activity defines exactly which bounded stdout, stderr, and valid protocol events reset the deadline. Legacy
-      heartbeat and operation counters are not adopted without this decision.
+- [ ] Active-run numeric capacity and event fanout are explicitly bounded or consumer-governed. This documentation contract
+      deliberately creates no numeric values for either topic.
+- [x] Idle timing is terminal-only: stdout, stderr, valid protocol frames, listeners, file work, and internal timers do not
+      reset it. Legacy heartbeat and operation counters are not adopted.
 - [ ] The proposed provider-version and OS/filesystem support matrix for Provider and platform conformance research is explicit,
       including unsupported-cell behavior.
 - [ ] Shared-conformance evidence is classified as deterministic real-process fixtures, credentialed live-provider runs, or a
@@ -203,20 +215,37 @@ adapter conformance work even if legacy provider tests are green.
 
 ## 7. Corrected responsibility graph
 
+The approved real-mechanics implementation sequence is deliberately narrower than a provider rollout. Documentation is the
+current completed contract-recording step; every following stage remains target work and does not change the empty root export.
+Full Provider and platform conformance research is a non-waivable entry prerequisite for every real-process stage below; this
+roadmap does not claim that research is complete.
+
+| Sequence | Target responsibility                 | Entry gate                                                                                 | Exit boundary                                                                                                                                                                                 |
+| -------- | ------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1        | Documentation contract                | Approved documentation scope.                                                              | ADR-0008, draft spec, roadmap, and required consistency surfaces agree; no code or conformance claim follows.                                                                                 |
+| 2        | Foundation                            | Documentation contract.                                                                    | Private multi-invocation supervision, fresh launch preflight boundary, lifecycle/result API seam, and deterministic tests exist without claiming real cancellation or filesystem publication. |
+| 3        | Cancellation, deadlines, and shutdown | Foundation plus full Provider and platform conformance research.                           | The approved terminal-only idle, first-commit arbitration, cancellation, kill/reap, and shutdown rules pass their owning real-process tests.                                                  |
+| 4        | Filesystem publication                | Cancellation/deadline/shutdown stage plus full Provider and platform conformance research. | Exact leaf claim, bounded redacted evidence, scratch lifecycle, and non-replacing `result.json` publication pass their owning filesystem tests.                                               |
+| 5        | Supported-cell closure                | Filesystem publication plus full Provider and platform conformance research.               | Approved platform/filesystem cells, Windows/CI posture, and provider evidence are explicitly supported or fail closed before adapter/public-package completion.                               |
+
+Residual blockers remain: filesystem trust and provenance; exact supported platform/filesystem cells; Windows behavior; CI
+evidence; provider versions/wires; `capabilities.cancellation: false`; and any consumer-facing capacity/fanout decision. No
+stage may treat an unsupported or untested cell as passed.
+
 ```text
-Contract decision research
+Documentation contract
         |
         v
-Human approval of contract decisions
+Foundation
         |
         v
-Private agent discovery and executable probing
+Cancellation, deadlines, and shutdown
         |
         v
-Deterministic lifecycle and result conformance
+Filesystem publication
         |
         v
-Real process, filesystem, security, cancellation, and shutdown conformance
+Supported-cell closure
         |
         +--> Native Codex adapter conformance --+
         +--> Native Claude adapter conformance -+--> Complete unpublished public package candidate
@@ -227,7 +256,9 @@ Real process, filesystem, security, cancellation, and shutdown conformance
                                                                v
                                              One-way orchestrator cutover
 
-Provider and platform conformance research --> Real process, filesystem, security, cancellation, and shutdown conformance
+Provider and platform conformance research --> Cancellation, deadlines, and shutdown
+Provider and platform conformance research --> Filesystem publication
+Provider and platform conformance research --> Supported-cell closure
 Provider and platform conformance research --> Native Codex adapter conformance
 Provider and platform conformance research --> Native Claude adapter conformance
 Provider and platform conformance research --> ACP adapter conformance
@@ -276,7 +307,7 @@ parsing/object/closed consumer-schema-profile decisions behind ports; completed 
 **base shared conformance harness** that future adapters must instantiate.
 
 **Exit:** the fake ports prove preflight rejection versus post-acceptance typed completion, exactly one terminal transition,
-the same immutable result through handle/lookup/wait/event paths, and bounded FIFO completed retention. The harness expresses
+the same immutable result through handle/lookup/wait paths, terminal-event result availability, and bounded FIFO completed retention. The harness expresses
 provider-neutral scenarios without branching on `codex`, `claude`, or `acp`.
 
 Deterministic lifecycle and result conformance MUST NOT claim a real child process, secure filesystem publication, production cancellation, kill/reap, streaming
@@ -284,7 +315,9 @@ redaction, or provider success. It is an internal lifecycle/result proof only. T
 
 ### Real process, filesystem, security, cancellation, and shutdown conformance
 
-**Entry:** Deterministic lifecycle and result conformance base harness green.
+**Entry:** Deterministic lifecycle and result conformance base harness green and full Provider and platform conformance
+research complete. This entry requirement applies to its cancellation/deadline/shutdown and filesystem-publication work; it
+does not claim that the research is complete today.
 
 **Owns:** real direct spawn and stdio ports; explicit environment capture; streaming redaction; byte, item, queue, and
 retention bounds; workspace and output preflight; exclusive output leaf; owner-only scratch; bounded event/stdout/stderr/raw
@@ -429,12 +462,8 @@ These decisions are deliberately unresolved until their owning gate. They MUST N
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Human approval of contract decisions                                                                                                                              | Acceptance of the closed consumer-schema profile and separate Zod/Ajv boundary; selection and audit of the exact-pinned external RFC 8785 implementation before Private agent discovery and executable probing. |
 | Human approval of contract decisions                                                                                                                              | Observable cancellation/shutdown behavior for definitions without protocol cancellation.                                                                                                                        |
-| Human approval of contract decisions                                                                                                                              | Acceptance commit, output-claim, shutdown-race, and cleanup ordering.                                                                                                                                           |
-| Human approval of contract decisions                                                                                                                              | Complete fault and terminal precedence across concurrent failure sources.                                                                                                                                       |
-| Human approval of contract decisions                                                                                                                              | Exact streaming redaction patterns, carry/overlap rules, and replacement semantics.                                                                                                                             |
 | Human approval of contract decisions                                                                                                                              | Workspace/CWD existence, symlink, realpath, and normalization policy.                                                                                                                                           |
-| Human approval of contract decisions                                                                                                                              | Package versus consumer ownership of active/probe/protocol/listener/write bounds.                                                                                                                               |
-| Human approval of contract decisions                                                                                                                              | Exact idle-activity definition; legacy heartbeat/operation behavior is not automatically inherited.                                                                                                             |
+| Human approval of contract decisions                                                                                                                              | Active-run numeric capacity and event-fanout ownership/bounds.                                                                                                                                                  |
 | Human approval of contract decisions                                                                                                                              | Proposed provider versions, supported OS/filesystem cells, and stable unsupported behavior for Provider and platform conformance research.                                                                      |
 | Human approval of contract decisions                                                                                                                              | Required deterministic versus credentialed evidence for shared conformance.                                                                                                                                     |
 | Provider and platform conformance research and Private agent discovery and executable probing                                                                     | Approval of any executable-probe or platform-unavailable observation that changes a Human approval of contract decisions decision, the draft spec, or an accepted ADR.                                          |

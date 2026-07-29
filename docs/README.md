@@ -27,6 +27,8 @@
   safely clean up non-reconnectable local processes after restart.
 - [ADR-0007](./adr/0007-separate-contracts-policy-errors-and-behavior.md) — separate portable contracts, immutable policy,
   typed errors, and behavior behind explicit internal barrels.
+- [ADR-0008](./adr/0008-real-mechanics-supervision-boundary.md) — refine private multi-invocation process supervision,
+  fresh launch evidence, and lifecycle-only event ownership.
 
 ## Repository policy
 

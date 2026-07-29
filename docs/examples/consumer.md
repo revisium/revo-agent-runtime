@@ -160,9 +160,11 @@ stopAll();
 await manager.shutdown('Consumer is stopping');
 ```
 
-The output directory leaf must not exist before `start()`. The manager claims it for one invocation and records bounded,
-redacted `events.ndjson`, `stdout.log`, `stderr.log`, optional failure-only `raw-final-response.txt`, and `result.json`.
-Live events are future-only; retained completion remains available through `getResult()` and `waitForResult()` until bounded
+The output directory leaf must not exist before `start()`. The manager freshly proves the resolved executable path and strict
+SemVer version before it claims that leaf or spawns the invocation, then records bounded, redacted `events.ndjson`,
+`stdout.log`, `stderr.log`, optional failure-only `raw-final-response.txt`, and `result.json`. Live events are future-only
+lifecycle notifications; `invocation.finished` signals result availability through `getResult()` and `waitForResult()`.
+Streams, diagnostics, file manifests, and results are not event payloads. Retained completion remains available until bounded
 process-local eviction.
 
 `activeInvocationRepository` is consumer code. It stores only the current `running | cancelling` snapshots supplied through
