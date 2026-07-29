@@ -98,9 +98,7 @@ test('keeps finalizing work out of completed lookup and terminal delivery until 
   const result = await accepted.handle.result();
   expect(result).toEqual({ status: 'succeeded', value: { ok: true } });
   expect(subject.manager.getResult('finalizing-release')).toEqual({ state: 'completed', result });
-  expect(events).toEqual([
-    { type: 'invocation.finished', invocationId: 'finalizing-release', result },
-  ]);
+  expect(events).toEqual([{ type: 'invocation.finished', invocationId: 'finalizing-release' }]);
   expect(
     subject.output.calls().filter((call) => call.type === 'record-terminal-result'),
   ).toHaveLength(1);
@@ -144,7 +142,7 @@ test.each([
       reason: 'output_write_failed',
     });
     expect(subject.manager.getResult(invocationId)).toEqual({ state: 'completed', result });
-    expect(events).toEqual([{ type: 'invocation.finished', invocationId, result }]);
+    expect(events).toEqual([{ type: 'invocation.finished', invocationId }]);
     expect(
       subject.output.calls().filter((call) => call.type === 'record-terminal-result'),
     ).toHaveLength(1);
@@ -173,10 +171,10 @@ test('delivers one canonical result after lookup visibility and isolates listene
     expect(lookup.state).toBe('completed');
     if (lookup.state !== 'completed')
       throw new Error('Expected completed lookup before terminal delivery.');
-    expect(lookup.result).toBe(event.result);
+    expect('result' in event).toBe(false);
     expect(handleResolved).toBe(false);
     expect(waiterResolved).toBe(false);
-    delivered.push(event.result);
+    delivered.push(lookup.result);
   });
   const filtered = subject.manager.subscribe({ invocationId: 'other' }, (event) =>
     delivered.push(event),
@@ -216,10 +214,8 @@ test('delivers one canonical result after lookup visibility and isolates listene
   await waitForLifecycleConformanceQuiescence();
   subject.execution.settleNaturalCompletion(2, new TextEncoder().encode('{"id":"later"}'));
   await waitForLifecycleConformanceQuiescence();
-  const secondResult = await second.handle.result();
-  expect(lateEvents).toEqual([
-    { type: 'invocation.finished', invocationId: 'later', result: secondResult },
-  ]);
+  await second.handle.result();
+  expect(lateEvents).toEqual([{ type: 'invocation.finished', invocationId: 'later' }]);
   expect(throwingCalls).toBe(1);
 });
 

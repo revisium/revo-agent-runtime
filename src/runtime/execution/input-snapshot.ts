@@ -1,4 +1,5 @@
 import { AGENT_MANAGER_LIMITS } from '../policy/index.js';
+import type { AgentRef } from '../spec/index.js';
 
 const maximumInvocationIdBytes = 256;
 const maximumMetadataBytes = 65_536;
@@ -384,8 +385,9 @@ const readRequest = (value: unknown): Readonly<Record<string, unknown>> | undefi
     for (const key in value) {
       entries += 1;
       if (
-        entries > 4 ||
+        entries > 5 ||
         (key !== 'invocationId' &&
+          key !== 'agent' &&
           key !== 'metadata' &&
           key !== 'resultSchema' &&
           key !== 'wallClockTimeoutMs')
@@ -401,7 +403,37 @@ const readRequest = (value: unknown): Readonly<Record<string, unknown>> | undefi
   }
 };
 
+const copyAgentRef = (value: unknown): AgentRef | undefined => {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== 2 || !keys.includes('id') || !keys.includes('version')) return undefined;
+  const id = Object.getOwnPropertyDescriptor(value, 'id');
+  const version = Object.getOwnPropertyDescriptor(value, 'version');
+  if (
+    id === undefined ||
+    version === undefined ||
+    !('value' in id) ||
+    !('value' in version) ||
+    !id.enumerable ||
+    !version.enumerable ||
+    typeof id.value !== 'string' ||
+    typeof version.value !== 'string' ||
+    id.value.length === 0 ||
+    version.value.length === 0 ||
+    id.value.length > maximumInvocationIdBytes ||
+    version.value.length > maximumInvocationIdBytes ||
+    !validString(id.value) ||
+    !validString(version.value) ||
+    encoder.encode(id.value).byteLength > maximumInvocationIdBytes ||
+    encoder.encode(version.value).byteLength > maximumInvocationIdBytes
+  )
+    return undefined;
+  return Object.freeze({ id: id.value, version: version.value });
+};
+
 export class InvocationInputSnapshot {
+  readonly agent: AgentRef | undefined;
   readonly invocationId: string;
   readonly metadata: SnapshotRecord | undefined;
   readonly resultSchema: SnapshotRecord;
@@ -409,12 +441,14 @@ export class InvocationInputSnapshot {
 
   private constructor(
     input: Readonly<{
+      agent: AgentRef | undefined;
       invocationId: string;
       metadata: SnapshotRecord | undefined;
       resultSchema: SnapshotRecord;
       wallClockTimeoutMs: number;
     }>,
   ) {
+    this.agent = input.agent;
     this.invocationId = input.invocationId;
     this.metadata = input.metadata;
     this.resultSchema = input.resultSchema;
@@ -436,6 +470,8 @@ export class InvocationInputSnapshot {
       encoder.encode(input.invocationId).byteLength > maximumInvocationIdBytes
     )
       return undefined;
+    const agent = copyAgentRef(input.agent);
+    if (input.agent !== undefined && agent === undefined) return undefined;
     const metadata = input.metadata === undefined ? undefined : copyMetadata(input.metadata);
     if (input.metadata !== undefined && metadata === undefined) return undefined;
     const resultSchema = copyMetadata(
@@ -453,6 +489,7 @@ export class InvocationInputSnapshot {
       return undefined;
     return new InvocationInputSnapshot(
       Object.freeze({
+        agent,
         invocationId: input.invocationId,
         metadata,
         resultSchema,

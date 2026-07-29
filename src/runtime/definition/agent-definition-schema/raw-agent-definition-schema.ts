@@ -49,7 +49,7 @@ const argumentTemplateSchema = z.discriminatedUnion('kind', [
 const launchSchema = z.strictObject({
   command: boundedString(1, AGENT_RUNTIME_LIMITS.argumentBytes),
   args: z.array(argumentTemplateSchema).max(AGENT_RUNTIME_LIMITS.argumentCount),
-  versionProbe: versionProbeSchema.exactOptional(),
+  versionProbe: versionProbeSchema,
 });
 
 const protocolSchema = z.strictObject({

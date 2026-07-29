@@ -154,7 +154,6 @@ const classifyObservation = (
     );
 
   const versionProbe = target.definition.launch.versionProbe;
-  if (versionProbe === undefined) return internalFailure();
   const parsed = parseVersionOutput({
     bytes: versionProbe.stream === 'stdout' ? observation.stdout : observation.stderr,
     prefix: versionProbe.prefix,
@@ -197,7 +196,6 @@ const evaluateVersionProbe = async (
   port: ExecutableProbePort,
 ): Promise<AgentProbeResult> => {
   const versionProbe = target.definition.launch.versionProbe;
-  if (versionProbe === undefined) return internalFailure();
   const running = await port.startVersionProbe({
     executable,
     args: versionProbe.args,
@@ -262,8 +260,6 @@ export const probeExecutable = async (
     }
     if (resolution.status !== 'resolved' || typeof resolution.executable !== 'string')
       return internalFailure();
-    if (target.definition.launch.versionProbe === undefined)
-      return available(target, resolution.executable);
     return await evaluateVersionProbe(target, resolution.executable, port);
   } catch (error: unknown) {
     if (error instanceof AgentManagerError && evaluatorInternalErrors.has(error)) throw error;

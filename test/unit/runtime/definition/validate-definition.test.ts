@@ -134,7 +134,11 @@ const acpDefinition = (overrides: Parameters<typeof buildAgentDefinition>[0] = {
   const { constraints: _constraints, ...definition } = buildAgentDefinition({
     protocol: { driver: 'acp/v1', permissionStrategy: 'acp/v1' },
     delivery: { prompt: 'protocol', resultSchema: 'protocol', result: 'protocol' },
-    launch: { command: '/fixture/bin/agent', args: [] },
+    launch: {
+      command: '/fixture/bin/agent',
+      args: [],
+      versionProbe: { args: ['--version'], stream: 'stdout', timeoutMs: 1_000 },
+    },
   });
 
   return { ...definition, ...overrides };
@@ -208,7 +212,11 @@ test.each([
     buildAgentDefinition({
       protocol: { driver: 'acp/v1', permissionStrategy: 'acp/v1' },
       delivery: { prompt: 'protocol', resultSchema: 'protocol', result: 'stdout' },
-      launch: { command: '/fixture/bin/agent', args: [] },
+      launch: {
+        command: '/fixture/bin/agent',
+        args: [],
+        versionProbe: { args: ['--version'], stream: 'stdout', timeoutMs: 1_000 },
+      },
     }),
     '/definitions/0/delivery/result',
   ],
@@ -580,7 +588,11 @@ test.each([
   [
     'argument prompt without exactly one prompt template',
     nativeDefinition({
-      launch: { command: '/fixture/bin/agent', args: [{ kind: 'result-schema' }] },
+      launch: {
+        command: '/fixture/bin/agent',
+        args: [{ kind: 'result-schema' }],
+        versionProbe: { args: ['--version'], stream: 'stdout', timeoutMs: 1_000 },
+      },
     }),
   ],
   [
@@ -590,6 +602,7 @@ test.each([
       launch: {
         command: '/fixture/bin/agent',
         args: [{ kind: 'prompt' }, { kind: 'result-schema' }],
+        versionProbe: { args: ['--version'], stream: 'stdout', timeoutMs: 1_000 },
       },
     }),
   ],
@@ -602,7 +615,11 @@ test.each([
   [
     'argument result schema without exactly one result-schema template',
     nativeDefinition({
-      launch: { command: '/fixture/bin/agent', args: [{ kind: 'prompt' }] },
+      launch: {
+        command: '/fixture/bin/agent',
+        args: [{ kind: 'prompt' }],
+        versionProbe: { args: ['--version'], stream: 'stdout', timeoutMs: 1_000 },
+      },
     }),
   ],
   [
@@ -612,12 +629,19 @@ test.each([
       launch: {
         command: '/fixture/bin/agent',
         args: [{ kind: 'prompt' }, { kind: 'result-schema' }],
+        versionProbe: { args: ['--version'], stream: 'stdout', timeoutMs: 1_000 },
       },
     }),
   ],
   [
     'protocol result schema with a result-schema template',
-    acpDefinition({ launch: { command: '/fixture/bin/agent', args: [{ kind: 'result-schema' }] } }),
+    acpDefinition({
+      launch: {
+        command: '/fixture/bin/agent',
+        args: [{ kind: 'result-schema' }],
+        versionProbe: { args: ['--version'], stream: 'stdout', timeoutMs: 1_000 },
+      },
+    }),
   ],
 ] as const)('rejects each template-coherence rule: %s', (_name, definition) => {
   expect(faultFrom(() => validateManagerOptions({ definitions: [definition] }))).toEqual(
@@ -873,17 +897,6 @@ test.each([
     }),
     'definition_bytes',
     '/definitions/0',
-  ],
-  [
-    'an executable constraint without a probe',
-    nativeDefinition({
-      launch: {
-        command: '/fixture/bin/agent',
-        args: [{ kind: 'prompt' }, { kind: 'result-schema' }],
-      },
-    }),
-    'executable_version_constraint',
-    '/definitions/0/constraints/executableVersion',
   ],
   [
     'a malformed executable constraint',

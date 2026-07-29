@@ -16,15 +16,12 @@ const flushMicrotasks = async (remaining = 12): Promise<void> => {
 
 const reference = (id: string, version = '1.0.0'): AgentRef => ({ id, version });
 
-const withoutVersionProbe = (id: string, version = '1.0.0'): AgentDefinitionInput =>
+const requiredVersionProbe = (id: string, version = '1.0.0'): AgentDefinitionInput =>
   buildAgentDefinition({
     id,
     version,
     displayName: id,
-    launch: {
-      command: `/fixture/bin/${id}`,
-      args: [{ kind: 'prompt' }, { kind: 'result-schema' }],
-    },
+    launch: { ...buildAgentDefinition().launch, command: `/fixture/bin/${id}` },
     constraints: { platforms: ['linux'] },
   });
 
@@ -93,8 +90,9 @@ test('renames the internal discovery factory without retaining an alias', () => 
 });
 
 test('probes one exact agent through a new admitted physical operation', async () => {
-  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([requiredVersionProbe('a')]);
   port.enqueueResolution({ status: 'resolved', executable: '/resolved/a' });
+  port.enqueueVersionStart(exited());
 
   const result = await discovery.probeAgent(reference('a'));
 
@@ -103,12 +101,15 @@ test('probes one exact agent through a new admitted physical operation', async (
     agent: reference('a'),
     executable: '/resolved/a',
   });
-  expect(port.calls()).toEqual([{ type: 'resolve', command: '/fixture/bin/a' }]);
+  expect(port.calls()).toEqual([
+    { type: 'resolve', command: '/fixture/bin/a' },
+    expect.objectContaining({ type: 'start-version', executable: '/resolved/a' }),
+  ]);
   expect(Object.isFrozen(result)).toBe(true);
 });
 
 test('propagates the evaluator-owned internal fault through one probe without raw error text', async () => {
-  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([requiredVersionProbe('a')]);
   port.enqueueResolution(new Error('single raw port failure'));
 
   const operation = discovery.probeAgent(reference('a'));
@@ -117,7 +118,7 @@ test('propagates the evaluator-owned internal fault through one probe without ra
 });
 
 test('rejects malformed and unknown single references asynchronously before port observation', async () => {
-  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([requiredVersionProbe('a')]);
 
   const malformedReference = reference('a');
   Reflect.deleteProperty(malformedReference, 'version');
@@ -133,7 +134,7 @@ test('rejects malformed and unknown single references asynchronously before port
 });
 
 test('rejects malformed outer batch containers before registry or port observation', async () => {
-  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([requiredVersionProbe('a')]);
   const customPrototype: AgentRef[] = [reference('a')];
   Object.setPrototypeOf(customPrototype, null);
   const sparse = new Array<AgentRef>(1);
@@ -155,17 +156,21 @@ test('rejects malformed outer batch containers before registry or port observati
 });
 
 test('accepts a transparent array proxy when its observable shape is ordinary', async () => {
-  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([requiredVersionProbe('a')]);
   port.enqueueResolution({ status: 'resolved', executable: '/resolved/a' });
+  port.enqueueVersionStart(exited());
 
   const result = await discovery.probeAgents(new Proxy([reference('a')], {}));
 
   expect(result).toHaveLength(1);
-  expect(port.calls()).toEqual([{ type: 'resolve', command: '/fixture/bin/a' }]);
+  expect(port.calls()).toEqual([
+    { type: 'resolve', command: '/fixture/bin/a' },
+    expect.objectContaining({ type: 'start-version', executable: '/resolved/a' }),
+  ]);
 });
 
 test('prevalidates every batch input in order before it admits physical work', async () => {
-  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([requiredVersionProbe('a')]);
   const malformedReference = reference('bad');
   Reflect.deleteProperty(malformedReference, 'version');
 
@@ -182,7 +187,7 @@ test('prevalidates every batch input in order before it admits physical work', a
 });
 
 test('bounds batch length before effects and permits exactly one thousand duplicate refs', async () => {
-  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([requiredVersionProbe('a')]);
   const tooMany = Array.from({ length: 1_001 }, () => reference('a'));
   const sparseTooMany = new Array<AgentRef>(1_001);
 
@@ -203,14 +208,18 @@ test('bounds batch length before effects and permits exactly one thousand duplic
   expectPortUnobserved(port);
 
   port.enqueueResolution({ status: 'resolved', executable: '/resolved/a' });
+  port.enqueueVersionStart(exited());
   const result = await discovery.probeAgents(Array.from({ length: 1_000 }, () => reference('a')));
   expect(result).toHaveLength(1_000);
   expect(result.every((item) => item === result[0])).toBe(true);
-  expect(port.calls()).toEqual([{ type: 'resolve', command: '/fixture/bin/a' }]);
+  expect(port.calls()).toEqual([
+    { type: 'resolve', command: '/fixture/bin/a' },
+    expect.objectContaining({ type: 'start-version', executable: '/resolved/a' }),
+  ]);
 });
 
 test('returns package-owned frozen empty batch output without effects', async () => {
-  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([requiredVersionProbe('a')]);
 
   const result = await discovery.probeAgents([]);
 
@@ -220,13 +229,14 @@ test('returns package-owned frozen empty batch output without effects', async ()
 });
 
 test('preserves input order, unavailable positions, and duplicate result identity', async () => {
-  const available = withoutVersionProbe('available');
+  const available = requiredVersionProbe('available');
   const unavailable = buildAgentDefinition({
-    ...withoutVersionProbe('unavailable'),
+    ...requiredVersionProbe('unavailable'),
     constraints: { platforms: ['darwin'] },
   });
   const { discovery, port } = discoveryWithDefinitions([available, unavailable]);
   port.enqueueResolution({ status: 'resolved', executable: '/resolved/available' });
+  port.enqueueVersionStart(exited());
 
   const result = await discovery.probeAgents([
     reference('available'),
@@ -245,13 +255,17 @@ test('preserves input order, unavailable positions, and duplicate result identit
   const duplicate = result[0];
   expect(duplicate).toBeDefined();
   if (duplicate !== undefined) expect(Object.isFrozen(duplicate)).toBe(true);
-  expect(port.calls()).toEqual([{ type: 'resolve', command: '/fixture/bin/available' }]);
+  expect(port.calls()).toEqual([
+    { type: 'resolve', command: '/fixture/bin/available' },
+    expect.objectContaining({ type: 'start-version', executable: '/resolved/available' }),
+  ]);
 });
 
 test('does not cache or coalesce physical work across calls', async () => {
-  const { discovery, port } = discoveryWithDefinitions([withoutVersionProbe('a')]);
+  const { discovery, port } = discoveryWithDefinitions([requiredVersionProbe('a')]);
   for (let count = 0; count < 4; count += 1)
     port.enqueueResolution({ status: 'resolved', executable: `/resolved/a-${count}` });
+  for (let count = 0; count < 4; count += 1) port.enqueueVersionStart(exited());
 
   const singleOne = await discovery.probeAgent(reference('a'));
   const singleTwo = await discovery.probeAgent(reference('a'));
@@ -263,15 +277,19 @@ test('does not cache or coalesce physical work across calls', async () => {
   expect(batchOne[0]).not.toBe(batchTwo[0]);
   expect(port.calls()).toEqual([
     { type: 'resolve', command: '/fixture/bin/a' },
+    expect.objectContaining({ type: 'start-version', executable: '/resolved/a-0' }),
     { type: 'resolve', command: '/fixture/bin/a' },
+    expect.objectContaining({ type: 'start-version', executable: '/resolved/a-1' }),
     { type: 'resolve', command: '/fixture/bin/a' },
+    expect.objectContaining({ type: 'start-version', executable: '/resolved/a-2' }),
     { type: 'resolve', command: '/fixture/bin/a' },
+    expect.objectContaining({ type: 'start-version', executable: '/resolved/a-3' }),
   ]);
 });
 
 test('propagates the evaluator-owned internal fault after the whole batch wave settles', async () => {
   const { discovery, port } = discoveryWithDefinitions([
-    withoutVersionProbe('bad'),
+    requiredVersionProbe('bad'),
     withVersionProbe('held'),
   ]);
   port.enqueueResolution(new Error('raw port failure'));

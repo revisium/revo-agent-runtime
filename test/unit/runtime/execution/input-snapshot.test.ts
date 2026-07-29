@@ -56,6 +56,20 @@ test('rejects hostile and invalid snapshots without exposing an error', () => {
   expect(
     InvocationInputSnapshot.create({ resultSchema, invocationId: 'id', wallClockTimeoutMs: 999 }),
   ).toBeUndefined();
+  expect(
+    InvocationInputSnapshot.create({
+      resultSchema,
+      invocationId: 'id',
+      agent: { id: 'x'.repeat(257), version: '1.0.0' },
+    }),
+  ).toBeUndefined();
+  expect(
+    InvocationInputSnapshot.create({
+      resultSchema,
+      invocationId: 'id',
+      agent: { id: 'agent', version: '\ud800' },
+    }),
+  ).toBeUndefined();
 });
 
 test('uses iterative copy and freezing for a deep byte-valid metadata graph', () => {
