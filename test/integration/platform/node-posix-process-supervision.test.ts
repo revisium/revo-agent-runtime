@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, readlink, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, readlink, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -51,15 +51,16 @@ const readLinuxProcessRecord = async (pid: number, processGroupId: number) => {
 
 const waitForFileAttempt = async (path: string, attemptsRemaining: number): Promise<string> => {
   try {
-    return await readFile(path, 'utf8');
+    const content = await readFile(path, 'utf8');
+    if (content !== '') return content;
   } catch (error: unknown) {
     if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error;
-    if (attemptsRemaining === 1)
-      throw new Error(`Reference child did not create ${path}.`, { cause: error });
-
-    await delay(10);
-    return waitForFileAttempt(path, attemptsRemaining - 1);
   }
+
+  if (attemptsRemaining === 1) throw new Error(`Reference child did not populate ${path}.`);
+
+  await delay(10);
+  return waitForFileAttempt(path, attemptsRemaining - 1);
 };
 
 const waitForFile = (path: string): Promise<string> => waitForFileAttempt(path, 50);
@@ -74,6 +75,27 @@ const expectProcessGroupAbsent = (processGroupId: number): void => {
 
   throw new Error(`Process group ${processGroupId} is still live.`);
 };
+
+test.runIf(process.platform === 'linux')(
+  'waits for a reference child file to be populated after it is created',
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'revo-process-supervision-'));
+    try {
+      const path = join(directory, 'delayed-record');
+      const writer = (async (): Promise<void> => {
+        await writeFile(path, '');
+        await delay(20);
+        await writeFile(path, 'complete');
+      })();
+
+      const content = await waitForFile(path);
+      await writer;
+      expect(content).toBe('complete');
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  },
+);
 
 test.runIf(process.platform === 'linux')(
   'captures a candidate-host reference child in its own group with a canonical OS fingerprint',
