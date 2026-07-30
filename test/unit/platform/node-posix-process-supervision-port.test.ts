@@ -179,6 +179,17 @@ test('rejects unsupported hosts before spawn', async () => {
   expect(mocks.spawn).not.toHaveBeenCalled();
 });
 
+test('rejects spawn errors without an unhandled completion rejection', async () => {
+  const child = new FakeChild(undefined);
+  const failure = new Error('spawn failed');
+  mocks.spawn.mockReturnValue(child);
+
+  const starting = new NodePosixProcessSupervisionPort().start(request());
+  child.emit('error', failure);
+
+  await expect(starting).rejects.toBe(failure);
+});
+
 test('rejects a child without a positive pid', async () => {
   const child = new FakeChild(undefined);
   mocks.spawn.mockReturnValue(child);
