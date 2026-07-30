@@ -32,7 +32,7 @@ const terminationGraceMs = 250;
 const terminationPollMs = 10;
 
 const positiveSafeInteger = (value: string | undefined, field: string): number => {
-  if (value === undefined || !/^[1-9][0-9]*$/u.test(value))
+  if (value === undefined || !/^[1-9]\d*$/u.test(value))
     throw new Error(`Linux process inspection did not provide a positive ${field}.`);
 
   const parsed = Number(value);
@@ -66,7 +66,7 @@ const inspectLinuxProcess = async (pid: number): Promise<ProcessIdentity> => {
   const fields = await linuxProcessFields(pid);
   const processGroupId = positiveSafeInteger(fields[2], 'process group id');
   const creationIdentity = fields[19];
-  if (creationIdentity === undefined || !/^[1-9][0-9]*$/u.test(creationIdentity))
+  if (creationIdentity === undefined || !/^[1-9]\d*$/u.test(creationIdentity))
     throw new Error('Linux process inspection did not provide a stable creation identity.');
 
   const executablePath = await readlink(`/proc/${pid}/exe`);
