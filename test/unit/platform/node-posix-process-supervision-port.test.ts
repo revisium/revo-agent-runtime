@@ -66,7 +66,7 @@ const prepareInspection = (statValue: string): void => {
   mocks.canonicalize.mockReturnValue('{"fixture":true}');
 };
 
-const startWith = (child: FakeChild): Promise<unknown> => {
+const startWith = (child: FakeChild): ReturnType<NodePosixProcessSupervisionPort['start']> => {
   mocks.spawn.mockReturnValue(child);
   const starting = new NodePosixProcessSupervisionPort().start(request());
   child.emit('spawn');
@@ -179,6 +179,17 @@ test('rejects unsupported hosts before spawn', async () => {
   expect(mocks.spawn).not.toHaveBeenCalled();
 });
 
+test('rejects spawn errors without an unhandled completion rejection', async () => {
+  const child = new FakeChild(undefined);
+  const failure = new Error('spawn failed');
+  mocks.spawn.mockReturnValue(child);
+
+  const starting = new NodePosixProcessSupervisionPort().start(request());
+  child.emit('error', failure);
+
+  await expect(starting).rejects.toBe(failure);
+});
+
 test('rejects a child without a positive pid', async () => {
   const child = new FakeChild(undefined);
   mocks.spawn.mockReturnValue(child);
@@ -186,6 +197,23 @@ test('rejects a child without a positive pid', async () => {
   child.emit('spawn');
 
   await expect(starting).rejects.toThrow('did not provide a positive child process id');
+});
+
+test('resolves completion when the child closes synchronously during spawn emission', async () => {
+  const child = new FakeChild(413);
+  prepareInspection(statLine('413', '1'));
+  child.once('spawn', () => child.emit('close'));
+
+  const live = await startWith(child);
+
+  await expect(
+    Promise.race([
+      live.completion.then(() => 'closed'),
+      new Promise((resolve) => {
+        setTimeout(() => resolve('pending'), 0);
+      }),
+    ]),
+  ).resolves.toBe('closed');
 });
 
 test('escalates a still-live owned group to SIGKILL before reaping its leader', async () => {

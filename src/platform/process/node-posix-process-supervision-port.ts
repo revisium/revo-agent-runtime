@@ -194,13 +194,18 @@ export class NodePosixProcessSupervisionPort implements ProcessSupervisionPort {
       shell: request.shell,
       stdio: 'ignore',
     });
-    await awaitSpawn(child);
+    const completion = awaitClose(child);
+    try {
+      await awaitSpawn(child);
+    } catch (error: unknown) {
+      void completion.catch(() => undefined);
+      throw error;
+    }
 
     const pid = child.pid;
     if (pid === undefined || !Number.isSafeInteger(pid) || pid < 1)
       throw new Error('Node did not provide a positive child process id.');
 
-    const completion = awaitClose(child);
     let cleanup: Promise<void> | undefined;
     const cleanupProcess = (): Promise<void> => {
       cleanup ??= terminateAndReap(pid, completion);
