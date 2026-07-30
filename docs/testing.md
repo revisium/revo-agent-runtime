@@ -59,8 +59,9 @@ direction; the package lane proves the intentionally empty root export, built de
 and deep-import denial. The lifecycle conformance harness is provider-neutral and uses deterministic fake ports; it is not
 integration proof of real process/filesystem behavior or a public API. The npm package remains unpublished; the complete public
 AgentManager and real process/filesystem/security/cancellation/shutdown, provider-adapter, and public-package work remain
-deferred. Integration scripts are added when their owned process/filesystem behavior exists; the repository does not keep empty
-lanes or permanent `passWithNoTests` configuration.
+deferred. The `test:integration` lane runs with `pnpm test` now that it owns a Linux reference-child check for detached-group
+cleanup, canonical OS fingerprinting, and explicit child-environment isolation. This is candidate-host evidence, not a
+supported-platform claim. The repository does not keep empty lanes or permanent `passWithNoTests` configuration.
 
 ## Definition and registry proof
 
