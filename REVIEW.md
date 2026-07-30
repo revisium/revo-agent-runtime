@@ -53,6 +53,9 @@ Block the change when any of the following applies:
   across manager methods.
 - Output recording adopts an existing leaf, allows two concurrent owners, replaces `result.json`, depends on unsupported
   atomic-link behavior without failing closed, deletes evidence, or omits bounded raw-response diagnostics.
+- Output recording creates a missing ancestor, proceeds through a missing or non-directory parent, relies on normalization,
+  realpath, or containment as hostile-ancestor protection, or lets the consumer release its trusted stable-ancestor warranty
+  before every package filesystem operation for the start has settled.
 - Output-leaf claim and private active registration are separated by an await or cancellable/re-entrant checkpoint, allowing
   shutdown to observe a claimed but unregistered invocation.
 - Definitions or accepted requests retain caller-owned JSON containers instead of canonical package-owned snapshots.

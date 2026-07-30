@@ -354,12 +354,19 @@ before acceptance remain invisible to public invocation/result APIs.
 
 ## Output and observability boundary
 
-The consumer supplies the exact invocation directory whose leaf must not exist. The manager creates parents, atomically
-creates the leaf without adopting `EEXIST`, and owns `.scratch` plus five reserved filenames: `events.ndjson`, `stdout.log`,
+The consumer supplies the exact invocation directory whose leaf must not exist, provisions its existing parent hierarchy,
+and warrants trusted stable ancestors until terminal filesystem quiescence. The manager creates no output ancestors,
+atomically creates only the leaf without adopting `EEXIST`, and owns `.scratch` plus five reserved filenames: `events.ndjson`, `stdout.log`,
 `stderr.log`, failure-only `raw-final-response.txt`, and exclusive `result.json`. Result publication uses a flushed
 same-directory temp plus non-replacing hard link. The manager never derives hierarchy, overwrites, deletes, rotates, or
 chooses retention for consumer evidence. Controlled completion deletes only manager-owned scratch/temp paths; crash residue
 may survive until consumer result recovery or retention removes the directory.
+
+Terminal filesystem quiescence requires every package file operation for the start to have settled, including recording,
+publication, flush, scratch/temp cleanup attempts, and the terminal filesystem append. Process exit alone is insufficient;
+reported filesystem uncertainty extends the warranty until consumer reconciliation. V1 makes no hostile-ancestor safety
+claim from normalization, realpath, or containment checks. Trusted symlink and mount topology are consumer-certified;
+workspace/CWD policy, hostile-ancestor support, and supported filesystem cells remain separate gates.
 
 A leaf claimed by rejected pre-acceptance setup is consumer-owned quarantined residue. The manager removes only its scratch
 and temp paths, never deletes that leaf, and another start with the same path fails `output_conflict`. Consumer retention
@@ -390,8 +397,8 @@ The package does not own:
 - choosing an agent version, model, workspace, prompt, or result schema;
 - Revo runs, steps, attempts, pipelines, gates, scheduling, or retry policy;
 - active-row database/repository reads, row selection, distributed races, locks, leases, or claims;
-- DBOS coordination, path construction, durable result/history indexing, file retention, recovery policy, or user-facing log
-  projections;
+- DBOS coordination, output-hierarchy provisioning and stable-ancestor warranty, path construction, durable result/history
+  indexing, file retention, recovery policy, or user-facing log projections;
 - Git, GitHub, or other deterministic system operations;
 - credentials policy, billing policy, or product verdict interpretation.
 

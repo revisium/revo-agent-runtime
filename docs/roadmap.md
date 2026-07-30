@@ -22,7 +22,8 @@ The boundary is already decided by [ADR-0001](./adr/0001-agent-runtime-boundary.
 [ADR-0002](./adr/0002-agent-manager-consumer-boundary.md),
 [ADR-0003](./adr/0003-invocation-output-recording.md), and refined by
 [ADR-0008](./adr/0008-real-mechanics-supervision-boundary.md) and
-[ADR-0009](./adr/0009-process-signal-authority.md). Research may refine the draft specification. A finding that
+[ADR-0009](./adr/0009-process-signal-authority.md). [ADR-0010](./adr/0010-consumer-warranted-stable-output-ancestors.md)
+amends the output-hierarchy rule. Research may refine the draft specification. A finding that
 changes an accepted decision requires a new refining, amending, or superseding ADR and human approval before implementation
 continues.
 
@@ -57,6 +58,8 @@ The roadmap carries these approved constraints:
 13. ADR-0009 requires Option A pre-acceptance cleanup: confirmed cleanup rejects `start()` without public invocation, while
     unconfirmed identity/save reap retains a private guard/reservation for shutdown retry and external consumer resolution.
     A rejected setup leaf is consumer-owned quarantined residue; retry uses a fresh output path.
+14. ADR-0010 assigns output-hierarchy provisioning and a trusted stable-ancestor warranty through terminal filesystem
+    quiescence to the consumer. The manager creates only the absent final leaf; hostile-ancestor support remains deferred.
 
 ## 3. Extraction approaches
 
@@ -72,13 +75,13 @@ ports; strategy and platform adapters behind those ports; application as the onl
 
 ## 4. Package, consumer, and durable human-gate boundary
 
-| Package owns                                                                                                                                               | Consumer owns                                                                                                                               |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Validation, canonical copying, digesting, exact registry lookup, and immutable execution pins.                                                             | Durable definition storage, rollout, and exact agent, model, profile, prompt, workspace, permission, and result-schema selection.           |
-| One native or ACP physical invocation, explicit child environment, bounded streams, deadlines, cancellation, process-tree termination, and confirmed reap. | Runs, tasks, steps, attempts, scheduling, durable retry, replay, workflow persistence, and restart recovery.                                |
-| Provider-neutral events, usage, diagnostics, typed faults, result validation, bounded completed retention, and process-local shutdown.                     | Product verdicts, billing, routing, gates, user-facing projections, and durable indexing.                                                   |
-| Exclusive recording in one exact consumer-supplied output directory, including manager-owned scratch and atomic non-replacing `result.json`.               | Output path construction, retention, crash-residue recovery, and the durable association between an attempt and its exact output directory. |
-| Provider protocol, parser, and permission translation behind package-owned adapters.                                                                       | DBOS, Prisma, Nest, GraphQL, MCP, the orchestrator lifecycle CLI, Git, GitHub, worktree allocation, and deterministic system operations.    |
+| Package owns                                                                                                                                               | Consumer owns                                                                                                                                                                                                                      |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Validation, canonical copying, digesting, exact registry lookup, and immutable execution pins.                                                             | Durable definition storage, rollout, and exact agent, model, profile, prompt, workspace, permission, and result-schema selection.                                                                                                  |
+| One native or ACP physical invocation, explicit child environment, bounded streams, deadlines, cancellation, process-tree termination, and confirmed reap. | Runs, tasks, steps, attempts, scheduling, durable retry, replay, workflow persistence, and restart recovery.                                                                                                                       |
+| Provider-neutral events, usage, diagnostics, typed faults, result validation, bounded completed retention, and process-local shutdown.                     | Product verdicts, billing, routing, gates, user-facing projections, and durable indexing.                                                                                                                                          |
+| Exclusive recording in one exact consumer-supplied output directory, including manager-owned scratch and atomic non-replacing `result.json`.               | Output path construction, parent-hierarchy provisioning, stable-ancestor warranty through filesystem quiescence, retention, crash-residue recovery, and the durable association between an attempt and its exact output directory. |
+| Provider protocol, parser, and permission translation behind package-owned adapters.                                                                       | DBOS, Prisma, Nest, GraphQL, MCP, the orchestrator lifecycle CLI, Git, GitHub, worktree allocation, and deterministic system operations.                                                                                           |
 
 A technically successful JSON result MAY contain consumer-defined values such as `blocked` or `needs_human`. The package
 validates and returns that object but MUST NOT interpret it as a workflow transition. During One-way orchestrator cutover, the orchestrator maps the
@@ -118,8 +121,9 @@ All paths in the following table are **sibling-repository paths**, relative to t
 
 Contract decision research produces evidence-backed answers for remaining contract gaps. It does not write production code.
 The approved real-mechanics documentation contract now owns fresh version-probe preflight, lifecycle-only events,
-first-commit terminal arbitration, terminal-only idle timing, and the exact streaming-redaction algorithm. Remaining research
-covers cancellation when a definition declares no protocol cancellation; filesystem trust; active-run capacity/event fanout;
+first-commit terminal arbitration, terminal-only idle timing, the exact streaming-redaction algorithm, and consumer-warranted
+stable output ancestors through terminal filesystem quiescence. Remaining research covers cancellation when a definition
+declares no protocol cancellation; workspace/CWD policy and hostile-output-ancestor support; active-run capacity/event fanout;
 and public platform, CI, and provider support.
 
 **Exit:** every Human approval of contract decisions item has one explicit decision, supporting source or experiment, affected
@@ -145,6 +149,8 @@ the later roadmap responsibility that consumes it.
       leftmost-longest overlap selection, final flush, mutable-buffer clearing, and all pre-sink applications.
 - [ ] Workspace and CWD rules define absolute normalization, existence, directory type, symlink/realpath behavior, and the
       intentionally absent workspace/output containment requirement.
+- [x] Output ancestors are consumer-provisioned, trusted, and stable through terminal filesystem quiescence; the manager
+      creates only the absent final leaf and makes no hostile-ancestor safety claim.
 - [ ] Active-run numeric capacity and event fanout are explicitly bounded or consumer-governed. This documentation contract
       deliberately creates no numeric values for either topic.
 - [x] Idle timing is terminal-only: stdout, stderr, valid protocol frames, listeners, file work, and internal timers do not
@@ -226,15 +232,15 @@ roadmap does not claim that research is complete.
 
 | Sequence | Target responsibility                 | Entry gate                                                                                 | Exit boundary                                                                                                                                                                                 |
 | -------- | ------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1        | Documentation contract                | Approved documentation scope.                                                              | ADR-0008, ADR-0009, draft spec, roadmap, and required consistency surfaces agree; no code or conformance claim follows.                                                                       |
+| 1        | Documentation contract                | Approved documentation scope.                                                              | ADR-0008, ADR-0009, ADR-0010, draft spec, roadmap, and required consistency surfaces agree; no code or conformance claim follows.                                                             |
 | 2        | Foundation                            | Documentation contract.                                                                    | Private multi-invocation supervision, fresh launch preflight boundary, lifecycle/result API seam, and deterministic tests exist without claiming real cancellation or filesystem publication. |
 | 3        | Cancellation, deadlines, and shutdown | Foundation plus full Provider and platform conformance research.                           | The approved terminal-only idle, first-commit arbitration, cancellation, kill/reap, and shutdown rules pass their owning real-process tests.                                                  |
 | 4        | Filesystem publication                | Cancellation/deadline/shutdown stage plus full Provider and platform conformance research. | Exact leaf claim, bounded redacted evidence, scratch lifecycle, and non-replacing `result.json` publication pass their owning filesystem tests.                                               |
 | 5        | Supported-cell closure                | Filesystem publication plus full Provider and platform conformance research.               | Approved platform/filesystem cells, Windows/CI posture, and provider evidence are explicitly supported or fail closed before adapter/public-package completion.                               |
 
-Residual blockers remain: filesystem trust and provenance; exact supported platform/filesystem cells; Windows behavior; CI
-evidence; provider versions/wires; `capabilities.cancellation: false`; and any consumer-facing capacity/fanout decision. No
-stage may treat an unsupported or untested cell as passed.
+Residual blockers remain: workspace/CWD trust and provenance, hostile-output-ancestor support, exact supported
+platform/filesystem cells, Windows behavior, CI evidence, provider versions/wires, `capabilities.cancellation: false`, and any
+consumer-facing capacity/fanout decision. No stage may treat an unsupported or untested cell as passed.
 
 ```text
 Documentation contract

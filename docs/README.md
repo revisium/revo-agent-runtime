@@ -31,6 +31,8 @@
   fresh launch evidence, and lifecycle-only event ownership.
 - [ADR-0009](./adr/0009-process-signal-authority.md) — separate persisted-row correlation from authority to signal a
   process and record the Option A pre-acceptance lifecycle.
+- [ADR-0010](./adr/0010-consumer-warranted-stable-output-ancestors.md) — require a consumer-provisioned output hierarchy and
+  trusted stable ancestors through terminal filesystem quiescence.
 
 ## Repository policy
 

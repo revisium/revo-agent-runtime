@@ -160,7 +160,9 @@ stopAll();
 await manager.shutdown('Consumer is stopping');
 ```
 
-The output directory leaf must not exist before `start()`. The manager freshly proves the resolved executable path and strict
+The consumer provisions the output directory's existing parent and warrants trusted stable ancestors until terminal
+filesystem quiescence; the output leaf itself must not exist before `start()`. The manager creates no output ancestors and
+freshly proves the resolved executable path and strict
 SemVer version before it claims that leaf or spawns the invocation, then records bounded, redacted `events.ndjson`,
 `stdout.log`, `stderr.log`, optional failure-only `raw-final-response.txt`, and `result.json`. Live events are future-only
 lifecycle notifications; `invocation.finished` signals result availability through `getResult()` and `waitForResult()`.

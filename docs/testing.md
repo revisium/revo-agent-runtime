@@ -252,8 +252,12 @@ Required behavior includes:
 - no-shell deterministic argv expansion, total argv bounds, owner-only `<output>/.scratch`, reap-before-cleanup, cleanup
   attempt before terminal commit, typed cleanup failure, and crash-residue recovery ownership;
 - ACP correlation, hostile input, permissions, cancellation, and session isolation;
-- recursively create missing parents, atomically create a non-existing output leaf, reject every `EEXIST`, and prove two
-  concurrent managers targeting one leaf have exactly one winner;
+- reject a missing or non-directory output parent with `output_path_invalid`, never create output ancestors, atomically create
+  a non-existing output leaf, reject every `EEXIST`, and prove two concurrent managers targeting one leaf have exactly one
+  winner;
+- under the consumer-warranted path topology, keep every package filesystem operation inside the claimed leaf, prove the
+  warranty lasts through settled recording/publication/flush/cleanup/terminal-append work, and never claim that
+  normalization, realpath, or containment protects against hostile ancestor replacement;
 - never adopt, overwrite, delete, rotate, or suffix an existing output leaf;
 - a rejected setup leaf remains consumer-owned quarantined residue: the manager cleans only `.scratch`/temp paths, the same
   output path fails `output_conflict`, consumer retention owns deletion, and retry uses a fresh path;

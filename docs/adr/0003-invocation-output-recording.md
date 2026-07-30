@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-07-15
 - Amends: [ADR-0001](./0001-agent-runtime-boundary.md)
+- Amended by: [ADR-0010](./0010-consumer-warranted-stable-output-ancestors.md)
 
 ## Context
 
