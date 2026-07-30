@@ -47,8 +47,9 @@ The consuming host owns:
 - classification of explicit inherit/variables as nonsecret and credential values under `secrets`;
 - immutable execution-plan compilation and persistence;
 - opaque invocation-id generation and any run/step/attempt metadata;
-- active-row storage and loading, distributed coordination, path construction, durable output/result indexing, retention,
-  recovery policy, and public projections;
+- active-row storage and loading, distributed coordination, path construction, output-hierarchy provisioning and its trusted
+  stable-ancestor warranty through terminal filesystem quiescence, durable output/result indexing, retention, recovery policy,
+  and public projections;
 - durable retry, replay, scheduling, pipelines, gates, and workflow transitions;
 - host-termination escalation after shutdown failure, with no replacement in the same supervision domain until cleanup is
   resolved, plus safe-domain replacement and restart-recovery policy;
@@ -96,8 +97,9 @@ strategy subpaths require a separate public-API decision; internal folder layout
 
 ## Output boundary
 
-The manager target accepts one exact non-existing directory leaf per invocation. It creates parents, atomically claims the
-leaf without adoption, and reserves `.scratch`, `events.ndjson`, `stdout.log`, `stderr.log`, failure-only
+The manager target accepts one exact non-existing directory leaf per invocation. The consumer provisions the existing parent
+hierarchy and warrants trusted stable ancestors until all package filesystem operations for the start have settled. The
+manager creates no ancestors, atomically claims only the leaf without adoption, and reserves `.scratch`, `events.ndjson`, `stdout.log`, `stderr.log`, failure-only
 `raw-final-response.txt`, and exclusive `result.json`. It treats the path as opaque and never constructs consumer hierarchy,
 replaces evidence, applies retention, or scans directories for restart recovery. Controlled completion attempts `.scratch`
 cleanup; consumer result recovery or retention owns crash residue by removing the invocation directory. Separately, the
@@ -107,3 +109,4 @@ initialization. Those rows never contain results or completed history.
 Late filesystem failure does not strand process-local completion. `result.json` or the terminal NDJSON line may be absent,
 which is an incomplete consumer audit record; the live manager still commits and exposes one typed terminal result. A terminal
 lifecycle event signals result availability through the result APIs; it does not carry output, diagnostics, files, or a result.
+V1 does not claim hostile-ancestor safety from pathname normalization, realpath, or containment checks.

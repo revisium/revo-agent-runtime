@@ -79,6 +79,8 @@ await manager.shutdown('Consumer is stopping');
   diagnostics are not event payloads.
 - The manager records bounded redacted `events.ndjson`, `stdout.log`, `stderr.log`, optional failure-only
   `raw-final-response.txt`, and `result.json` under `output.directory`.
+- The consumer provisions the existing parent of `output.directory` and warrants trusted stable ancestors until every package
+  filesystem operation for the start has settled; the manager creates only the absent final leaf.
 - `result()` waits for the terminal result; `getResult()` retrieves a retained result after completion.
 - `cancel()` stops one invocation; `shutdown()` closes the manager and drains every accepted invocation.
 - Success is a top-level JSON object validated against the supplied draft 2020-12 schema. There is no text-success result.
@@ -171,8 +173,9 @@ The consumer owns:
 
 - definition storage and rollout plus exact agent, model, prompt, workspace, permission, and result-schema selection;
 - invocation ids and any run/step/attempt model, scheduling, retry, pipeline, gate, or product verdict;
-- active-row storage/loading, DBOS, distributed coordination, output path construction, durable result/history indexing,
-  retention, recovery policy, and user-facing log projection;
+- active-row storage/loading, DBOS, distributed coordination, output path construction and parent provisioning, the trusted
+  stable-ancestor warranty through terminal filesystem quiescence, durable result/history indexing, retention, recovery
+  policy, and user-facing log projection;
 - credential selection, billing, Git, GitHub, and other deterministic system operations.
 
 ## Documentation

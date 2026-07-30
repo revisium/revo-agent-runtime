@@ -514,8 +514,11 @@ strings into package-owned storage. Later mutation of caller objects cannot affe
 the only retained caller object and is not part of a durable or digested value.
 
 The output directory is mandatory, opaque, and exclusively claimed by one pending start or accepted invocation. Its leaf MUST
-NOT exist. The manager creates missing parent directories, then performs one atomic non-recursive leaf-directory creation. Any `EEXIST`,
-including an existing empty directory or symbolic link, fails preflight with `revo.agent.output_conflict`; the manager never
+NOT exist. The consumer MUST provision the hierarchy through the leaf's existing parent and warrant that every output
+ancestor remains trusted and stable until terminal filesystem quiescence. The manager MUST NOT create missing output
+ancestors. A missing or non-directory parent fails preflight with `revo.agent.output_path_invalid`. The manager performs one
+atomic non-recursive leaf-directory creation. Any `EEXIST`, including an existing empty directory or symbolic link, fails
+preflight with `revo.agent.output_conflict`; the manager never
 adopts an existing leaf. Concurrent starts targeting the same leaf have one winner and all others fail closed. The manager
 MUST NOT overwrite, delete, rotate, or suffix consumer-owned or committed paths; deletion is limited to manager-owned
 `.scratch` and temporary publication paths inside the newly claimed leaf. A rejected pre-acceptance start publishes no result
@@ -524,9 +527,14 @@ and temporary paths, never deletes the leaf, and a retry using that same path fa
 retention eventually removes the residue; a retry uses a fresh output path.
 
 Workspace and output directories MUST be normalized absolute paths. The manager does not require one to contain the other
-and does not infer a hierarchy. Trust, existence, directory-type, symlink, realpath, mount, and consumer-path provenance
-policy beyond the exact non-existing output-leaf claim are deferred; this draft does not claim that a supplied parent or
-workspace is trusted merely because it is absolute.
+and does not infer a hierarchy. For output ancestors, v1 relies on the consumer warranty: ancestor identity, symlink
+resolution, mount topology, and access policy MUST remain stable from preflight until no package filesystem operation for the
+start remains pending. For a rejection before leaf claim, that point is `start()` rejection. For a claimed leaf, all
+recording, publication, flush, scratch/temp cleanup attempts, and terminal filesystem append attempts MUST have settled and
+the start rejection or terminal result path MUST have settled. Reported or retained filesystem uncertainty extends the
+warranty until consumer reconciliation; process exit or elapsed time alone does not end it. The manager does not prove
+consumer provenance or hostile-ancestor safety with normalization, realpath, or containment checks. Workspace trust,
+existence, directory type, symlink/realpath policy, and workspace/output containment remain deferred.
 
 The child environment is explicit. Nothing from `process.env` is inherited by default, and the child never receives a
 wholesale copy. `environment.inherit` names individual host variables to capture during preflight; missing named variables
@@ -1242,8 +1250,9 @@ stopAll();
 - reconnectable ACP socket/daemon transport;
 - package-owned run, step, attempt, retry, pipeline, or scheduling concepts;
 - async iterators, replayable subscriber cursors, cross-process fan-in, active-run numeric capacity, or event-fanout limits;
-- filesystem trust and provenance policy for consumer-supplied workspaces and output parents, including realpath, symlink,
-  mount, and network-filesystem support beyond the exact non-existing-leaf rule;
+- workspace/CWD trust and provenance policy, including realpath, symlink, and containment behavior;
+- hostile or mutating output-ancestor support beyond the consumer-warranted stable-ancestor policy; such support requires a
+  separate native capability design and supported-filesystem evidence;
 - supported platform/filesystem cells, Windows process-tree/recovery behavior, CI evidence, and provider-version/wire
   conformance; unsupported cells are not implementation successes;
 - process pooling or ACP session reuse across invocations;
