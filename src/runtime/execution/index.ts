@@ -8,3 +8,9 @@ export type { NormalizedInvocationFailureReason } from './normalized-invocation-
 export type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
 export type { RawResponseDiagnostic } from './raw-response-diagnostic.js';
 export type { ResultSchemaValidator } from './result-schema-validator.js';
+export type {
+  LiveOwnedProcess,
+  ProcessIdentity,
+  ProcessStartRequest,
+  ProcessSupervisionPort,
+} from './process-supervision-port/index.js';

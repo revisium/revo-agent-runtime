@@ -25,7 +25,11 @@ import type {
   InvocationExecutionPorts,
   InvocationInputSnapshot,
   InvocationTerminalObservation,
+  LiveOwnedProcess,
   NormalizedInvocationOutcome,
+  ProcessIdentity,
+  ProcessStartRequest,
+  ProcessSupervisionPort,
 } from '../../src/runtime/execution/index.js';
 import type {
   ExecutableProbePort,
@@ -214,6 +218,29 @@ type ExpectedExecutableProbePort = {
   startVersionProbe(request: VersionProbeRequest): Promise<RunningVersionProbe>;
 };
 
+type ExpectedProcessStartRequest = {
+  readonly executable: string;
+  readonly args: readonly string[];
+  readonly environment: Readonly<Record<string, string>>;
+  readonly shell: false;
+};
+
+type ExpectedProcessIdentity = {
+  readonly pid: number;
+  readonly processGroupId: number;
+  readonly fingerprint: string;
+};
+
+type ExpectedLiveOwnedProcess = {
+  readonly completion: Promise<void>;
+  readonly identity: ProcessIdentity;
+  terminateAndReap(): Promise<void>;
+};
+
+type ExpectedProcessSupervisionPort = {
+  start(request: ProcessStartRequest): Promise<LiveOwnedProcess>;
+};
+
 export type StrictSemVerIsExact = Expect<Equal<StrictSemVer, ExpectedStrictSemVer>>;
 
 export type ComparatorOperatorIsExact = Expect<
@@ -276,6 +303,18 @@ export type RunningVersionProbeIsExact = Expect<
 
 export type ExecutableProbePortIsExact = Expect<
   Equal<ExecutableProbePort, ExpectedExecutableProbePort>
+>;
+
+export type ProcessStartRequestIsExact = Expect<
+  Equal<ProcessStartRequest, ExpectedProcessStartRequest>
+>;
+
+export type ProcessIdentityIsExact = Expect<Equal<ProcessIdentity, ExpectedProcessIdentity>>;
+
+export type LiveOwnedProcessIsExact = Expect<Equal<LiveOwnedProcess, ExpectedLiveOwnedProcess>>;
+
+export type ProcessSupervisionPortIsExact = Expect<
+  Equal<ProcessSupervisionPort, ExpectedProcessSupervisionPort>
 >;
 
 export type ParseVersionOutputIsExact = Expect<
