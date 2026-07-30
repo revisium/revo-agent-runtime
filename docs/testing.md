@@ -102,11 +102,21 @@ Manager tests must prove:
   and unprocessed rows on expiry, and cannot apply a late timed-out mutation;
 - active snapshots contain exactly invocation id, execution pin, `running | cancelling`, and process identity; they contain
   no result, terminal status, prompt, credential, environment, metadata, output directory, or consumer workflow field;
-- `running` is saved after process-identity capture and before an accepted handle is returned; `cancelling` is attempted
-  before the first cancellation signal; leader exit sweeps/confirms the owned group before removal or finalization;
-- post-acceptance spawn, identity-capture, and initial-save failures clean up and finalize one typed terminal result through
-  the accepted handle, lookup, and wait paths rather than rejecting `start()`; an unconfirmed cleanup reports its typed fault
-  and leaves the manager permanently failed-closed for host termination;
+- `running` is saved after process-identity capture and before acceptance or handle return; `cancelling` is attempted before
+  the first cancellation signal; leader exit sweeps/confirms the owned group before removal or finalization;
+- Option A pre-acceptance spawn, identity-capture, and initial-save failures use only live-owned cleanup, then reject
+  `start()` after confirmed cleanup. They create no public lifecycle record: no accepted/started/finished event, completed
+  record, result, retention, or visible lookup. With no initial-save dispatch, confirmed cleanup releases the private
+  guard/reservation; an unconfirmed identity/save reap still rejects without public invocation, retains the private
+  owned-child guard/id reservation, exposes the primary fault with bounded cleanup-uncertain detail, and leaves the manager
+  failed-closed for bounded shutdown retry and consumer external resolution;
+- a rejected/timed initial `running` save is maybe-persisted: after confirmed reap, the test proves that only fulfilment of
+  that same save promise after abort confirms quiescence. Only then is absent-row-safe idempotent `remove` attempted, and its
+  fulfilment releases the reservation. A rejected save or a save that does not fulfil in the bounded quiescence window issues
+  no `remove`, blocks reuse, and fails the manager closed for a fresh manager to reconcile consumer-loaded rows;
+- the per-invocation serialized active-state lane proves both outcomes of the late-save race: a post-abort fulfilled save
+  cannot mutate after its compensating removal, while unknown quiescence issues no removal, retains the guard/reservation,
+  and fails closed;
 - cancellation save failure emits a bounded diagnostic but still kills/reaps through the live child handle, then attempts
   removal; it cannot by itself force `shutdown_failed` or host termination;
 - active-row removal failure emits one bounded diagnostic, leaves a stale consumer row, and cannot change or delay the
@@ -121,9 +131,12 @@ Manager tests must prove:
   mutation after acceptance;
 - parameter, permission, result-schema, workspace, relational-limit, environment, and output-path preflight failures reject
   before acceptance;
-- output-leaf claim and `starting` active-registry insertion are one synchronous no-await acceptance transition; shutdown
-  before it leaves no leaf, handle, or process, while shutdown after it drains the registered invocation through typed
-  terminal handling;
+- output-leaf claim and `starting` active-registry insertion are one synchronous no-await pre-acceptance drain-registration
+  transition; shutdown before it leaves no leaf, handle, or process, while shutdown after it drains the pending start. Only
+  the saved `running` snapshot accepts an invocation; confirmed rejected pre-acceptance work releases its id only when no
+  initial save was dispatched or its maybe-persisted row had post-abort fulfilment-confirmed quiescence and a fulfilled
+  removal, and has unknown lookups. Unconfirmed reap, unknown quiescence, or unknown/rejected removal retains the private
+  reservation and blocks same-domain id reuse;
 - no wholesale process environment inheritance, no inherited variables by default, duplicate environment-key rejection,
   credential-like-name rejection in nonsecret inherit/variables, secret auto-redaction before spawn, split-chunk redaction,
   exact-literal matching, named Authorization/Proxy-Authorization, bare Bearer, and bounded PEM grammar; every ASCII-case
@@ -133,8 +146,9 @@ Manager tests must prove:
   unredacted-buffer disposal;
 - a malformed or unterminated built-in candidate that would exceed the carry limit emits exactly one `[REDACTED]`, discards
   bytes through its grammar-specific safe delimiter or channel end, persists no tail, and does not fail the invocation;
-- only pre-acceptance failures reject `start()`; post-acceptance spawn, process, protocol, output, parsing, validation,
-  timeout, and cancellation failures resolve typed terminal results rather than rejecting result waiters;
+- pre-acceptance spawn, identity, initial-save, and cancellation-before-running paths reject `start()` after required
+  cleanup; only failures after saved `running`/handle acceptance resolve typed terminal results rather than rejecting result
+  waiters;
 - one subscription can observe all invocations or exactly one filtered invocation;
 - per-invocation sequence ordering and exactly one lifecycle-only process-local `invocation.finished` delivery;
 - subscriber failure isolation and no hidden async event buffer;
@@ -145,11 +159,14 @@ Manager tests must prove:
 - bounded FIFO completion eviction never removes active work, makes evicted ids unknown, and permits reuse only after
   eviction;
 - cancel is idempotent and terminal races commit exactly one outcome;
-- cancellation before spawn settles cancelled without sink/signal; cancellation after spawn but before initial snapshot uses
-  the live child handle, writes no snapshot, and does not confuse persisted supervision state with invocation status;
+- cancellation before spawn rejects pending `start()` without sink/signal; cancellation after spawn before initial-save
+  dispatch uses the live child handle and rejects after confirmed cleanup. After save dispatch it treats the row as
+  maybe-persisted and requires post-abort save fulfilment plus fulfilled removal before release. Unconfirmed reap rejects with
+  primary `process_cleanup_failed` plus bounded cancellation cause, retains guard/reservation, and is retried by shutdown without
+  public invocation;
 - shutdown is idempotent, the first call creates one shared fulfillment/rejection, and only its copied/bounded/redacted reason
-  is used; the first close atomically partitions racing starts into accepted-and-drained or `manager_closed` without a
-  handle/process;
+  is used; the first close atomically partitions racing starts into accepted-and-drained, pre-acceptance-cleaned-and-rejected,
+  or `manager_closed` without a handle/process;
 - shutdown before initialization closes an empty manager; shutdown during initialization stops new rows, aborts/waits only
   to the initialization deadline, and confirms every recovery process already signalled without hanging indefinitely;
 - after closing begins, new start/probe operations reject and subscribe throws `revo.agent.manager_closed`, while exact
@@ -161,7 +178,8 @@ Manager tests must prove:
   evicted-record handles retain their resolved result, and consumer output directories are never deleted;
 - inability to confirm any owned invocation/probe kill and reap rejects the shared completion exactly once with bounded,
   redacted, non-retryable `revo.agent.shutdown_failed` in phase `shutdown`, including affected invocation ids/truncation and
-  probe count; every later shutdown observes the same rejection;
+  probe count; this includes a retained private pre-acceptance owned-child guard after bounded retry; every later shutdown
+  observes the same rejection;
 - after shutdown failure the manager remains failed-closed, registry/state reads remain available, and an unreaped invocation
   stays active without a false terminal result;
 - natural leader exit with unconfirmed descendant cleanup preserves the active row and nonterminal invocation with typed
@@ -202,8 +220,19 @@ Required behavior includes:
 - process fingerprint capture and recovery recomputation use the same versioned canonical OS identity fields, produce exact
   `sha256:<64 lowercase hex>`, use exact byte comparison, and never include argv, environment, prompts,
   credentials, metadata, or application `startedAt`;
-- inability to capture required identity after accepted spawn kills and reaps before one typed terminal result; recovery
+- inability to capture required identity during pre-acceptance kills and reaps before rejecting `start()` with no lifecycle
+  event, result, completed retention, or visible lookup. If reap is unconfirmed, the primary identity fault contains bounded
+  cleanup-uncertain detail, the private guard/id reservation remains, and shutdown retries before `shutdown_failed`; recovery
   inspection uncertainty sends no signal, preserves the row, and fails closed;
+- a rejected/timed initial save without cancellation rejects with primary `active_state_failed`, not
+  `process_cleanup_failed`, and its unknown quiescence retains the reconciliation guard; an unconfirmed post-spawn
+  cancellation rejects with primary `process_cleanup_failed`, not a cancelled result, and retains its owned-child guard.
+  Both retain their own bounded uncertainty detail;
+- unconfirmed reap during post-spawn pre-acceptance cancellation rejects `start()` with primary
+  `revo.agent.process_cleanup_failed` and bounded cancellation cause, rather than a cancelled result; the private guard/id
+  reservation remains until shutdown cleanup confirms or `shutdown_failed` leaves consumer external resolution;
+- after handle return, unconfirmed reap instead leaves a public active/nonterminal invocation and follows the ordinary
+  accepted shutdown path; it never retroactively rejects `start()` or becomes an Option A rejected start;
 - recovered identity match sends process-group `SIGTERM`, performs a bounded wait, escalates to group `SIGKILL`, and confirms
   termination; a PID/PGID alone is never sufficient authority;
 - unsupported-platform empty initialization preserves existing non-recovery execution, while non-empty recovery fails closed
@@ -225,6 +254,8 @@ Required behavior includes:
 - recursively create missing parents, atomically create a non-existing output leaf, reject every `EEXIST`, and prove two
   concurrent managers targeting one leaf have exactly one winner;
 - never adopt, overwrite, delete, rotate, or suffix an existing output leaf;
+- a rejected setup leaf remains consumer-owned quarantined residue: the manager cleans only `.scratch`/temp paths, the same
+  output path fails `output_conflict`, consumer retention owns deletion, and retry uses a fresh path;
 - bounded `events.ndjson`, `stdout.log`, `stderr.log`, and failure-only `raw-final-response.txt` with explicit truncation
   diagnostics or markers;
 - relational limit validation, including active-state operation <= initialization, idle <= wall, and an events-file

@@ -7,7 +7,8 @@
 - Related decisions: [ADR-0002](../adr/0002-agent-manager-consumer-boundary.md),
   [ADR-0003](../adr/0003-invocation-output-recording.md),
   [ADR-0006](../adr/0006-consumer-backed-active-invocation-recovery.md), and
-  [ADR-0008](../adr/0008-real-mechanics-supervision-boundary.md)
+  [ADR-0008](../adr/0008-real-mechanics-supervision-boundary.md), refined by
+  [ADR-0009](../adr/0009-process-signal-authority.md)
 
 This document is normative for the target v1 API. `MUST`, `MUST NOT`, `SHOULD`, and `MAY` are requirements terms. The
 package currently exports no runtime values or types; these declarations describe the contract to implement and test.
@@ -240,7 +241,16 @@ contract.
 Every sink operation receives a package-owned abort signal and MUST stop without applying a late write after that signal is
 aborted. The manager aborts the call when `activeStateOperationTimeoutMs` or the remaining initialization deadline expires.
 A timeout is the same typed sink/recovery failure as a rejection. This bounds package waiting without allowing a timed-out
-`remove` to delete a later invocation that reused the same id.
+`remove` to delete a later invocation that reused the same id. Each invocation has one package-owned serialized active-state
+lane. If the manager aborts an already-dispatched `save`, fulfilment of that same `save` promise after abort is the sink's
+confirmation that every mutation caused by that operation is quiesced. Rejection or abort alone is not confirmation. The
+manager waits for that fulfilment through one additional bounded `activeStateOperationTimeoutMs` quiescence window; a promise
+that does not fulfil in that window leaves quiescence unknown. A rejected `save` cannot later furnish that fulfilment and also
+leaves quiescence unknown. Only confirmed quiescence MAY be followed by a compensating
+`remove`, and a dispatched save releases its guard/reservation only after that `remove` fulfils. `remove` MUST be
+absent-row-safe and idempotent for a `running` save that may have been applied even though its caller observed timeout or
+rejection. If quiescence is unknown, the manager MUST NOT call `remove`, MUST retain the private guard/reservation, and becomes
+failed-closed; that id is not reusable until consumer-backed reconciliation by a fresh manager.
 
 An active snapshot contains no result, terminal status, prompt, environment, credential, metadata, or output directory.
 The consumer already owns durable output coordinates, and they are not required for process identity comparison. Snapshot
@@ -290,6 +300,62 @@ structural validation.
 The consumer-supplied list is trusted selection input for this local manager. The consumer owns row integrity, coordination,
 and the claim that a selected row came from its earlier manager. The package does not prove that provenance: fresh process
 identity comparison only prevents signalling a different process after PID reuse or executable/identity drift.
+
+### Signal authority and context-specific outcomes
+
+This section is the normative trace for [ADR-0009](../adr/0009-process-signal-authority.md).
+
+Persisted `pid`, `processGroupId`, `invocationId`, `pin`, `startedAt`, and any future persisted epoch are correlation data
+only. They never authorize a signal, reap, or descendant-cleanup claim. Signal authority comes only from a private live-owned
+process capability held by this manager or, during recovery, from a fresh package-observed fingerprint that exactly matches
+the saved fingerprint. `invocationId`, pin, and an epoch remain consumer/workflow correlation even when they identify the
+same row.
+
+| Context                                                               | Required outcome                                                                                                                                                                                                                                                                               |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Recovery: leader is definitely absent                                 | Remove only the stale row. Do not signal its persisted group and do not claim descendant cleanup.                                                                                                                                                                                              |
+| Recovery: fingerprint mismatch or required observation is unavailable | Preserve the row; send no signal; report `revo.agent.recovery_failed`.                                                                                                                                                                                                                         |
+| Recovery: fresh exact fingerprint match                               | Signal, terminate, and reap only the identity-matched group; remove the row only after confirmed reap.                                                                                                                                                                                         |
+| Recovery: `activeStateSink` operation fails                           | Preserve the row and report `revo.agent.recovery_failed`.                                                                                                                                                                                                                                      |
+| Post-spawn identity capture or initial `running` save fails           | Use the private live-owned capability. Confirmed cleanup rejects `start()`; if `save` was dispatched, its post-abort fulfilment must confirm quiescence and an absent-row-safe `remove` must fulfil before release. Unconfirmed reap retains the private guard/reservation for shutdown retry. |
+| Live cancellation or shutdown: `cancelling` save fails                | Emit bounded diagnostic evidence and continue live-owned cleanup.                                                                                                                                                                                                                              |
+| Accepted invocation: reap cannot be confirmed                         | Keep that public invocation active and nonterminal; during shutdown reject the shared completion with `revo.agent.shutdown_failed`.                                                                                                                                                            |
+| Confirmed reap, then `remove` fails                                   | Keep the result unchanged, retain a stale row, and emit bounded diagnostic evidence.                                                                                                                                                                                                           |
+
+### Option A: pre-acceptance lifecycle
+
+On supported local POSIX platforms, a start remains pre-acceptance until the package has captured its identity, saved the
+`running` snapshot, and is ready to return its handle. Output-leaf claim and private drain registration can occur during this
+interval only to prevent a shutdown race; neither creates a public invocation. After confirmed cleanup of a pre-acceptance
+child, `start()` rejects; it releases the private id reservation only when no initial save was dispatched or the dispatched
+save's post-abort fulfilment confirmed quiescence and a removal of the maybe-persisted row fulfilled. It emits no
+`invocation.accepted`, `invocation.started`,
+`invocation.cancelling`, or `invocation.finished` event; creates no completed record, result, retention entry, or result
+publication; and leaves `getInvocation`, `getResult`, `waitForResult`, `cancel`, and `listInvocations` with their ordinary
+unknown semantics for that id. After confirmed cleanup and any required fulfilled row removal, the id is immediately reusable.
+
+An unconfirmed reap is the Option A/U1 exception to release: `start()` still rejects without a public invocation. For
+identity capture or initial-save failure its primary fault remains `revo.agent.process_identity_failed` or
+`revo.agent.active_state_failed` with bounded redacted cleanup-uncertain detail. The manager retains its private owned-child
+guard and id reservation, so public lookup remains unknown but the id is not reusable in that supervision domain. Shutdown
+retries the same bounded cleanup; if it remains unconfirmed, its shared completion rejects with
+`revo.agent.shutdown_failed`. The consumer externally resolves the process before replacing that supervision domain.
+
+Cancellation before `running` is distinct from live cancellation of an accepted invocation: before spawn it performs no sink
+call or process signal. After spawn but before initial `running` save dispatch, it uses only the private live-owned capability
+to terminate and reap the child; confirmed cleanup rejects `start()` with its bounded cancellation cause and releases the
+reservation. After initial save dispatch, the row is maybe-persisted even before the save promise settles: confirmed reap
+must be followed by post-abort save fulfilment within the bounded quiescence window and then a fulfilled absent-row-safe,
+idempotent `remove` before releasing the guard/reservation. A missing fulfilment, rejection, or remove
+rejection/uncertainty keeps the id unavailable and leaves the manager failed-closed for consumer-backed reconciliation by a
+fresh manager. If a post-spawn pre-acceptance cancellation cannot confirm reap,
+`start()` rejects with primary
+`revo.agent.process_cleanup_failed` and bounded redacted cancellation cause; it creates no public invocation, retains the
+private owned-child guard/reservation, and shutdown retries bounded cleanup before `revo.agent.shutdown_failed`. Cancellation
+after `running` follows the ordinary active invocation cancellation contract.
+
+This private rejected-start path is not the accepted unreaped path. Once a handle has been returned, unconfirmed reap leaves
+an observable active invocation nonterminal under the ordinary lifecycle rules; it does not retroactively reject `start()`.
 
 Valid rows are reconciled in `invocationId` order:
 
@@ -354,9 +420,9 @@ A mismatch may mean PID reuse, executable replacement/drift, or corrupted/stale 
 those cases, so mismatch is never treated as proof that the recorded invocation ended and is never silently removed.
 
 `startedAt` is an RFC 3339 application timestamp captured after spawn for observability only. It does not establish process
-identity and is never substituted for OS creation identity. If the platform cannot capture the required identity after
-accepted spawn, the invocation kills and reaps the owned child, then exposes one typed terminal result through its accepted
-handle/result paths. If recovery inspection cannot obtain the required fields, it sends no signal and preserves the row.
+identity and is never substituted for OS creation identity. If the platform cannot capture the required identity after spawn,
+the invocation kills and reaps the owned child through its private live-owned capability, then rejects `start()`. If recovery
+inspection cannot obtain the required fields, it sends no signal and preserves the row.
 
 ## 4. Starting an invocation
 
@@ -409,9 +475,14 @@ interface AgentInvocationHandle {
 Such identifiers MAY be placed in `metadata`, which the manager stores and returns without interpreting.
 
 `start()` requires successful initialization and an exact agent ref. It validates the request, result schema, parameters,
-permissions, limits, workspace, and output path; reserves the id; proves the current launch executable and version; claims
-the output leaf; starts and records the owned process; and only then returns a handle. An id is unique among active and
-retained completed records. Duplicate ids fail preflight. Once a completed record has been evicted, its id MAY be reused.
+permissions, limits, workspace, and output path; privately reserves the id; proves the current launch executable and version;
+claims the output leaf; starts and records the owned process; and only then accepts the invocation and returns a handle. An id
+is unique among pending pre-acceptance starts, active invocations, and retained completed records. Duplicate ids fail
+preflight. Only confirmed cleanup after a rejected pre-acceptance start releases its reservation, and a dispatched initial
+save additionally requires post-abort fulfilment-confirmed quiescence plus a fulfilled absent-row-safe removal. An
+unconfirmed reap, unknown quiescence, or unknown/rejected removal retains its private guard/reservation and prevents id reuse
+in the supervision domain. Once a completed record has been evicted, its id
+MAY also be reused.
 
 Immediately before output-leaf claim and invocation spawn, the manager checks the definition's platform constraint, freshly
 resolves `launch.command`, and executes the required `launch.versionProbe` against that resolution. The probe uses the strict
@@ -423,29 +494,34 @@ fault. All of those failures occur before output-leaf claim and invocation spawn
 handle. This fresh launch proof is distinct from ADR-0006 post-spawn fingerprinting, which protects recovery identity rather
 than executable eligibility.
 
-Output-leaf claim and process-local active registration form one synchronous acceptance transition. After the leaf creation
-succeeds, the manager registers the `starting` invocation in its active registry immediately, without an `await`, cancellation
-checkpoint, listener delivery, or other re-entrant boundary between those two steps. This transition also places the accepted
-invocation in the manager's shutdown drain set. The active registry is distinct from the post-spawn consumer-backed active
-snapshot; the latter cannot exist before there is a process. This contract defines no separate registry-insertion failure
-behavior.
+Output-leaf claim and process-local pre-handle registration form one synchronous drain-registration transition. After the
+leaf creation succeeds, the manager registers the `starting` invocation in its active registry immediately, without an
+`await`, cancellation checkpoint, listener delivery, or other re-entrant boundary between those two steps. This transition
+places the pending start in the manager's shutdown drain set; it does not make persisted correlation data signal authority.
+The active registry is distinct from the post-spawn consumer-backed active snapshot; the latter cannot exist before there is
+a process. This contract defines no separate registry-insertion failure behavior.
 
 Shutdown and start arbitrate at that one transition. If shutdown commits before it, `start()` rejects with no output-leaf
-claim, handle, or invocation process. If the transition commits first, shutdown drains that invocation under the ordinary
-typed cancellation, terminal-arbitration, finalization, and reap rules; it cannot reject it as an unaccepted start. There is
-no separately cancellable interval after output-leaf claim and before active registration.
+claim, handle, or invocation process. If the transition commits first, shutdown drains the registered pending start under
+the ordinary cancellation and reap rules. If that pending start never reaches acceptance, confirmed cleanup rejects `start()`
+without an event, result, completed record, retention entry, or result publication. A post-spawn identity or initial-save
+failure still cleans up through the live-owned capability and rejects `start()` after cleanup. There is no separately
+cancellable interval after output-leaf claim and before active registration.
 
 Before returning the handle, the manager canonical-serializes and parses package-owned copies of metadata, effective
 parameters, effective permissions, the result schema, and effective limits. It copies the prompt, paths, and environment
 strings into package-owned storage. Later mutation of caller objects cannot affect execution. The ephemeral `AbortSignal` is
 the only retained caller object and is not part of a durable or digested value.
 
-The output directory is mandatory, opaque, and exclusively owned by one accepted invocation. Its leaf MUST NOT exist. The
-manager creates missing parent directories, then performs one atomic non-recursive leaf-directory creation. Any `EEXIST`,
+The output directory is mandatory, opaque, and exclusively claimed by one pending start or accepted invocation. Its leaf MUST
+NOT exist. The manager creates missing parent directories, then performs one atomic non-recursive leaf-directory creation. Any `EEXIST`,
 including an existing empty directory or symbolic link, fails preflight with `revo.agent.output_conflict`; the manager never
 adopts an existing leaf. Concurrent starts targeting the same leaf have one winner and all others fail closed. The manager
 MUST NOT overwrite, delete, rotate, or suffix consumer-owned or committed paths; deletion is limited to manager-owned
-`.scratch` and temporary publication paths inside the newly claimed leaf.
+`.scratch` and temporary publication paths inside the newly claimed leaf. A rejected pre-acceptance start publishes no result
+or terminal lifecycle record. Its claimed leaf is consumer-owned quarantined residue: the manager cleans only its own scratch
+and temporary paths, never deletes the leaf, and a retry using that same path fails with `revo.agent.output_conflict`. Consumer
+retention eventually removes the residue; a retry uses a fresh output path.
 
 Workspace and output directories MUST be normalized absolute paths. The manager does not require one to contain the other
 and does not infer a hierarchy. Trust, existence, directory-type, symlink, realpath, mount, and consumer-path provenance
@@ -475,30 +551,44 @@ inspects the new child immediately, captures the package fingerprint and applica
 `activeStateSink.save({ invocationId, pin, state: 'running', process }, context)` with the remaining deadline. The active
 snapshot MUST be saved before the handle is returned. A timeout or unavailable identity fails with
 `revo.agent.process_identity_failed`; a failed/timed-out sink save fails with `revo.agent.active_state_failed`. In both
-cases the runtime first kills and reaps the live child/process group. These are terminal invocation faults after acceptance,
-not `start()` rejections. If cleanup cannot be confirmed, the manager becomes permanently failed-closed and the consumer must
-terminate the supervision domain; its accepted invocation still resolves one typed terminal failure that reports the cleanup
-fault and MUST NOT imply confirmed process cleanup. On unsupported platforms, this active-state sequence is skipped and the
-existing non-recovery start path remains available.
+cases the runtime first kills and reaps the live child/process group through its private live-owned capability, then rejects
+`start()`. A rejected or timed-out initial save is maybe-persisted: after confirmed reap the manager waits for a still
+unsettled, already-dispatched save to fulfil after abort in the bounded quiescence window, then attempts absent-row-safe
+idempotent `remove` before releasing its private guard/reservation. A rejected save cannot provide that fulfilment, so its
+quiescence is unknown and it receives no `remove`. Only a fulfilled `remove` releases the guard as allowed. Unknown
+quiescence, rejected removal, or uncertain removal keeps the reservation unavailable, leaves the manager failed-closed, and
+requires a fresh manager to reconcile
+consumer-loaded rows. Without cancellation, the rejected/timed initial save keeps primary
+`revo.agent.active_state_failed`; its bounded redacted detail records quiescence or reconciliation uncertainty and MUST NOT
+imply confirmed cleanup. If identity capture cleanup cannot be confirmed, its primary fault remains
+`revo.agent.process_identity_failed` with bounded cleanup-uncertain detail. The manager retains the private owned-child
+guard/reservation, becomes permanently failed-closed, and retries bounded cleanup during shutdown. Continuing uncertainty
+rejects shutdown with `revo.agent.shutdown_failed`; the consumer must externally resolve the supervision domain. On unsupported
+platforms, this active-state sequence is skipped and the existing non-recovery start path remains available.
 
 The invocation wall-clock deadline begins when process spawn succeeds, before identity inspection and active-state save. It
 does not begin at preflight, logical acceptance, or handle return. Post-spawn setup therefore consumes invocation wall-clock
 budget as well as its shorter active-state operation budget.
 
-Cancellation before a child is spawned settles the invocation as cancelled without a sink call or process signal.
-Cancellation after spawn but before fingerprint/save completion uses the live child handle to kill and reap, writes no
-active snapshot, and settles cancelled. In either pre-running cancellation case, `start()` may return the invocation handle
-only after it is terminal and no live process remains; the usual save-before-handle requirement applies to invocations that
-reach `running`. `running | cancelling` in `ActiveInvocationSnapshot` describes persisted process supervision only; it is
-distinct from the broader `AgentInvocationStatus` state machine.
+Cancellation before a child is spawned performs no sink call or process signal and rejects the still pre-acceptance
+`start()`. Cancellation after spawn but before initial save dispatch uses the live child handle to kill and reap, writes no
+snapshot, and rejects after confirmed cleanup. Cancellation after dispatch treats the `running` save as maybe-persisted and,
+after confirmed reap, requires a still-unsettled save's post-abort fulfilment within the quiescence window and a fulfilled
+removal before releasing the guard. A rejected save leaves quiescence unknown and receives no removal. An unconfirmed reap
+rejects with primary `revo.agent.process_cleanup_failed` plus bounded cancellation
+cause and retains the private owned-child
+guard/reservation. Neither pre-running path returns a handle or creates a public invocation. The usual save-before-handle
+requirement applies to invocations that reach `running`. `running | cancelling` in `ActiveInvocationSnapshot` describes
+persisted process supervision only; it is distinct from the broader `AgentInvocationStatus` state machine.
 
-Only failures before the synchronous acceptance transition reject `start()` with `AgentManagerError` and no handle. After
-that transition, `start()` returns an accepted handle even when its result has already settled: spawn failure finalizes one
-typed `revo.agent.spawn_failed` result; process-identity capture failure finalizes one typed
-`revo.agent.process_identity_failed` result after cleanup; and initial active-state-save failure finalizes one typed
-`revo.agent.active_state_failed` result after cleanup. The same handle, `getResult`, and `waitForResult` paths expose that
-one immutable terminal value. Later process, protocol, timeout, cancellation, output, result parsing, and result validation
-failures follow the same typed terminal-result rule; `result()` never rejects for an invocation failure.
+Failures before acceptance reject `start()` with `AgentManagerError` and no handle. This includes spawn failure, confirmed
+post-spawn process-identity or initial active-state-save cleanup, and confirmed pre-acceptance cancellation. None may create
+a handle, event, completed record, result, retention entry, or signal authority from persisted row data. The C1/U1 exceptions
+remain private: unconfirmed reap retains its owned-child guard/reservation, while a maybe-persisted initial save with unknown
+quiescence or rejected/uncertain remove retains a reconciliation guard/reservation and fails the manager closed. After a
+`running` snapshot has been saved and the handle is returned, later process, protocol, timeout, cancellation, output, result
+parsing, and result validation failures follow the typed terminal-result rule; `result()` never rejects for an invocation
+failure.
 
 ## 5. State and lifecycle
 
@@ -549,6 +639,10 @@ Failures may transition `accepted`, `starting`, `running`, or `cancelling` to `f
 allowed. Cancellation, deadline, process/protocol, cleanup, and finalization candidates arbitrate through one atomic terminal
 commit: the first candidate to commit determines the immutable terminal result; later candidates cannot replace it. The
 specification intentionally does not infer a priority from arrival order before that commit.
+
+The state machine starts only after Option A acceptance. Private pre-acceptance drain registration and a rejected pending
+start are not `accepted`, `starting`, `cancelling`, terminal, or retained states and are not observable through this state
+machine.
 
 Only `running` and `cancelling` have consumer-backed active snapshots, and only on supported local POSIX platforms. These are
 process-supervision states, not a persisted copy of `AgentInvocationStatus`. For an invocation with a saved `running` row,
@@ -883,10 +977,12 @@ process is reaped. A racing subscription is either registered before closing and
 
 Shutdown applies the same 4 KiB bound and redaction rules as cancellation reasons and requests cancellation of every active
 invocation. It attempts termination and requires confirmed reap of every manager-owned child process and in-flight
-version-probe process. On successful shutdown, every accepted invocation reaches typed terminal completion, completes output
-finalization, publishes its retained completed record, and delivers its terminal event before shutdown clears remaining
-listeners and resolves. Invocation execution or finalization failures do not reject shutdown; they remain typed invocation
-results. Existing unsubscribe functions remain idempotent before, during, and after listener clearing.
+version-probe process, including a private owned-child guard retained by an unconfirmed pre-acceptance setup failure. That
+guard has no public invocation, result, event, or lookup record, but shutdown retries its bounded cleanup. On successful
+shutdown, every accepted invocation reaches typed terminal completion, completes output finalization, publishes its retained
+completed record, and delivers its terminal event before shutdown clears remaining listeners and resolves. Invocation
+execution or finalization failures do not reject shutdown; they remain typed invocation results. Existing unsubscribe functions
+remain idempotent before, during, and after listener clearing.
 
 If saving `cancelling` fails during shutdown, the manager emits the bounded diagnostic and still terminates/reaps the live
 owned process. Confirmed process termination permits shutdown to continue and triggers a bounded `remove` attempt; the state
