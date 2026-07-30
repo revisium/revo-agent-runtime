@@ -1,4 +1,4 @@
-# ADR-0009: Отделить корреляцию активной строки от права послать сигнал
+# ADR-0009: Separate active-row correlation from authority to signal
 
 - Status: Accepted
 - Date: 2026-07-29
@@ -6,63 +6,60 @@
   [ADR-0006](./0006-consumer-backed-active-invocation-recovery.md), and
   [ADR-0008](./0008-real-mechanics-supervision-boundary.md)
 
-## Контекст
+## Context
 
-Потребитель хранит активную строку дольше, чем живёт менеджер. PID и PGID могут быть
-переиспользованы, а идентификатор инвокации, pin, `startedAt` и возможный epoch описывают
-связь строки с попыткой, но не дают пакету право воздействовать на процесс. Такое право
-нельзя получать из данных потребительского хранилища.
+The consumer can retain an active row longer than the manager lives. PID and PGID can be reused,
+and an invocation ID, pin, `startedAt`, and any future epoch describe the row's correlation to an
+attempt but do not grant the package authority to affect a process. That authority cannot be
+derived from consumer-storage data.
 
-## Решение
+## Decision
 
-Все сохранённые поля `pid`, `processGroupId`, `invocationId`, `pin`, `startedAt` и epoch
-(если он когда-либо появится в строке) являются только данными корреляции. Ни одно из них,
-отдельно или вместе, не является основанием для `SIGTERM`, `SIGKILL`, reap или утверждения
-о потомках.
+All persisted `pid`, `processGroupId`, `invocationId`, `pin`, `startedAt`, and any future epoch
+are correlation data only. Neither separately nor together may they authorize `SIGTERM`,
+`SIGKILL`, reap, or a claim about descendants.
 
-У пакета есть ровно два источника права сигнализировать:
+The package has exactly two sources of authority to signal:
 
-1. приватная живая capability процесса, созданная и удерживаемая этим экземпляром
-   менеджера; либо
-2. при recovery — новый снимок из package-owned platform inspector, чей канонический
-   fingerprint в точности совпал с сохранённым fingerprint.
+1. a private live process capability created and held by this manager instance; or
+2. during recovery, a fresh observation from a package-owned platform inspector whose canonical
+   fingerprint exactly matches the saved fingerprint.
 
-Во втором случае пакет сначала наблюдает лидера и заново вычисляет fingerprint. Только
-точное совпадение разрешает сигнализировать соответствующую группу. Во всех остальных
-случаях сохранённая строка не даёт права воздействия на ОС.
+In the second case, the package first observes the leader and recomputes the fingerprint. Only
+an exact match authorizes signalling the corresponding group. In every other case, the persisted
+row grants no authority to affect the operating system.
 
-Выбран Option A: сохранённый `running` — граница acceptance. До неё lifecycle остаётся
-приватным; отклонённый `start()` не создаёт публичную lifecycle-запись. Это отделяет
-непринятый setup от accepted invocation, который уже следует обычному публичному lifecycle.
+Option A is selected: persisted `running` is the acceptance boundary. Before that boundary, the
+lifecycle is private; a rejected `start()` creates no public lifecycle record. This separates an
+unaccepted setup from an accepted invocation, which follows the ordinary public lifecycle.
 
-Claimed output leaf при rejected setup остаётся consumer-owned evidence; этот ADR не
-добавляет Windows, provider adapter, public API/export, публикацию результата или consumer
-storage.
+A claimed output leaf from rejected setup remains consumer-owned evidence. This ADR does not add
+Windows, a provider adapter, a public API/export, result publication, or consumer storage.
 
-Нормативные исходы recovery, pre-acceptance, sink, typed fault и shutdown определяет
+The normative recovery, pre-acceptance, sink, typed-fault, and shutdown outcomes are defined by
 [AgentManager v1 specification](../specs/agent-manager-v1.spec.md#signal-authority-and-context-specific-outcomes).
-Требуемое доказательство real-process harness определяет
+The required real-process-harness proof is defined by the
 [roadmap](../roadmap.md#real-process-filesystem-security-cancellation-and-shutdown-conformance).
 
-## Последствия
+## Consequences
 
-- Путь recovery не превращает consumer storage в capability для управления ОС.
-- Consumer storage остаётся корреляцией и workflow-boundary, а не способом управлять
-  процессами; consumer отвечает за внешнее разрешение недоступных пакету случаев.
-- Граница Option A запрещает превращать непринятый setup в accepted invocation, result или
-  retention лишь потому, что процесс кратко существовал.
-- Точные правила active-state quiescence и reconcile остаются в спецификации, а их
-  provider-neutral real-process proof — в roadmap; этот ADR не дублирует их lifecycle
-  механику.
-- Документация уточняет draft target; реализация, platform evidence и публичный экспорт
-  по-прежнему отсутствуют.
+- Recovery does not turn consumer storage into a capability for operating-system control.
+- Consumer storage remains a correlation and workflow boundary, not a way to control processes;
+  the consumer externally resolves cases unavailable to the package.
+- The Option A boundary prevents a briefly existing, unaccepted setup from becoming an accepted
+  invocation, result, or retention record.
+- The exact active-state quiescence and reconciliation rules remain in the specification, and
+  their provider-neutral real-process proof remains in the roadmap; this ADR does not duplicate
+  those lifecycle mechanics.
+- The documentation refines a draft target; implementation, platform evidence, and public export
+  remain absent.
 
-## Отклонённые альтернативы
+## Rejected alternatives
 
-- **Сигнал по сохранённым PID/PGID:** допускает воздействие на переиспользованный процесс.
-- **`invocationId`, pin или epoch как fencing-token процесса:** это корреляция consumer
-  workflow, а не наблюдаемая package capability.
-- **Заявлять очистку потомков без живого лидера:** сохранённый PGID не доказывает
-  принадлежность потомков инвокации.
-- **Старый post-acceptance terminal-result путь:** делает неготовый pre-`running` процесс
-  публичной инвокацией, хотя первоначальная active-state запись не подтверждена.
+- **Signal from persisted PID/PGID:** can affect a reused process.
+- **`invocationId`, pin, or epoch as a process fencing token:** these are consumer-workflow
+  correlation, not an observable package capability.
+- **Claim descendant cleanup without a live leader:** a persisted PGID does not prove that
+  descendants belong to the invocation.
+- **The former post-acceptance terminal-result path:** makes an unready pre-`running` process a
+  public invocation even though the initial active-state record was not confirmed.
