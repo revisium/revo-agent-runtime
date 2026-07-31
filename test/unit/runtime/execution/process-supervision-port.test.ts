@@ -5,6 +5,7 @@ import { FakeProcessSupervisionPort } from '../../../support/process/fake-proces
 
 const request = (): ProcessStartRequest =>
   Object.freeze({
+    cwd: process.cwd(),
     executable: '/fixture/bin/agent',
     args: Object.freeze(['--run']),
     environment: Object.freeze({ REFERENCE_PROCESS_ENV: 'candidate' }),

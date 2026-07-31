@@ -31,6 +31,7 @@ class FakeChild extends EventEmitter {
 
 const request = () =>
   Object.freeze({
+    cwd: process.cwd(),
     executable: '/fixture/bin/agent',
     args: Object.freeze([]),
     environment: Object.freeze({}),
@@ -107,6 +108,27 @@ test('rejects malformed proc records after owned cleanup', async () => {
   await releaseClose(child);
 
   await expect(starting).rejects.toThrow('could not delimit the command name');
+});
+
+test('passes an approved workspace as the child working directory', async () => {
+  vi.spyOn(process, 'kill').mockImplementation(() => {
+    throw gone();
+  });
+  prepareInspection(statLine('408', '1'));
+  const child = new FakeChild(408);
+  mocks.spawn.mockReturnValue(child);
+  const starting = new NodePosixProcessSupervisionPort().start({
+    ...request(),
+    cwd: '/approved/workspace',
+  });
+  child.emit('spawn');
+  await releaseClose(child);
+  await expect(starting).resolves.toBeDefined();
+  expect(mocks.spawn).toHaveBeenCalledWith(
+    '/fixture/bin/agent',
+    [],
+    expect.objectContaining({ cwd: '/approved/workspace' }),
+  );
 });
 
 test('rejects missing and unsafe process identities after owned cleanup', async () => {

@@ -76,6 +76,7 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/process-supervision-port/process-supervision-port.ts',
     'execution/raw-response-diagnostic.ts',
     'execution/result-schema-validator.ts',
+    'execution/workspace-admission-result.ts',
     'policy/fault-messages.ts',
     'policy/index.ts',
     'policy/limits/index.ts',

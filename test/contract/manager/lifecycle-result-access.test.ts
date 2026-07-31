@@ -367,7 +367,7 @@ test('isolates a throwing listener without stranding manager handle or active wa
   expect(throwingCalls).toBe(1);
 });
 
-test('exposes subscription capacity refusal without changing terminal result settlement', async () => {
+test('admits subscriptions independently from completed result retention', async () => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
   output.enqueuePrepare();
@@ -382,7 +382,7 @@ test('exposes subscription capacity refusal without changing terminal result set
   const refusedCalls: unknown[] = [];
   const rejectedListener = manager.subscribe({}, (event) => refusedCalls.push(event.invocationId));
   expect(acceptedListener.state).toBe('subscribed');
-  expect(rejectedListener).toEqual({ state: 'rejected', reason: 'capacity' });
+  expect(rejectedListener.state).toBe('subscribed');
 
   const accepted = expectAcceptedInvocation(
     await manager.start({ resultSchema, invocationId: 'subscription-capacity' }),
@@ -393,6 +393,6 @@ test('exposes subscription capacity refusal without changing terminal result set
 
   const result = await accepted.handle.result();
   expect(received).toEqual(['subscription-capacity']);
-  expect(refusedCalls).toEqual([]);
+  expect(refusedCalls).toEqual(['subscription-capacity']);
   expect(await manager.waitForResult('subscription-capacity')).toBe(result);
 });

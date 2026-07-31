@@ -2,6 +2,7 @@ import { AGENT_MANAGER_LIMITS } from '../policy/index.js';
 import type { AgentRef } from '../spec/index.js';
 
 const maximumInvocationIdBytes = 256;
+const maximumWorkspacePathBytes = 4096;
 const maximumMetadataBytes = 65_536;
 const maximumTraversalValues = 65_536;
 const maximumTraversalDepth = 65_536;
@@ -385,12 +386,13 @@ const readRequest = (value: unknown): Readonly<Record<string, unknown>> | undefi
     for (const key in value) {
       entries += 1;
       if (
-        entries > 5 ||
+        entries > 6 ||
         (key !== 'invocationId' &&
           key !== 'agent' &&
           key !== 'metadata' &&
           key !== 'resultSchema' &&
-          key !== 'wallClockTimeoutMs')
+          key !== 'wallClockTimeoutMs' &&
+          key !== 'workspace')
       )
         return undefined;
       const read = ownEnumerableData(value, key);
@@ -432,12 +434,32 @@ const copyAgentRef = (value: unknown): AgentRef | undefined => {
   return Object.freeze({ id: id.value, version: version.value });
 };
 
+const copyWorkspace = (value: unknown): string | undefined => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== 1 || !keys.includes('directory')) return undefined;
+  const directory = Object.getOwnPropertyDescriptor(value, 'directory');
+  if (
+    directory === undefined ||
+    !directory.enumerable ||
+    !('value' in directory) ||
+    typeof directory.value !== 'string' ||
+    directory.value.length === 0 ||
+    directory.value.length > maximumWorkspacePathBytes ||
+    encoder.encode(directory.value).byteLength > maximumWorkspacePathBytes ||
+    !validString(directory.value)
+  )
+    return undefined;
+  return directory.value;
+};
+
 export class InvocationInputSnapshot {
   readonly agent: AgentRef | undefined;
   readonly invocationId: string;
   readonly metadata: SnapshotRecord | undefined;
   readonly resultSchema: SnapshotRecord;
   readonly wallClockTimeoutMs: number;
+  readonly workspace: string | undefined;
 
   private constructor(
     input: Readonly<{
@@ -446,6 +468,7 @@ export class InvocationInputSnapshot {
       metadata: SnapshotRecord | undefined;
       resultSchema: SnapshotRecord;
       wallClockTimeoutMs: number;
+      workspace: string | undefined;
     }>,
   ) {
     this.agent = input.agent;
@@ -453,6 +476,7 @@ export class InvocationInputSnapshot {
     this.metadata = input.metadata;
     this.resultSchema = input.resultSchema;
     this.wallClockTimeoutMs = input.wallClockTimeoutMs;
+    this.workspace = input.workspace;
     Object.freeze(this);
   }
 
@@ -487,6 +511,9 @@ export class InvocationInputSnapshot {
       deadline > AGENT_MANAGER_LIMITS.wallClockTimeoutMs.maximum
     )
       return undefined;
+    let workspace: string | undefined;
+    if (input.workspace !== undefined) workspace = copyWorkspace(input.workspace);
+    if (input.workspace !== undefined && workspace === undefined) return undefined;
     return new InvocationInputSnapshot(
       Object.freeze({
         agent,
@@ -494,6 +521,7 @@ export class InvocationInputSnapshot {
         metadata,
         resultSchema,
         wallClockTimeoutMs: deadline,
+        workspace,
       }),
     );
   }

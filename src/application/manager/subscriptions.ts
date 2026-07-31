@@ -44,16 +44,11 @@ const isTerminalEventListener = (value: unknown): value is TerminalEventListener
 export class TerminalSubscriptions {
   private readonly subscriptions = new Set<Subscription>();
 
-  constructor(private readonly capacity: number) {}
-
   subscribe(filter: unknown, listener: TerminalEventListener): TerminalSubscriptionAdmission {
     if (!isTerminalEventListener(listener))
       throw new TypeError('Terminal event listener must be a function.');
 
     const invocationId = copyInvocationIdFilter(filter);
-    if (this.subscriptions.size === this.capacity)
-      return Object.freeze({ state: 'rejected', reason: 'capacity' });
-
     const subscription: Subscription = Object.freeze({ invocationId, listener });
     this.subscriptions.add(subscription);
     return Object.freeze({

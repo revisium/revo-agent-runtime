@@ -107,6 +107,23 @@ test('fails closed when reflective Proxy traps throw', () => {
   ).toBeUndefined();
 });
 
+test('copies bounded workspace input without applying filesystem path policy', () => {
+  const relative = InvocationInputSnapshot.create({
+    resultSchema,
+    invocationId: 'relative-workspace',
+    workspace: { directory: '../workspace/./pending\u0000' },
+  });
+
+  expect(relative?.workspace).toBe('../workspace/./pending\u0000');
+  expect(
+    InvocationInputSnapshot.create({
+      resultSchema,
+      invocationId: 'oversized-workspace',
+      workspace: { directory: 'x'.repeat(4_097) },
+    }),
+  ).toBeUndefined();
+});
+
 test('allows acyclic aliases while copying each occurrence independently', () => {
   const shared = { value: [1] };
   const snapshot = InvocationInputSnapshot.create({

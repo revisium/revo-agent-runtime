@@ -181,6 +181,14 @@ class InternalInvocationLifecycleManager {
   }
 
   private async preflight(snapshot: InvocationInputSnapshot): Promise<boolean> {
+    if (snapshot.workspace !== undefined) {
+      const workspace = this.ports.workspace;
+      if (
+        workspace === undefined ||
+        (await workspace.admit(snapshot.workspace)).status !== 'admitted'
+      )
+        return false;
+    }
     if (snapshot.agent === undefined) return this.registry.listAgents().length === 0;
     const target = this.registry.getDefinition(snapshot.agent);
     if (target === undefined) return false;
@@ -226,7 +234,7 @@ export const createInvocationLifecycleManager = (
   if (capacity === undefined)
     throw new Error('Validated completed invocation capacity is required.');
   const completed = new CompletedInvocations(capacity);
-  const subscriptions = new TerminalSubscriptions(capacity);
+  const subscriptions = new TerminalSubscriptions();
   const registry = SealedAgentRegistry.create(validated.definitions);
   return Object.freeze(
     new InternalInvocationLifecycleManager(ports, completed, subscriptions, registry),

@@ -33,6 +33,7 @@ const copyIdentity = (identity: ProcessIdentity): ProcessIdentity =>
 
 const copyRequest = (request: ProcessStartRequest): ProcessStartRequest =>
   Object.freeze({
+    cwd: request.cwd,
     executable: request.executable,
     args: Object.freeze([...request.args]),
     environment: Object.freeze({ ...request.environment }),

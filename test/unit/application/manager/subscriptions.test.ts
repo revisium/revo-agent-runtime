@@ -14,20 +14,25 @@ const expectSubscribed = (admission: SubscriptionAdmission): (() => void) => {
   return admission.dispose;
 };
 
-test('admits exactly N listeners and rejects N plus one before it can receive an event', () => {
-  const subscriptions = new TerminalSubscriptions(2);
+test('admits listeners without a package-owned capacity', () => {
+  const subscriptions = new TerminalSubscriptions();
   const calls: string[] = [];
   expectSubscribed(subscriptions.subscribe({}, () => calls.push('first')));
   expectSubscribed(subscriptions.subscribe({}, () => calls.push('second')));
-  const rejected = subscriptions.subscribe({}, () => calls.push('rejected'));
-
-  expect(rejected).toEqual({ state: 'rejected', reason: 'capacity' });
+  expectSubscribed(subscriptions.subscribe({}, () => calls.push('third')));
   subscriptions.deliver(event('first'));
-  expect(calls).toEqual(['first', 'second']);
+  expect(calls).toEqual(['first', 'second', 'third']);
+});
+
+test('does not couple listener registration to completed retention capacity', () => {
+  const subscriptions = new TerminalSubscriptions();
+
+  expectSubscribed(subscriptions.subscribe({}, () => undefined));
+  expectSubscribed(subscriptions.subscribe({}, () => undefined));
 });
 
 test('frees exactly one slot after idempotent disposal', () => {
-  const subscriptions = new TerminalSubscriptions(1);
+  const subscriptions = new TerminalSubscriptions();
   const calls: string[] = [];
   const dispose = expectSubscribed(subscriptions.subscribe({}, () => calls.push('disposed')));
   dispose();
@@ -40,7 +45,7 @@ test('frees exactly one slot after idempotent disposal', () => {
 });
 
 test('keeps snapshot delivery future-only when a reentrant admission frees a slot', () => {
-  const subscriptions = new TerminalSubscriptions(1);
+  const subscriptions = new TerminalSubscriptions();
   const calls: string[] = [];
   let reentrantAdmission: SubscriptionAdmission | undefined;
   let disposeCurrent: () => void = () => undefined;
@@ -59,8 +64,8 @@ test('keeps snapshot delivery future-only when a reentrant admission frees a slo
   expect(calls).toEqual(['current', 'late']);
 });
 
-test('rejects a full reentrant admission and frees a throwing listener slot for a replacement', () => {
-  const subscriptions = new TerminalSubscriptions(2);
+test('frees a throwing listener while retaining a reentrant admission', () => {
+  const subscriptions = new TerminalSubscriptions();
   const calls: string[] = [];
   let reentrantAdmission: SubscriptionAdmission | undefined;
   expectSubscribed(
@@ -79,12 +84,12 @@ test('rejects a full reentrant admission and frees a throwing listener slot for 
   subscriptions.deliver(event('second'));
   replacement();
 
-  expect(reentrantAdmission).toEqual({ state: 'rejected', reason: 'capacity' });
-  expect(calls).toEqual(['throwing', 'independent', 'independent', 'replacement']);
+  expect(reentrantAdmission).toEqual(expect.objectContaining({ state: 'subscribed' }));
+  expect(calls).toEqual(['throwing', 'independent', 'independent', 'hidden', 'replacement']);
 });
 
 test('copies matching filters and honors cross disposal during a snapshot', () => {
-  const subscriptions = new TerminalSubscriptions(3);
+  const subscriptions = new TerminalSubscriptions();
   const filter = { invocationId: 'first' };
   const calls: string[] = [];
   expectSubscribed(
