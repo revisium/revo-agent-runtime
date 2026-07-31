@@ -25,8 +25,9 @@ public-package work remain target or deferred. The normative public target is [t
 5. The consumer starts an exact `{ id, version }` with an opaque invocation id, dynamic inputs, a JSON Schema result
    contract, and one exact output directory.
 6. The manager snapshots agent identity and definition digest for every accepted invocation; execution never rereads the
-   registry. On local `darwin`/`linux`, it starts a separate process group, captures a verifiable OS process fingerprint, and
-   saves the active row before accepting the invocation or returning its handle.
+   registry. The first implementation/evidence cell is Linux on a local `ext4` filesystem: it starts a separate process group,
+   captures a verifiable OS process fingerprint, and saves the active row before accepting the invocation or returning its
+   handle. This target sequence is not a shipped support claim.
 7. One native or ACP adapter runs the physical process while the manager bounds, redacts, records, and publishes events.
 8. Leader exit triggers a full owned-group descendant sweep. Only confirmed group termination permits active-row removal and
    result handling. The manager then parses one top-level JSON object, validates it, attempts atomic terminal recording,
@@ -237,8 +238,14 @@ pins and process identity conflicts are preserved as row failures while valid ro
 uncertainty fails initialization closed after all independent work. Operation and total initialization deadlines bound every
 path; retry requires a new manager and newly loaded rows. Pure sealed-registry reads and shutdown remain available.
 
-The completed registry is bounded FIFO. Eviction makes an invocation unknown to the manager and does not touch consumer
-files. The consumer owns durable indexing and may retain output-directory coordinates in its own attempt record.
+The retained-completed registry is a deterministic FIFO with an exact construction range of 1 through 1,000 records and a
+default of 1,000. The consumer may select a lower value at construction. Active invocations never occupy this capacity and are
+never evicted. Completed-record eviction makes an invocation unknown to the manager and does not touch consumer files. The
+consumer owns durable indexing and may retain output-directory coordinates in its own attempt record.
+
+V1 has no package-owned active-invocation admission limit and no internal admission queue. The consumer owns admission,
+concurrency limits, scheduling, and overload policy before `start()`. Bounded recovery input and bounded executable-probe
+concurrency are separate safeguards, not active-invocation admission limits.
 
 Shutdown is the manager's concurrency-safe, idempotent process-local lifecycle boundary. Acceptance and closing have one
 atomic boundary: a racing start is either accepted and drained or rejected without a handle or process. Closing rejects new
@@ -300,8 +307,9 @@ application timestamp for observability only. The output directory is not duplic
 durable coordinate and it is not needed for process identity comparison. The row contains no prompt, environment,
 credentials, result, terminal status, or consumer workflow fields.
 
-Active-state recovery v1 is local POSIX functionality for `darwin` and `linux`. Invocation processes start in a separate
-process group. A bounded post-spawn sequence inspects the new child and creates opaque `sha256:<lowercase hex>` over
+The first active-state recovery implementation and evidence cell is Linux on a local `ext4` filesystem. Invocation processes
+start in a separate process group. A bounded post-spawn sequence inspects the new child and creates opaque
+`sha256:<lowercase hex>` over
 canonical, versioned, package-owned OS identity fields: process creation identity/time, resolved executable identity/path,
 PID/process group, and local boot/session discriminator when supplied. It never fingerprints argv, environment, prompt,
 credentials, or caller data. Invocation wall-clock time starts at successful spawn. Capture/save occurs before acceptance:
@@ -312,9 +320,9 @@ required before guard release. A rejected save leaves quiescence unknown and rec
 unknown/rejected removal retains the reconciliation guard/reservation and fails the manager closed for fresh-manager consumer
 reconciliation. An unconfirmed identity reap keeps primary
 `process_identity_failed`; an initial-save failure without cancellation keeps primary `active_state_failed`; each adds bounded
-cleanup-uncertain detail, private guard, and id reservation without becoming a false terminal result. Unsupported platforms
-keep the existing non-recovery invocation path but accept only an empty recovery set; v1 makes no Windows fingerprint or
-process-tree recovery promise.
+cleanup-uncertain detail, private guard, and id reservation without becoming a false terminal result. macOS requires a later
+separate native implementation and evidence cell; Linux evidence does not establish macOS support. Windows is unsupported and
+outside the MVP pending a separately approved process/filesystem design and native evidence.
 
 The consumer-supplied row list is trusted selection/provenance input. The package does not prove ownership; exact fingerprint
 comparison only protects against PID reuse and identity drift. An unknown/mismatched pin or live fingerprint mismatch is
@@ -322,8 +330,9 @@ preserved and reported, because mismatch may represent PID reuse, executable rep
 definitely absent PID is removed. A live identity match receives group `SIGTERM`, a bounded wait, group `SIGKILL` when
 needed, and confirmed termination before removal. Persisted PID/PGID values alone are never authority to signal.
 
-The runtime saves `running` before accepting or returning a handle and attempts `cancelling` before the first cancellation
-signal. Cancellation before spawn makes no sink call or signal and rejects the pending `start()`. Cancellation after spawn
+The runtime saves `running` before accepting or returning a handle and starts the `cancelling` save best-effort without awaiting
+it, its timeout, or eventual quiescence before provider dispatch or the first cancellation signal. Cancellation before spawn
+makes no sink call or signal and rejects the pending `start()`. Cancellation after spawn
 but before initial-save dispatch writes no row and, after confirmed cleanup, rejects with its bounded cancellation cause.
 After dispatch, `running` is maybe-persisted even when save rejects or times out: confirmed reap attempts absent-row-safe
 idempotent removal only after a still-unsettled save fulfils after abort in the bounded quiescence window. A rejected save
@@ -331,9 +340,9 @@ leaves quiescence unknown and receives no removal. A fulfilled removal is requir
 Unknown quiescence or unknown/rejected removal retains the reconciliation guard/reservation and fails the manager closed for a
 fresh manager's consumer-backed reconciliation. Unconfirmed cancellation reap rejects with primary `process_cleanup_failed`,
 retains the owned-child guard/reservation, and is retried during shutdown.
-None of these pre-acceptance paths creates events, a result, completed retention, or a visible lookup. A bounded `cancelling`
-save failure after acceptance is surfaced but does not prevent live
-kill/reap. After confirmed termination, removal is attempted; a stale `running` row is safely removed on the next
+None of these pre-acceptance paths creates events, a result, completed retention, or a visible lookup. A `cancelling` save
+failure after acceptance is surfaced through bounded diagnostics but cannot delay or prevent live kill/reap. After confirmed
+termination, removal is attempted; a stale `running` row is safely removed on the next
 initialization when its PID is absent. Snapshot state describes persisted process supervision and is distinct from
 `AgentInvocationStatus`.
 
@@ -354,6 +363,12 @@ before acceptance remain invisible to public invocation/result APIs.
 
 ## Output and observability boundary
 
+The consumer authorizes `workspace.directory`. Preflight bounds and normalizes it, requires an absolute existing directory,
+and then uses it as the invocation working directory. The package does not certify workspace realpath or symlink topology,
+containment, ownership, provenance, or hostile-rebinding safety. It neither requires nor implies containment between workspace
+and output directories. Invalid workspace input fails with `revo.agent.workspace_invalid` before output-leaf claim or
+invocation spawn.
+
 The consumer supplies the exact invocation directory whose leaf must not exist, provisions its existing parent hierarchy,
 and warrants trusted stable ancestors until terminal filesystem quiescence. The manager creates no output ancestors,
 atomically creates only the leaf without adopting `EEXIST`, and owns `.scratch` plus five reserved filenames: `events.ndjson`, `stdout.log`,
@@ -366,7 +381,7 @@ Terminal filesystem quiescence requires every package file operation for the sta
 publication, flush, scratch/temp cleanup attempts, and the terminal filesystem append. Process exit alone is insufficient;
 reported filesystem uncertainty extends the warranty until consumer reconciliation. V1 makes no hostile-ancestor safety
 claim from normalization, realpath, or containment checks. Trusted symlink and mount topology are consumer-certified;
-workspace/CWD policy, hostile-ancestor support, and supported filesystem cells remain separate gates.
+hostile-output-ancestor support and later supported filesystem cells remain separate gates.
 
 A leaf claimed by rejected pre-acceptance setup is consumer-owned quarantined residue. The manager removes only its scratch
 and temp paths, never deletes that leaf, and another start with the same path fails `output_conflict`. Consumer retention
@@ -377,8 +392,9 @@ events and `events.ndjson` are lifecycle-only: `invocation.finished` signals res
 files, and results remain in the bounded file and result contracts. The event recorder reserves a relationally valid terminal
 event tail. Late I/O failure may leave `result.json` absent or omit the terminal NDJSON line; those are incomplete audit
 records. The live manager still commits one completed record and delivers exactly one process-local `invocation.finished`.
-Synchronous listeners do not create hidden queues; listener failures are isolated from execution. Active-run capacity and
-event fanout remain deferred; this document does not invent numeric limits for them.
+Listeners execute synchronously and the package creates no listener queue, worker pool, or numeric fanout limit. Listener
+failures are isolated from execution. The consumer owns listener execution cost, downstream buffering, batching, parallel
+fanout, and backpressure; a slow listener may therefore add consumer-side latency.
 
 ## ACP boundary
 
@@ -396,6 +412,10 @@ The package does not own:
 - definition storage or rollout;
 - choosing an agent version, model, workspace, prompt, or result schema;
 - Revo runs, steps, attempts, pipelines, gates, scheduling, or retry policy;
+- active-invocation admission, concurrency limits, overload policy, or an invocation-admission queue;
+- listener execution cost, downstream buffering, batching, parallel fanout, or backpressure;
+- workspace authorization beyond bounded normalized absolute existing-directory validation, including realpath/symlink,
+  containment, ownership, provenance, or hostile-rebinding certification;
 - active-row database/repository reads, row selection, distributed races, locks, leases, or claims;
 - DBOS coordination, output-hierarchy provisioning and stable-ancestor warranty, path construction, durable result/history
   indexing, file retention, recovery policy, or user-facing log projections;
@@ -407,13 +427,18 @@ The package does not own:
 - **Determinism:** exact agent refs, canonical full-definition digests, defensive input snapshots, and deterministic bounded
   argv expansion are immutable per invocation.
 - **Security:** output conflicts fail closed; secrets and unbounded provider data do not reach subscribers, files, or faults.
-- **Cancellation and shutdown:** abort and manager close propagate through protocol shutdown and authoritative process
-  kill/reap; successful shutdown reaches typed completion before listeners are cleared, and unconfirmed cleanup fails
-  closed.
+- **Cancellation and shutdown:** when `capabilities.cancellation` is `true`, caller cancellation, deadlines, and shutdown
+  dispatch an available provider-neutral graceful-cancellation hook best-effort without waiting or draining. A false capability
+  or missing or failed hook follows the same immediate local path.
+  Authoritative cleanup sends `SIGTERM` to the owned POSIX group, waits no more than 2 seconds, sends `SIGKILL` only while the
+  group remains live, and requires confirmed group absence plus leader reap. The same local cleanup applies to natural-exit
+  descendant sweep and identity-authorized recovery, while the first terminal candidate remains authoritative. Successful
+  shutdown reaches typed completion before listeners are cleared, and unconfirmed cleanup fails closed.
 - **Recovery safety:** consumer-selected persisted PID/process-group ids are never signalling authority without a freshly
   matching package-generated OS process fingerprint.
 - **Backpressure:** every event, file, response, and completed registry has a hard bound; v1 has no hidden async event queue.
 - **Portability:** public durable contracts are provider-neutral JSON values and core logic does not depend on a consumer
-  framework or database; active process recovery is explicitly local `darwin`/`linux` v1 functionality.
+  framework or database. Linux on local `ext4` is the first implementation/evidence cell, macOS requires separate native
+  evidence, and Windows is unsupported and outside the MVP. None of these target statements claim shipped conformance.
 - **Testability:** adapters share one lifecycle/result suite; architecture verification proves both allowed and forbidden
   dependency directions.

@@ -33,6 +33,8 @@
   process and record the Option A pre-acceptance lifecycle.
 - [ADR-0010](./adr/0010-consumer-warranted-stable-output-ancestors.md) — require a consumer-provisioned output hierarchy and
   trusted stable ancestors through terminal filesystem quiescence.
+- [ADR-0011](./adr/0011-consumer-governed-local-supervision.md) — define consumer-governed admission, synchronous listener
+  ownership, workspace authorization, and authoritative local supervision.
 
 ## Repository policy
 

@@ -90,7 +90,8 @@ Generic registry tests use arbitrary agent ids. They MUST NOT pass because an im
 
 ## AgentManager contract proof
 
-Manager tests must prove:
+The following cases are target proof requirements for the not-yet-public AgentManager. They do not claim that current source or
+tests already implement them. Manager tests must prove:
 
 - initialization is one-shot and concurrency-safe, copies the first caller input, and gates every non-registry manager
   operation except shutdown until its shared completion succeeds;
@@ -103,8 +104,9 @@ Manager tests must prove:
   and unprocessed rows on expiry, and cannot apply a late timed-out mutation;
 - active snapshots contain exactly invocation id, execution pin, `running | cancelling`, and process identity; they contain
   no result, terminal status, prompt, credential, environment, metadata, output directory, or consumer workflow field;
-- `running` is saved after process-identity capture and before acceptance or handle return; `cancelling` is attempted before
-  the first cancellation signal; leader exit sweeps/confirms the owned group before removal or finalization;
+- `running` is saved after process-identity capture and before acceptance or handle return; `cancelling` persistence starts
+  best-effort but cannot delay provider dispatch or the first cancellation signal; leader exit sweeps/confirms the owned group
+  before removal or finalization;
 - Option A pre-acceptance spawn, identity-capture, and initial-save failures use only live-owned cleanup, then reject
   `start()` after confirmed cleanup. They create no public lifecycle record: no accepted/started/finished event, completed
   record, result, retention, or visible lookup. With no initial-save dispatch, confirmed cleanup releases the private
@@ -118,8 +120,10 @@ Manager tests must prove:
 - the per-invocation serialized active-state lane proves both outcomes of the late-save race: a post-abort fulfilled save
   cannot mutate after its compensating removal, while unknown quiescence issues no removal, retains the guard/reservation,
   and fails closed;
-- cancellation save failure emits a bounded diagnostic but still kills/reaps through the live child handle, then attempts
-  removal; it cannot by itself force `shutdown_failed` or host termination;
+- the `cancelling` save starts best-effort and is never awaited before provider dispatch or the first local signal; timeout,
+  rejection, or uncertain quiescence emits bounded diagnostic evidence but cannot delay live-child kill/reap. After confirmed
+  cleanup, removal follows the active-row reconciliation contract; persistence failure alone cannot force `shutdown_failed` or
+  host termination;
 - active-row removal failure emits one bounded diagnostic, leaves a stale consumer row, and cannot change or delay the
   existing terminal result semantics;
 - initialization removes definitely missing rows, never signals or removes live fingerprint/PID mismatches, terminates and
@@ -131,7 +135,9 @@ Manager tests must prove:
 - metadata, parameters, permissions, result schema, limits, and environment are package-owned snapshots unaffected by caller
   mutation after acceptance;
 - parameter, permission, result-schema, workspace, relational-limit, environment, and output-path preflight failures reject
-  before acceptance;
+  before acceptance; invalid workspace input fails with `revo.agent.workspace_invalid` before output-leaf claim or spawn.
+  Workspace proof accepts only a bounded normalized absolute existing directory and makes no realpath, symlink, containment,
+  ownership, provenance, hostile-rebinding, or workspace/output-containment certification;
 - output-leaf claim and `starting` active-registry insertion are one synchronous no-await pre-acceptance drain-registration
   transition; shutdown before it leaves no leaf, handle, or process, while shutdown after it drains the pending start. Only
   the saved `running` snapshot accepts an invocation; confirmed rejected pre-acceptance work releases its id only when no
@@ -152,14 +158,23 @@ Manager tests must prove:
   waiters;
 - one subscription can observe all invocations or exactly one filtered invocation;
 - per-invocation sequence ordering and exactly one lifecycle-only process-local `invocation.finished` delivery;
-- subscriber failure isolation and no hidden async event buffer;
+- synchronous subscriber delivery, subscriber failure isolation, and absence of a package listener queue, worker pool, or
+  numeric fanout limit; tests do not invent an active-invocation or listener limit and assign listener cost, downstream
+  buffering, batching, fanout, and backpressure to the consumer;
 - handle result, `waitForResult`, and completed `getResult` expose the same completed value; the terminal event carries no
   result, file, stream, or diagnostic payload;
 - a terminal event handler can synchronously observe the completed lookup;
 - filtered listing covers active and retained terminal invocations without a separate completed-run collection;
-- bounded FIFO completion eviction never removes active work, makes evicted ids unknown, and permits reuse only after
-  eviction;
-- cancel is idempotent and terminal races commit exactly one outcome;
+- retained-completed construction accepts exactly 1 through 1,000 records, defaults to 1,000, and may be lowered by the
+  consumer; active work neither occupies retained capacity nor becomes an eviction candidate, while deterministic FIFO eviction
+  makes evicted completed ids unknown and permits reuse only after eviction;
+- concurrent starts are neither rejected nor queued by a package-owned active-invocation cap or internal admission queue;
+  bounded recovery input and executable-probe concurrency remain separate proof axes;
+- cancel is idempotent and terminal races commit exactly one outcome; caller cancellation, deadline expiry, and shutdown
+  dispatch an available provider graceful-cancellation hook best-effort when `capabilities.cancellation` is `true`, without
+  awaiting acknowledgement, completion, or drain, while a false capability, missing hook, or failed dispatch follows the
+  identical immediate local-cleanup path;
+- natural-exit sweep and recovery cleanup do not dispatch the provider graceful-cancellation hook;
 - cancellation before spawn rejects pending `start()` without sink/signal; cancellation after spawn before initial-save
   dispatch uses the live child handle and rejects after confirmed cleanup. After save dispatch it treats the row as
   maybe-persisted and requires post-abort save fulfilment plus fulfilled removal before release. Unconfirmed reap rejects with
@@ -216,8 +231,9 @@ Integration tests use package-owned narrow process/filesystem seams and real tem
 
 Required behavior includes:
 
-- separate `darwin`/`linux` process-group spawn, stdin, stdout, stderr, exit, signal, timeout, cancellation,
-  process-tree kill, and reaping;
+- Linux on local `ext4` as the first implementation/evidence cell: process-group spawn, stdin, stdout, stderr, exit, signal,
+  timeout, cancellation, process-tree kill, reaping, and the owned filesystem contract. This is target proof, not current
+  shipped conformance;
 - process fingerprint capture and recovery recomputation use the same versioned canonical OS identity fields, produce exact
   `sha256:<64 lowercase hex>`, use exact byte comparison, and never include argv, environment, prompts,
   credentials, metadata, or application `startedAt`;
@@ -234,10 +250,13 @@ Required behavior includes:
   reservation remains until shutdown cleanup confirms or `shutdown_failed` leaves consumer external resolution;
 - after handle return, unconfirmed reap instead leaves a public active/nonterminal invocation and follows the ordinary
   accepted shutdown path; it never retroactively rejects `start()` or becomes an Option A rejected start;
-- recovered identity match sends process-group `SIGTERM`, performs a bounded wait, escalates to group `SIGKILL`, and confirms
-  termination; a PID/PGID alone is never sufficient authority;
-- unsupported-platform empty initialization preserves existing non-recovery execution, while non-empty recovery fails closed
-  without inspection, signal, sink mutation, or a Windows fingerprint/process-tree promise;
+- caller cancellation, wall/idle deadline expiry, shutdown, natural-exit descendant sweep, and identity-authorized recovery
+  cleanup send `SIGTERM` to the owned POSIX group, wait no more than 2 seconds, send group `SIGKILL` only if the group remains
+  live, and require confirmed group absence plus leader reap; persisted PID/PGID alone is never sufficient authority, and the
+  first terminal candidate remains authoritative across cleanup races;
+- macOS receives no support claim from Linux evidence and requires a separate native implementation/evidence cell selected from
+  that host; Windows is unsupported and outside the MVP, fails invocation preflight before output claim/spawn, and receives no
+  fingerprint/process-tree promise until a separately approved design and native evidence exist;
 - unsupported invocation platforms fail with `revo.agent.platform_unsupported` before the manager claims an output leaf or
   spawns the invocation; supported-cell closure is still required before a platform conformance claim;
 - a missing recorded leader with possible surviving descendants removes the stale row without signalling the group and does

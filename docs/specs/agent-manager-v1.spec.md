@@ -127,6 +127,11 @@ omit `resultParser`. Unknown strategy ids and incoherent combinations fail manag
 requires protocol delivery for prompt, result schema, and result. A permission strategy must belong to the selected driver
 and provider family.
 
+`capabilities.cancellation: false` means the selected adapter exposes no provider graceful-cancellation dispatch. When it is
+`true`, the selected adapter MAY expose one provider-neutral dispatch. In either case, cancellation, deadline expiry, and
+shutdown use the same authoritative local cleanup; a missing, failed, or incomplete provider dispatch never delays or replaces
+that cleanup.
+
 Argument templates are interpreted by package code and checked against delivery mode:
 
 - `delivery.prompt: 'argument'` requires exactly one `prompt` item and forbids `prompt-file`;
@@ -526,15 +531,18 @@ or terminal lifecycle record. Its claimed leaf is consumer-owned quarantined res
 and temporary paths, never deletes the leaf, and a retry using that same path fails with `revo.agent.output_conflict`. Consumer
 retention eventually removes the residue; a retry uses a fresh output path.
 
-Workspace and output directories MUST be normalized absolute paths. The manager does not require one to contain the other
-and does not infer a hierarchy. For output ancestors, v1 relies on the consumer warranty: ancestor identity, symlink
+Workspace and output directories MUST be normalized absolute paths. `workspace.directory` MUST exist and identify a directory
+at preflight or fail with `revo.agent.workspace_invalid` before output-leaf claim or invocation spawn. The consumer authorizes
+the workspace; the manager does not require workspace/output containment or infer a hierarchy. It makes no workspace
+`realpath`, symlink, ownership, provenance, containment, or hostile-rebinding safety claim. For output ancestors, v1 relies on
+the consumer warranty: ancestor identity, symlink
 resolution, mount topology, and access policy MUST remain stable from preflight until no package filesystem operation for the
 start remains pending. For a rejection before leaf claim, that point is `start()` rejection. For a claimed leaf, all
 recording, publication, flush, scratch/temp cleanup attempts, and terminal filesystem append attempts MUST have settled and
 the start rejection or terminal result path MUST have settled. Reported or retained filesystem uncertainty extends the
 warranty until consumer reconciliation; process exit or elapsed time alone does not end it. The manager does not prove
 consumer provenance or hostile-ancestor safety with normalization, realpath, or containment checks. Workspace trust,
-existence, directory type, symlink/realpath policy, and workspace/output containment remain deferred.
+authorization, and output-ancestor trust remain separate responsibilities.
 
 The child environment is explicit. Nothing from `process.env` is inherited by default, and the child never receives a
 wholesale copy. `environment.inherit` names individual host variables to capture during preflight; missing named variables
@@ -654,12 +662,13 @@ machine.
 
 Only `running` and `cancelling` have consumer-backed active snapshots, and only on supported local POSIX platforms. These are
 process-supervision states, not a persisted copy of `AgentInvocationStatus`. For an invocation with a saved `running` row,
-the manager attempts to save the same process identity as `cancelling` before the first cancellation signal. A rejected or
-timed-out save emits bounded diagnostic `revo.agent.active_state_save_failed` but does not prevent the manager from using its
-live owned child handle to terminate and reap the process group. After confirmed termination it attempts `remove`; a stale
-`running` row left by a database outage is safe for the next initialization to remove once the PID is definitely absent.
-Cancellation and shutdown do not require host termination solely because active-state persistence failed when process-group
-termination and reap were confirmed.
+the manager starts a best-effort save of the same process identity as `cancelling` but does not await that save, its timeout,
+or its eventual quiescence before provider dispatch or the first local cancellation signal. A rejected or timed-out save emits
+bounded diagnostic `revo.agent.active_state_save_failed` but does not prevent the manager from using its live owned child
+handle to terminate and reap the process group. After confirmed termination it attempts `remove`; a stale `running` row left
+by a database outage is safe for the next initialization to remove once the PID is definitely absent. Cancellation and shutdown
+do not require host termination solely because active-state persistence failed when process-group termination and reap were
+confirmed.
 
 Natural leader exit is not yet process-group completion. Before removing the active snapshot or finalizing a result, the
 manager checks its live owned process group for descendants, sends group `SIGTERM`, performs the bounded wait and `SIGKILL`
@@ -888,8 +897,9 @@ type AgentEventListener = (event: AgentEvent) => void;
 observes one. Delivery is ordered per invocation by strictly increasing `sequence`. Listener failure is isolated and MUST NOT
 change invocation outcome; it is not re-emitted as a public diagnostic event. Delivery is synchronous after the applicable
 internal recording attempt; a slow listener applies consumer-side latency but cannot create an unbounded package queue. V1
-does not expose `AsyncIterable`. Active-run numeric capacity and event-fanout limits are deliberately deferred rather than
-invented by this draft.
+does not expose `AsyncIterable`, an internal listener queue, a listener-worker pool, or a numeric event-fanout limit. V1 also
+defines no active-invocation admission limit or internal admission queue. The consumer owns admission, concurrency, listener
+execution cost, downstream buffering, fanout, and backpressure.
 
 Every accepted invocation delivers exactly one process-local `invocation.finished` while the manager process remains alive.
 Before delivery, the manager MUST make the completed record visible to `getResult`. The terminal event signals result
@@ -949,15 +959,18 @@ an execution failure.
 separate `completedRuns` collection exists. Results are ordered by `acceptedAt`, then `invocationId`.
 
 Cancellation is idempotent. Unknown returns `unknown`; retained completion returns `already_completed`; active work returns
-`requested` after cancellation is committed. Saving `cancelling` is best-effort but ordered before the first signal; its
-bounded failure is diagnostic and does not block live process termination. Cancellation reason is bounded and redacted.
-
+`requested` after cancellation is committed. Saving `cancelling` is best-effort and non-blocking. For caller cancellation,
+deadline expiry, and shutdown, an adapter with `capabilities.cancellation: true` MAY dispatch its provider graceful-
+cancellation hook best-effort without awaiting acknowledgement or completion. A `false` capability, unavailable hook, or hook
+failure enters the identical local path. Cancellation reason is bounded and redacted.
 Termination uses the live owned child handle for normal in-memory invocations. Recovered processes require a fresh matching
 fingerprint before any signal; a persisted PID or process-group id alone is never authority. For supported local POSIX
-recovery, the manager sends `SIGTERM` to the identity-matched invocation process group, waits at most 5,000 ms, sends group
-`SIGKILL` earlier when the remaining active-state operation deadline requires it, and confirms termination/reap within that
-deadline. Timeout, cancellation, initialization cleanup, natural-exit descendant sweep, and shutdown share this POSIX
-escalation and confirmation contract. V1 defines no persisted recovery or process-group contract for other platforms.
+cleanup, the manager sends `SIGTERM` to the live-authorized invocation process group, waits at most 2,000 ms, sends group
+`SIGKILL` only if the group remains live, and confirms group termination and leader reap. Active-state operation deadlines do
+not shorten or extend this grace interval. Timeout, cancellation, initialization cleanup, natural-exit descendant sweep, and
+shutdown share this POSIX escalation and confirmation contract. Provider graceful-cancellation dispatch applies only to
+caller cancellation, deadline expiry, and shutdown; it is not implied by natural exit or recovery. V1 defines no persisted
+recovery or process-group contract for other platforms.
 
 `shutdown(reason?)` closes the manager's process-local supervision domain. It is idempotent and concurrency-safe: the first
 call atomically marks the manager closing and creates one shared completion promise. Concurrent and later calls return that
@@ -1249,8 +1262,7 @@ stopAll();
 - reconnection to native CLI or ACP-over-stdio invocations after manager restart;
 - reconnectable ACP socket/daemon transport;
 - package-owned run, step, attempt, retry, pipeline, or scheduling concepts;
-- async iterators, replayable subscriber cursors, cross-process fan-in, active-run numeric capacity, or event-fanout limits;
-- workspace/CWD trust and provenance policy, including realpath, symlink, and containment behavior;
+- async iterators, replayable subscriber cursors, or cross-process fan-in;
 - hostile or mutating output-ancestor support beyond the consumer-warranted stable-ancestor policy; such support requires a
   separate native capability design and supported-filesystem evidence;
 - supported platform/filesystem cells, Windows process-tree/recovery behavior, CI evidence, and provider-version/wire

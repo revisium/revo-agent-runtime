@@ -18,7 +18,8 @@ Use this order when sources disagree:
 
 The current root export is intentionally empty. Internal definition, registry, executable-probe, and deterministic
 lifecycle/result slices are implemented and tested, but remain private. The AgentManager v1 specification is a draft target,
-not a shipped API.
+not a shipped API. Its first platform/filesystem implementation and evidence target is Linux with a local `ext4` filesystem;
+macOS requires later native evidence, and Windows is outside the MVP. This sequence is not a shipped support claim.
 
 ## Ownership boundary
 
@@ -29,13 +30,15 @@ The package target owns:
   SemVer preflight before each invocation claims output or spawns;
 - package-owned protocol, parser, and permission strategies;
 - native command-line and ACP adapters;
-- one invocation lifecycle, process stdio, deadlines, cancellation, and reaping;
+- one invocation lifecycle, process stdio, deadlines, provider-neutral advisory cancellation dispatch, authoritative local
+  process-group cleanup, and reaping;
 - idempotent process-local shutdown with one shared settlement that drains accepted work, confirms owned invocation/probe
   kill and reap, and fails closed when cleanup cannot be confirmed;
-- process-local active and bounded retained-completed records;
+- process-local active records and a retained-completed FIFO with an exact construction bound of 1 through 1,000 records;
 - bounded local `darwin`/`linux` process identity, consumer-backed active-state notifications, and one-shot cleanup of
   consumer-supplied active snapshots;
-- normalized results, usage, bounded redacted technical evidence, lifecycle-only ordered subscriptions, and stable faults;
+- normalized results, usage, bounded redacted technical evidence, lifecycle-only ordered synchronous subscriptions without an
+  internal listener queue, and stable faults;
 - bounds and redaction before subscriber delivery and file writes;
 - conflict-safe recording of invocation-local files in one exact consumer-supplied directory.
 
@@ -43,6 +46,8 @@ The consuming host owns:
 
 - durable definition storage and rollout;
 - exact agent, model, profile, prompt, permission, result-schema, and workspace selection;
+- invocation admission, concurrency, listener execution cost, downstream buffering, fanout, and backpressure;
+- workspace authorization, ownership/provenance assessment, and any stronger realpath, symlink, or containment policy;
 - credential storage and selection plus the explicit per-invocation environment allowlist;
 - classification of explicit inherit/variables as nonsecret and credential values under `secrets`;
 - immutable execution-plan compilation and persistence;
