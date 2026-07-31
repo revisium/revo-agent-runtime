@@ -23,7 +23,9 @@ The boundary is already decided by [ADR-0001](./adr/0001-agent-runtime-boundary.
 [ADR-0003](./adr/0003-invocation-output-recording.md), and refined by
 [ADR-0008](./adr/0008-real-mechanics-supervision-boundary.md) and
 [ADR-0009](./adr/0009-process-signal-authority.md). [ADR-0010](./adr/0010-consumer-warranted-stable-output-ancestors.md)
-amends the output-hierarchy rule. Research may refine the draft specification. A finding that
+amends the output-hierarchy rule. [ADR-0011](./adr/0011-consumer-governed-local-supervision.md) records completed retention,
+consumer-governed admission/listeners, workspace authorization, authoritative local cleanup, and platform rollout. Research
+may refine the draft specification. A finding that
 changes an accepted decision requires a new refining, amending, or superseding ADR and human approval before implementation
 continues.
 
@@ -40,8 +42,12 @@ The roadmap carries these approved constraints:
    conformance harness, in addition to their wire-specific tests.
 6. Contract decision research and Human approval of contract decisions are non-waivable. Private agent discovery and executable probing additionally requires closure
    of only the Provider and platform conformance research evidence or contradiction that directly
-   affects its executable-probe literals and platform-unavailable contract. Full Provider and platform conformance research
-   remains non-waivable before Real process, filesystem, security, cancellation, and shutdown conformance and each provider adapter conformance work item that consumes it.
+   affects its executable-probe literals and platform-unavailable contract. The provider-neutral Linux/local-`ext4` POSIX core
+   is a second bounded exception: cancellation/deadline/shutdown and filesystem-publication work may proceed through
+   package-owned real-process fixtures and a generic adapter seam after its governing decisions and Linux/local-`ext4` fixture
+   prerequisites are approved. This exception makes no Codex, Claude, ACP, provider wire/version, or supported-cell claim. Full
+   Provider and platform conformance research remains non-waivable before Supported-cell closure and each native provider
+   adapter conformance work item that consumes it.
 7. The root session orchestrates human gates. The package reports technical results and typed faults; it does not approve,
    persist, resume, or advance a durable human gate.
 8. Cross-repository cutover is one-way. One-way orchestrator cutover does not introduce dual routing, compatibility fallbacks, or implicit provider
@@ -53,13 +59,26 @@ The roadmap carries these approved constraints:
     post-spawn process fingerprints have separate purposes.
 11. Events are lifecycle-only; `invocation.finished` signals result availability through the result APIs. Bounded redacted
     streams, raw response, typed terminal result, and exact invocation files remain their own contracts.
-12. This documentation decision records no implementation, provider/CI/platform conformance, or root export. Active-run
-    numeric capacity and event fanout remain deferred rather than receiving invented values.
+12. This documentation decision records no implementation, provider/CI/platform conformance, or root export. Per
+    [ADR-0011](./adr/0011-consumer-governed-local-supervision.md), v1 has no package active-invocation cap or internal admission
+    queue, and synchronous listeners have no package queue, worker pool, or numeric fanout limit. The consumer owns admission,
+    concurrency, listener cost, downstream buffering, fanout, and backpressure.
 13. ADR-0009 requires Option A pre-acceptance cleanup: confirmed cleanup rejects `start()` without public invocation, while
     unconfirmed identity/save reap retains a private guard/reservation for shutdown retry and external consumer resolution.
     A rejected setup leaf is consumer-owned quarantined residue; retry uses a fresh output path.
 14. ADR-0010 assigns output-hierarchy provisioning and a trusted stable-ancestor warranty through terminal filesystem
     quiescence to the consumer. The manager creates only the absent final leaf; hostile-ancestor support remains deferred.
+15. ADR-0011 fixes retained completed FIFO capacity at minimum 1, default 1,000, and maximum 1,000; construction may select a
+    lower value, while active invocations neither occupy nor evict retained-completed capacity.
+16. ADR-0011 treats the consumer-authorized workspace as a bounded normalized absolute existing directory and creates no
+    package certification of realpath/symlink topology, containment, ownership, provenance, hostile rebinding, or a
+    workspace/output relationship.
+17. ADR-0011 makes `cancelling` persistence and provider graceful-cancellation dispatch best-effort and non-blocking.
+    Caller cancellation, deadline, and shutdown use the provider-neutral hook only when available for a cancellation-capable
+    definition, without drain; a false capability or missing/failed hook takes the same immediate local path. Authoritative
+    owned-POSIX-group cleanup uses `SIGTERM`, at most 2 seconds of grace, conditional `SIGKILL`, and confirmed group absence plus
+    leader reap for cancellation, deadline, shutdown, natural-exit sweep, and recovery; first-terminal arbitration remains
+    authoritative.
 
 ## 3. Extraction approaches
 
@@ -121,10 +140,10 @@ All paths in the following table are **sibling-repository paths**, relative to t
 
 Contract decision research produces evidence-backed answers for remaining contract gaps. It does not write production code.
 The approved real-mechanics documentation contract now owns fresh version-probe preflight, lifecycle-only events,
-first-commit terminal arbitration, terminal-only idle timing, the exact streaming-redaction algorithm, and consumer-warranted
-stable output ancestors through terminal filesystem quiescence. Remaining research covers cancellation when a definition
-declares no protocol cancellation; workspace/CWD policy and hostile-output-ancestor support; active-run capacity/event fanout;
-and public platform, CI, and provider support.
+first-commit terminal arbitration, terminal-only idle timing, the exact streaming-redaction algorithm, consumer-warranted
+stable output ancestors through terminal filesystem quiescence, and the decisions recorded by ADR-0011. Remaining research
+covers hostile-output-ancestor support, provider versions and wires, the macOS native cell/evidence, Windows future design,
+CI evidence, and the required shared-conformance evidence classes.
 
 **Exit:** every Human approval of contract decisions item has one explicit decision, supporting source or experiment, affected
 specification clauses, and an identified verification owner. If evidence contradicts an accepted ADR, Contract decision research
@@ -139,7 +158,8 @@ the later roadmap responsibility that consumes it.
 
 - [x] The supported JSON Schema draft 2020-12 surface is closed precisely, including unknown properties, `$ref`, vocabularies,
       formats, and bounded diagnostics; the evaluator and RFC 8785 dependency or package-owned implementation are approved.
-- [ ] `capabilities.cancellation: false` has one observable manager-cancel and shutdown behavior.
+- [x] `capabilities.cancellation: false` has the best-effort provider-dispatch and immediate authoritative local-cleanup
+      behavior recorded by [ADR-0011](./adr/0011-consumer-governed-local-supervision.md).
 - [x] Acceptance is located relative to id reservation, fresh launch proof, output-leaf claim, active registration, shutdown
       racing, cleanup, and handle return; every losing path has explicit evidence ownership.
 - [x] Simultaneous cancellation, wall/idle timeout, process exit, protocol failure, result failure, scratch cleanup failure,
@@ -147,18 +167,38 @@ the later roadmap responsibility that consumes it.
       pre-commit priority.
 - [x] Streaming redaction defines literal and built-in patterns, `[REDACTED]` replacement text, per-channel 64 KiB carry,
       leftmost-longest overlap selection, final flush, mutable-buffer clearing, and all pre-sink applications.
-- [ ] Workspace and CWD rules define absolute normalization, existence, directory type, symlink/realpath behavior, and the
-      intentionally absent workspace/output containment requirement.
+- [x] Workspace and CWD rules define consumer authorization, absolute normalization, existence, directory type, intentionally
+      absent package realpath/symlink/containment/ownership/provenance certification, and no implied workspace/output
+      containment ([ADR-0011](./adr/0011-consumer-governed-local-supervision.md)).
 - [x] Output ancestors are consumer-provisioned, trusted, and stable through terminal filesystem quiescence; the manager
       creates only the absent final leaf and makes no hostile-ancestor safety claim.
-- [ ] Active-run numeric capacity and event fanout are explicitly bounded or consumer-governed. This documentation contract
-      deliberately creates no numeric values for either topic.
+- [x] Active-invocation admission/concurrency and synchronous listener cost/fanout/buffering/backpressure are consumer-governed;
+      the package adds no admission queue, listener queue/pool, or numeric active/listener limit
+      ([ADR-0011](./adr/0011-consumer-governed-local-supervision.md)).
 - [x] Idle timing is terminal-only: stdout, stderr, valid protocol frames, listeners, file work, and internal timers do not
       reset it. Legacy heartbeat and operation counters are not adopted.
 - [ ] The proposed provider-version and OS/filesystem support matrix for Provider and platform conformance research is explicit,
       including unsupported-cell behavior.
 - [ ] Shared-conformance evidence is classified as deterministic real-process fixtures, credentialed live-provider runs, or a
       required combination; missing credentials are never reported as a pass.
+
+#### Platform rollout decision record — 2026-07-31
+
+Human approval sets the following implementation and evidence sequence. It is not a current compatibility claim: a cell becomes
+supported only after its required native process/filesystem and provider conformance evidence passes. The decision is recorded
+by [ADR-0011](./adr/0011-consumer-governed-local-supervision.md).
+
+- The first implementation and native-conformance target is a Linux host with a local `ext4` filesystem. This MVP slice uses
+  Node's built-in `child_process` with package-owned Linux process-group supervision; it does not add `execa`, `cross-spawn`,
+  DBOS, Docker-based OS emulation, or `systemd`/`launchd` as a mandatory invocation backend.
+- macOS follows as a separate native implementation and validation slice on a colleague-host. Its exact filesystem cell is chosen
+  only from observed host evidence; it is not supported or inferred from Linux evidence.
+- Windows is explicitly outside the MVP. Until a separately approved Windows process/filesystem design and native evidence exist,
+  it remains unsupported and follows the existing `revo.agent.platform_unsupported` preflight path before output-leaf claim or
+  process spawn.
+
+The unchecked matrix item remains open because provider versions, the macOS cell, and all required conformance evidence are not
+yet recorded.
 
 #### Private agent discovery and executable probing entry decision record — 2026-07-20
 
@@ -207,40 +247,47 @@ Provider and platform conformance research also completes the cross-product belo
 contract decisions declares it supported; unsupported cells require a stable preflight or construction outcome and documentation,
 not a skipped test disguised as success.
 
-| Platform/filesystem cell             | Process evidence                                                                             | Filesystem/security evidence                                                                                                          | Provider coverage                               |
-| ------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| Linux on each supported filesystem   | Direct spawn, signal/process-tree termination, confirmed reap, timeout, and cancellation.    | Owner-only scratch, exclusive leaf, bounded files, hard-link result publication, file/directory flush behavior, and cleanup ordering. | Every provider declared supported on this cell. |
-| Darwin on each supported filesystem  | Direct spawn, process-group termination, confirmed reap, timeout, and cancellation.          | The same exclusive publication and owner-only evidence, including directory flush support.                                            | Every provider declared supported on this cell. |
-| Windows on each supported filesystem | Direct spawn, process-tree termination mechanism, confirmed reap, timeout, and cancellation. | Equivalent owner-only scratch and non-replacing publication evidence or an approved fail-closed unsupported outcome.                  | Every provider declared supported on this cell. |
+| Platform/filesystem cell              | Process evidence                                                                                        | Filesystem/security evidence                                                                                                          | Provider coverage                                     |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Linux on local `ext4`                 | First target: direct spawn, signal/process-tree termination, confirmed reap, timeout, and cancellation. | Owner-only scratch, exclusive leaf, bounded files, hard-link result publication, file/directory flush behavior, and cleanup ordering. | Every provider later declared supported on this cell. |
+| macOS filesystem cell to be evidenced | Later separate native process-group, confirmed-reap, timeout, and cancellation evidence.                | A cell selected from the native host; Linux filesystem evidence is not reused.                                                        | Every provider later declared supported on that cell. |
+| Windows outside MVP                   | Unsupported pending a separately approved future process/filesystem design and native evidence.         | Fail closed before output-leaf claim or process spawn; no current filesystem-support claim.                                           | None in MVP.                                          |
 
 **Partial exit for Private agent discovery and executable probing:** executable-probe literals and the stable
 platform-unavailable partition have no unresolved contradiction. Missing provider wire, permission, cancellation, process-ownership,
 or filesystem evidence does not block this responsibility because it uses only a fake executable-probe port.
 
-**Full exit for Real process, filesystem, security, cancellation, and shutdown conformance and the provider adapter conformance
-work items:** all supported cells have reproducible observations and bounded fixtures; exact provider versions are recorded; every
-unsupported cell has a stable contract; and every contradiction has completed the Contract decision research and Human approval of
-contract decisions loop. Full Provider and platform conformance research is non-waivable before real-process/platform and provider
-adapter conformance work even if legacy provider tests are green.
+**Partial exit for the provider-neutral Linux/local-`ext4` POSIX core:** the governing process-supervision and filesystem
+decisions are approved, package-owned Linux/local-`ext4` real-process fixtures can exercise the generic adapter seam, and no
+contradiction affects that scoped core. Provider versions, wires, permissions, usage, and provider cancellation/completion
+semantics may remain unresolved because this exit authorizes no Codex, Claude, ACP, native-adapter, or supported-cell claim.
+
+**Full exit for Supported-cell closure and the provider adapter conformance work items:** all supported cells have reproducible
+observations and bounded fixtures; exact provider versions are recorded; every unsupported cell has a stable contract; and every
+contradiction has completed the Contract decision research and Human approval of contract decisions loop. Full Provider and
+platform conformance research is non-waivable before supported-cell closure and native provider adapter conformance work even if
+package-owned fixtures or legacy provider tests are green.
 
 ## 7. Corrected responsibility graph
 
 The approved real-mechanics implementation sequence is deliberately narrower than a provider rollout. Documentation is the
 current completed contract-recording step; every following stage remains target work and does not change the empty root export.
-Full Provider and platform conformance research is a non-waivable entry prerequisite for every real-process stage below; this
-roadmap does not claim that research is complete.
+The provider-neutral Linux/local-`ext4` POSIX core may enter stages 3 and 4 through package-owned real-process fixtures and a
+generic adapter seam after its governing decisions and fixture prerequisites are approved. Full Provider and platform
+conformance research remains a non-waivable entry prerequisite for Supported-cell closure and native provider adapter
+conformance; this roadmap does not claim that research is complete.
 
-| Sequence | Target responsibility                 | Entry gate                                                                                 | Exit boundary                                                                                                                                                                                 |
-| -------- | ------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1        | Documentation contract                | Approved documentation scope.                                                              | ADR-0008, ADR-0009, ADR-0010, draft spec, roadmap, and required consistency surfaces agree; no code or conformance claim follows.                                                             |
-| 2        | Foundation                            | Documentation contract.                                                                    | Private multi-invocation supervision, fresh launch preflight boundary, lifecycle/result API seam, and deterministic tests exist without claiming real cancellation or filesystem publication. |
-| 3        | Cancellation, deadlines, and shutdown | Foundation plus full Provider and platform conformance research.                           | The approved terminal-only idle, first-commit arbitration, cancellation, kill/reap, and shutdown rules pass their owning real-process tests.                                                  |
-| 4        | Filesystem publication                | Cancellation/deadline/shutdown stage plus full Provider and platform conformance research. | Exact leaf claim, bounded redacted evidence, scratch lifecycle, and non-replacing `result.json` publication pass their owning filesystem tests.                                               |
-| 5        | Supported-cell closure                | Filesystem publication plus full Provider and platform conformance research.               | Approved platform/filesystem cells, Windows/CI posture, and provider evidence are explicitly supported or fail closed before adapter/public-package completion.                               |
+| Sequence | Target responsibility                 | Entry gate                                                                                                                                  | Exit boundary                                                                                                                                                                                              |
+| -------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1        | Documentation contract                | Approved documentation scope.                                                                                                               | ADR-0008, ADR-0009, ADR-0010, ADR-0011, draft spec, roadmap, and required consistency surfaces agree; no code or conformance claim follows.                                                                |
+| 2        | Foundation                            | Documentation contract.                                                                                                                     | Private multi-invocation supervision, fresh launch preflight boundary, lifecycle/result API seam, and deterministic tests exist without claiming real cancellation or filesystem publication.              |
+| 3        | Cancellation, deadlines, and shutdown | Foundation plus governing decisions and package-owned Linux/local-`ext4` real-process fixtures; provider-neutral generic adapter seam only. | The approved terminal-only idle, first-commit arbitration, cancellation, kill/reap, and shutdown rules pass their package-owned Linux/local-`ext4` real-process tests without a provider or support claim. |
+| 4        | Filesystem publication                | Stage 3 plus governing decisions and package-owned Linux/local-`ext4` filesystem fixtures; provider-neutral generic adapter seam only.      | Exact leaf claim, bounded redacted evidence, scratch lifecycle, and non-replacing `result.json` publication pass their package-owned Linux/local-`ext4` filesystem tests without a support claim.          |
+| 5        | Supported-cell closure                | Filesystem publication plus full Provider and platform conformance research.                                                                | Approved platform/filesystem cells, Windows/CI posture, and provider evidence are explicitly supported or fail closed before adapter/public-package completion.                                            |
 
-Residual blockers remain: workspace/CWD trust and provenance, hostile-output-ancestor support, exact supported
-platform/filesystem cells, Windows behavior, CI evidence, provider versions/wires, `capabilities.cancellation: false`, and any
-consumer-facing capacity/fanout decision. No stage may treat an unsupported or untested cell as passed.
+Residual blockers remain: hostile-output-ancestor support, provider versions/wires, the macOS native cell/evidence, Windows
+future design, CI evidence, shared-conformance evidence classification, and any other unrecorded supported-cell evidence. No
+stage may treat an unsupported or untested cell as passed.
 
 ```text
 Documentation contract
@@ -278,8 +325,6 @@ Human approval of the exact package artifact and consumer candidate
         v
 One-way orchestrator cutover
 
-Provider and platform conformance research --> Cancellation, deadlines, and shutdown
-Provider and platform conformance research --> Filesystem publication
 Provider and platform conformance research --> Supported-cell closure
 Provider and platform conformance research --> Native Codex adapter conformance
 Provider and platform conformance research --> Native Claude adapter conformance
@@ -336,22 +381,29 @@ redaction, or provider success. It is an internal lifecycle/result proof only. T
 
 ### Real process, filesystem, security, cancellation, and shutdown conformance
 
-**Entry:** Deterministic lifecycle and result conformance base harness green and full Provider and platform conformance
-research complete. This entry requirement applies to its cancellation/deadline/shutdown and filesystem-publication work; it
-does not claim that the research is complete today.
+**Entry:** Deterministic lifecycle and result conformance base harness green; the governing process-supervision and filesystem
+decisions are approved; and package-owned Linux/local-`ext4` real-process and filesystem fixtures are available. This entry is
+limited to the provider-neutral POSIX core and generic adapter seam. Full Provider and platform conformance research remains
+required before Supported-cell closure and native provider adapter conformance; no provider wire/version or supported-cell
+claim follows from this entry.
 
-**Owns:** real direct spawn and stdio ports; explicit environment capture; streaming redaction; byte, item, queue, and
-retention bounds; workspace and output preflight; exclusive output leaf; owner-only scratch; bounded event/stdout/stderr/raw
-files; non-replacing result publication; idle/wall deadlines; cancellation; process-tree kill/reap confirmation; shutdown;
-and late-finalization failure behavior.
+**Owns:** the provider-neutral Linux/local-`ext4` POSIX process-supervision and filesystem core exercised through package-owned
+real-process fixtures and a generic adapter seam: real direct spawn and stdio ports; explicit environment capture; streaming
+redaction; byte, item, queue, and retention bounds; workspace and output preflight; exclusive output leaf; owner-only scratch;
+bounded event/stdout/stderr/raw files; non-replacing result publication; idle/wall deadlines; cancellation; process-tree
+kill/reap confirmation; shutdown; and late-finalization failure behavior. It owns no Codex, Claude, ACP, or other provider
+wire/version behavior.
 
-**Exit:** the base harness is extended with real temporary process and filesystem scenarios. It proves all approved contract-precedence and security decisions, acceptance/shutdown races, subscriber failure isolation, terminal delivery ordering, scratch cleanup,
-late I/O branches, fail-closed shutdown ownership, and supported platform cells. The provider-neutral frozen real-process
-harness proves Option A pre-acceptance rejection, private guard/reservation on unconfirmed reap, bounded shutdown retry, and
-consumer-owned quarantined rejected-setup leaves. It also proves C1 cancellation-cleanup faults and S1 maybe-persisted
-initial-save removal/reconciliation, including post-abort fulfilled-save quiescence, confirmed removal before id release, the
-per-invocation serialized active-state lane, and both late-save-race outcomes, before Native Codex adapter conformance begins.
-This is shared infrastructure proof, not provider completion. The root export remains empty.
+**Exit:** the base harness is extended with package-owned, provider-neutral Linux/local-`ext4` temporary process and filesystem
+scenarios through the generic adapter seam. It proves all approved contract-precedence and security decisions,
+acceptance/shutdown races, subscriber failure isolation, terminal delivery ordering, scratch cleanup, late I/O branches, and
+fail-closed shutdown ownership for that scoped core without declaring a supported platform cell. The provider-neutral frozen
+real-process harness proves Option A pre-acceptance rejection, private guard/reservation on unconfirmed reap, bounded shutdown
+retry, and consumer-owned quarantined rejected-setup leaves. It also proves C1 cancellation-cleanup faults and S1
+maybe-persisted initial-save removal/reconciliation, including post-abort fulfilled-save quiescence, confirmed removal before
+id release, the per-invocation serialized active-state lane, and both late-save-race outcomes. Full research and the applicable
+provider evidence remain required before Native Codex adapter conformance begins. This is shared infrastructure proof, not a
+provider, supported-cell, or shipped-behavior completion claim. The root export remains empty.
 
 ### Native Codex adapter conformance
 
@@ -442,17 +494,17 @@ merge, it runs the complete target-repository gate from [VERIFICATION.md](../VER
 unsupported provider/platform cell are reported as blocked, skipped, or unsupported according to the approved matrix, never
 as passed.
 
-| Roadmap responsibility                                                     | Minimum proof before exit                                                                                                                                                                                                |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Contract decision research and Human approval of contract decisions        | Documentation consistency across ADRs, specification, architecture, testing, review policy, and this roadmap; recorded human approval for every Human approval of contract decisions item.                               |
-| Provider and platform conformance research                                 | Reproducible version/protocol/platform observations, bounded fixtures, complete supported/unsupported matrix, and completed Contract decision research and Human approval of contract decisions loop for contradictions. |
-| Private agent discovery and executable probing                             | Unit/contract definition/identity/closed consumer-schema profile/registry/single-and-batch fake-probe tests, architecture positive and negative probes, and full `pnpm verify`.                                          |
-| Deterministic lifecycle and result conformance                             | Base shared conformance harness against deterministic fake ports, lifecycle/result contract tests, architecture proof, and full `pnpm verify`; no real-success claim.                                                    |
-| Real process, filesystem, security, cancellation, and shutdown conformance | Extended harness against real temporary process/filesystem fixtures, security/redaction/bounds/race/finalization tests on supported cells, and full `pnpm verify`.                                                       |
-| All provider adapter conformance work                                      | The same extended harness instantiated by each adapter, wire-specific tests, required Provider and platform conformance research evidence class, and full `pnpm verify` for each merged lane.                            |
-| Complete unpublished public package candidate                              | Complete runtime/contract/integration/package/type/declaration/export/packed-consumer/coverage/architecture evidence from one exact head and tarball, plus full `pnpm verify`.                                           |
-| Human approval of the exact package artifact and consumer candidate        | Exact orchestrator head, artifact identity, approved dependency and lockfile diff, successful isolated consumer install, mapping/durable-gate results, and human acceptance.                                             |
-| One-way orchestrator cutover                                               | Merge and activation of only the head approved by Human approval of the exact package artifact and consumer candidate, provider cutover tests, legacy-path absence proof, and the orchestrator's complete `pnpm verify`. |
+| Roadmap responsibility                                                     | Minimum proof before exit                                                                                                                                                                                                                                           |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Contract decision research and Human approval of contract decisions        | Documentation consistency across ADRs, specification, architecture, testing, review policy, and this roadmap; recorded human approval for every Human approval of contract decisions item.                                                                          |
+| Provider and platform conformance research                                 | Reproducible version/protocol/platform observations, bounded fixtures, complete supported/unsupported matrix, and completed Contract decision research and Human approval of contract decisions loop for contradictions.                                            |
+| Private agent discovery and executable probing                             | Unit/contract definition/identity/closed consumer-schema profile/registry/single-and-batch fake-probe tests, architecture positive and negative probes, and full `pnpm verify`.                                                                                     |
+| Deterministic lifecycle and result conformance                             | Base shared conformance harness against deterministic fake ports, lifecycle/result contract tests, architecture proof, and full `pnpm verify`; no real-success claim.                                                                                               |
+| Real process, filesystem, security, cancellation, and shutdown conformance | Extended harness against package-owned, provider-neutral Linux/local-`ext4` temporary process/filesystem fixtures through the generic adapter seam, security/redaction/bounds/race/finalization tests, and full `pnpm verify`; no provider or supported-cell claim. |
+| All provider adapter conformance work                                      | The same extended harness instantiated by each adapter, wire-specific tests, required Provider and platform conformance research evidence class, and full `pnpm verify` for each merged lane.                                                                       |
+| Complete unpublished public package candidate                              | Complete runtime/contract/integration/package/type/declaration/export/packed-consumer/coverage/architecture evidence from one exact head and tarball, plus full `pnpm verify`.                                                                                      |
+| Human approval of the exact package artifact and consumer candidate        | Exact orchestrator head, artifact identity, approved dependency and lockfile diff, successful isolated consumer install, mapping/durable-gate results, and human acceptance.                                                                                        |
+| One-way orchestrator cutover                                               | Merge and activation of only the head approved by Human approval of the exact package artifact and consumer candidate, provider cutover tests, legacy-path absence proof, and the orchestrator's complete `pnpm verify`.                                            |
 
 No roadmap responsibility may weaken required tests, bounds, public types, or package gates to become green. The Complete unpublished public package candidate remains unpublished even
 after all local verification passes.
@@ -488,18 +540,14 @@ not edited in place.
 
 These decisions are deliberately unresolved until their owning gate. They MUST NOT be guessed by an implementation role.
 
-| Required by                                                                                                                                                       | Decision                                                                                                                                                                                                        |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Human approval of contract decisions                                                                                                                              | Acceptance of the closed consumer-schema profile and separate Zod/Ajv boundary; selection and audit of the exact-pinned external RFC 8785 implementation before Private agent discovery and executable probing. |
-| Human approval of contract decisions                                                                                                                              | Observable cancellation/shutdown behavior for definitions without protocol cancellation.                                                                                                                        |
-| Human approval of contract decisions                                                                                                                              | Workspace/CWD existence, symlink, realpath, and normalization policy.                                                                                                                                           |
-| Human approval of contract decisions                                                                                                                              | Active-run numeric capacity and event-fanout ownership/bounds.                                                                                                                                                  |
-| Human approval of contract decisions                                                                                                                              | Proposed provider versions, supported OS/filesystem cells, and stable unsupported behavior for Provider and platform conformance research.                                                                      |
-| Human approval of contract decisions                                                                                                                              | Required deterministic versus credentialed evidence for shared conformance.                                                                                                                                     |
-| Provider and platform conformance research and Private agent discovery and executable probing                                                                     | Approval of any executable-probe or platform-unavailable observation that changes a Human approval of contract decisions decision, the draft spec, or an accepted ADR.                                          |
-| Provider and platform conformance research, Real process, filesystem, security, cancellation, and shutdown conformance, and All provider adapter conformance work | Full provider, process-ownership, filesystem, permission, cancellation, and supported-cell evidence before the consuming roadmap responsibility.                                                                |
-| Real process, filesystem, security, cancellation, and shutdown conformance                                                                                        | Acceptance of any residual platform limitation after the approved fail-closed behavior is implemented and tested.                                                                                               |
-| Human approval of the exact package artifact and consumer candidate                                                                                               | Exact orchestrator candidate head, unpublished artifact delivery, version/commit/digest, dependency and lockfile, mapping/durable-gate results, and artifact/package-pin or host rollback procedure.            |
-| One-way orchestrator cutover                                                                                                                                      | Authorization for the one-way orchestrator cutover and removal of replaced legacy execution paths.                                                                                                              |
+| Required by                                                                                                   | Decision                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Human approval of contract decisions                                                                          | Provider versions, the macOS native filesystem cell/evidence, Windows future process/filesystem design, and the remaining supported/unsupported-cell evidence for Provider and platform conformance research.                                                        |
+| Human approval of contract decisions                                                                          | Required deterministic versus credentialed evidence for shared conformance.                                                                                                                                                                                          |
+| Provider and platform conformance research and Private agent discovery and executable probing                 | Approval of any executable-probe or platform-unavailable observation that changes a Human approval of contract decisions decision, the draft spec, or an accepted ADR.                                                                                               |
+| Provider and platform conformance research, Supported-cell closure, and All provider adapter conformance work | Full provider, process-ownership, filesystem, permission, cancellation, and supported-cell evidence before supported-cell closure and each consuming native provider adapter conformance item; not before the scoped provider-neutral Linux/local-`ext4` POSIX core. |
+| Real process, filesystem, security, cancellation, and shutdown conformance                                    | Acceptance of any residual platform limitation after the approved fail-closed behavior is implemented and tested.                                                                                                                                                    |
+| Human approval of the exact package artifact and consumer candidate                                           | Exact orchestrator candidate head, unpublished artifact delivery, version/commit/digest, dependency and lockfile, mapping/durable-gate results, and artifact/package-pin or host rollback procedure.                                                                 |
+| One-way orchestrator cutover                                                                                  | Authorization for the one-way orchestrator cutover and removal of replaced legacy execution paths.                                                                                                                                                                   |
 
 Until the relevant decision is approved, its roadmap responsibility is blocked rather than partially passed.
