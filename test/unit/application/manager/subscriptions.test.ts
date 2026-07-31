@@ -27,8 +27,11 @@ test('admits listeners without a package-owned capacity', () => {
 test('does not couple listener registration to completed retention capacity', () => {
   const subscriptions = new TerminalSubscriptions();
 
-  expectSubscribed(subscriptions.subscribe({}, () => undefined));
-  expectSubscribed(subscriptions.subscribe({}, () => undefined));
+  const first = subscriptions.subscribe({}, () => undefined);
+  const second = subscriptions.subscribe({}, () => undefined);
+
+  expect(first).toEqual(expect.objectContaining({ state: 'subscribed' }));
+  expect(second).toEqual(expect.objectContaining({ state: 'subscribed' }));
 });
 
 test('frees exactly one slot after idempotent disposal', () => {
