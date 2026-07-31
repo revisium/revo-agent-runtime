@@ -105,6 +105,7 @@ test.runIf(process.platform === 'linux')(
       const environmentPath = join(directory, 'environment.json');
       const port = new NodePosixProcessSupervisionPort();
       const ownedProcess = await port.start({
+        cwd: process.cwd(),
         executable: process.execPath,
         args: ['--input-type=module', '--eval', recordEnvironment, environmentPath],
         shell: false,
@@ -141,6 +142,7 @@ test.runIf(process.platform === 'linux')(
       const descendantPidPath = join(directory, 'descendant.pid');
       const port = new NodePosixProcessSupervisionPort();
       ownedProcess = await port.start({
+        cwd: process.cwd(),
         executable: '/bin/sh',
         args: [fixturePath, '', descendantPidPath, '5'],
         shell: false,
@@ -175,6 +177,7 @@ test.runIf(process.platform === 'linux')(
         },
       });
       const starting = port.start({
+        cwd: process.cwd(),
         executable: '/bin/sh',
         args: [fixturePath, '', '', '5', leaderPidPath],
         shell: false,

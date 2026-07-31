@@ -189,6 +189,7 @@ export class NodePosixProcessSupervisionPort implements ProcessSupervisionPort {
 
     const environment = copyEnvironment(request.environment);
     const child = spawn(request.executable, [...request.args], {
+      cwd: request.cwd,
       detached: true,
       env: environment,
       shell: request.shell,

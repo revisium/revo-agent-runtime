@@ -1,6 +1,7 @@
 import type { InvocationTerminalObservation } from './execution-terminal-observation.js';
 import type { InvocationInputSnapshot } from './input-snapshot.js';
 import type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
+import type { WorkspaceAdmissionResult } from './workspace-admission-result.js';
 
 export interface InvocationExecutionPorts {
   readonly execution: {
@@ -8,6 +9,9 @@ export interface InvocationExecutionPorts {
       readonly completion: Promise<InvocationTerminalObservation>;
       requestCancellation(): Promise<void>;
     }>;
+  };
+  readonly workspace?: {
+    admit(path: string): Promise<WorkspaceAdmissionResult>;
   };
   readonly clock: {
     now(): number;

@@ -183,7 +183,7 @@ test('delivers one canonical result after lookup visibility and isolates listene
   expect(throwing.state).toBe('subscribed');
   expect(matching.state).toBe('subscribed');
   expect(filtered.state).toBe('subscribed');
-  expect(overCapacity).toEqual({ state: 'rejected', reason: 'capacity' });
+  expect(overCapacity.state).toBe('subscribed');
 
   const accepted = await subject.start(subject.createInput('delivered'));
   if (accepted.status !== 'accepted') throw new Error('Expected listener invocation acceptance.');

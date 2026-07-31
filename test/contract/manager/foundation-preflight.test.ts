@@ -1,8 +1,11 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 
 import { createInvocationLifecycleManager } from '../../../src/application/manager/index.js';
 import { AgentManagerError } from '../../../src/runtime/errors/index.js';
-import type { InvocationExecutionPorts } from '../../../src/runtime/execution/index.js';
+import type {
+  InvocationExecutionPorts,
+  WorkspaceAdmissionResult,
+} from '../../../src/runtime/execution/index.js';
 import { AGENT_FAULT_MESSAGES } from '../../../src/runtime/policy/index.js';
 import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
@@ -33,6 +36,7 @@ const flush = async (): Promise<void> => {
 
 const createPorts = (
   platform: 'darwin' | 'linux',
+  workspaceAdmission?: WorkspaceAdmissionResult,
 ): Readonly<{
   execution: FakeInvocationExecutionPort;
   output: FakeInvocationOutputPort;
@@ -47,9 +51,60 @@ const createPorts = (
     output,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     executableProbe: probe,
+    ...(workspaceAdmission === undefined
+      ? {}
+      : { workspace: { admit: vi.fn(async () => workspaceAdmission) } }),
   } as InvocationExecutionPorts;
   return Object.freeze({ execution, output, probe, ports });
 };
+
+test('rejects workspace admission before output preparation or execution delegation', async () => {
+  const { execution, output, probe, ports } = createPorts('linux', {
+    status: 'rejected',
+    reason: 'invalid_path',
+  });
+  const definition = buildAgentDefinition();
+  const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+
+  await expect(
+    manager.start({
+      invocationId: 'invalid-workspace',
+      agent: { id: definition.id, version: definition.version },
+      resultSchema,
+      workspace: { directory: '../relative/./hostile\u0000path' },
+    }),
+  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  expect(probe.calls()).toEqual([]);
+  expect(output.calls()).toEqual([]);
+  expect(execution.calls()).toEqual([]);
+});
+
+test('admits a normalized absolute workspace before output preparation and execution', async () => {
+  const { execution, output, probe, ports } = createPorts('linux', {
+    status: 'admitted',
+    directory: '/approved/workspace',
+  });
+  const definition = buildAgentDefinition();
+  const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+  probe.enqueueResolution({ status: 'resolved', executable: '/resolved/workspace-agent' });
+  probe.enqueueVersionStart('running');
+  output.enqueuePrepare();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+
+  const started = manager.start({
+    invocationId: 'valid-workspace',
+    agent: { id: definition.id, version: definition.version },
+    resultSchema,
+    workspace: { directory: '/approved/workspace' },
+  });
+  await flush();
+  probe.settleCompletion(1, exited());
+
+  await expect(started).resolves.toMatchObject({ status: 'accepted' });
+  expect(output.calls()[0]).toEqual({ type: 'prepare' });
+  expect(execution.calls()).toEqual([{ type: 'start' }]);
+});
 
 test('freshly probes every invocation before output preparation and execution delegation', async () => {
   const { execution, output, probe, ports } = createPorts('linux');
