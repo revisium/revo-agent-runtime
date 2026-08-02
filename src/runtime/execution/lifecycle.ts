@@ -4,6 +4,7 @@ import { finalizeInvocationOutcome } from './finalize-invocation-outcome.js';
 import { InvocationInputSnapshot } from './input-snapshot.js';
 import { normalizeInvocationOutcome } from './normalize-invocation-outcome.js';
 import type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
+import type { PreparedLaunch } from './prepared-launch.js';
 import type { ResultSchemaValidator } from './result-schema-validator.js';
 
 type LifecycleState =
@@ -45,6 +46,7 @@ export class InvocationLifecycle {
   constructor(
     private readonly ports: InvocationExecutionPorts,
     private readonly snapshot: InvocationInputSnapshot,
+    private readonly preparedLaunch: PreparedLaunch,
     private readonly onTerminal: (settlement: NormalizedInvocationOutcome) => void,
     private readonly resultSchemaValidator: ResultSchemaValidator = Object.freeze({
       validate: () => undefined,
@@ -71,7 +73,7 @@ export class InvocationLifecycle {
 
   private async startExecution(): Promise<void> {
     try {
-      const execution = await this.ports.execution.start(this.snapshot);
+      const execution = await this.ports.execution.start(this.snapshot, this.preparedLaunch);
       if (this.state === 'terminal' || this.state === 'finalizing') return;
       this.execution = execution;
       this.deadlineCancellation = this.ports.clock.schedule(

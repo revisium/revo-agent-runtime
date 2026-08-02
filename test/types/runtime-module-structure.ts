@@ -27,6 +27,7 @@ import type {
   InvocationTerminalObservation,
   LiveOwnedProcess,
   NormalizedInvocationOutcome,
+  PreparedLaunch,
   ProcessExitObservation,
   ProcessIdentity,
   ProcessOutputSink,
@@ -400,7 +401,10 @@ export type RuntimeContractSurface = readonly [
 
 type ExpectedInvocationExecutionPorts = {
   readonly execution: {
-    start(snapshot: InvocationInputSnapshot): Promise<{
+    start(
+      snapshot: InvocationInputSnapshot,
+      preparedLaunch: PreparedLaunch,
+    ): Promise<{
       readonly completion: Promise<InvocationTerminalObservation>;
       requestCancellation(): Promise<void>;
     }>;

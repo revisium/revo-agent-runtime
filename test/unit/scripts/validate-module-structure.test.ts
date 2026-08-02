@@ -157,6 +157,17 @@ test('rejects a dynamic cross-layer deep import', () => {
   );
 });
 
+test('rejects an execution import of the probe barrel through a normalized path', () => {
+  expectViolation(
+    {
+      path: 'src/runtime/execution/forbidden-probe-barrel.ts',
+      source:
+        "import { probe } from '../../runtime/probe/index.js';\nexport const leaked = probe;\n",
+    },
+    'cross-layer-barrel-import',
+  );
+});
+
 test('rejects a test dynamic import of a runtime domain barrel', () => {
   expectViolation(
     {

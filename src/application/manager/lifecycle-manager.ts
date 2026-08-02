@@ -7,6 +7,7 @@ import { AgentManagerError } from '../../runtime/errors/index.js';
 import {
   InvocationInputSnapshot,
   InvocationLifecycle,
+  PreparedLaunch,
   type InvocationExecutionPorts,
   type NormalizedInvocationOutcome,
   type ResultSchemaValidator,
@@ -116,7 +117,8 @@ class InternalInvocationLifecycleManager {
     if (!this.reserve(snapshot.invocationId))
       return Object.freeze({ status: 'rejected', reason: 'duplicate_invocation' });
     try {
-      if (!(await this.preflight(snapshot)))
+      const preparedLaunch = await this.preflight(snapshot);
+      if (preparedLaunch === undefined)
         return Object.freeze({ status: 'rejected', reason: 'preflight_failed' });
       try {
         await this.ports.output.prepare();
@@ -128,6 +130,7 @@ class InternalInvocationLifecycleManager {
       const lifecycle = new InvocationLifecycle(
         this.ports,
         snapshot,
+        preparedLaunch,
         (outcome) => this.complete(snapshot.invocationId, completion, outcome),
         resultSchemaValidator,
       );
@@ -180,23 +183,39 @@ class InternalInvocationLifecycleManager {
     }
   }
 
-  private async preflight(snapshot: InvocationInputSnapshot): Promise<boolean> {
+  private async preflight(snapshot: InvocationInputSnapshot): Promise<PreparedLaunch | undefined> {
     if (snapshot.workspace !== undefined) {
       const workspace = this.ports.workspace;
       if (
         workspace === undefined ||
         (await workspace.admit(snapshot.workspace)).status !== 'admitted'
       )
-        return false;
+        return undefined;
     }
-    if (snapshot.agent === undefined) return this.registry.listAgents().length === 0;
+    if (snapshot.agent === undefined) return undefined;
     const target = this.registry.getDefinition(snapshot.agent);
-    if (target === undefined) return false;
+    if (target === undefined) return undefined;
     const port = this.ports.executableProbe;
-    if (port === undefined) return false;
+    if (port === undefined) return undefined;
     const result = await probeExecutable(target, port);
-    if (result.status === 'available') return true;
-    if (result.error.code !== 'revo.agent.probe_platform_unsupported') return false;
+    if (result.status === 'available') {
+      if (
+        result.agent.id !== target.definition.id ||
+        result.agent.version !== target.definition.version ||
+        result.definitionDigest !== target.definitionDigest
+      )
+        return undefined;
+      return PreparedLaunch.create({
+        pin: {
+          agentId: target.definition.id,
+          agentVersion: target.definition.version,
+          definitionDigest: target.definitionDigest,
+        },
+        executable: result.executable,
+        reportedVersion: result.reportedVersion,
+      });
+    }
+    if (result.error.code !== 'revo.agent.probe_platform_unsupported') return undefined;
     throw new AgentManagerError(
       Object.freeze({
         code: 'revo.agent.platform_unsupported',

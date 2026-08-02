@@ -1,6 +1,9 @@
 import { expect, test } from 'vitest';
 
-import { InvocationInputSnapshot } from '../../../../src/runtime/execution/index.js';
+import {
+  InvocationInputSnapshot,
+  PreparedLaunch,
+} from '../../../../src/runtime/execution/index.js';
 import {
   FakeInvocationExecutionPort,
   type InvocationExecutionCall,
@@ -10,6 +13,20 @@ const testSnapshot = (): InvocationInputSnapshot => {
   const snapshot = InvocationInputSnapshot.create({ resultSchema, invocationId: 'test' });
   if (snapshot === undefined) throw new Error('Unable to create test snapshot');
   return snapshot;
+};
+
+const preparedLaunch = (): PreparedLaunch => {
+  const value = PreparedLaunch.create({
+    pin: {
+      agentId: 'fixture-agent',
+      agentVersion: '1.0.0',
+      definitionDigest: 'fixture-definition-digest',
+    },
+    executable: '/resolved/fixture-agent',
+    reportedVersion: '1.0.0',
+  });
+  if (value === undefined) throw new Error('Unable to create prepared launch evidence');
+  return value;
 };
 
 const resultSchema = {
@@ -24,10 +41,13 @@ test('starts queued executions in FIFO order and exposes frozen copied calls', a
   port.enqueueStart(startFailure);
   port.enqueueStart('running');
   port.enqueueStart('running');
+  const failedPreparedLaunch = preparedLaunch();
+  const firstPreparedLaunch = preparedLaunch();
+  const secondPreparedLaunch = preparedLaunch();
 
-  await expect(port.start(testSnapshot())).rejects.toBe(startFailure);
-  const first = await port.start(testSnapshot());
-  const second = await port.start(testSnapshot());
+  await expect(port.start(testSnapshot(), failedPreparedLaunch)).rejects.toBe(startFailure);
+  const first = await port.start(testSnapshot(), firstPreparedLaunch);
+  const second = await port.start(testSnapshot(), secondPreparedLaunch);
 
   expect(port.calls()).toEqual([{ type: 'start' }, { type: 'start' }, { type: 'start' }]);
   const calls = port.calls();
@@ -38,6 +58,9 @@ test('starts queued executions in FIFO order and exposes frozen copied calls', a
     { type: 'start' },
     { type: 'start' },
   ] satisfies readonly InvocationExecutionCall[]);
+  expect(executionEvidence(port, 0)).toBe(failedPreparedLaunch);
+  expect(executionEvidence(port, 1)).toBe(firstPreparedLaunch);
+  expect(executionEvidence(port, 2)).toBe(secondPreparedLaunch);
 
   port.settleNaturalCompletion(1);
   port.settleNaturalCompletion(2);
@@ -45,13 +68,20 @@ test('starts queued executions in FIFO order and exposes frozen copied calls', a
   expect(Object.isFrozen(firstObservation)).toBe(true);
   expect(firstObservation).toEqual({ status: 'completed' });
   await expect(second.completion).resolves.toEqual({ status: 'completed' });
-  await expect(port.start(testSnapshot())).rejects.toThrow('No start result is queued');
+  await expect(port.start(testSnapshot(), preparedLaunch())).rejects.toThrow(
+    'No start result is queued',
+  );
 });
+
+const executionEvidence = (
+  port: FakeInvocationExecutionPort,
+  index: number,
+): PreparedLaunch | undefined => port.startedPreparedLaunches()[index];
 
 test('keeps cancellation-request settlement independent from terminal completion', async () => {
   const port = new FakeInvocationExecutionPort();
   port.enqueueStart('running');
-  const execution = await port.start(testSnapshot());
+  const execution = await port.start(testSnapshot(), preparedLaunch());
 
   const cancellation = execution.requestCancellation();
   expect(port.calls()).toEqual([
@@ -77,7 +107,7 @@ test('retains rejection identity without completing execution', async () => {
   const port = new FakeInvocationExecutionPort();
   const rejection = new Error('cancellation request rejected');
   port.enqueueStart('running');
-  const execution = await port.start(testSnapshot());
+  const execution = await port.start(testSnapshot(), preparedLaunch());
 
   const cancellation = execution.requestCancellation();
   port.rejectCancellationRequest(1, rejection);
@@ -103,7 +133,7 @@ test('retains rejection identity without completing execution', async () => {
 test('settles a pending cancellation request before natural completion', async () => {
   const port = new FakeInvocationExecutionPort();
   port.enqueueStart('running');
-  const execution = await port.start(testSnapshot());
+  const execution = await port.start(testSnapshot(), preparedLaunch());
   const cancellation = execution.requestCancellation();
 
   port.settleNaturalCompletion(1);
@@ -117,7 +147,7 @@ test('settles a pending cancellation request before natural completion', async (
 test('confirms accepted cancellation only through execution completion', async () => {
   const port = new FakeInvocationExecutionPort();
   port.enqueueStart('running');
-  const execution = await port.start(testSnapshot());
+  const execution = await port.start(testSnapshot(), preparedLaunch());
   const cancellation = execution.requestCancellation();
   port.settleCancellationRequest(1);
   await expect(cancellation).resolves.toBeUndefined();
@@ -137,7 +167,7 @@ test('settles pending cancellation with completion failures and preserves accept
   const acceptedFailure = new Error('execution failed after cancellation acceptance');
 
   port.enqueueStart('running');
-  const pending = await port.start(testSnapshot());
+  const pending = await port.start(testSnapshot(), preparedLaunch());
   const pendingRequest = pending.requestCancellation();
   port.settleCompletionFailure(1, pendingFailure);
 
@@ -145,7 +175,7 @@ test('settles pending cancellation with completion failures and preserves accept
   await expect(pending.completion).rejects.toBe(pendingFailure);
 
   port.enqueueStart('running');
-  const accepted = await port.start(testSnapshot());
+  const accepted = await port.start(testSnapshot(), preparedLaunch());
   const acceptedRequest = accepted.requestCancellation();
   port.settleCancellationRequest(2);
   await expect(acceptedRequest).resolves.toBeUndefined();
@@ -158,7 +188,7 @@ test('settles pending cancellation with completion failures and preserves accept
 test('rejects duplicate and post-terminal controls without leaving request promises pending', async () => {
   const port = new FakeInvocationExecutionPort();
   port.enqueueStart('running');
-  const execution = await port.start(testSnapshot());
+  const execution = await port.start(testSnapshot(), preparedLaunch());
   const cancellation = execution.requestCancellation();
 
   expect(() => execution.requestCancellation()).toThrow('already requested');

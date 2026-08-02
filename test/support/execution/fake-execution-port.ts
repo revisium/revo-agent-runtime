@@ -1,6 +1,7 @@
 import {
   InvocationInputSnapshot,
   type InvocationExecutionPorts,
+  type PreparedLaunch,
 } from '../../../src/runtime/execution/index.js';
 
 export type InvocationExecutionCall =
@@ -18,6 +19,7 @@ export interface FakeInvocationExecutionControls {
   confirmCancellation(executionId: number): void;
   settleCompletionFailure(executionId: number, error: Error): void;
   calls(): readonly InvocationExecutionCall[];
+  startedPreparedLaunches(): readonly PreparedLaunch[];
   startedSnapshots(): readonly InvocationInputSnapshot[];
 }
 
@@ -58,6 +60,7 @@ export class FakeInvocationExecutionPort
   private readonly executions = new Map<number, PendingExecution>();
   private readonly callLog: InvocationExecutionCall[] = [];
   private readonly pendingStarts = new Map<number, Deferred<RunningExecution>>();
+  private readonly preparedLaunches: PreparedLaunch[] = [];
   private readonly snapshots: InvocationInputSnapshot[] = [];
   private readonly startQueue: StartResult[] = [];
   private nextExecutionId = 1;
@@ -71,9 +74,13 @@ export class FakeInvocationExecutionPort
     this.startQueue.push('pending');
   }
 
-  async start(snapshot: InvocationInputSnapshot): Promise<RunningExecution> {
+  async start(
+    snapshot: InvocationInputSnapshot,
+    preparedLaunch: PreparedLaunch,
+  ): Promise<RunningExecution> {
     this.record(Object.freeze({ type: 'start' }));
     this.snapshots.push(snapshot);
+    this.preparedLaunches.push(preparedLaunch);
     const result = this.takeStart();
     if (result instanceof Error) throw result;
     if (result === 'pending') {
@@ -153,6 +160,10 @@ export class FakeInvocationExecutionPort
 
   startedSnapshots(): readonly InvocationInputSnapshot[] {
     return Object.freeze([...this.snapshots]);
+  }
+
+  startedPreparedLaunches(): readonly PreparedLaunch[] {
+    return Object.freeze([...this.preparedLaunches]);
   }
 
   private createExecution(): RunningExecution {

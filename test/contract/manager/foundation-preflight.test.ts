@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
 
 import { createInvocationLifecycleManager } from '../../../src/application/manager/index.js';
+import { validateManagerOptions } from '../../../src/runtime/definition/index.js';
 import { AgentManagerError } from '../../../src/runtime/errors/index.js';
 import type {
   InvocationExecutionPorts,
@@ -18,12 +19,12 @@ const resultSchema = Object.freeze({
   type: 'object',
 });
 
-const exited = () =>
+const exited = (version = '1.0.0') =>
   Object.freeze({
     status: 'exited' as const,
     exitCode: 0,
     signal: null,
-    stdout: new TextEncoder().encode('agent 1.0.0\n'),
+    stdout: new TextEncoder().encode(`agent ${version}\n`),
     stderr: new Uint8Array(),
     overflow: 'none' as const,
   });
@@ -109,6 +110,8 @@ test('admits a normalized absolute workspace before output preparation and execu
 test('freshly probes every invocation before output preparation and execution delegation', async () => {
   const { execution, output, probe, ports } = createPorts('linux');
   const definition = buildAgentDefinition();
+  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  if (validatedDefinition === undefined) throw new Error('Expected validated definition');
   const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
 
   for (const executable of ['/resolved/first', '/resolved/second']) {
@@ -137,7 +140,7 @@ test('freshly probes every invocation before output preparation and execution de
     resultSchema,
   });
   await flush();
-  probe.settleCompletion(2, exited());
+  probe.settleCompletion(2, exited('1.0.1'));
   const secondAccepted = await second;
   expect(secondAccepted.status).toBe('accepted');
 
@@ -164,6 +167,46 @@ test('freshly probes every invocation before output preparation and execution de
     },
   ]);
   expect(execution.calls()).toEqual([{ type: 'start' }, { type: 'start' }]);
+  const [firstPrepared, secondPrepared] = execution.startedPreparedLaunches();
+  expect(firstPrepared).toEqual({
+    pin: {
+      agentId: definition.id,
+      agentVersion: definition.version,
+      definitionDigest: validatedDefinition.definitionDigest,
+    },
+    executable: '/resolved/first',
+    reportedVersion: '1.0.0',
+  });
+  expect(secondPrepared).toEqual({
+    pin: {
+      agentId: definition.id,
+      agentVersion: definition.version,
+      definitionDigest: validatedDefinition.definitionDigest,
+    },
+    executable: '/resolved/second',
+    reportedVersion: '1.0.1',
+  });
+  expect(firstPrepared).not.toBe(secondPrepared);
+});
+
+test('rejects malformed launch evidence before output preparation or execution delegation', async () => {
+  const { execution, output, probe, ports } = createPorts('linux');
+  const definition = buildAgentDefinition();
+  const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+  probe.enqueueResolution({ status: 'resolved', executable: '' });
+  probe.enqueueVersionStart('running');
+
+  const started = manager.start({
+    invocationId: 'malformed-launch-evidence',
+    agent: { id: definition.id, version: definition.version },
+    resultSchema,
+  });
+  await flush();
+  probe.settleCompletion(1, exited());
+
+  await expect(started).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  expect(output.calls()).toEqual([]);
+  expect(execution.calls()).toEqual([]);
 });
 
 test('fails target-platform preflight before output preparation or execution delegation', async () => {

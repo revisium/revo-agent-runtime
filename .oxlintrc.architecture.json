@@ -146,7 +146,7 @@
           {
             "patterns": [
               {
-                "regex": "^(?:\\.\\./)+(?:definition|registry|application|strategies|platform|testing)(?:/|$)",
+                "regex": "^(?:\\.\\./)+(?:definition|probe|registry|application|strategies|platform|testing)(?:/|$)",
                 "message": "Execution depends on portable spec and execution-owned ports, not concrete adapters."
               }
             ]
