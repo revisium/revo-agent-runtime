@@ -1,6 +1,13 @@
 import { expect, test } from 'vitest';
 
-import { inspectPlainJson } from '../../../../src/runtime/definition/index.js';
+import {
+  appendPointerToken,
+  freezeJsonValue,
+  inspectPlainJson,
+  isJsonArray,
+  isJsonObject,
+  parseCanonicalJson,
+} from '../../../../src/runtime/definition/index.js';
 import { AgentManagerError } from '../../../../src/runtime/errors/index.js';
 import {
   AGENT_FAULT_MESSAGES,
@@ -323,6 +330,55 @@ test('exposes the exact frozen agent manager limit descriptors', () => {
     maxTerminalEventBytes: 2_097_152,
   });
   expect(Object.isFrozen(AGENT_MANAGER_LIMITS)).toBe(true);
+});
+
+test('parseCanonicalJson decodes canonical UTF-8 bytes back to the equivalent value', () => {
+  const bytes = new TextEncoder().encode('{"a":1,"b":[true,null]}');
+  expect(parseCanonicalJson(bytes)).toEqual({ a: 1, b: [true, null] });
+});
+
+test('parseCanonicalJson throws on malformed UTF-8 bytes', () => {
+  const malformed = new Uint8Array([0x80]);
+  expect(() => parseCanonicalJson(malformed)).toThrow();
+});
+
+test('isJsonArray distinguishes arrays from other JSON values', () => {
+  expect(isJsonArray([1, 2, 3])).toBe(true);
+  expect(isJsonArray({ a: 1 })).toBe(false);
+  expect(isJsonArray('x')).toBe(false);
+  expect(isJsonArray(null)).toBe(false);
+});
+
+test('isJsonObject accepts plain objects and rejects arrays, null, and primitives', () => {
+  expect(isJsonObject({ a: 1 })).toBe(true);
+  expect(isJsonObject([])).toBe(false);
+  expect(isJsonObject(null)).toBe(false);
+  expect(isJsonObject('x')).toBe(false);
+  expect(isJsonObject(1)).toBe(false);
+  expect(isJsonObject(undefined)).toBe(false);
+});
+
+test('freezeJsonValue freezes nested objects and arrays recursively', () => {
+  const value = { nested: { list: [{ leaf: true }] } };
+  freezeJsonValue(value);
+  expect(Object.isFrozen(value)).toBe(true);
+  expect(Object.isFrozen(value.nested)).toBe(true);
+  expect(Object.isFrozen(value.nested.list)).toBe(true);
+  expect(Object.isFrozen(value.nested.list[0])).toBe(true);
+});
+
+test('freezeJsonValue is a no-op for primitives and null', () => {
+  expect(() => freezeJsonValue(null)).not.toThrow();
+  expect(() => freezeJsonValue('x')).not.toThrow();
+  expect(() => freezeJsonValue(1)).not.toThrow();
+  expect(() => freezeJsonValue(true)).not.toThrow();
+});
+
+test('appendPointerToken escapes ~ and / per RFC 6901', () => {
+  expect(appendPointerToken('', 'plain')).toBe('/plain');
+  expect(appendPointerToken('/base', 'a/b')).toBe('/base/a~1b');
+  expect(appendPointerToken('/base', 'a~b')).toBe('/base/a~0b');
+  expect(appendPointerToken('/base', '~/~')).toBe('/base/~0~1~0');
 });
 
 test('exposes the exact frozen agent fault messages', () => {

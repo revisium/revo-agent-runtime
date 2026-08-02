@@ -1,6 +1,6 @@
 import { AGENT_RUNTIME_LIMITS } from '../../policy/index.js';
-import type { JsonObject, JsonSchema202012 } from '../../spec/index.js';
-import { inspectPlainJson } from '../plain-json/index.js';
+import type { JsonObject } from '../../spec/index.js';
+import { appendPointerToken, inspectPlainJson, isJsonObject } from '../plain-json/index.js';
 import { canonicalizeJsonBytes } from '../rfc8785/index.js';
 import {
   normalizeValidationDiagnostics,
@@ -69,17 +69,6 @@ interface ProfileCollection {
 }
 
 const encoder = new TextEncoder();
-
-const escapePointerToken = (token: string): string =>
-  token.replaceAll('~', '~0').replaceAll('/', '~1');
-
-const appendPointerToken = (path: string, token: string): string =>
-  `${path}/${escapePointerToken(token)}`;
-
-const isJsonObject = (value: unknown): value is JsonObject =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isJsonSchema = (value: unknown): value is JsonSchema202012 => isJsonObject(value);
 
 const isSchemaLocation = (value: unknown): value is SchemaLocationValue =>
   typeof value === 'boolean' || isJsonObject(value);
@@ -374,7 +363,7 @@ export const validateConsumerSchemaProfile = (
   instancePath: string,
 ): ConsumerSchemaProfileValidation => {
   const inspection = inspectPlainJson(schema, instancePath);
-  if (!isJsonSchema(schema)) return invalid([diagnostic(instancePath, 'root_dialect')]);
+  if (!isJsonObject(schema)) return invalid([diagnostic(instancePath, 'root_dialect')]);
 
   const resourceFailures = resourceDiagnostics(inspection.depth, inspection.nodes, instancePath);
   if (resourceFailures.length > 0) return invalid(resourceFailures);

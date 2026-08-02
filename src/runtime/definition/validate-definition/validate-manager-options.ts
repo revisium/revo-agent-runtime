@@ -26,7 +26,7 @@ import {
 } from '../consumer-schema-validator/index.js';
 import { createDefinitionIdentity } from '../definition-digest/index.js';
 import { parseExecutableVersionConstraint } from '../executable-version-constraint/index.js';
-import { inspectPlainJson } from '../plain-json/index.js';
+import { appendPointerToken, inspectPlainJson } from '../plain-json/index.js';
 import { canonicalizeJsonBytes } from '../rfc8785/index.js';
 import {
   normalizeValidationDiagnostics,
@@ -146,9 +146,6 @@ const rejectDiagnostic = (
       },
     ]),
   );
-
-const appendPointerToken = (base: string, token: string): string =>
-  `${base}/${token.replaceAll('~', '~0').replaceAll('/', '~1')}`;
 
 const zodIssuePath = (path: readonly PropertyKey[]): string => {
   let pointer = '';

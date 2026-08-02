@@ -7,6 +7,7 @@ import type {
   AgentValidationDetails,
   AgentValidationDiagnostic,
 } from '../../spec/index.js';
+import { appendPointerToken } from './append-pointer-token.js';
 import type { PlainJsonInspection } from './plain-json-inspection.js';
 
 const diagnosticMessages = {
@@ -45,12 +46,6 @@ interface ExitFrame {
 }
 
 type TraversalFrame = EnterFrame | ExitFrame;
-
-const escapePointerToken = (token: string): string =>
-  token.replaceAll('~', '~0').replaceAll('/', '~1');
-
-const appendPointerToken = (path: string, token: string): string =>
-  `${path}/${escapePointerToken(token)}`;
 
 const hasPairedSurrogates = (value: string): boolean => {
   for (let index = 0; index < value.length; index += 1) {

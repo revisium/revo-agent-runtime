@@ -1,5 +1,10 @@
+export { appendPointerToken } from './plain-json/index.js';
+export { freezeJsonValue } from './plain-json/index.js';
 export { inspectPlainJson } from './plain-json/index.js';
+export { isJsonArray } from './plain-json/index.js';
+export { isJsonObject } from './plain-json/index.js';
 export type { PlainJsonInspection } from './plain-json/index.js';
+export { parseCanonicalJson } from './plain-json/index.js';
 export {
   parseAndClassifyAgentDefinition,
   rawAgentDefinitionSchema,

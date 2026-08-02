@@ -1,8 +1,10 @@
 # Internal module structure specification
 
 - Status: Accepted
-- Version: 1.1.0
+- Version: 1.1.1
 - Accepted: 2026-07-21
+- Amended: 2026-08-02 — §3.5 narrowed to clarify "traversal helpers" scope after extracting JSON-pointer path
+  formatting into a shared `plain-json/` leaf; no traversal-walk or behavior change.
 - Baseline: PR #4 head `2a6f3d39fccb6661e6b59806a66d88a5f491ad69`
 - Related decision: [ADR-0007](../adr/0007-separate-contracts-policy-errors-and-behavior.md)
 
@@ -199,9 +201,13 @@ The errors layer MUST NOT import the definition layer.
 
 `src/runtime/definition/plain-json/plain-json-inspection.ts` MUST own the exported `PlainJsonInspection` type.
 
-Private traversal helpers MUST remain in `inspect-plain-json.ts`.
+Private traversal-walk helpers (frame push/pop, depth tracking, cycle detection, own-enumerable-property enumeration)
+MUST remain in `inspect-plain-json.ts`.
 
 Private traversal-frame and inspected-property types MUST remain in `inspect-plain-json.ts`.
+
+Incidental formatting utilities used during traversal, such as JSON-pointer path construction, are not traversal-walk
+helpers and MAY live in shared `plain-json/` leaves, provided the traversal walk itself is unaffected.
 
 The migration MUST NOT change any accepted or rejected plain-JSON input.
 

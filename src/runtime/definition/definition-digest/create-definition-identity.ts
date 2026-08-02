@@ -2,8 +2,13 @@ import { createHash } from 'node:crypto';
 
 import { AgentManagerError } from '../../errors/index.js';
 import { AGENT_FAULT_MESSAGES } from '../../policy/index.js';
-import type { AgentFault, JsonObject, JsonValue } from '../../spec/index.js';
-import { inspectPlainJson } from '../plain-json/index.js';
+import type { AgentFault, JsonObject } from '../../spec/index.js';
+import {
+  freezeJsonValue,
+  inspectPlainJson,
+  isJsonObject,
+  parseCanonicalJson,
+} from '../plain-json/index.js';
 import { canonicalizeJsonBytes } from '../rfc8785/index.js';
 import type { DefinitionIdentity } from './definition-identity.js';
 
@@ -28,26 +33,6 @@ const mapInternalConstructionFailure = <Value>(operation: () => Value): Value =>
 
 const createDigest = (canonicalBytes: Uint8Array): string =>
   createHash('sha256').update(canonicalBytes).digest('hex');
-
-const parseCanonicalJson = (canonicalBytes: Uint8Array): unknown =>
-  JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(canonicalBytes));
-
-const isJsonObject = (value: unknown): value is JsonObject =>
-  value !== null && typeof value === 'object' && !Array.isArray(value);
-
-const isJsonArray = (value: JsonValue): value is readonly JsonValue[] => Array.isArray(value);
-
-const freezeJsonValue = (value: JsonValue): void => {
-  if (value === null || typeof value !== 'object') return;
-
-  if (isJsonArray(value)) {
-    for (const item of value) freezeJsonValue(item);
-  } else {
-    for (const item of Object.values(value)) freezeJsonValue(item);
-  }
-
-  Object.freeze(value);
-};
 
 const createFrozenSnapshot = (value: unknown): JsonObject => {
   inspectPlainJson(value, '/definition');

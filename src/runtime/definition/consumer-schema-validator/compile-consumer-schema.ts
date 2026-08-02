@@ -8,7 +8,12 @@ import type {
   JsonSchema202012,
   JsonValue,
 } from '../../spec/index.js';
-import { inspectPlainJson } from '../plain-json/index.js';
+import {
+  freezeJsonValue,
+  inspectPlainJson,
+  isJsonObject,
+  parseCanonicalJson,
+} from '../plain-json/index.js';
 import { canonicalizeJsonBytes } from '../rfc8785/index.js';
 import {
   normalizeValidationDiagnostics,
@@ -127,24 +132,6 @@ const createAjv = (): Ajv2020Instance =>
     ownProperties: true,
     messages: true,
   });
-
-const parseCanonicalJson = (canonicalBytes: Uint8Array): unknown =>
-  JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(canonicalBytes));
-
-const isJsonObject = (value: unknown): value is JsonSchema202012 =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isJsonArray = (value: JsonValue): value is readonly JsonValue[] => Array.isArray(value);
-
-const freezeJsonValue = (value: JsonValue): void => {
-  if (value === null || typeof value !== 'object') return;
-  if (isJsonArray(value)) {
-    for (const item of value) freezeJsonValue(item);
-  } else {
-    for (const item of Object.values(value)) freezeJsonValue(item);
-  }
-  Object.freeze(value);
-};
 
 const createOwnedSchemaSnapshot = (schema: JsonSchema202012): JsonSchema202012 => {
   const parsed = parseCanonicalJson(canonicalizeJsonBytes(schema));
