@@ -106,8 +106,17 @@ try {
   await mkdir(consumerDirectory);
 
   const packOutput = execFileSync(
-    'npm',
-    ['pack', '--json', '--ignore-scripts', '--pack-destination', packDirectory],
+    'corepack',
+    [
+      'pnpm',
+      'dlx',
+      'npm@10.9.3',
+      'pack',
+      '--json',
+      '--ignore-scripts',
+      '--pack-destination',
+      packDirectory,
+    ],
     {
       cwd: root,
       encoding: 'utf8',

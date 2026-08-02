@@ -1,5 +1,6 @@
 import type {
   LiveOwnedProcess,
+  ProcessExitObservation,
   ProcessIdentity,
   ProcessStartRequest,
   ProcessSupervisionPort,
@@ -11,7 +12,7 @@ interface Deferred<Value> {
 }
 
 interface PendingProcess {
-  readonly completion: Deferred<void>;
+  readonly completion: Deferred<ProcessExitObservation>;
 }
 
 const deferred = <Value>(): Deferred<Value> => {
@@ -38,6 +39,8 @@ const copyRequest = (request: ProcessStartRequest): ProcessStartRequest =>
     args: Object.freeze([...request.args]),
     environment: Object.freeze({ ...request.environment }),
     shell: request.shell,
+    stdout: request.stdout,
+    stderr: request.stderr,
   });
 
 export class FakeProcessSupervisionPort implements ProcessSupervisionPort {
@@ -55,7 +58,7 @@ export class FakeProcessSupervisionPort implements ProcessSupervisionPort {
     const identity = this.starts.shift();
     if (identity === undefined) throw new Error('No process start is queued.');
 
-    const completion = deferred<void>();
+    const completion = deferred<ProcessExitObservation>();
     const id = this.nextId;
     this.nextId += 1;
     this.pending.set(id, Object.freeze({ completion }));
@@ -67,7 +70,7 @@ export class FakeProcessSupervisionPort implements ProcessSupervisionPort {
         if (pending === undefined) return;
 
         this.pending.delete(id);
-        pending.completion.resolve(undefined);
+        pending.completion.resolve(Object.freeze({ exitCode: 0, signal: null }));
       },
     });
   }
@@ -81,6 +84,6 @@ export class FakeProcessSupervisionPort implements ProcessSupervisionPort {
     if (pending === undefined) throw new Error(`Unknown process id ${id}`);
 
     this.pending.delete(id);
-    pending.completion.resolve(undefined);
+    pending.completion.resolve(Object.freeze({ exitCode: 0, signal: null }));
   }
 }

@@ -65,6 +65,12 @@ const waitForFileAttempt = async (path: string, attemptsRemaining: number): Prom
 
 const waitForFile = (path: string): Promise<string> => waitForFileAttempt(path, 50);
 
+const ignoredOutput = () =>
+  Object.freeze({
+    write: async (_chunk: Uint8Array): Promise<void> => undefined,
+    end: async (): Promise<void> => undefined,
+  });
+
 const expectProcessGroupAbsent = (processGroupId: number): void => {
   try {
     process.kill(-processGroupId, 0);
@@ -75,6 +81,56 @@ const expectProcessGroupAbsent = (processGroupId: number): void => {
 
   throw new Error(`Process group ${processGroupId} is still live.`);
 };
+
+test.runIf(process.platform === 'linux')(
+  'rejects a process start that omits mandatory output sinks before spawning',
+  async () => {
+    const port = new NodePosixProcessSupervisionPort();
+    const malformedRequest: unknown = {
+      executable: process.execPath,
+      args: ['--input-type=module', '--eval', 'process.exit(0)'],
+      shell: false,
+      environment: Object.freeze({}),
+    };
+
+    const start = port.start.bind(port);
+    await expect(Reflect.apply(start, port, [malformedRequest])).rejects.toThrow(
+      'Process output sinks are mandatory.',
+    );
+  },
+);
+
+test.runIf(process.platform === 'linux')(
+  'rejects malformed output sinks before a child can create evidence',
+  async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'revo-process-supervision-'));
+    try {
+      const markerPath = join(directory, 'child-created-marker');
+      const malformedRequest: unknown = {
+        executable: process.execPath,
+        args: [
+          '--input-type=module',
+          '--eval',
+          "import { writeFile } from 'node:fs/promises'; await writeFile(process.argv[1], 'created');",
+          markerPath,
+        ],
+        shell: false,
+        environment: Object.freeze({}),
+        stdout: { write: async (): Promise<void> => undefined },
+        stderr: ignoredOutput(),
+      };
+      const port = new NodePosixProcessSupervisionPort();
+      const start = port.start.bind(port);
+
+      await expect(Reflect.apply(start, port, [malformedRequest])).rejects.toThrow(
+        'stdout output sink must provide write and end functions',
+      );
+      await expect(readFile(markerPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  },
+);
 
 test.runIf(process.platform === 'linux')(
   'waits for a reference child file to be populated after it is created',
@@ -98,6 +154,65 @@ test.runIf(process.platform === 'linux')(
 );
 
 test.runIf(process.platform === 'linux')(
+  'does not complete before ordered stdout delivery has drained',
+  async () => {
+    const delivered: string[] = [];
+    const sink = {
+      write: async (chunk: Uint8Array): Promise<void> => {
+        await delay(delivered.length === 0 ? 30 : 0);
+        delivered.push(Buffer.from(chunk).toString('utf8'));
+      },
+      end: async (): Promise<void> => undefined,
+    };
+    const port = new NodePosixProcessSupervisionPort();
+    const ownedProcess = await port.start({
+      cwd: process.cwd(),
+      executable: process.execPath,
+      args: [
+        '--input-type=module',
+        '--eval',
+        "process.stdout.write('first'); process.stdout.write('second');",
+      ],
+      shell: false,
+      environment: Object.freeze({}),
+      stdout: sink,
+      stderr: ignoredOutput(),
+    });
+
+    await expect(ownedProcess.completion).resolves.toEqual({ exitCode: 0, signal: null });
+    expect(delivered.join('')).toBe('firstsecond');
+  },
+);
+
+test.runIf(process.platform === 'linux')(
+  'fails closed and reaps the group when stdout delivery rejects',
+  async () => {
+    const port = new NodePosixProcessSupervisionPort();
+    const ownedProcess = await port.start({
+      cwd: process.cwd(),
+      executable: process.execPath,
+      args: [
+        '--input-type=module',
+        '--eval',
+        "process.stdout.write('reject-me'); setTimeout(() => {}, 5000);",
+      ],
+      shell: false,
+      environment: Object.freeze({}),
+      stdout: {
+        write: async (): Promise<void> => {
+          throw new Error('stdout sink failed');
+        },
+        end: async (): Promise<void> => undefined,
+      },
+      stderr: ignoredOutput(),
+    });
+
+    await expect(ownedProcess.completion).rejects.toThrow('stdout sink failed');
+    expectProcessGroupAbsent(ownedProcess.identity.processGroupId);
+  },
+);
+
+test.runIf(process.platform === 'linux')(
   'captures a candidate-host reference child in its own group with a canonical OS fingerprint',
   async () => {
     const directory = await mkdtemp(join(tmpdir(), 'revo-process-supervision-'));
@@ -110,6 +225,8 @@ test.runIf(process.platform === 'linux')(
         args: ['--input-type=module', '--eval', recordEnvironment, environmentPath],
         shell: false,
         environment: Object.freeze({ REFERENCE_PROCESS_ENV: 'candidate' }),
+        stdout: ignoredOutput(),
+        stderr: ignoredOutput(),
       });
 
       expect(ownedProcess.identity.processGroupId).toBe(ownedProcess.identity.pid);
@@ -126,7 +243,7 @@ test.runIf(process.platform === 'linux')(
         JSON.stringify({ REFERENCE_PROCESS_ENV: 'candidate' }),
       );
 
-      await expect(ownedProcess.completion).resolves.toBeUndefined();
+      await expect(ownedProcess.completion).resolves.toEqual({ exitCode: 0, signal: null });
     } finally {
       await rm(directory, { force: true, recursive: true });
     }
@@ -147,11 +264,13 @@ test.runIf(process.platform === 'linux')(
         args: [fixturePath, '', descendantPidPath, '5'],
         shell: false,
         environment: Object.freeze({}),
+        stdout: ignoredOutput(),
+        stderr: ignoredOutput(),
       });
       await expect(waitForFile(descendantPidPath)).resolves.toMatch(/^\d+$/u);
 
       await expect(ownedProcess.terminateAndReap()).resolves.toBeUndefined();
-      await expect(ownedProcess.completion).resolves.toBeUndefined();
+      await expect(ownedProcess.completion).resolves.toEqual({ exitCode: null, signal: 'SIGTERM' });
       expectProcessGroupAbsent(ownedProcess.identity.processGroupId);
     } finally {
       if (ownedProcess !== undefined) await ownedProcess.terminateAndReap().catch(() => undefined);
@@ -182,6 +301,8 @@ test.runIf(process.platform === 'linux')(
         args: [fixturePath, '', '', '5', leaderPidPath],
         shell: false,
         environment: Object.freeze({}),
+        stdout: ignoredOutput(),
+        stderr: ignoredOutput(),
       });
 
       await expect(starting).rejects.toThrow(

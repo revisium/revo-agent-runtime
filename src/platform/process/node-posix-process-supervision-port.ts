@@ -6,10 +6,13 @@ import canonicalize from 'canonicalize';
 
 import type {
   LiveOwnedProcess,
+  ProcessExitObservation,
   ProcessIdentity,
+  ProcessOutputSink,
   ProcessStartRequest,
   ProcessSupervisionPort,
 } from '../../runtime/execution/index.js';
+import { AGENT_MANAGER_LIMITS } from '../../runtime/policy/index.js';
 
 interface LinuxProcessFingerprintRecord {
   readonly schemaVersion: 'process-fingerprint/v1';
@@ -28,7 +31,8 @@ interface NodePosixProcessSupervisionPortOptions {
   readonly inspect?: ProcessIdentityInspector;
 }
 
-const terminationGraceMs = 250;
+const terminationGraceMs = AGENT_MANAGER_LIMITS.processTerminationGraceMs;
+const postKillReapTimeoutMs = AGENT_MANAGER_LIMITS.processPostKillReapTimeoutMs;
 const terminationPollMs = 10;
 
 const positiveSafeInteger = (value: string | undefined, field: string): number => {
@@ -97,9 +101,11 @@ const awaitSpawn = async (child: ReturnType<typeof spawn>): Promise<void> =>
     child.once('error', reject);
   });
 
-const awaitClose = (child: ReturnType<typeof spawn>): Promise<void> =>
+const awaitClose = (child: ReturnType<typeof spawn>): Promise<ProcessExitObservation> =>
   new Promise((resolve, reject) => {
-    child.once('close', () => resolve());
+    child.once('close', (exitCode: number | null, signal: NodeJS.Signals | null) =>
+      resolve(Object.freeze({ exitCode, signal })),
+    );
     child.once('error', reject);
   });
 
@@ -111,6 +117,21 @@ const copyEnvironment = (
     throw new Error('Process environment values must be strings.');
 
   return Object.freeze(Object.fromEntries(entries));
+};
+
+const assertOutputSink: (value: unknown, name: string) => asserts value is ProcessOutputSink = (
+  value,
+  name,
+) => {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('write' in value) ||
+    typeof value.write !== 'function' ||
+    !('end' in value) ||
+    typeof value.end !== 'function'
+  )
+    throw new Error(`${name} output sink must provide write and end functions.`);
 };
 
 const processGroupExists = (processGroupId: number): boolean => {
@@ -148,7 +169,10 @@ const waitForGroupAbsenceUntil = async (
 const waitForGroupAbsence = (processGroupId: number, timeoutMs: number): Promise<boolean> =>
   waitForGroupAbsenceUntil(processGroupId, Date.now() + timeoutMs);
 
-const waitForClose = async (completion: Promise<void>, timeoutMs: number): Promise<boolean> => {
+const waitForClose = async <Value>(
+  completion: Promise<Value>,
+  timeoutMs: number,
+): Promise<boolean> => {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<false>((resolve) => {
     timeoutId = setTimeout(() => resolve(false), timeoutMs);
@@ -163,16 +187,16 @@ const waitForClose = async (completion: Promise<void>, timeoutMs: number): Promi
 
 const terminateAndReap = async (
   processGroupId: number,
-  completion: Promise<void>,
+  completion: Promise<ProcessExitObservation>,
 ): Promise<void> => {
   signalProcessGroup(processGroupId, 'SIGTERM');
   if (!(await waitForGroupAbsence(processGroupId, terminationGraceMs))) {
     signalProcessGroup(processGroupId, 'SIGKILL');
-    if (!(await waitForGroupAbsence(processGroupId, terminationGraceMs)))
+    if (!(await waitForGroupAbsence(processGroupId, postKillReapTimeoutMs)))
       throw new Error('Process group did not terminate after SIGKILL.');
   }
 
-  if (!(await waitForClose(completion, terminationGraceMs)))
+  if (!(await waitForClose(completion, postKillReapTimeoutMs)))
     throw new Error('Process leader did not close after its group terminated.');
 };
 
@@ -186,6 +210,10 @@ export class NodePosixProcessSupervisionPort implements ProcessSupervisionPort {
   async start(request: ProcessStartRequest): Promise<LiveOwnedProcess> {
     if (process.platform !== 'linux')
       throw new Error(`Node POSIX process inspection is unavailable on ${process.platform}.`);
+    if (request.stdout === undefined || request.stderr === undefined)
+      throw new Error('Process output sinks are mandatory.');
+    assertOutputSink(request.stdout, 'stdout');
+    assertOutputSink(request.stderr, 'stderr');
 
     const environment = copyEnvironment(request.environment);
     const child = spawn(request.executable, [...request.args], {
@@ -193,7 +221,7 @@ export class NodePosixProcessSupervisionPort implements ProcessSupervisionPort {
       detached: true,
       env: environment,
       shell: request.shell,
-      stdio: 'ignore',
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
     const completion = awaitClose(child);
     try {
@@ -212,6 +240,24 @@ export class NodePosixProcessSupervisionPort implements ProcessSupervisionPort {
       cleanup ??= terminateAndReap(pid, completion);
       return cleanup;
     };
+
+    const outputCompletion = Promise.all([
+      this.pump(child.stdout, request.stdout),
+      this.pump(child.stderr, request.stderr),
+    ]).catch(async (error: unknown) => {
+      try {
+        await cleanupProcess();
+      } catch (cleanupError: unknown) {
+        const failure = new AggregateError(
+          [error, cleanupError],
+          'Process output delivery and cleanup both failed.',
+          { cause: cleanupError },
+        );
+        throw failure;
+      }
+      throw error;
+    });
+    void outputCompletion.catch(() => undefined);
 
     let identity: ProcessIdentity;
     try {
@@ -232,6 +278,24 @@ export class NodePosixProcessSupervisionPort implements ProcessSupervisionPort {
       throw error;
     }
 
-    return Object.freeze({ identity, completion, terminateAndReap: cleanupProcess });
+    const observedCompletion = completion.then(async (observation) => {
+      await outputCompletion;
+      return observation;
+    });
+    return Object.freeze({
+      identity,
+      completion: observedCompletion,
+      terminateAndReap: cleanupProcess,
+    });
+  }
+
+  private async pump(
+    stream: NonNullable<ReturnType<typeof spawn>['stdout']> | null | undefined,
+    sink: ProcessOutputSink,
+  ): Promise<void> {
+    if (stream === null || stream === undefined) return sink.end();
+    for await (const chunk of stream)
+      await sink.write(typeof chunk === 'string' ? Buffer.from(chunk) : new Uint8Array(chunk));
+    await sink.end();
   }
 }

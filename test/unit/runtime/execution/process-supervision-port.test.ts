@@ -3,6 +3,12 @@ import { expect, test } from 'vitest';
 import type { ProcessStartRequest } from '../../../../src/runtime/execution/index.js';
 import { FakeProcessSupervisionPort } from '../../../support/process/fake-process-supervision-port.js';
 
+const sink = () =>
+  Object.freeze({
+    write: async (_chunk: Uint8Array): Promise<void> => undefined,
+    end: async (): Promise<void> => undefined,
+  });
+
 const request = (): ProcessStartRequest =>
   Object.freeze({
     cwd: process.cwd(),
@@ -10,6 +16,8 @@ const request = (): ProcessStartRequest =>
     args: Object.freeze(['--run']),
     environment: Object.freeze({ REFERENCE_PROCESS_ENV: 'candidate' }),
     shell: false,
+    stdout: sink(),
+    stderr: sink(),
   });
 
 test('returns the scripted immutable identity for a newly live owned process', async () => {
@@ -31,10 +39,16 @@ test('returns the scripted immutable identity for a newly live owned process', a
   });
   expect(Object.isFrozen(process)).toBe(true);
   expect(Object.isFrozen(process.identity)).toBe(true);
-  expect(port.calls()).toEqual([request()]);
+  expect(port.calls()).toHaveLength(1);
+  expect(port.calls()[0]).toMatchObject({
+    executable: '/fixture/bin/agent',
+    args: ['--run'],
+    environment: { REFERENCE_PROCESS_ENV: 'candidate' },
+    shell: false,
+  });
 
   port.settle(1);
-  await expect(process.completion).resolves.toBeUndefined();
+  await expect(process.completion).resolves.toEqual({ exitCode: 0, signal: null });
 });
 
 test('settles a retained fake process once through its private cleanup capability', async () => {
@@ -51,5 +65,5 @@ test('settles a retained fake process once through its private cleanup capabilit
 
   await expect(firstCleanup).resolves.toBeUndefined();
   await expect(repeatedCleanup).resolves.toBeUndefined();
-  await expect(process.completion).resolves.toBeUndefined();
+  await expect(process.completion).resolves.toEqual({ exitCode: 0, signal: null });
 });

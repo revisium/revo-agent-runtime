@@ -1,4 +1,11 @@
 export type { InvocationExecutionPorts } from './execution-ports.js';
+export type {
+  BoundedCommandObservation,
+  BoundedCommandPort,
+  BoundedCommandRequest,
+  CommandResolution,
+  RunningBoundedCommand,
+} from './bounded-command-port/index.js';
 export type { InvocationTerminalObservation } from './execution-terminal-observation.js';
 export { finalizeInvocationOutcome } from './finalize-invocation-outcome.js';
 export { InvocationInputSnapshot } from './input-snapshot.js';
@@ -11,6 +18,8 @@ export type { ResultSchemaValidator } from './result-schema-validator.js';
 export type { WorkspaceAdmissionResult } from './workspace-admission-result.js';
 export type {
   LiveOwnedProcess,
+  ProcessExitObservation,
+  ProcessOutputSink,
   ProcessIdentity,
   ProcessStartRequest,
   ProcessSupervisionPort,
