@@ -2,14 +2,21 @@ import { expect, test } from 'vitest';
 
 import { createInvocationLifecycleManager } from '../../../src/application/manager/index.js';
 import type { InvocationExecutionPorts } from '../../../src/runtime/execution/index.js';
+import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
 import { FakeInvocationOutputPort } from '../../support/execution/fake-output-port.js';
+import { FreshAvailableExecutableProbePort } from '../../support/probe/fresh-available-executable-probe-port.js';
 
-const lifecycleOptions = Object.freeze({ definitions: [] });
+const definition = buildAgentDefinition();
+const agent = Object.freeze({ id: definition.id, version: definition.version });
+const lifecycleOptions = Object.freeze({ definitions: Object.freeze([definition]) });
 
 const createLifecycleManager = (ports: InvocationExecutionPorts) =>
-  createInvocationLifecycleManager(lifecycleOptions, ports);
+  createInvocationLifecycleManager(lifecycleOptions, {
+    ...ports,
+    executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
+  });
 
 const resultSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -26,7 +33,7 @@ test('rejects an invalid request before output preparation or execution start', 
     output,
   });
 
-  await expect(manager.start({ resultSchema, invocationId: '' })).resolves.toEqual({
+  await expect(manager.start({ agent, resultSchema, invocationId: '' })).resolves.toEqual({
     status: 'rejected',
     reason: 'invalid_request',
   });
@@ -49,8 +56,8 @@ test('admits one concurrent duplicate after preparation and passes an immutable 
   });
 
   const [first, second] = await Promise.all([
-    manager.start({ resultSchema, invocationId: 'same', metadata }),
-    manager.start({ resultSchema, invocationId: 'same', metadata }),
+    manager.start({ agent, resultSchema, invocationId: 'same', metadata }),
+    manager.start({ agent, resultSchema, invocationId: 'same', metadata }),
   ]);
 
   expect([first.status, second.status].toSorted()).toEqual(['accepted', 'rejected']);
@@ -70,7 +77,9 @@ test('does not admit output preparation failures', async () => {
     output,
   });
 
-  await expect(manager.start({ resultSchema, invocationId: 'prepare-failure' })).resolves.toEqual({
+  await expect(
+    manager.start({ agent, resultSchema, invocationId: 'prepare-failure' }),
+  ).resolves.toEqual({
     status: 'rejected',
     reason: 'output_prepare_failed',
   });
@@ -98,12 +107,12 @@ test('retains an id after terminal settlement until FIFO eviction', async () => 
     output,
   });
 
-  const first = await manager.start({ resultSchema, invocationId: 'reused' });
+  const first = await manager.start({ agent, resultSchema, invocationId: 'reused' });
   if (first.status !== 'accepted') throw new Error('Expected first admission');
   await flush();
   execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
   await flush();
-  const second = await manager.start({ resultSchema, invocationId: 'reused' });
+  const second = await manager.start({ agent, resultSchema, invocationId: 'reused' });
 
   expect(second).toEqual({ status: 'rejected', reason: 'duplicate_invocation' });
   expect(execution.calls()).toEqual([{ type: 'start' }]);
@@ -132,13 +141,15 @@ test('retains failed composition admission after completion rejection', async ()
   });
 
   const lifecycle = expectAccepted(
-    await manager.start({ resultSchema, invocationId: 'failed-reuse' }),
+    await manager.start({ agent, resultSchema, invocationId: 'failed-reuse' }),
   );
   await flush();
   execution.settleCompletionFailure(1, new Error('failed'));
   await flush();
   expect(lifecycle.terminalSettlement()).toEqual({ status: 'failed', reason: 'execution_failed' });
-  await expect(manager.start({ resultSchema, invocationId: 'failed-reuse' })).resolves.toEqual({
+  await expect(
+    manager.start({ agent, resultSchema, invocationId: 'failed-reuse' }),
+  ).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',
   });
@@ -160,21 +171,25 @@ test('retains caller-cancelled composition admission after confirmed cancellatio
   });
 
   const lifecycle = expectAccepted(
-    await manager.start({ resultSchema, invocationId: 'cancelled-reuse' }),
+    await manager.start({ agent, resultSchema, invocationId: 'cancelled-reuse' }),
   );
   await flush();
   const cancellation = lifecycle.requestCancellation();
   await flush();
   execution.settleCancellationRequest(1);
   await cancellation;
-  await expect(manager.start({ resultSchema, invocationId: 'cancelled-reuse' })).resolves.toEqual({
+  await expect(
+    manager.start({ agent, resultSchema, invocationId: 'cancelled-reuse' }),
+  ).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',
   });
   execution.confirmCancellation(1);
   await flush();
   expect(lifecycle.terminalSettlement()).toEqual({ status: 'cancelled' });
-  await expect(manager.start({ resultSchema, invocationId: 'cancelled-reuse' })).resolves.toEqual({
+  await expect(
+    manager.start({ agent, resultSchema, invocationId: 'cancelled-reuse' }),
+  ).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',
   });
@@ -193,12 +208,19 @@ test('retains deadline-cancelled composition admission after confirmed cancellat
   const manager = createLifecycleManager({ execution, clock, output });
 
   const lifecycle = expectAccepted(
-    await manager.start({ resultSchema, invocationId: 'timeout-reuse', wallClockTimeoutMs: 1_000 }),
+    await manager.start({
+      agent,
+      resultSchema,
+      invocationId: 'timeout-reuse',
+      wallClockTimeoutMs: 1_000,
+    }),
   );
   await flush();
   clock.advanceBy(1_000);
   await flush();
-  await expect(manager.start({ resultSchema, invocationId: 'timeout-reuse' })).resolves.toEqual({
+  await expect(
+    manager.start({ agent, resultSchema, invocationId: 'timeout-reuse' }),
+  ).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',
   });
@@ -206,7 +228,9 @@ test('retains deadline-cancelled composition admission after confirmed cancellat
   execution.confirmCancellation(1);
   await flush();
   expect(lifecycle.terminalSettlement()).toEqual({ status: 'timed_out' });
-  await expect(manager.start({ resultSchema, invocationId: 'timeout-reuse' })).resolves.toEqual({
+  await expect(
+    manager.start({ agent, resultSchema, invocationId: 'timeout-reuse' }),
+  ).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',
   });
@@ -227,7 +251,7 @@ test('keeps a racing natural completion as the only terminal composition settlem
   });
 
   const lifecycle = expectAccepted(
-    await manager.start({ resultSchema, invocationId: 'race-reuse' }),
+    await manager.start({ agent, resultSchema, invocationId: 'race-reuse' }),
   );
   await flush();
   const cancellation = lifecycle.requestCancellation();
@@ -238,10 +262,12 @@ test('keeps a racing natural completion as the only terminal composition settlem
   );
   await flush();
   expect(lifecycle.terminalSettlement()).toEqual({ status: 'succeeded', value: {} });
-  await expect(manager.start({ resultSchema, invocationId: 'race-reuse' })).resolves.toEqual({
-    status: 'rejected',
-    reason: 'duplicate_invocation',
-  });
+  await expect(manager.start({ agent, resultSchema, invocationId: 'race-reuse' })).resolves.toEqual(
+    {
+      status: 'rejected',
+      reason: 'duplicate_invocation',
+    },
+  );
 });
 
 test('keeps an id active until its one pending terminal-result commit settles', async () => {
@@ -256,25 +282,31 @@ test('keeps an id active until its one pending terminal-result commit settles', 
   output.enqueuePendingTerminalResultRecording();
   const manager = createLifecycleManager({ execution, clock, output });
 
-  const first = expectAccepted(await manager.start({ resultSchema, invocationId: 'finalizing' }));
+  const first = expectAccepted(
+    await manager.start({ agent, resultSchema, invocationId: 'finalizing' }),
+  );
   await flush();
   execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
   await flush();
 
   expect(first.currentState()).toBe('finalizing');
-  await expect(manager.start({ resultSchema, invocationId: 'finalizing' })).resolves.toEqual({
-    status: 'rejected',
-    reason: 'duplicate_invocation',
-  });
+  await expect(manager.start({ agent, resultSchema, invocationId: 'finalizing' })).resolves.toEqual(
+    {
+      status: 'rejected',
+      reason: 'duplicate_invocation',
+    },
+  );
   expect(output.calls().filter((call) => call.type === 'record-terminal-result')).toHaveLength(1);
 
   output.fulfilPendingTerminalResultRecording(1);
   await flush();
   expect(first.terminalSettlement()).toEqual({ status: 'succeeded', value: { ok: true } });
-  await expect(manager.start({ resultSchema, invocationId: 'finalizing' })).resolves.toEqual({
-    status: 'rejected',
-    reason: 'duplicate_invocation',
-  });
+  await expect(manager.start({ agent, resultSchema, invocationId: 'finalizing' })).resolves.toEqual(
+    {
+      status: 'rejected',
+      reason: 'duplicate_invocation',
+    },
+  );
 });
 
 test('retains the id after one output commit failure without retrying the commit', async () => {
@@ -293,7 +325,7 @@ test('retains the id after one output commit failure without retrying the commit
   });
 
   const lifecycle = expectAccepted(
-    await manager.start({ resultSchema, invocationId: 'output-failure' }),
+    await manager.start({ agent, resultSchema, invocationId: 'output-failure' }),
   );
   await flush();
   execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
@@ -304,7 +336,9 @@ test('retains the id after one output commit failure without retrying the commit
     reason: 'output_write_failed',
   });
   expect(output.calls().filter((call) => call.type === 'record-terminal-result')).toHaveLength(1);
-  await expect(manager.start({ resultSchema, invocationId: 'output-failure' })).resolves.toEqual({
+  await expect(
+    manager.start({ agent, resultSchema, invocationId: 'output-failure' }),
+  ).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',
   });
@@ -344,7 +378,7 @@ test('finalizes a deep in-bound response with one output commit before retaining
   const manager = createLifecycleManager({ execution, clock, output });
 
   const lifecycle = expectAccepted(
-    await manager.start({ resultSchema, invocationId: 'deep-result' }),
+    await manager.start({ agent, resultSchema, invocationId: 'deep-result' }),
   );
   await flush();
   execution.settleNaturalCompletion(1, response);
@@ -353,7 +387,9 @@ test('finalizes a deep in-bound response with one output commit before retaining
   expect(response.byteLength).toBeLessThan(1_048_576);
   expect(lifecycle.currentState()).toBe('finalizing');
   expect(output.calls().filter((call) => call.type === 'record-terminal-result')).toHaveLength(1);
-  await expect(manager.start({ resultSchema, invocationId: 'deep-result' })).resolves.toEqual({
+  await expect(
+    manager.start({ agent, resultSchema, invocationId: 'deep-result' }),
+  ).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',
   });
@@ -362,7 +398,9 @@ test('finalizes a deep in-bound response with one output commit before retaining
   await flush();
   expect(lifecycle.currentState()).toBe('terminal');
   expect(lifecycle.terminalSettlement()?.status).toBe('succeeded');
-  await expect(manager.start({ resultSchema, invocationId: 'deep-result' })).resolves.toEqual({
+  await expect(
+    manager.start({ agent, resultSchema, invocationId: 'deep-result' }),
+  ).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',
   });

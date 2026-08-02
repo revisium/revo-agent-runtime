@@ -192,6 +192,14 @@ const structureProbes: readonly (readonly [SourceModule, string])[] = [
   ],
   [
     {
+      path: 'src/runtime/execution/forbidden-probe-barrel.ts',
+      source:
+        "import { probe } from '../../runtime/probe/index.js';\nexport const leaked = probe;\n",
+    },
+    'cross-layer-barrel-import',
+  ],
+  [
+    {
       path: 'src/runtime/definition/plain-json/inspect-plain-json.ts',
       source:
         "export const loadLimits = () => import('../../policy/limits/agent-runtime-limits.js');\n",
@@ -293,9 +301,11 @@ try {
 
   const forbiddenDefinitionProbe = join(probeRoot, 'src/runtime/definition/forbidden.ts');
   const forbiddenProbeRegistry = join(probeRoot, 'src/runtime/probe/forbidden-registry.ts');
+  const forbiddenExecutionProbe = join(probeRoot, 'src/runtime/execution/forbidden-probe.ts');
   const forbiddenRootProbe = join(probeRoot, 'src/index.ts');
   await mkdir(dirname(forbiddenDefinitionProbe), { recursive: true });
   await mkdir(dirname(forbiddenProbeRegistry), { recursive: true });
+  await mkdir(dirname(forbiddenExecutionProbe), { recursive: true });
   await writeFile(
     forbiddenDefinitionProbe,
     "import { probe } from '../probe/executable-probe.js';\nexport const leaked = probe;\n",
@@ -305,11 +315,16 @@ try {
     "import { registry } from '../registry/sealed-agent-registry.js';\nexport const leaked = registry;\n",
   );
   await writeFile(
+    forbiddenExecutionProbe,
+    "import { probe } from '../probe/executable-probe.js';\nexport const leaked = probe;\n",
+  );
+  await writeFile(
     forbiddenRootProbe,
     "import { probe } from './runtime/probe/executable-probe.js';\nexport const leaked = probe;\n",
   );
   expectArchitectureFailure([relative(root, forbiddenDefinitionProbe)], 'no-restricted-imports');
   expectArchitectureFailure([relative(root, forbiddenProbeRegistry)], 'no-restricted-imports');
+  expectArchitectureFailure([relative(root, forbiddenExecutionProbe)], 'no-restricted-imports');
   expectArchitectureFailure([relative(root, forbiddenRootProbe)], 'no-restricted-imports');
 
   const forbiddenSpec = join(probeRoot, 'src/runtime/spec/forbidden.ts');

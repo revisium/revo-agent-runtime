@@ -75,6 +75,7 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/normalize-invocation-outcome.ts',
     'execution/normalized-invocation-failure-reason.ts',
     'execution/normalized-invocation-outcome.ts',
+    'execution/prepared-launch.ts',
     'execution/process-supervision-port/index.ts',
     'execution/process-supervision-port/live-owned-process.ts',
     'execution/process-supervision-port/process-exit-observation.ts',

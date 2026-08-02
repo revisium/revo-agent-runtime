@@ -3,6 +3,7 @@ import { expect, test } from 'vitest';
 import {
   InvocationInputSnapshot,
   InvocationLifecycle,
+  PreparedLaunch,
 } from '../../../../src/runtime/execution/index.js';
 import { FakeInvocationClock } from '../../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../../support/execution/fake-execution-port.js';
@@ -24,6 +25,20 @@ const snapshot = (): InvocationInputSnapshot => {
   return value;
 };
 
+const preparedLaunch = (): PreparedLaunch => {
+  const value = PreparedLaunch.create({
+    pin: {
+      agentId: 'codex',
+      agentVersion: '1.0.0',
+      definitionDigest: 'definition-digest',
+    },
+    executable: '/usr/bin/codex',
+    reportedVersion: '1.2.3',
+  });
+  if (value === undefined) throw new Error('Unable to create prepared launch evidence');
+  return value;
+};
+
 const startLifecycle = (
   execution: FakeInvocationExecutionPort,
   clock = new FakeInvocationClock({ initialNowMs: 0 }),
@@ -31,19 +46,32 @@ const startLifecycle = (
   const settlements: Array<{ readonly status: string }> = [];
   const output = new FakeInvocationOutputPort();
   output.enqueueTerminalResultRecording();
+  const prepared = preparedLaunch();
   const lifecycle = new InvocationLifecycle(
     { execution, clock, output },
     snapshot(),
+    prepared,
     (settlement) => settlements.push(settlement),
   );
   lifecycle.begin();
-  return { lifecycle, settlements, clock };
+  return { lifecycle, settlements, clock, prepared };
 };
 
 const resultSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   type: 'object',
 };
+
+test('passes the identical prepared launch instance to execution', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueStart('running');
+  const { prepared } = startLifecycle(execution);
+
+  await flush();
+
+  expect(execution.startedPreparedLaunches()).toEqual([prepared]);
+  expect(execution.startedPreparedLaunches()[0]).toBe(prepared);
+});
 
 test('queues cancellation during a deferred start and cancels exactly once after it runs', async () => {
   const execution = new FakeInvocationExecutionPort();

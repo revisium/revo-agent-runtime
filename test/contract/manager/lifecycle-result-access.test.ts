@@ -2,13 +2,20 @@ import { expect, test } from 'vitest';
 
 import { createInvocationLifecycleManager } from '../../../src/application/manager/index.js';
 import type { InvocationExecutionPorts } from '../../../src/runtime/execution/index.js';
+import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
 import { FakeInvocationOutputPort } from '../../support/execution/fake-output-port.js';
+import { FreshAvailableExecutableProbePort } from '../../support/probe/fresh-available-executable-probe-port.js';
 
-const lifecycleOptions = Object.freeze({ definitions: [] });
+const definition = buildAgentDefinition();
+const agent = Object.freeze({ id: definition.id, version: definition.version });
+const lifecycleOptions = Object.freeze({ definitions: Object.freeze([definition]) });
 const createLifecycleManager = (ports: InvocationExecutionPorts) =>
-  createInvocationLifecycleManager(lifecycleOptions, ports);
+  createInvocationLifecycleManager(lifecycleOptions, {
+    ...ports,
+    executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
+  });
 
 const resultSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -38,7 +45,7 @@ test('publishes a completed canonical result before synchronous terminal deliver
     output,
   });
   const accepted = expectAcceptedInvocation(
-    await manager.start({ resultSchema, invocationId: 'ordered' }),
+    await manager.start({ agent, resultSchema, invocationId: 'ordered' }),
   );
   let handleResolved = false;
   let waiterResolved = false;
@@ -86,11 +93,16 @@ test('keeps an active waiter and handle result after later FIFO eviction while f
   execution.enqueueStart('running');
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
-    { definitions: [], limits: { maxCompletedInvocations: 1 } },
-    { execution, clock: new FakeInvocationClock({ initialNowMs: 0 }), output },
+    { definitions: [definition], limits: { maxCompletedInvocations: 1 } },
+    {
+      execution,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      output,
+      executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
+    },
   );
   const first = expectAcceptedInvocation(
-    await manager.start({ resultSchema, invocationId: 'first' }),
+    await manager.start({ agent, resultSchema, invocationId: 'first' }),
   );
   const activeWaiter = manager.waitForResult('first');
 
@@ -98,7 +110,7 @@ test('keeps an active waiter and handle result after later FIFO eviction while f
   execution.settleNaturalCompletion(1, new TextEncoder().encode('{"id":"first"}'));
   await flush();
   const second = expectAcceptedInvocation(
-    await manager.start({ resultSchema, invocationId: 'second' }),
+    await manager.start({ agent, resultSchema, invocationId: 'second' }),
   );
   await flush();
   execution.settleNaturalCompletion(2, new TextEncoder().encode('{"id":"second"}'));
@@ -112,7 +124,9 @@ test('keeps an active waiter and handle result after later FIFO eviction while f
   expect(secondLookup.state).toBe('completed');
   if (secondLookup.state !== 'completed') throw new Error('Expected retained second result.');
   await expect(second.handle.result()).resolves.toBe(secondLookup.result);
-  expect((await manager.start({ resultSchema, invocationId: 'first' })).status).toBe('accepted');
+  expect((await manager.start({ agent, resultSchema, invocationId: 'first' })).status).toBe(
+    'accepted',
+  );
 });
 
 test('does not publish a pending terminal result before its output commit settles', async () => {
@@ -127,7 +141,7 @@ test('does not publish a pending terminal result before its output commit settle
     output,
   });
   const accepted = expectAcceptedInvocation(
-    await manager.start({ resultSchema, invocationId: 'pending-result' }),
+    await manager.start({ agent, resultSchema, invocationId: 'pending-result' }),
   );
   let eventCalls = 0;
   let waiterSettled = false;
@@ -162,14 +176,14 @@ test('uses validated default capacity and rejects invalid capacity through lifec
   const invalidMinimum = createPorts();
   expect(() =>
     createInvocationLifecycleManager(
-      { definitions: [], limits: { maxCompletedInvocations: 0 } },
+      { definitions: [definition], limits: { maxCompletedInvocations: 0 } },
       invalidMinimum,
     ),
   ).toThrow('Agent manager limit is invalid.');
   const invalidMaximum = createPorts();
   expect(() =>
     createInvocationLifecycleManager(
-      { definitions: [], limits: { maxCompletedInvocations: 1_001 } },
+      { definitions: [definition], limits: { maxCompletedInvocations: 1_001 } },
       invalidMaximum,
     ),
   ).toThrow('Agent manager limit is invalid.');
@@ -183,7 +197,7 @@ test('uses validated default capacity and rejects invalid capacity through lifec
   const manager = createLifecycleManager({ execution, output, clock });
   const complete = async (index: number): Promise<void> => {
     if (index > 1_000) return;
-    const accepted = await manager.start({ resultSchema, invocationId: `default-${index}` });
+    const accepted = await manager.start({ agent, resultSchema, invocationId: `default-${index}` });
     expect(accepted.status).toBe('accepted');
     await flush();
     execution.settleNaturalCompletion(index + 1, new TextEncoder().encode('{}'));
@@ -211,7 +225,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   const outputFailureEvents: unknown[] = [];
   outputFailureManager.subscribe({}, (event) => outputFailureEvents.push(event.invocationId));
   const outputFailure = expectAcceptedInvocation(
-    await outputFailureManager.start({ resultSchema, invocationId: 'output-failure-event' }),
+    await outputFailureManager.start({ agent, resultSchema, invocationId: 'output-failure-event' }),
   );
   await flush();
   outputFailureExecution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
@@ -233,7 +247,11 @@ test('delivers one canonical terminal event for output failure, execution failur
   const executionFailureEvents: unknown[] = [];
   executionFailureManager.subscribe({}, (event) => executionFailureEvents.push(event.invocationId));
   const executionFailure = expectAcceptedInvocation(
-    await executionFailureManager.start({ resultSchema, invocationId: 'execution-failure-event' }),
+    await executionFailureManager.start({
+      agent,
+      resultSchema,
+      invocationId: 'execution-failure-event',
+    }),
   );
   await flush();
   executionFailureExecution.settleCompletionFailure(1, new Error('execution failed'));
@@ -255,7 +273,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   const cancellationEvents: unknown[] = [];
   cancellationManager.subscribe({}, (event) => cancellationEvents.push(event.invocationId));
   const cancellation = expectAcceptedInvocation(
-    await cancellationManager.start({ resultSchema, invocationId: 'caller-cancel-event' }),
+    await cancellationManager.start({ agent, resultSchema, invocationId: 'caller-cancel-event' }),
   );
   await flush();
   const cancellationRequest = cancellation.lifecycle.requestCancellation();
@@ -283,6 +301,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   deadlineManager.subscribe({}, (event) => deadlineEvents.push(event.invocationId));
   const deadline = expectAcceptedInvocation(
     await deadlineManager.start({
+      agent,
       resultSchema,
       invocationId: 'deadline-cancel-event',
       wallClockTimeoutMs: 1_000,
@@ -336,7 +355,7 @@ test('isolates a throwing listener without stranding manager handle or active wa
   expect(independentAdmission.state).toBe('subscribed');
 
   const first = expectAcceptedInvocation(
-    await manager.start({ resultSchema, invocationId: 'first' }),
+    await manager.start({ agent, resultSchema, invocationId: 'first' }),
   );
   const handleResult = first.handle.result().then((result) => {
     handleResolved = true;
@@ -356,7 +375,7 @@ test('isolates a throwing listener without stranding manager handle or active wa
   expect(throwingCalls).toBe(1);
 
   const second = expectAcceptedInvocation(
-    await manager.start({ resultSchema, invocationId: 'second' }),
+    await manager.start({ agent, resultSchema, invocationId: 'second' }),
   );
   await flush();
   execution.settleNaturalCompletion(2, new TextEncoder().encode('{"id":"second"}'));
@@ -374,8 +393,13 @@ test('admits subscriptions independently from completed result retention', async
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
-    { definitions: [], limits: { maxCompletedInvocations: 1 } },
-    { execution, clock: new FakeInvocationClock({ initialNowMs: 0 }), output },
+    { definitions: [definition], limits: { maxCompletedInvocations: 1 } },
+    {
+      execution,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      output,
+      executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
+    },
   );
   const received: unknown[] = [];
   const acceptedListener = manager.subscribe({}, (event) => received.push(event.invocationId));
@@ -385,7 +409,7 @@ test('admits subscriptions independently from completed result retention', async
   expect(rejectedListener.state).toBe('subscribed');
 
   const accepted = expectAcceptedInvocation(
-    await manager.start({ resultSchema, invocationId: 'subscription-capacity' }),
+    await manager.start({ agent, resultSchema, invocationId: 'subscription-capacity' }),
   );
   await flush();
   execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));

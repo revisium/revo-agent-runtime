@@ -240,6 +240,9 @@ const validateImportBoundaries = (path: string, references: readonly ModuleRefer
     }
 
     const targetLayer = runtimeLayer(reference.target);
+    if (layer === 'execution' && targetLayer === 'probe') {
+      fail('cross-layer-barrel-import', path);
+    }
     if (layer && targetLayer && layer !== targetLayer && !isBarrel(reference.target)) {
       fail('cross-layer-barrel-import', path);
     }
