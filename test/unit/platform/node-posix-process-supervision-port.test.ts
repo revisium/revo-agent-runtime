@@ -36,6 +36,14 @@ const request = () =>
     args: Object.freeze([]),
     environment: Object.freeze({}),
     shell: false as const,
+    stdout: Object.freeze({
+      write: async (_chunk: Uint8Array): Promise<void> => undefined,
+      end: async (): Promise<void> => undefined,
+    }),
+    stderr: Object.freeze({
+      write: async (_chunk: Uint8Array): Promise<void> => undefined,
+      end: async (): Promise<void> => undefined,
+    }),
   });
 
 const statLine = (
@@ -190,6 +198,73 @@ test('rejects non-string environment values before spawn', async () => {
     new NodePosixProcessSupervisionPort().start({ ...request(), environment }),
   ).rejects.toThrow('environment values must be strings');
   expect(mocks.spawn).not.toHaveBeenCalled();
+});
+
+test('rejects malformed output sinks before spawn', async () => {
+  const malformedRequest: unknown = {
+    ...request(),
+    stdout: { write: async (): Promise<void> => undefined },
+  };
+  const port = new NodePosixProcessSupervisionPort();
+  const start = port.start.bind(port);
+
+  await expect(Reflect.apply(start, port, [malformedRequest])).rejects.toThrow(
+    'stdout output sink must provide write and end functions',
+  );
+  expect(mocks.spawn).not.toHaveBeenCalled();
+});
+
+test('observes immediate output rejection while identity inspection is delayed', async () => {
+  vi.spyOn(process, 'kill').mockImplementation(() => {
+    throw gone();
+  });
+  const child = new FakeChild(414);
+  const outputFailure = new Error('output delivery failed');
+  let unhandledRejection: unknown;
+  const onUnhandledRejection = (reason: unknown): void => {
+    unhandledRejection = reason;
+  };
+  process.once('unhandledRejection', onUnhandledRejection);
+  let releaseInspection: (identity: {
+    readonly pid: number;
+    readonly processGroupId: number;
+    readonly fingerprint: string;
+  }) => void = () => undefined;
+  const inspection = new Promise<{
+    readonly pid: number;
+    readonly processGroupId: number;
+    readonly fingerprint: string;
+  }>((resolve) => {
+    releaseInspection = resolve;
+  });
+  const outputRejectingRequest = {
+    ...request(),
+    stdout: Object.freeze({
+      write: async (_chunk: Uint8Array): Promise<void> => undefined,
+      end: async (): Promise<void> => {
+        throw outputFailure;
+      },
+    }),
+  };
+
+  mocks.spawn.mockReturnValue(child);
+  const starting = new NodePosixProcessSupervisionPort({
+    inspect: async () => inspection,
+  }).start(outputRejectingRequest);
+  child.emit('spawn');
+
+  await wait(50);
+  child.emit('close');
+  releaseInspection({
+    pid: 414,
+    processGroupId: 414,
+    fingerprint: '{"fixture":true}',
+  });
+
+  const live = await starting;
+  await expect(live.completion).rejects.toBe(outputFailure);
+  process.removeListener('unhandledRejection', onUnhandledRejection);
+  expect(unhandledRejection).toBeUndefined();
 });
 
 test('rejects unsupported hosts before spawn', async () => {

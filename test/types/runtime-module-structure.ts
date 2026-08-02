@@ -27,7 +27,9 @@ import type {
   InvocationTerminalObservation,
   LiveOwnedProcess,
   NormalizedInvocationOutcome,
+  ProcessExitObservation,
   ProcessIdentity,
+  ProcessOutputSink,
   ProcessStartRequest,
   ProcessSupervisionPort,
 } from '../../src/runtime/execution/index.js';
@@ -224,6 +226,8 @@ type ExpectedProcessStartRequest = {
   readonly args: readonly string[];
   readonly environment: Readonly<Record<string, string>>;
   readonly shell: false;
+  readonly stdout: ProcessOutputSink;
+  readonly stderr: ProcessOutputSink;
 };
 
 type ExpectedProcessIdentity = {
@@ -233,7 +237,7 @@ type ExpectedProcessIdentity = {
 };
 
 type ExpectedLiveOwnedProcess = {
-  readonly completion: Promise<void>;
+  readonly completion: Promise<ProcessExitObservation>;
   readonly identity: ProcessIdentity;
   terminateAndReap(): Promise<void>;
 };

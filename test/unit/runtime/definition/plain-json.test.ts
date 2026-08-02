@@ -313,6 +313,12 @@ test('exposes the exact frozen agent manager limit descriptors', () => {
     maxStdoutBytes: { minimum: 65_536, default: 8_388_608, maximum: 8_388_608 },
     maxStderrBytes: { minimum: 65_536, default: 8_388_608, maximum: 8_388_608 },
     maxRawResponseBytes: { minimum: 65_536, default: 1_048_576, maximum: 1_048_576 },
+    maxCommandStdoutBytes: 1_048_576,
+    maxCommandStderrBytes: 1_048_576,
+    maxParserCarryBytes: 1_048_576,
+    maxParserLineBytes: 1_048_576,
+    processTerminationGraceMs: 2_000,
+    processPostKillReapTimeoutMs: 500,
     maxCompletedInvocations: { minimum: 1, default: 1_000, maximum: 1_000 },
     maxTerminalEventBytes: 2_097_152,
   });
