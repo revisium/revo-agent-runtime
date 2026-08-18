@@ -82,6 +82,40 @@ interface ParsedRequest {
   readonly secrets: readonly ParsedEntry[];
 }
 
+interface ParsedRequestAccumulator {
+  inherit: readonly string[];
+  variables: readonly ParsedEntry[];
+  secrets: readonly ParsedEntry[];
+}
+
+const readRequestField = (
+  value: object,
+  key: string,
+  target: ParsedRequestAccumulator,
+): boolean => {
+  const read = ownEnumerableData(value, key);
+  if (!read.valid) return false;
+  if (key === 'inherit') {
+    const parsed = readStringArray(read.value);
+    if (parsed === undefined) return false;
+    target.inherit = parsed;
+    return true;
+  }
+  if (key === 'variables') {
+    const parsed = readStringRecord(read.value);
+    if (parsed === undefined) return false;
+    target.variables = parsed;
+    return true;
+  }
+  if (key === 'secrets') {
+    const parsed = readStringRecord(read.value);
+    if (parsed === undefined) return false;
+    target.secrets = parsed;
+    return true;
+  }
+  return false;
+};
+
 const readRequest = (value: unknown): ParsedRequest | undefined => {
   if (
     typeof value !== 'object' ||
@@ -91,31 +125,13 @@ const readRequest = (value: unknown): ParsedRequest | undefined => {
   )
     return undefined;
 
-  let inherit: readonly string[] = [];
-  let variables: readonly ParsedEntry[] = [];
-  let secrets: readonly ParsedEntry[] = [];
+  const parsed: ParsedRequestAccumulator = { inherit: [], variables: [], secrets: [] };
 
   for (const key of enumerableKeys(value)) {
-    const read = ownEnumerableData(value, key);
-    if (!read.valid) return undefined;
-    if (key === 'inherit') {
-      const parsed = readStringArray(read.value);
-      if (parsed === undefined) return undefined;
-      inherit = parsed;
-    } else if (key === 'variables') {
-      const parsed = readStringRecord(read.value);
-      if (parsed === undefined) return undefined;
-      variables = parsed;
-    } else if (key === 'secrets') {
-      const parsed = readStringRecord(read.value);
-      if (parsed === undefined) return undefined;
-      secrets = parsed;
-    } else {
-      return undefined;
-    }
+    if (!readRequestField(value, key, parsed)) return undefined;
   }
 
-  return Object.freeze({ inherit, variables, secrets });
+  return Object.freeze(parsed);
 };
 
 const createRecord = (): Record<string, string> => {
