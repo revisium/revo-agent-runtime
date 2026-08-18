@@ -66,6 +66,11 @@ const isIdentifierByte = (byte: number): boolean =>
   (byte >= 97 && byte <= 122);
 
 const isOws = (byte: number): boolean => byte === 32 || byte === 9;
+const skipOws = (input: Uint8Array, start: number): number => {
+  let offset = start;
+  while (isOws(input[offset] ?? 0)) offset += 1;
+  return offset;
+};
 const isLineDelimiter = (byte: number): boolean => byte === 13 || byte === 10;
 const isTokenDelimiter = (byte: number): boolean =>
   isOws(byte) || byte === 44 || byte === 59 || byte === 38 || isLineDelimiter(byte);
@@ -96,6 +101,57 @@ const replacementWithPrefix = (
   suffix: Uint8Array = new Uint8Array(),
 ): Uint8Array => concatBytes(input.subarray(start, prefixEnd), REDACTED, suffix);
 
+const parseQuotedKeyValue = (
+  input: Uint8Array,
+  start: number,
+  quoteStart: number,
+  quote: number,
+): Candidate => {
+  const quotedPrefixEnd = quoteStart + 1;
+  let end = quotedPrefixEnd;
+  while (input[end] !== undefined && input[end] !== quote) end += 1;
+  if (input[end] === undefined)
+    return {
+      state: 'incomplete',
+      active: true,
+      replacement: replacementWithPrefix(input, start, quotedPrefixEnd),
+      discardRule: { kind: 'byte', delimiters: [quote] },
+    };
+  return {
+    state: 'complete',
+    end: end + 1,
+    replacement: replacementWithPrefix(input, start, quotedPrefixEnd, new Uint8Array([quote])),
+  };
+};
+
+const parseUnquotedKeyValue = (
+  input: Uint8Array,
+  start: number,
+  valueStart: number,
+): Candidate | undefined => {
+  const firstValueByte = input[valueStart];
+  if (firstValueByte === undefined)
+    return {
+      state: 'incomplete',
+      active: true,
+      replacement: replacementWithPrefix(input, start, valueStart),
+      discardRule: { kind: 'byte-after-ows', grammar: 'key-value' },
+    };
+  if (isTokenDelimiter(firstValueByte)) return undefined;
+
+  let end = valueStart + 1;
+  while (input[end] !== undefined && !isTokenDelimiter(input[end] ?? 0)) end += 1;
+  const replacement = replacementWithPrefix(input, start, valueStart);
+  if (input[end] === undefined)
+    return {
+      state: 'incomplete',
+      active: true,
+      replacement,
+      discardRule: { kind: 'byte', delimiters: TOKEN_DELIMITERS },
+    };
+  return { state: 'complete', end, replacement };
+};
+
 const parseKeyValue = (input: Uint8Array, start: number, key: string): Candidate | undefined => {
   if (!hasBoundaryBefore(input, start)) return undefined;
   const keyBytes = encoder.encode(key);
@@ -106,65 +162,15 @@ const parseKeyValue = (input: Uint8Array, start: number, key: string): Candidate
   let offset = start + keyBytes.byteLength;
   const next = input[offset];
   if (next !== undefined && isIdentifierByte(next)) return undefined;
-  while (true) {
-    const byte = input[offset];
-    if (byte === undefined || !isOws(byte)) break;
-    offset += 1;
-  }
+  offset = skipOws(input, offset);
   if (input[offset] === undefined)
     return { state: 'incomplete', active: false, replacement: REDACTED };
   if (input[offset] !== 61 && input[offset] !== 58) return undefined;
-  offset += 1;
-  while (true) {
-    const byte = input[offset];
-    if (byte === undefined || !isOws(byte)) break;
-    offset += 1;
-  }
-  const prefixEnd = offset;
-  const firstValueByte = input[offset];
-  if (firstValueByte === undefined)
-    return {
-      state: 'incomplete',
-      active: true,
-      replacement: replacementWithPrefix(input, start, prefixEnd),
-      discardRule: { kind: 'byte-after-ows', grammar: 'key-value' },
-    };
-
-  if (firstValueByte === 34 || firstValueByte === 39) {
-    const quote = firstValueByte;
-    offset += 1;
-    const quotedPrefixEnd = offset;
-    while (input[offset] !== undefined && input[offset] !== quote) offset += 1;
-    if (input[offset] === undefined)
-      return {
-        state: 'incomplete',
-        active: true,
-        replacement: replacementWithPrefix(input, start, quotedPrefixEnd),
-        discardRule: { kind: 'byte', delimiters: [quote] },
-      };
-    return {
-      state: 'complete',
-      end: offset + 1,
-      replacement: replacementWithPrefix(input, start, quotedPrefixEnd, new Uint8Array([quote])),
-    };
-  }
-
-  if (isTokenDelimiter(firstValueByte)) return undefined;
-  offset += 1;
-  while (true) {
-    const byte = input[offset];
-    if (byte === undefined || isTokenDelimiter(byte)) break;
-    offset += 1;
-  }
-  const replacement = replacementWithPrefix(input, start, prefixEnd);
-  return input[offset] === undefined
-    ? {
-        state: 'incomplete',
-        active: true,
-        replacement,
-        discardRule: { kind: 'byte', delimiters: TOKEN_DELIMITERS },
-      }
-    : { state: 'complete', end: offset, replacement };
+  const valueStart = skipOws(input, offset + 1);
+  const firstValueByte = input[valueStart];
+  if (firstValueByte === 34 || firstValueByte === 39)
+    return parseQuotedKeyValue(input, start, valueStart, firstValueByte);
+  return parseUnquotedKeyValue(input, start, valueStart);
 };
 
 const parseHeader = (input: Uint8Array, start: number, name: string): Candidate | undefined => {
@@ -323,6 +329,53 @@ type Processed =
       candidate: IncompleteCandidate;
     }>;
 
+interface RankedCandidate {
+  readonly candidate: CompleteCandidate;
+  readonly priority: number;
+}
+
+const candidatePriority = (candidate: Candidate): number => {
+  if (candidate.state === 'complete') return 2;
+  if (candidate.active) return 1;
+  return 0;
+};
+
+const applicableCandidate = (
+  candidate: Candidate,
+  inputLength: number,
+  final: boolean,
+): RankedCandidate | undefined => {
+  if (candidate.state === 'complete') return { candidate, priority: candidatePriority(candidate) };
+  if (!final) return undefined;
+  return {
+    candidate: { state: 'complete', end: inputLength, replacement: candidate.replacement },
+    priority: candidatePriority(candidate),
+  };
+};
+
+const isPreferredCandidate = (
+  candidate: RankedCandidate,
+  current: RankedCandidate | undefined,
+): boolean => {
+  if (current === undefined) return true;
+  if (candidate.candidate.end > current.candidate.end) return true;
+  if (candidate.candidate.end < current.candidate.end) return false;
+  return candidate.priority > current.priority;
+};
+
+const selectBestCandidate = (
+  candidates: readonly Candidate[],
+  inputLength: number,
+  final: boolean,
+): CompleteCandidate | undefined => {
+  let best: RankedCandidate | undefined;
+  for (const candidate of candidates) {
+    const applicable = applicableCandidate(candidate, inputLength, final);
+    if (applicable !== undefined && isPreferredCandidate(applicable, best)) best = applicable;
+  }
+  return best?.candidate;
+};
+
 const processCarry = (
   input: Uint8Array,
   secretBytes: readonly Uint8Array[],
@@ -336,26 +389,7 @@ const processCarry = (
     const incomplete = candidates.find((candidate) => candidate.state === 'incomplete');
     if (!final && incomplete !== undefined)
       return { state: 'retained', start: offset, candidate: incomplete };
-    let complete: CompleteCandidate | undefined;
-    let completePriority = -1;
-    for (const candidate of candidates) {
-      const applicable: CompleteCandidate | undefined =
-        candidate.state === 'complete'
-          ? candidate
-          : final
-            ? { state: 'complete', end: input.byteLength, replacement: candidate.replacement }
-            : undefined;
-      const priority = candidate.state === 'complete' ? 2 : candidate.active ? 1 : 0;
-      if (
-        applicable !== undefined &&
-        (complete === undefined ||
-          applicable.end > complete.end ||
-          (applicable.end === complete.end && priority > completePriority))
-      ) {
-        complete = applicable;
-        completePriority = priority;
-      }
-    }
+    const complete = selectBestCandidate(candidates, input.byteLength, final);
     if (complete === undefined) {
       offset += 1;
       continue;

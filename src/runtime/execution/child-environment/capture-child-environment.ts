@@ -4,7 +4,7 @@ import type { ChildEnvironmentCapture } from './child-environment-capture.js';
 const { isPlainObservedObject, isDataDescriptor, ownEnumerableData, enumerableKeys } =
   reflectiveObjectRead;
 
-const keyPattern = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const keyPattern = /^[A-Za-z_]\w*$/;
 const credentialLikePattern = /token|secret|password|credential|api[_-]?key|private[_-]?key/i;
 
 const maxTotalKeys = 128;
@@ -133,6 +133,77 @@ const appendEntry = (target: Record<string, string>, key: string, value: string)
   });
 };
 
+const validateNames = (parsed: ParsedRequest): RejectionReason | undefined => {
+  const nonSecretNames = [...parsed.inherit, ...parsed.variables.map((entry) => entry.key)];
+  const allNames = [...nonSecretNames, ...parsed.secrets.map((entry) => entry.key)];
+
+  for (const name of allNames) {
+    if (!keyPattern.test(name)) return 'invalid_key';
+  }
+  for (const name of nonSecretNames) {
+    if (credentialLikePattern.test(name)) return 'credential_like_name';
+  }
+
+  const seenNames = new Set<string>();
+  for (const name of allNames) {
+    if (seenNames.has(name)) return 'duplicate_name';
+    seenNames.add(name);
+  }
+  return undefined;
+};
+
+const resolveInheritedEntries = (
+  names: readonly string[],
+  hostSnapshot: Readonly<Record<string, string>>,
+): readonly ParsedEntry[] | undefined => {
+  const entries: ParsedEntry[] = [];
+  for (const name of names) {
+    const read = ownEnumerableData(hostSnapshot, name);
+    if (!read.valid || typeof read.value !== 'string') return undefined;
+    entries.push(Object.freeze({ key: name, value: read.value }));
+  }
+  return entries;
+};
+
+const hasEmptySecretValue = (entries: readonly ParsedEntry[]): boolean => {
+  for (const entry of entries) {
+    if (entry.value.length === 0) return true;
+  }
+  return false;
+};
+
+const validateEntryBounds = (entries: readonly ParsedEntry[]): RejectionReason | undefined => {
+  if (entries.length > maxTotalKeys) return 'too_many_keys';
+
+  let totalBytes = 0;
+  for (const entry of entries) {
+    const keyBytes = encoder.encode(entry.key).byteLength;
+    if (keyBytes > maxKeyBytes) return 'key_too_large';
+    const valueBytes = encoder.encode(entry.value).byteLength;
+    if (valueBytes > maxValueBytes) return 'value_too_large';
+    totalBytes += keyBytes + valueBytes;
+    if (totalBytes > maxTotalBytes) return 'total_size_exceeded';
+  }
+  return undefined;
+};
+
+const createEnvironment = (entries: readonly ParsedEntry[]): Readonly<Record<string, string>> => {
+  const environment = createRecord();
+  for (const entry of entries) appendEntry(environment, entry.key, entry.value);
+  return Object.freeze(environment);
+};
+
+const uniqueSecretValues = (entries: readonly ParsedEntry[]): readonly string[] => {
+  const values: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    if (seen.has(entry.value)) continue;
+    seen.add(entry.value);
+    values.push(entry.value);
+  }
+  return Object.freeze(values);
+};
+
 export function captureChildEnvironment(
   request: unknown,
   hostSnapshot: Readonly<Record<string, string>>,
@@ -141,62 +212,20 @@ export function captureChildEnvironment(
     const parsed = readRequest(request);
     if (parsed === undefined) return rejected('invalid_request');
 
-    const nonSecretNames = [...parsed.inherit, ...parsed.variables.map((entry) => entry.key)];
-    const secretNames = parsed.secrets.map((entry) => entry.key);
-    const allNames = [...nonSecretNames, ...secretNames];
+    const nameRejection = validateNames(parsed);
+    if (nameRejection !== undefined) return rejected(nameRejection);
 
-    for (const name of allNames) {
-      if (!keyPattern.test(name)) return rejected('invalid_key');
-    }
-    for (const name of nonSecretNames) {
-      if (credentialLikePattern.test(name)) return rejected('credential_like_name');
-    }
-    const seenNames = new Set<string>();
-    for (const name of allNames) {
-      if (seenNames.has(name)) return rejected('duplicate_name');
-      seenNames.add(name);
-    }
-
-    const resolvedInherit: ParsedEntry[] = [];
-    for (const name of parsed.inherit) {
-      const read = ownEnumerableData(hostSnapshot, name);
-      if (!read.valid || typeof read.value !== 'string')
-        return rejected('missing_inherit_variable');
-      resolvedInherit.push(Object.freeze({ key: name, value: read.value }));
-    }
-
-    for (const entry of parsed.secrets) {
-      if (entry.value.length === 0) return rejected('empty_secret_value');
-    }
-
+    const resolvedInherit = resolveInheritedEntries(parsed.inherit, hostSnapshot);
+    if (resolvedInherit === undefined) return rejected('missing_inherit_variable');
+    if (hasEmptySecretValue(parsed.secrets)) return rejected('empty_secret_value');
     const combined = [...resolvedInherit, ...parsed.variables, ...parsed.secrets];
-    if (combined.length > maxTotalKeys) return rejected('too_many_keys');
-
-    let totalBytes = 0;
-    for (const entry of combined) {
-      const keyBytes = encoder.encode(entry.key).byteLength;
-      if (keyBytes > maxKeyBytes) return rejected('key_too_large');
-      const valueBytes = encoder.encode(entry.value).byteLength;
-      if (valueBytes > maxValueBytes) return rejected('value_too_large');
-      totalBytes += keyBytes + valueBytes;
-      if (totalBytes > maxTotalBytes) return rejected('total_size_exceeded');
-    }
-
-    const environment = createRecord();
-    for (const entry of combined) appendEntry(environment, entry.key, entry.value);
-
-    const secretValues: string[] = [];
-    const seenSecretValues = new Set<string>();
-    for (const entry of parsed.secrets) {
-      if (seenSecretValues.has(entry.value)) continue;
-      seenSecretValues.add(entry.value);
-      secretValues.push(entry.value);
-    }
+    const boundsRejection = validateEntryBounds(combined);
+    if (boundsRejection !== undefined) return rejected(boundsRejection);
 
     return Object.freeze({
       status: 'captured',
-      environment: Object.freeze(environment),
-      secretValues: Object.freeze(secretValues),
+      environment: createEnvironment(combined),
+      secretValues: uniqueSecretValues(parsed.secrets),
     });
   } catch {
     return rejected('invalid_request');

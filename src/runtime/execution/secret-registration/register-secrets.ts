@@ -24,9 +24,29 @@ const readSecretList = (value: unknown): SecretListRead => {
     values.push(descriptor.value);
   }
   for (const key of reflectiveObjectRead.enumerableKeys(value)) {
-    if (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= length) return { status: 'invalid' };
+    if (!/^(0|[1-9]\d*)$/.test(key) || Number(key) >= length) return { status: 'invalid' };
   }
   return { status: 'valid', values };
+};
+
+interface SecretRequestFields {
+  readonly configured: unknown;
+  readonly invocation: unknown;
+}
+
+const readRequestFields = (request: object): SecretRequestFields | undefined => {
+  const keys = [...reflectiveObjectRead.enumerableKeys(request)];
+  if (
+    keys.length !== 2 ||
+    !keys.includes('configuredSecrets') ||
+    !keys.includes('invocationSecrets')
+  )
+    return undefined;
+
+  const configured = reflectiveObjectRead.ownEnumerableData(request, 'configuredSecrets');
+  const invocation = reflectiveObjectRead.ownEnumerableData(request, 'invocationSecrets');
+  if (!configured.valid || !invocation.valid) return undefined;
+  return { configured: configured.value, invocation: invocation.value };
 };
 
 const readRequest = (
@@ -45,18 +65,11 @@ const readRequest = (
     !reflectiveObjectRead.isPlainObservedObject(request)
   )
     return { status: 'invalid' };
-  const keys = [...reflectiveObjectRead.enumerableKeys(request)];
-  if (
-    keys.length !== 2 ||
-    !keys.includes('configuredSecrets') ||
-    !keys.includes('invocationSecrets')
-  )
-    return { status: 'invalid' };
-  const configured = reflectiveObjectRead.ownEnumerableData(request, 'configuredSecrets');
-  const invocation = reflectiveObjectRead.ownEnumerableData(request, 'invocationSecrets');
-  if (!configured.valid || !invocation.valid) return { status: 'invalid' };
-  const configuredSecrets = readSecretList(configured.value);
-  const invocationSecrets = readSecretList(invocation.value);
+  const fields = readRequestFields(request);
+  if (fields === undefined) return { status: 'invalid' };
+
+  const configuredSecrets = readSecretList(fields.configured);
+  const invocationSecrets = readSecretList(fields.invocation);
   if (configuredSecrets.status === 'invalid' || invocationSecrets.status === 'invalid')
     return { status: 'invalid' };
   if (configuredSecrets.status === 'empty' || invocationSecrets.status === 'empty')
