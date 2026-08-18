@@ -22,6 +22,11 @@ import type {
   ValidatedManagerConstruction,
 } from '../../src/runtime/definition/index.js';
 import type {
+  captureChildEnvironment,
+  ChildEnvironmentCapture,
+  ChildEnvironmentRequest,
+  createRedactingBoundedOutputSink,
+  createRedactionChannel,
   InvocationExecutionPorts,
   InvocationInputSnapshot,
   InvocationTerminalObservation,
@@ -33,6 +38,12 @@ import type {
   ProcessOutputSink,
   ProcessStartRequest,
   ProcessSupervisionPort,
+  RedactingBoundedOutputSink,
+  RedactingOutputGuardRequest,
+  RedactionChannel,
+  registerSecrets,
+  SealedSecretRegistration,
+  SecretRegistrationRequest,
 } from '../../src/runtime/execution/index.js';
 import type {
   ExecutableProbePort,
@@ -221,6 +232,65 @@ type ExpectedExecutableProbePort = {
   startVersionProbe(request: VersionProbeRequest): Promise<RunningVersionProbe>;
 };
 
+type ExpectedChildEnvironmentRequest = {
+  readonly inherit: readonly string[];
+  readonly variables: Readonly<Record<string, string>>;
+  readonly secrets: Readonly<Record<string, string>>;
+};
+
+type ExpectedChildEnvironmentCapture =
+  | {
+      readonly status: 'captured';
+      readonly environment: Readonly<Record<string, string>>;
+      readonly secretValues: readonly string[];
+    }
+  | {
+      readonly status: 'rejected';
+      readonly reason:
+        | 'invalid_request'
+        | 'invalid_key'
+        | 'credential_like_name'
+        | 'duplicate_name'
+        | 'missing_inherit_variable'
+        | 'empty_secret_value'
+        | 'too_many_keys'
+        | 'key_too_large'
+        | 'value_too_large'
+        | 'total_size_exceeded';
+    };
+
+type ExpectedSecretRegistrationRequest = {
+  readonly configuredSecrets: readonly string[];
+  readonly invocationSecrets: readonly string[];
+};
+
+type ExpectedSealedSecretRegistration =
+  | {
+      readonly status: 'registered';
+      readonly secretValues: readonly string[];
+    }
+  | {
+      readonly status: 'rejected';
+      readonly reason: 'invalid_request' | 'empty_secret_value';
+    };
+
+type ExpectedRedactionChannel = {
+  feed(chunk: Uint8Array): Uint8Array;
+  flush(): Uint8Array;
+  dispose(): void;
+};
+
+type ExpectedRedactingOutputGuardRequest = {
+  readonly downstream: ProcessOutputSink;
+  readonly secretValues: readonly string[];
+  readonly maxBytes: number;
+};
+
+type ExpectedRedactingBoundedOutputSink = ProcessOutputSink & {
+  dispose(): void;
+  truncated(): boolean;
+};
+
 type ExpectedProcessStartRequest = {
   readonly cwd: string;
   readonly executable: string;
@@ -309,6 +379,57 @@ export type RunningVersionProbeIsExact = Expect<
 
 export type ExecutableProbePortIsExact = Expect<
   Equal<ExecutableProbePort, ExpectedExecutableProbePort>
+>;
+
+export type ChildEnvironmentRequestIsExact = Expect<
+  Equal<ChildEnvironmentRequest, ExpectedChildEnvironmentRequest>
+>;
+
+export type ChildEnvironmentCaptureIsExact = Expect<
+  Equal<ChildEnvironmentCapture, ExpectedChildEnvironmentCapture>
+>;
+
+export type CaptureChildEnvironmentIsExact = Expect<
+  Equal<
+    typeof captureChildEnvironment,
+    (request: unknown, hostSnapshot: Readonly<Record<string, string>>) => ChildEnvironmentCapture
+  >
+>;
+
+export type SecretRegistrationRequestIsExact = Expect<
+  Equal<SecretRegistrationRequest, ExpectedSecretRegistrationRequest>
+>;
+
+export type SealedSecretRegistrationIsExact = Expect<
+  Equal<SealedSecretRegistration, ExpectedSealedSecretRegistration>
+>;
+
+export type RegisterSecretsIsExact = Expect<
+  Equal<typeof registerSecrets, (request: SecretRegistrationRequest) => SealedSecretRegistration>
+>;
+
+export type RedactionChannelIsExact = Expect<Equal<RedactionChannel, ExpectedRedactionChannel>>;
+
+export type CreateRedactionChannelIsExact = Expect<
+  Equal<typeof createRedactionChannel, (secretValues: readonly string[]) => RedactionChannel>
+>;
+
+export type RedactingOutputGuardRequestIsExact = Expect<
+  Equal<RedactingOutputGuardRequest, ExpectedRedactingOutputGuardRequest>
+>;
+
+export type RedactingBoundedOutputSinkIsExact = Expect<
+  Equal<RedactingBoundedOutputSink, ExpectedRedactingBoundedOutputSink>
+>;
+
+export type CreateRedactingBoundedOutputSinkIsExact = Expect<
+  Equal<
+    typeof createRedactingBoundedOutputSink,
+    (
+      request: RedactingOutputGuardRequest,
+      channelFactory?: (secretValues: readonly string[]) => RedactionChannel,
+    ) => RedactingBoundedOutputSink
+  >
 >;
 
 export type ProcessStartRequestIsExact = Expect<

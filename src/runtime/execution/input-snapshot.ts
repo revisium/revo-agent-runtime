@@ -1,5 +1,9 @@
 import { AGENT_MANAGER_LIMITS } from '../policy/index.js';
 import type { AgentRef } from '../spec/index.js';
+import { reflectiveObjectRead } from './reflective-object-read.js';
+
+const { isPlainObservedObject, isDataDescriptor, ownEnumerableData, enumerableKeys } =
+  reflectiveObjectRead;
 
 const maximumInvocationIdBytes = 256;
 const maximumWorkspacePathBytes = 4096;
@@ -118,38 +122,6 @@ const scalarJsonBytes = (
   else text = Object.is(value, -0) ? '0' : String(value);
   const bytes = encoder.encode(text).byteLength;
   return bytes <= remaining ? bytes : undefined;
-};
-
-const enumerableKeys = function* (value: object): Generator<string> {
-  for (const key in value) yield key;
-};
-
-const isPlainObservedObject = (value: object): boolean => {
-  const prototype = Reflect.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-};
-
-type OwnDataRead = Readonly<{ valid: true; value: unknown }> | Readonly<{ valid: false }>;
-interface DataDescriptor {
-  readonly value: unknown;
-}
-interface EnumerableDataDescriptor extends DataDescriptor {
-  readonly enumerable: true;
-}
-
-const isEnumerableDataDescriptor = (
-  descriptor: PropertyDescriptor | undefined,
-): descriptor is EnumerableDataDescriptor =>
-  descriptor?.enumerable === true && Object.hasOwn(descriptor, 'value');
-
-const isDataDescriptor = (
-  descriptor: PropertyDescriptor | undefined,
-): descriptor is DataDescriptor => descriptor !== undefined && Object.hasOwn(descriptor, 'value');
-
-const ownEnumerableData = (value: object, key: string): OwnDataRead => {
-  const descriptor = Object.getOwnPropertyDescriptor(value, key);
-  if (!isEnumerableDataDescriptor(descriptor)) return Object.freeze({ valid: false });
-  return Object.freeze({ valid: true, value: descriptor.value });
 };
 
 const appendProperty = (
