@@ -5,6 +5,7 @@ import { probeExecutable } from '../../runtime/probe/index.js';
 import type { ExecutableProbePort, ProbeTarget } from '../../runtime/probe/index.js';
 import { SealedAgentRegistry } from '../../runtime/registry/index.js';
 import type { AgentDescriptor, AgentProbeResult, AgentRef } from '../../runtime/spec/index.js';
+import { InstalledBindingRegistry } from './installed-bindings.js';
 import { ProbeAdmission } from './probe-admission.js';
 
 interface AgentDiscovery {
@@ -199,6 +200,7 @@ export const createProbeableAgentDiscovery = (
 ): ProbeableAgentDiscovery => {
   const validated = validateManagerOptions(options);
   const registry = SealedAgentRegistry.create(validated.definitions);
+  InstalledBindingRegistry.create(validated.definitions);
 
   return new InternalProbeableAgentDiscovery(registry, probePort);
 };

@@ -1,6 +1,20 @@
 import { expect, test } from 'vitest';
 
-import { PreparedLaunch } from '../../../../src/runtime/execution/index.js';
+import { ExecutionBindingToken, PreparedLaunch } from '../../../../src/runtime/execution/index.js';
+
+const bindingToken = (
+  overrides: Partial<Parameters<typeof ExecutionBindingToken.create>[0]> = {},
+) =>
+  ExecutionBindingToken.create({
+    agentId: 'codex',
+    agentVersion: '1.0.0',
+    definitionDigest: 'definition-digest',
+    protocolDriverId: 'native/stdio-v1',
+    resultParserId: 'codex-jsonl/v1',
+    permissionStrategyId: 'codex-cli/v1',
+    delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    ...overrides,
+  });
 
 const effectiveLimits = Object.freeze({
   wallClockTimeoutMs: 1_000,
@@ -36,6 +50,13 @@ test('creates prepared launch evidence with the exact execution-owned shape', ()
       executable: '/usr/bin/codex',
       reportedVersion: '1.2.3',
       limits: effectiveLimits,
+      binding: {
+        protocolDriverId: 'native/stdio-v1',
+        resultParserId: 'codex-jsonl/v1',
+        permissionStrategyId: 'codex-cli/v1',
+        delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+      },
+      bindingToken: bindingToken(),
     }),
   ).toEqual({
     pin: {
@@ -60,6 +81,13 @@ test('accepts null-prototype record containers', () => {
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
     limits: effectiveLimits,
+    binding: {
+      protocolDriverId: 'native/stdio-v1',
+      resultParserId: 'codex-jsonl/v1',
+      permissionStrategyId: 'codex-cli/v1',
+      delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    },
+    bindingToken: bindingToken(),
   };
   Object.setPrototypeOf(pin, null);
   Object.setPrototypeOf(candidate, null);
@@ -257,6 +285,13 @@ test('rejects missing, empty, and wrong-type semantic values', () => {
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
     limits: effectiveLimits,
+    binding: {
+      protocolDriverId: 'native/stdio-v1',
+      resultParserId: 'codex-jsonl/v1',
+      permissionStrategyId: 'codex-cli/v1',
+      delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    },
+    bindingToken: bindingToken(),
   };
 
   expect(PreparedLaunch.create({ ...exact, executable: '' })).toBeUndefined();
@@ -272,6 +307,79 @@ test('rejects missing, empty, and wrong-type semantic values', () => {
   ).toBeUndefined();
 });
 
+test('authenticates the exact full binding tuple in finalization material', () => {
+  const exact = {
+    pin: {
+      agentId: 'codex',
+      agentVersion: '1.0.0',
+      definitionDigest: 'definition-digest',
+    },
+    executable: '/usr/bin/codex',
+    reportedVersion: '1.2.3',
+    limits: effectiveLimits,
+    binding: {
+      protocolDriverId: 'native/stdio-v1' as const,
+      resultParserId: 'codex-jsonl/v1' as const,
+      permissionStrategyId: 'codex-cli/v1' as const,
+      delivery: {
+        prompt: 'argument' as const,
+        resultSchema: 'argument' as const,
+        result: 'stdout' as const,
+      },
+    },
+  };
+
+  expect(PreparedLaunch.create({ ...exact, bindingToken: bindingToken() })).toBeDefined();
+  expect(
+    PreparedLaunch.create({
+      ...exact,
+      bindingToken: bindingToken({ permissionStrategyId: 'claude-cli/v1' }),
+    }),
+  ).toBeUndefined();
+});
+
+test('requires an authentic binding token matched to the launch pin', () => {
+  const exact = {
+    pin: {
+      agentId: 'codex',
+      agentVersion: '1.0.0',
+      definitionDigest: 'definition-digest',
+    },
+    executable: '/usr/bin/codex',
+    reportedVersion: '1.2.3',
+    limits: effectiveLimits,
+    binding: {
+      protocolDriverId: 'native/stdio-v1' as const,
+      resultParserId: 'codex-jsonl/v1' as const,
+      permissionStrategyId: 'codex-cli/v1' as const,
+      delivery: {
+        prompt: 'argument' as const,
+        resultSchema: 'argument' as const,
+        result: 'stdout' as const,
+      },
+    },
+  };
+
+  expect(PreparedLaunch.create({ ...exact })).toBeUndefined();
+  expect(
+    PreparedLaunch.create({
+      ...exact,
+      bindingToken: {
+        agentId: 'codex',
+        agentVersion: '1.0.0',
+        definitionDigest: 'definition-digest',
+      },
+    }),
+  ).toBeUndefined();
+  expect(
+    PreparedLaunch.create({
+      ...exact,
+      bindingToken: bindingToken({ definitionDigest: 'other-definition-digest' }),
+    }),
+  ).toBeUndefined();
+  expect(PreparedLaunch.create({ ...exact, bindingToken: bindingToken() })).toBeDefined();
+});
+
 test('copies caller containers and deeply freezes prepared launch evidence', () => {
   const candidate = {
     pin: {
@@ -282,6 +390,13 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
     limits: { ...effectiveLimits },
+    binding: {
+      protocolDriverId: 'native/stdio-v1',
+      resultParserId: 'codex-jsonl/v1',
+      permissionStrategyId: 'codex-cli/v1',
+      delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    },
+    bindingToken: bindingToken(),
   };
 
   const prepared = PreparedLaunch.create(candidate);
@@ -339,6 +454,13 @@ test('requires copied effective limits in finalization material', () => {
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
     limits,
+    binding: {
+      protocolDriverId: 'native/stdio-v1',
+      resultParserId: 'codex-jsonl/v1',
+      permissionStrategyId: 'codex-cli/v1',
+      delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    },
+    bindingToken: bindingToken(),
   });
 
   expect(prepared).toMatchObject({ limits });
