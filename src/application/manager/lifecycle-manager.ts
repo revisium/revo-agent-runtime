@@ -16,7 +16,7 @@ import { AGENT_FAULT_MESSAGES } from '../../runtime/policy/index.js';
 import { probeExecutable } from '../../runtime/probe/index.js';
 import type { ExecutableProbePort } from '../../runtime/probe/index.js';
 import { SealedAgentRegistry } from '../../runtime/registry/index.js';
-import type { JsonObject } from '../../runtime/spec/index.js';
+import type { AgentManagerLimits, JsonObject } from '../../runtime/spec/index.js';
 import { CompletedInvocations } from './completed-invocations.js';
 import { TerminalSubscriptions } from './subscriptions.js';
 
@@ -105,10 +105,11 @@ class InternalInvocationLifecycleManager {
     private readonly completed: CompletedInvocations,
     private readonly subscriptions: TerminalSubscriptions,
     private readonly registry: SealedAgentRegistry,
+    private readonly limits: Readonly<AgentManagerLimits>,
   ) {}
 
   async start(input: unknown): Promise<LifecycleStartOutcome> {
-    const snapshot = InvocationInputSnapshot.create(input);
+    const snapshot = InvocationInputSnapshot.create(input, this.limits);
     if (snapshot === undefined)
       return Object.freeze({ status: 'rejected', reason: 'invalid_request' });
     const resultSchemaValidator = createResultSchemaValidator(snapshot);
@@ -213,6 +214,7 @@ class InternalInvocationLifecycleManager {
         },
         executable: result.executable,
         reportedVersion: result.reportedVersion,
+        limits: snapshot.limits,
       });
     }
     if (result.error.code !== 'revo.agent.probe_platform_unsupported') return undefined;
@@ -256,6 +258,12 @@ export const createInvocationLifecycleManager = (
   const subscriptions = new TerminalSubscriptions();
   const registry = SealedAgentRegistry.create(validated.definitions);
   return Object.freeze(
-    new InternalInvocationLifecycleManager(ports, completed, subscriptions, registry),
+    new InternalInvocationLifecycleManager(
+      ports,
+      completed,
+      subscriptions,
+      registry,
+      validated.limits,
+    ),
   );
 };

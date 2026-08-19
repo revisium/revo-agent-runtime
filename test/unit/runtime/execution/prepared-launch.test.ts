@@ -2,6 +2,16 @@ import { expect, test } from 'vitest';
 
 import { PreparedLaunch } from '../../../../src/runtime/execution/index.js';
 
+const effectiveLimits = Object.freeze({
+  wallClockTimeoutMs: 1_000,
+  idleTimeoutMs: 1_000,
+  maxEventBytes: 65_536,
+  maxEventsFileBytes: 16_777_216,
+  maxStdoutBytes: 8_388_608,
+  maxStderrBytes: 8_388_608,
+  maxRawResponseBytes: 1_048_576,
+});
+
 test('rejects prepared launch evidence without a reported version', () => {
   expect(
     PreparedLaunch.create({
@@ -25,6 +35,7 @@ test('creates prepared launch evidence with the exact execution-owned shape', ()
       },
       executable: '/usr/bin/codex',
       reportedVersion: '1.2.3',
+      limits: effectiveLimits,
     }),
   ).toEqual({
     pin: {
@@ -34,6 +45,7 @@ test('creates prepared launch evidence with the exact execution-owned shape', ()
     },
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
+    limits: effectiveLimits,
   });
 });
 
@@ -47,6 +59,7 @@ test('accepts null-prototype record containers', () => {
     pin,
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
+    limits: effectiveLimits,
   };
   Object.setPrototypeOf(pin, null);
   Object.setPrototypeOf(candidate, null);
@@ -59,6 +72,7 @@ test('accepts null-prototype record containers', () => {
     },
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
+    limits: effectiveLimits,
   });
 });
 
@@ -242,6 +256,7 @@ test('rejects missing, empty, and wrong-type semantic values', () => {
     },
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
+    limits: effectiveLimits,
   };
 
   expect(PreparedLaunch.create({ ...exact, executable: '' })).toBeUndefined();
@@ -266,6 +281,7 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
     },
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
+    limits: { ...effectiveLimits },
   };
 
   const prepared = PreparedLaunch.create(candidate);
@@ -275,6 +291,7 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
   expect(prepared.pin).not.toBe(candidate.pin);
   expect(Object.isFrozen(prepared)).toBe(true);
   expect(Object.isFrozen(prepared.pin)).toBe(true);
+  expect(Object.isFrozen(prepared.limits)).toBe(true);
 
   candidate.pin.agentId = 'mutated';
   candidate.executable = '/tmp/mutated';
@@ -286,5 +303,46 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
     },
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
+    limits: effectiveLimits,
   });
+});
+
+test('requires copied effective limits in finalization material', () => {
+  const limits = {
+    wallClockTimeoutMs: 1_000,
+    idleTimeoutMs: 1_000,
+    maxEventBytes: 65_536,
+    maxEventsFileBytes: 16_777_216,
+    maxStdoutBytes: 8_388_608,
+    maxStderrBytes: 8_388_608,
+    maxRawResponseBytes: 1_048_576,
+  };
+
+  expect(
+    PreparedLaunch.create({
+      pin: {
+        agentId: 'codex',
+        agentVersion: '1.0.0',
+        definitionDigest: 'definition-digest',
+      },
+      executable: '/usr/bin/codex',
+      reportedVersion: '1.2.3',
+    }),
+  ).toBeUndefined();
+
+  const prepared = PreparedLaunch.create({
+    pin: {
+      agentId: 'codex',
+      agentVersion: '1.0.0',
+      definitionDigest: 'definition-digest',
+    },
+    executable: '/usr/bin/codex',
+    reportedVersion: '1.2.3',
+    limits,
+  });
+
+  expect(prepared).toMatchObject({ limits });
+  limits.wallClockTimeoutMs = 2_000;
+  expect(prepared).toMatchObject({ limits: { wallClockTimeoutMs: 1_000 } });
+  expect(Object.isFrozen(prepared?.limits)).toBe(true);
 });

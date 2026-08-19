@@ -17,9 +17,15 @@ const flush = async (): Promise<void> => {
 
 const snapshot = (): InvocationInputSnapshot => {
   const value = InvocationInputSnapshot.create({
-    resultSchema,
     invocationId: 'lifecycle',
-    wallClockTimeoutMs: 1_000,
+    agent: { id: 'codex', version: '1.0.0' },
+    prompt: 'Return JSON.',
+    workspace: { directory: '/workspace/project' },
+    parameters: {},
+    permissions: {},
+    result: { schema: resultSchema },
+    output: { directory: '/outputs/invocation' },
+    limits: { wallClockTimeoutMs: 1_000, idleTimeoutMs: 1_000 },
   });
   if (value === undefined) throw new Error('Unable to create test snapshot');
   return value;
@@ -34,6 +40,7 @@ const preparedLaunch = (): PreparedLaunch => {
     },
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
+    limits: snapshot().limits,
   });
   if (value === undefined) throw new Error('Unable to create prepared launch evidence');
   return value;

@@ -32,6 +32,7 @@ test('rejects mismatched or incomplete available probe evidence before output an
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
+      workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
   );
   const exactAgent = Object.freeze({ id: definition.id, version: definition.version });
@@ -59,7 +60,18 @@ test('rejects mismatched or incomplete available probe evidence before output an
       'mismatched-agent-version',
       'mismatched-definition-digest',
       'missing-reported-version',
-    ].map((invocationId) => manager.start({ invocationId, agent: exactAgent, resultSchema })),
+    ].map((invocationId) =>
+      manager.start({
+        invocationId,
+        agent: exactAgent,
+        prompt: 'Return JSON.',
+        workspace: { directory: '/workspace/project' },
+        parameters: {},
+        permissions: {},
+        result: { schema: resultSchema },
+        output: { directory: '/outputs/invocation' },
+      }),
+    ),
   );
   expect(outcomes).toEqual([
     { status: 'rejected', reason: 'preflight_failed' },
