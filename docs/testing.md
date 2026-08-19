@@ -62,6 +62,7 @@ AgentManager and real process/filesystem/security/cancellation/shutdown, provide
 deferred. The `test:integration` lane runs with `pnpm test` now that it owns a Linux reference-child check for detached-group
 cleanup, canonical OS fingerprinting, and explicit child-environment isolation. This is candidate-host evidence, not a
 supported-platform claim. The repository does not keep empty lanes or permanent `passWithNoTests` configuration.
+Current fake lifecycle and Linux reference-child evidence do not implement B+ and do not prove a supported invocation cell.
 
 ## Definition and registry proof
 
@@ -104,9 +105,9 @@ tests already implement them. Manager tests must prove:
   and unprocessed rows on expiry, and cannot apply a late timed-out mutation;
 - active snapshots contain exactly invocation id, execution pin, `running | cancelling`, and process identity; they contain
   no result, terminal status, prompt, credential, environment, metadata, output directory, or consumer workflow field;
-- `running` is saved after process-identity capture and before acceptance or handle return; `cancelling` persistence starts
-  best-effort but cannot delay provider dispatch or the first cancellation signal; leader exit sweeps/confirms the owned group
-  before removal or finalization;
+- `running` is fulfilled after process-identity capture and before atomic acceptance/handle creation while I/O remains paused;
+  sole-coordinator registration and activation follow acceptance. `cancelling` persistence starts best-effort but cannot delay
+  provider dispatch or the first cancellation signal; leader exit sweeps/confirms the owned group before removal or finalization;
 - Option A pre-acceptance spawn, identity-capture, and initial-save failures use only live-owned cleanup, then reject
   `start()` after confirmed cleanup. They create no public lifecycle record: no accepted/started/finished event, completed
   record, result, retention, or visible lookup. With no initial-save dispatch, confirmed cleanup releases the private
@@ -138,12 +139,19 @@ tests already implement them. Manager tests must prove:
   before acceptance; invalid workspace input fails with `revo.agent.workspace_invalid` before output-leaf claim or spawn.
   Workspace proof accepts only a bounded normalized absolute existing directory and makes no realpath, symlink, containment,
   ownership, provenance, hostile-rebinding, or workspace/output-containment certification;
-- output-leaf claim and `starting` active-registry insertion are one synchronous no-await pre-acceptance drain-registration
-  transition; shutdown before it leaves no leaf, handle, or process, while shutdown after it drains the pending start. Only
-  the saved `running` snapshot accepts an invocation; confirmed rejected pre-acceptance work releases its id only when no
-  initial save was dispatched or its maybe-persisted row had post-abort fulfilment-confirmed quiescence and a fulfilled
-  removal, and has unknown lookups. Unconfirmed reap, unknown quiescence, or unknown/rejected removal retains the private
-  reservation and blocks same-domain id reuse;
+- every deterministic caller/definition/binding/permission/environment/workspace/schema/platform/probe/bound decision fails
+  before output mutation, and a failing preclaim case proves that no filesystem mutation occurred;
+- claim, output preparation, and process start are each drain-registered before dispatch. Timeout, rejection, or unknown
+  settlement retains the identical authentic claim/publication/live cleanup owner through bounded settlement, quiescence,
+  late disposal, and shutdown drainage;
+- attested resources bind only into authentic invocation-bound one-use carriers; package-owned authentic fixtures prove
+  cross-invocation use, structural substitution, double consume, and transferred-source reuse fail closed;
+- spawn acceptance arms actual-spawn wall/idle/setup timers and leaves stdout/stderr unpumped. Identity and initial `running`
+  save share one setup deadline; atomic acceptance/handle creation occurs before sole-coordinator registration and one-use I/O
+  activation;
+- activation failure after acceptance uses the accepted terminal arbiter and result channels rather than rejecting `start()`;
+  rejected preacceptance work creates no public state, and confirmed release requires every applicable process, active-row,
+  claim, preparation, and filesystem operation to be settled;
 - no wholesale process environment inheritance, no inherited variables by default, duplicate environment-key rejection,
   credential-like-name rejection in nonsecret inherit/variables, secret auto-redaction before spawn, split-chunk redaction,
   exact-literal matching, named Authorization/Proxy-Authorization, bare Bearer, and bounded PEM grammar; every ASCII-case
@@ -213,9 +221,14 @@ tests already implement them. Manager tests must prove:
 Result tests must partition:
 
 - one top-level JSON object that passes the consumer's draft 2020-12 schema;
-- empty output, primitive JSON, array JSON, malformed JSON, schema mismatch, and oversized response;
+- all nine exact parser reasons: `response_empty`, `response_too_large`, `invalid_utf8`, `invalid_json`,
+  `response_not_object`, `frame_malformed`, `frame_overflow`, `duplicate_terminal`, and `missing_terminal`;
+- exact mapping from every parser reason to the unchanged public fault surface without aggregate parser reasons;
 - no text-success path;
-- raw-response preview and failure-only file for extraction, parse, object, and validation failures;
+- ADR-0003 eligibility only for result extraction, strict decoding/parsing/top-level-object checks, and schema validation;
+  frame/transport/process/timeout/cancellation/output/cleanup/internal failures carry no raw response;
+- separate non-replacing raw publication, including zero-byte files for eligible `response_empty` and `missing_terminal` and
+  second-complete-terminal evidence for `duplicate_terminal`;
 - redaction before object validation, subscriber delivery, diagnostics, raw preview, and every file write;
 - launch evidence exposes only the freshly resolved executable path and strict-SemVer version, while recovery fingerprint
   evidence remains private to ADR-0006 process identity;
@@ -231,6 +244,11 @@ Integration tests use package-owned narrow process/filesystem seams and real tem
 
 Required behavior includes:
 
+- package-owned authentic fixtures for every authority-bearing carrier, with structural object, wrong-invocation,
+  double-consume, double-bind, and use-after-transfer rejection;
+- output-port-only stdout/stderr/protocol redaction destinations, one deferred protocol destination with zero pre-bind
+  buffering, exact one-use bind, and proof that raw child bytes never reach parser, evidence, faults, events, results, files,
+  or callbacks;
 - Linux on local `ext4` as the first implementation/evidence cell: process-group spawn, stdin, stdout, stderr, exit, signal,
   timeout, cancellation, process-tree kill, reaping, and the owned filesystem contract. This is target proof, not current
   shipped conformance;
@@ -286,12 +304,18 @@ Required behavior includes:
   reservation for one final non-terminal lifecycle event, one terminal lifecycle event, and both newline bytes;
 - invocation wall-clock timing starts at successful spawn and includes post-spawn identity/save latency rather than starting
   at logical acceptance or handle return;
+- one active-state setup deadline is never extended/reset/consumed by postacceptance coordinator registration or activation;
+  paused-I/O backpressure remains bounded by operating-system pipes and the fixed duplex operation bound;
 - idle timing is terminal-only: stream/protocol activity never resets it, and deadline/cancellation/process/finalization
   races use one first-terminal-commit arbitration without mutating a committed result;
-- exclusive same-directory result temp creation, file flush, non-replacing hard link, supported directory flush, temp unlink,
-  `EEXIST`/unsupported-filesystem failure, and concurrent publication without replacement;
-- required normal finalization order plus every late-I/O branch where process-local completion survives an incomplete audit
-  record.
+- natural-exit cleanup distinguishes leader/group absence, TERM early exit, conditional KILL, post-kill confirmation,
+  retained cleanup authority, exact primary/cause preservation, two-retry exhaustion, and quiescence;
+- separate exclusive same-directory eligible-raw and result publication, file flush, non-replacing publish, supported
+  directory flush, temp cleanup, `EEXIST`/unsupported-filesystem failure, and concurrent publication without replacement;
+- exact scratch/evidence/raw/result/completed-record/terminal-event precedence and every late-I/O branch where process-local
+  completion survives an incomplete audit record;
+- shutdown concurrently drains preregistered claim, preparation, start, paused-I/O, accepted, probe, active-state,
+  publication, retained-claim, and retained-cleanup owners under operation-owned bounds.
 
 ## Architecture proof
 
@@ -308,7 +332,9 @@ The committed architecture harness MUST:
 4. synthesize a temporary import cycle and prove cycle detection exits non-zero;
 5. validate one entity per production leaf, type-only specification leaves, explicit barrels, `.js` specifiers, and the
    required domain/layer barrel boundaries with representative negative probes;
-6. remove all probes even after failure.
+6. add representative probes whenever execution/application/platform responsibility groups are introduced, including
+   execution-to-adapter, adapter-to-application, adapter-to-registry, and production-to-test-fixture violations; and
+7. remove all probes even after failure.
 
 A configuration change is not proven by a green graph that happens to contain no violation.
 
@@ -354,3 +380,6 @@ snapshot contracts, and the complete invocation-handle surface.
 5. Refactor only after green, preserving one abstraction level per unit.
 6. Run `pnpm verify` before handoff, commit, or publication.
 7. Run applicable conditional and remote gates from `VERIFICATION.md`.
+
+Canonical documentation alignment adds no behavior test or implementation claim. The later product-code migration begins
+each implementation slice with the smallest failing contract or integration proof above and follows red -> green -> refactor.

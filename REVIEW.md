@@ -56,8 +56,27 @@ Block the change when any of the following applies:
 - Output recording creates a missing ancestor, proceeds through a missing or non-directory parent, relies on normalization,
   realpath, or containment as hostile-ancestor protection, or lets the consumer release its trusted stable-ancestor warranty
   before every package filesystem operation for the start has settled.
-- Output-leaf claim and private active registration are separated by an await or cancellable/re-entrant checkpoint, allowing
-  shutdown to observe a claimed but unregistered invocation.
+- An output claim is dispatched before its attempt is registered for bounded settlement/quiescence and shutdown drainage, or
+  a timeout does not retain the identical authentic claim guard through late reconciliation.
+- A deterministic caller, definition, binding, permission, environment, workspace, schema, platform, probe, or prospective-
+  bound failure first appears after output claim.
+- Output preparation mutates the claimed leaf before its authentic publication/cleanup authority is registered, or a
+  rejection/unknown settlement loses that identical authority before filesystem quiescence.
+- An authority-bearing carrier is accepted structurally, for the wrong invocation, after transfer, or more than once.
+- Raw child bytes can reach a parser, evidence object, fault, event, result, completed record, file destination, or callback
+  before the applicable independent redaction front.
+- Stdout/stderr pumping or callbacks begin before sole-coordinator registration and one-use activation, or protocol data is
+  buffered before its deferred destination binds.
+- A parser competes for terminal completion, multiple terminal authorities exist, exact parser reasons collapse, or raw-
+  response eligibility exceeds ADR-0003's extraction/parsing/schema-validation partition.
+- A process-start attempt is not registered before spawn dispatch, spawn failure carries live authority, or a post-spawn
+  rejection lacks confirmed cleanup or the authentic retained cleanup owner.
+- Cleanup uncertainty reaches a terminal commit, eligible raw evidence or `result.json` is replaced, scratch/output
+  precedence drifts, or terminal publication reparses the response.
+- Fixed private claim, preparation, duplex, protocol, parser, cleanup, preview, event, or probe bounds are missing; required
+  public relations drift; or `initializationTimeoutMs` is used as a general shutdown deadline.
+- Migration retains an old/new execution overload, alias, dual publication authority, eager/paused I/O path, or second
+  completion/normalization path.
 - Definitions or accepted requests retain caller-owned JSON containers instead of canonical package-owned snapshots.
 - Argument-template delivery is incoherent, generic parameters do not use exact own-property/canonical JSON rules, expansion
   is nondeterministic/unbounded, CLI flags are implicit, or missing values are silently omitted.

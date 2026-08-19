@@ -11,6 +11,8 @@ Private agent discovery and executable probing, plus private deterministic lifec
 execution and file ports, are implemented and tested. The npm package remains unpublished and the root package export remains
 empty. The complete public AgentManager and real process/filesystem/security/cancellation/shutdown, provider-adapter, and
 public-package work remain target or deferred. The normative public target is [the AgentManager v1 specification](./specs/agent-manager-v1.spec.md).
+The accepted package-private execution target is [ADR-0013](./adr/0013-seal-invocation-intent-before-preregistered-execution-handoff.md)
+and the [B+ execution-handoff specification](./specs/execution-handoff.spec.md); it is not implemented.
 
 ## Consumer flow
 
@@ -24,22 +26,26 @@ public-package work remain target or deferred. The normative public target is [t
    and may subscribe to future events.
 5. The consumer starts an exact `{ id, version }` with an opaque invocation id, dynamic inputs, a JSON Schema result
    contract, and one exact output directory.
-6. The manager snapshots agent identity and definition digest for every accepted invocation; execution never rereads the
-   registry. The first implementation/evidence cell is Linux on a local `ext4` filesystem: it starts a separate process group,
-   captures a verifiable OS process fingerprint, and saves the active row before accepting the invocation or returning its
-   handle. This target sequence is not a shipped support claim.
-7. One native or ACP adapter runs the physical process while the manager bounds, redacts, records, and publishes events.
-8. Leader exit triggers a full owned-group descendant sweep. Only confirmed group termination permits active-row removal and
-   result handling. The manager then parses one top-level JSON object, validates it, attempts atomic terminal recording,
-   retains a bounded
-   process-local completion even after late recording failure, delivers exactly one process-local terminal event, and
-   resolves result waiters.
-9. The consumer shuts down the manager. Successful close stops acceptance, drains typed invocation completions, confirms
-   kill/reap of owned invocation/probe processes, finishes terminal recording/events, then clears listeners.
-10. Unconfirmed kill/reap rejects shutdown and leaves the manager permanently failed-closed. The consumer escalates host
-    termination and creates no replacement in that supervision domain until process cleanup is resolved.
-11. The consumer decides replacement in a resolved/new domain, active-row selection, retry, workflow, gate, indexing,
-    retention, and recovery policy.
+6. The manager snapshots inputs, reads the sealed registry exactly once, and seals every resource-independent decision before
+   output mutation. It preregisters output claim before exclusive-create dispatch and preregisters output-preparation
+   authority before the first postclaim mutation.
+7. The manager binds attested claimed resources into one authentic one-use prepared execution and preregisters process-start
+   ownership before native spawn. Spawn acceptance captures authentic live authority, arms wall/idle/setup deadlines, and
+   leaves process I/O paused.
+8. One active-state setup window covers only identity inspection, fingerprint capture, and fulfillment of the initial
+   `running` save. The manager then atomically accepts and creates the handle, registers one duplex coordinator, and activates
+   I/O exactly once.
+9. One coordinator consumes independently redacted stdout, stderr, and protocol bytes, preserves exact parser reasons, and
+   arbitrates the first successful terminal commit. Leader exit or cancellation reaches a terminal commit only after
+   confirmed group cleanup; uncertainty retains the authentic cleanup owner and remains nonterminal.
+10. Finalization removes active state, normalizes without reparsing, cleans scratch, flushes bounded evidence, publishes an
+    eligible ADR-0003 raw response and `result.json` separately without replacement, commits the process-local result, then
+    best-effort records and delivers the terminal lifecycle event.
+11. Shutdown closes new work and concurrently drains preregistered claim, preparation, start, paused-I/O, accepted, probe,
+    active-state, publication, and retained-authority owners under their operation-owned bounds. Unresolved process cleanup
+    prohibits same-domain replacement; output and active-state uncertainty retain only their affected id/path/row obligations.
+12. The consumer decides replacement in a safe domain, active-row selection, retry, workflow, gate, indexing, retention, and
+    recovery policy. None of this target sequence is a shipped support claim.
 
 ## Target production structure
 
@@ -96,13 +102,12 @@ src/
 │   │   ├── version-output/
 │   │   └── index.ts
 │   └── execution/
-│       ├── invocation-executor.ts
-│       ├── lifecycle.ts
-│       ├── input-snapshot.ts
-│       ├── argument-builder.ts
-│       ├── result-collector.ts
-│       ├── execution-ports.ts
-│       └── limits.ts
+│       ├── preparation and authentic carriers
+│       ├── output claim and publication ports
+│       ├── process start and one-use activation ports
+│       ├── duplex coordination
+│       ├── parser observation and normalization
+│       └── retained claim, cleanup, and quiescence authority
 ├── strategies/
 │   ├── protocol/
 │   │   ├── native/
@@ -127,23 +132,23 @@ src/
 
 ## File and area responsibilities
 
-| Area                       | Owns                                                                                                                                | Must not own                                                                                  |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `runtime/spec`             | Provider-neutral JSON-compatible type-only contracts behind domain and layer barrels.                                               | Runtime values, Node APIs, behavior, side effects, or test code.                              |
-| `runtime/policy`           | Immutable limits, defaults, and stable message values.                                                                              | Specification, errors, definition behavior, or composition.                                   |
-| `runtime/errors`           | Typed runtime errors that depend only on specification types.                                                                       | Policy, definition behavior, process, or composition.                                         |
-| `runtime/definition`       | Plain-JSON inspection, closed definition validation, canonicalization, and digest.                                                  | Mutable registration, execution, process or filesystem access.                                |
-| `runtime/registry`         | Exact `{ id, version }` lookup over one sealed immutable definition set.                                                            | Latest/fallback resolution, mutation after construction, execution.                           |
-| `runtime/probe`            | Provider-neutral executable-probe ports and deterministic version-output interpretation.                                            | Concrete process mechanics, manager composition, agent selection, or scheduling.              |
-| `runtime/execution`        | Input snapshots, bounded argv, one state machine, result validation, ports, and finalization.                                       | Consumer workflow concepts, concrete Node or provider mechanics.                              |
-| `strategies/protocol`      | Native stdio and ACP framing behind execution ports.                                                                                | Manager composition, durable workflow state, direct file policy.                              |
-| `strategies/result-parser` | Bounded provider-specific extraction of the final response and usage.                                                               | Product verdicts or consumer JSON Schema selection.                                           |
-| `strategies/permissions`   | Translation of provider-neutral validated permission data into one provider invocation.                                             | Authorization policy or approval workflow decisions.                                          |
-| `platform/process`         | Explicit environment, strict SemVer probe, group spawn, OS identity/fingerprint inspection, kill, and reaping.                      | Agent selection, credential policy, result semantics.                                         |
-| `platform/filesystem`      | Exclusive leaf/result creation, `.scratch`, bounded recording, and flush mechanics.                                                 | Path construction, indexing, retention, restart recovery.                                     |
-| `application`              | Manager composition, initialization, active-state sink ordering, registry/probe coordination, records, subscriptions, and shutdown. | Provider branches by agent id, database reads, distributed coordination, scheduling, retries. |
-| `testing`                  | Deliberately published fakes or conformance harnesses after demonstrated consumer demand.                                           | Repository-only fixtures or a second production API.                                          |
-| root `index.ts`            | Curated public exports implemented and proven together.                                                                             | Deep implementation barrels or accidental testing exports.                                    |
+| Area                       | Owns                                                                                                                                                                          | Must not own                                                                                               |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `runtime/spec`             | Provider-neutral JSON-compatible type-only contracts behind domain and layer barrels.                                                                                         | Runtime values, Node APIs, behavior, side effects, or test code.                                           |
+| `runtime/policy`           | Immutable limits, defaults, and stable message values.                                                                                                                        | Specification, errors, definition behavior, or composition.                                                |
+| `runtime/errors`           | Typed runtime errors that depend only on specification types.                                                                                                                 | Policy, definition behavior, process, or composition.                                                      |
+| `runtime/definition`       | Plain-JSON inspection, closed definition validation, canonicalization, and digest.                                                                                            | Mutable registration, execution, process or filesystem access.                                             |
+| `runtime/registry`         | Exact `{ id, version }` lookup over one sealed immutable definition set.                                                                                                      | Latest/fallback resolution, mutation after construction, execution.                                        |
+| `runtime/probe`            | Provider-neutral executable-probe ports and deterministic version-output interpretation.                                                                                      | Concrete process mechanics, manager composition, agent selection, or scheduling.                           |
+| `runtime/execution`        | Sealed preparation, authentic one-use carriers, execution-owned ports, resource finalization, duplex coordination, exact observations, normalization, and deadline contracts. | Consumer workflow concepts, concrete Node or provider mechanics.                                           |
+| `strategies/protocol`      | Native stdio and ACP framing behind execution-owned protocol ports.                                                                                                           | Manager composition, durable workflow state, direct file policy.                                           |
+| `strategies/result-parser` | Bounded provider-specific extraction with the exact execution-owned parser taxonomy.                                                                                          | Product verdicts or consumer JSON Schema selection.                                                        |
+| `strategies/permissions`   | Translation of provider-neutral validated permission data into one provider invocation.                                                                                       | Authorization policy or approval workflow decisions.                                                       |
+| `platform/process`         | Explicit environment, strict SemVer probe, group spawn with paused I/O, normal live signal/reap mechanics, and OS identity inspection.                                        | Agent selection, credential policy, result semantics, or recovery authority from persisted identity alone. |
+| `platform/filesystem`      | Exclusive claim/preparation mechanics, output-port-owned raw destinations, separate non-replacing publication, cleanup, and quiescence.                                       | Path construction, indexing, retention, restart recovery, or parser semantics.                             |
+| `application`              | Sole cross-boundary composition root, preregistered drain ownership, authentic authority transfer, active-state ordering, records, subscriptions, and shutdown.               | Provider branches by agent id, database reads, distributed coordination, scheduling, retries.              |
+| `testing`                  | Deliberately published fakes or conformance harnesses after demonstrated consumer demand.                                                                                     | Repository-only fixtures or a second production API.                                                       |
+| root `index.ts`            | Curated public exports implemented and proven together.                                                                                                                       | Deep implementation barrels or accidental testing exports.                                                 |
 
 Tests mirror behavior rather than production folders:
 
@@ -163,7 +168,9 @@ may depend on specification types, policy values, and errors. Registry builds im
 specification. Probe owns provider-neutral executable-probe ports and uses definition parsing for strict version
 interpretation. Execution is a parallel building block over portable contracts and its own ports. Registry, probe, and
 execution do not import each other. Strategies and platform adapters implement execution ports without depending on each
-other. Application is the sole composition root and wires registry, probe, execution, strategies, and platform together.
+other. Application is the sole composition root and wires registry, probe, execution, strategies, and platform together. It
+also owns preregistration and transfer between pending and accepted drain owners. Execution never rereads the registry, and
+an adapter never selects a provider or branches on an agent id.
 
 ```text
 importer -> dependency
@@ -247,23 +254,23 @@ V1 has no package-owned active-invocation admission limit and no internal admiss
 concurrency limits, scheduling, and overload policy before `start()`. Bounded recovery input and bounded executable-probe
 concurrency are separate safeguards, not active-invocation admission limits.
 
-Shutdown is the manager's concurrency-safe, idempotent process-local lifecycle boundary. Acceptance and closing have one
-atomic boundary: a racing start is either accepted and drained or rejected without a handle or process. Closing rejects new
-starts, probes, and subscriptions, cancels all active invocations, attempts termination, and requires confirmed reap of every
-owned invocation/probe process. Successful closing waits through terminal output finalization and event delivery and only
-then clears listeners. It does not independently clear or evict completed records; drain completions use normal bounded FIFO
-and may evict older records. Handles retain their resolved results, process-local reads keep normal active/retained/unknown
-semantics, and consumer output directories are never removed.
+Shutdown is the manager's concurrency-safe, idempotent process-local lifecycle boundary. Closing rejects new starts, probes,
+and subscriptions and concurrently drains preregistered claim/preparation/start attempts, paused-I/O starts, accepted work,
+probes, active-state lanes, publication owners, and retained claim/cleanup authorities. Each registration boundary arbitrates
+with close before dispatch; no claimed or spawned work can occupy an unregistered interval. Successful closing requires
+confirmed process absence/reap, accepted terminal completion, and output quiescence before listeners clear. It does not
+independently clear completed records or remove consumer output directories.
 
 Shutdown before initialization closes an empty manager. Shutdown during initialization closes new work, aborts the current
-abortable recovery operation, starts no more rows, and waits only to the initialization deadline while still requiring
-confirmation for every process already signalled. It cannot hang indefinitely.
+abortable recovery operation, starts no more rows, and uses only that initialization's existing remaining deadline while
+still requiring confirmation for every process already signalled. `initializationTimeoutMs` is not a general close deadline;
+all other operations retain their own bounds.
 
-The first shutdown owns one shared settlement. Failure to confirm kill/reap rejects it with non-retryable
-`revo.agent.shutdown_failed` and leaves the manager permanently failed-closed. New start/probe/subscription operations remain
-closed, while registry and state reads remain available. An unreaped invocation remains active and is never falsely
-completed. The consumer escalates host termination and does not create a replacement in the same supervision domain until
-cleanup is externally resolved.
+The first shutdown owns one shared settlement. Unresolved process cleanup rejects it with non-retryable
+`revo.agent.shutdown_failed`, leaves an accepted invocation active and nonterminal, and prohibits same-domain replacement
+until cleanup is externally resolved. Output uncertainty quarantines only the affected id/path and extends its stable-ancestor
+warranty; active-state uncertainty preserves the affected id/row for fresh-manager consumer reconciliation. Neither imposes
+the process-cleanup replacement ban after process absence/reap is confirmed.
 
 This lifecycle ownership does not make the package a workflow engine. The consumer still decides when to replace a closed
 manager in a safe domain, which active rows belong to it, how to resolve distributed races, when to retry or reschedule work,
@@ -276,23 +283,22 @@ credentials. No child receives wholesale `process.env`; secret values join strea
 discarded after finalization. Inherited and variable values are deliberately non-confidential and cannot use credential-like
 names.
 
-Immediately before output-leaf claim and invocation spawn, the manager checks platform eligibility, freshly resolves the
-definition command, and proves its required strict-SemVer version probe. It launches that resolved absolute executable and
-retains only path/version launch evidence. A preflight failure, including `revo.agent.platform_unsupported`, occurs before
-claim or spawn. This proof is separate from ADR-0006 post-spawn process fingerprinting, which establishes recovery identity.
-Output-leaf claim and insertion of the `starting` invocation into the private active registry are one synchronous,
-non-re-entrant pre-acceptance drain-registration transition. It prevents a shutdown race but creates no public invocation.
-Shutdown either wins before that transition, leaving no leaf, handle, or process, or drains the registered pending start.
-Only a saved `running` snapshot accepts the invocation and permits its handle, lifecycle events, result, and retention. A
-pre-acceptance identity failure or cancellation before initial-save dispatch cleans up through the live-owned capability,
-rejects `start()`, releases the private guard/reservation after confirmed reap, and leaves no public lifecycle record; the
-consumer-backed post-spawn snapshot is therefore the acceptance boundary. After initial-save dispatch, that `save` is
-maybe-persisted: release/reuse requires its post-abort fulfilment to confirm quiescence and a fulfilled absent-row-safe
-`remove`. If reap is unconfirmed, or dispatched-save quiescence/removal is unknown, `start()` still rejects without public
-invocation but the relevant private owned-child or reconciliation guard/reservation remains in the supervision domain.
-Shutdown retries bounded cleanup and fails with `shutdown_failed` when uncertainty remains; the consumer resolves that process
-externally before replacement. An unconfirmed post-spawn cancellation uses primary `process_cleanup_failed` plus bounded
-cancellation cause, rather than creating a cancelled result.
+Every deterministic request, definition, binding, schema, permission, environment, workspace, platform, bound, and fresh
+executable-proof decision completes before output mutation. The manager reads the sealed registry once, launches the resolved
+absolute executable without a shell or reinterpretation, and never grants authority to persisted identity data.
+
+Claim, output preparation, and process start are each registered in shutdown drainage before dispatch. Claim timeout retains
+the identical claim guard; preparation uncertainty retains the identical publication and cleanup authority. Attested claimed
+resources bind into one authentic one-use prepared execution. Spawn acceptance captures authentic live authority, arms
+wall/idle/setup deadlines, and keeps stdout and stderr unpumped. The one setup deadline covers only identity inspection,
+fingerprint capture, and fulfillment of the initial `running` save.
+
+Acceptance and handle creation are atomic and occur after identity/save success while I/O remains paused. Sole-coordinator
+registration and one-use I/O activation occur afterward and cannot retroactively reject `start()`. No claim, preparation,
+start attempt, paused process, or rejected cleanup guard is a public invocation before acceptance. Every preacceptance
+rejection either confirms process cleanup and any required active-row reconciliation or retains the authentic owner and id
+reservation for shutdown/fresh-manager reconciliation. A postacceptance activation failure enters the accepted terminal
+arbiter rather than reverting to rejection.
 
 Definitions are data; protocol drivers, result parsers, permission translators, process execution, and filesystem behavior
 are package code. Adding an agent that uses existing strategies requires a new versioned definition, not an agent-id branch
@@ -308,7 +314,9 @@ durable coordinate and it is not needed for process identity comparison. The row
 credentials, result, terminal status, or consumer workflow fields.
 
 The first active-state recovery implementation and evidence cell is Linux on a local `ext4` filesystem. Invocation processes
-start in a separate process group. A bounded post-spawn sequence inspects the new child and creates opaque
+start in a separate process group with I/O paused. One active-state setup deadline covers immediate identity inspection,
+fingerprint capture, and fulfillment of the initial `running` save; coordinator registration and activation occur only after
+acceptance and outside that deadline. Identity inspection creates opaque
 `sha256:<lowercase hex>` over
 canonical, versioned, package-owned OS identity fields: process creation identity/time, resolved executable identity/path,
 PID/process group, and local boot/session discriminator when supplied. It never fingerprints argv, environment, prompt,
@@ -324,14 +332,17 @@ cleanup-uncertain detail, private guard, and id reservation without becoming a f
 separate native implementation and evidence cell; Linux evidence does not establish macOS support. Windows is unsupported and
 outside the MVP pending a separately approved process/filesystem design and native evidence.
 
-The consumer-supplied row list is trusted selection/provenance input. The package does not prove ownership; exact fingerprint
-comparison only protects against PID reuse and identity drift. An unknown/mismatched pin or live fingerprint mismatch is
+The consumer-supplied row list is trusted selection/provenance input. The package does not prove ownership. Recovery cleanup
+authority exists only after a fresh package observation's recomputed fingerprint exactly matches the saved fingerprint; this
+is independent of normal in-memory supervision, which signals only through the authentic private live capability, its
+coordinator owner, or its retained cleanup owner. An unknown/mismatched pin or live fingerprint mismatch is
 preserved and reported, because mismatch may represent PID reuse, executable replacement, or corrupted state. Only a
 definitely absent PID is removed. A live identity match receives group `SIGTERM`, a bounded wait, group `SIGKILL` when
 needed, and confirmed termination before removal. Persisted PID/PGID values alone are never authority to signal.
 
-The runtime saves `running` before accepting or returning a handle and starts the `cancelling` save best-effort without awaiting
-it, its timeout, or eventual quiescence before provider dispatch or the first cancellation signal. Cancellation before spawn
+The runtime fulfills the initial `running` save before atomic acceptance/handle creation, then registers the sole coordinator
+and activates I/O exactly once. It starts the `cancelling` save best-effort without awaiting it, its timeout, or eventual
+quiescence before provider dispatch or the first cancellation signal. Cancellation before spawn
 makes no sink call or signal and rejects the pending `start()`. Cancellation after spawn
 but before initial-save dispatch writes no row and, after confirmed cleanup, rejects with its bounded cancellation cause.
 After dispatch, `running` is maybe-persisted even when save rejects or times out: confirmed reap attempts absent-row-safe
@@ -351,7 +362,8 @@ rehydrate an invocation handle, result waiter, event stream, or stdio session. R
 is deferred. If the recorded group leader is already gone while descendants might remain, identity cannot be verified from
 the stale group id; the runtime does not signal the group or claim descendant cleanup.
 
-When a normally observed leader exits, the manager first sweeps and terminates descendants using its live owned group. It
+When a normally observed leader exits, the manager first sweeps and terminates descendants using its authentic live or
+transferred coordinator authority. It
 removes active state and finalizes only after confirming the group is gone. Unconfirmed cleanup preserves the row, emits
 typed `process_cleanup_failed`, and keeps the invocation nonterminal; continued shutdown uncertainty becomes
 `shutdown_failed`. One bounded `remove` failure after confirmed cleanup leaves only a stale row and cannot change the result.
@@ -370,12 +382,17 @@ and output directories. Invalid workspace input fails with `revo.agent.workspace
 invocation spawn.
 
 The consumer supplies the exact invocation directory whose leaf must not exist, provisions its existing parent hierarchy,
-and warrants trusted stable ancestors until terminal filesystem quiescence. The manager creates no output ancestors,
-atomically creates only the leaf without adopting `EEXIST`, and owns `.scratch` plus five reserved filenames: `events.ndjson`, `stdout.log`,
-`stderr.log`, failure-only `raw-final-response.txt`, and exclusive `result.json`. Result publication uses a flushed
-same-directory temp plus non-replacing hard link. The manager never derives hierarchy, overwrites, deletes, rotates, or
-chooses retention for consumer evidence. Controlled completion deletes only manager-owned scratch/temp paths; crash residue
-may survive until consumer result recovery or retention removes the directory.
+and warrants trusted stable ancestors until terminal filesystem quiescence. The manager preregisters an authentic claim owner
+before exclusive absent-leaf creation and preregisters output-preparation publication/cleanup authority before the first
+postclaim mutation. It creates no ancestors and never adopts `EEXIST`. Claim or preparation uncertainty retains the identical
+authority and quarantines the affected invocation id/path.
+
+The output port alone constructs the three independent stdout, stderr, and protocol redaction fronts and their bounded raw
+destinations. Protocol preparation creates one authentic deferred destination that buffers zero bytes before its exact
+one-use bind. The port owns `.scratch`, `events.ndjson`, `stdout.log`, `stderr.log`, eligible failure-only
+`raw-final-response.txt`, and `result.json`. Eligible raw evidence and the terminal result publish separately without
+replacement. The manager never derives consumer hierarchy, replaces or deletes committed evidence, chooses retention, or
+lets raw child bytes bypass redaction. Controlled completion deletes only manager-owned scratch and temporary paths.
 
 Terminal filesystem quiescence requires every package file operation for the start to have settled, including recording,
 publication, flush, scratch/temp cleanup attempts, and the terminal filesystem append. Process exit alone is insufficient;
@@ -425,8 +442,10 @@ The package does not own:
 ## Quality attributes
 
 - **Determinism:** exact agent refs, canonical full-definition digests, defensive input snapshots, and deterministic bounded
-  argv expansion are immutable per invocation.
-- **Security:** output conflicts fail closed; secrets and unbounded provider data do not reach subscribers, files, or faults.
+  argv expansion are immutable per invocation; exact parser reasons survive through normalization without a second parse.
+- **Security:** authority-bearing carriers are authentic, invocation-bound, and one-use; structural equality grants no
+  authority. Output conflicts fail closed, and independently redacted channels leave no raw-byte bypass to parser, evidence,
+  subscribers, results, files, or faults.
 - **Cancellation and shutdown:** when `capabilities.cancellation` is `true`, caller cancellation, deadlines, and shutdown
   dispatch an available provider-neutral graceful-cancellation hook best-effort without waiting or draining. A false capability
   or missing or failed hook follows the same immediate local path.
@@ -436,7 +455,11 @@ The package does not own:
   shutdown reaches typed completion before listeners are cleared, and unconfirmed cleanup fails closed.
 - **Recovery safety:** consumer-selected persisted PID/process-group ids are never signalling authority without a freshly
   matching package-generated OS process fingerprint.
-- **Backpressure:** every event, file, response, and completed registry has a hard bound; v1 has no hidden async event queue.
+- **Backpressure:** every event, file, response, parser carry, protocol frame/count/write set, and completed registry has a
+  hard bound. Paused I/O relies only on bounded operating-system pipes until one coordinator activates; v1 has no hidden async
+  event queue or pre-bind protocol buffer.
+- **Ownership:** every dispatched claim, preparation, spawn, cleanup, active-state, and publication operation has a registered
+  owner, bounded settlement/quiescence, and a failed-closed retained-authority path.
 - **Portability:** public durable contracts are provider-neutral JSON values and core logic does not depend on a consumer
   framework or database. Linux on local `ext4` is the first implementation/evidence cell, macOS requires separate native
   evidence, and Windows is unsupported and outside the MVP. None of these target statements claim shipped conformance.
