@@ -510,7 +510,7 @@ const createEffectiveLimits = (
     const keys = Reflect.ownKeys(value);
     if (keys.some((key) => typeof key !== 'string' || !limitKeys.includes(key))) return undefined;
   }
-  const source = value === undefined ? undefined : value;
+  const source = value;
   const limit = (
     key: keyof InvocationEffectiveLimits,
     range: Readonly<{ minimum: number; default: number; maximum: number }>,
