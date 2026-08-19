@@ -32,7 +32,13 @@ export const createAcceptedInvocationLifecycleSubject = (
 ): AcceptedInvocationLifecycleSubject => {
   const snapshot = InvocationInputSnapshot.create({
     invocationId: 'accepted-lifecycle',
-    resultSchema,
+    agent: { id: 'fixture-agent', version: '1.0.0' },
+    prompt: 'Return JSON.',
+    workspace: { directory: '/workspace/project' },
+    parameters: {},
+    permissions: {},
+    result: { schema: resultSchema },
+    output: { directory: '/outputs/invocation' },
   });
   if (snapshot === undefined)
     throw new Error('Unable to create an accepted lifecycle input snapshot.');
@@ -48,6 +54,7 @@ export const createAcceptedInvocationLifecycleSubject = (
     },
     executable: '/resolved/fixture-agent',
     reportedVersion: '1.0.0',
+    limits: snapshot.limits,
   });
   if (preparedLaunch === undefined)
     throw new Error('Unable to create accepted prepared launch evidence.');

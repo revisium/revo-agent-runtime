@@ -1,4 +1,4 @@
-import { AGENT_MANAGER_LIMITS } from '../policy/index.js';
+import { AGENT_MANAGER_LIMITS, AGENT_RUNTIME_LIMITS } from '../policy/index.js';
 import type { AgentRef } from '../spec/index.js';
 import { reflectiveObjectRead } from './reflective-object-read.js';
 
@@ -6,8 +6,12 @@ const { isPlainObservedObject, isDataDescriptor, ownEnumerableData, enumerableKe
   reflectiveObjectRead;
 
 const maximumInvocationIdBytes = 256;
-const maximumWorkspacePathBytes = 4096;
-const maximumMetadataBytes = 65_536;
+const maximumWorkspacePathBytes = AGENT_RUNTIME_LIMITS.workspacePathBytes;
+const maximumOutputPathBytes = AGENT_RUNTIME_LIMITS.outputPathBytes;
+const maximumPromptBytes = AGENT_RUNTIME_LIMITS.promptBytes;
+const maximumMetadataBytes = AGENT_RUNTIME_LIMITS.invocationMetadataBytes;
+const maximumParametersBytes = AGENT_RUNTIME_LIMITS.parameterBytes;
+const maximumPermissionsBytes = AGENT_RUNTIME_LIMITS.permissionBytes;
 const maximumTraversalValues = 65_536;
 const maximumTraversalDepth = 65_536;
 
@@ -298,7 +302,7 @@ const appendEntry = (
 
 const copyMetadata = (
   source: unknown,
-  maximumBytes = maximumMetadataBytes,
+  maximumBytes: number = maximumMetadataBytes,
 ): SnapshotRecord | undefined => {
   try {
     if (
@@ -344,6 +348,19 @@ const copyMetadata = (
   }
 };
 
+const requestKeys = Object.freeze([
+  'invocationId',
+  'agent',
+  'prompt',
+  'workspace',
+  'parameters',
+  'permissions',
+  'metadata',
+  'result',
+  'limits',
+  'output',
+]);
+
 const readRequest = (value: unknown): Readonly<Record<string, unknown>> | undefined => {
   try {
     if (
@@ -354,19 +371,10 @@ const readRequest = (value: unknown): Readonly<Record<string, unknown>> | undefi
     )
       return undefined;
     const input: Record<string, unknown> = {};
-    let entries = 0;
-    for (const key in value) {
-      entries += 1;
-      if (
-        entries > 6 ||
-        (key !== 'invocationId' &&
-          key !== 'agent' &&
-          key !== 'metadata' &&
-          key !== 'resultSchema' &&
-          key !== 'wallClockTimeoutMs' &&
-          key !== 'workspace')
-      )
-        return undefined;
+    const keys = Reflect.ownKeys(value);
+    if (keys.length > requestKeys.length) return undefined;
+    for (const key of keys) {
+      if (typeof key !== 'string' || !requestKeys.includes(key)) return undefined;
       const read = ownEnumerableData(value, key);
       if (!read.valid) return undefined;
       input[key] = read.value;
@@ -406,7 +414,7 @@ const copyAgentRef = (value: unknown): AgentRef | undefined => {
   return Object.freeze({ id: id.value, version: version.value });
 };
 
-const copyWorkspace = (value: unknown): string | undefined => {
+const copyDirectory = (value: unknown, maximumBytes: number): string | undefined => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
   const keys = Reflect.ownKeys(value);
   if (keys.length !== 1 || !keys.includes('directory')) return undefined;
@@ -417,18 +425,160 @@ const copyWorkspace = (value: unknown): string | undefined => {
     !('value' in directory) ||
     typeof directory.value !== 'string' ||
     directory.value.length === 0 ||
-    directory.value.length > maximumWorkspacePathBytes ||
-    encoder.encode(directory.value).byteLength > maximumWorkspacePathBytes ||
+    encoder.encode(directory.value).byteLength > maximumBytes ||
     !validString(directory.value)
   )
     return undefined;
   return directory.value;
 };
 
+const copyPrompt = (value: unknown): string | undefined => {
+  if (typeof value !== 'string' || value.length === 0 || !validString(value)) return undefined;
+  return encoder.encode(value).byteLength <= maximumPromptBytes ? value : undefined;
+};
+
+const copyResultSchema = (value: unknown): SnapshotRecord | undefined =>
+  value === undefined
+    ? undefined
+    : copyMetadata(value, AGENT_MANAGER_LIMITS.maxRawResponseBytes.default);
+
+const readResultSchema = (input: Readonly<Record<string, unknown>>): SnapshotRecord | undefined => {
+  if (typeof input.result !== 'object' || input.result === null || Array.isArray(input.result))
+    return undefined;
+  const keys = Reflect.ownKeys(input.result);
+  if (keys.length !== 1 || !keys.includes('schema')) return undefined;
+  const schema = Object.getOwnPropertyDescriptor(input.result, 'schema');
+  if (schema === undefined || !schema.enumerable || !('value' in schema)) return undefined;
+  return copyResultSchema(schema.value);
+};
+
+interface InvocationLimitDefaults {
+  readonly wallClockTimeoutMs?: number;
+  readonly idleTimeoutMs?: number;
+  readonly maxEventBytes?: number;
+  readonly maxEventsFileBytes?: number;
+  readonly maxStdoutBytes?: number;
+  readonly maxStderrBytes?: number;
+  readonly maxRawResponseBytes?: number;
+}
+
+interface InvocationEffectiveLimits {
+  readonly wallClockTimeoutMs: number;
+  readonly idleTimeoutMs: number;
+  readonly maxEventBytes: number;
+  readonly maxEventsFileBytes: number;
+  readonly maxStdoutBytes: number;
+  readonly maxStderrBytes: number;
+  readonly maxRawResponseBytes: number;
+}
+
+const limitKeys = Object.freeze([
+  'wallClockTimeoutMs',
+  'idleTimeoutMs',
+  'maxEventBytes',
+  'maxEventsFileBytes',
+  'maxStdoutBytes',
+  'maxStderrBytes',
+  'maxRawResponseBytes',
+]);
+
+const optionalLimit = (limits: object, key: string): number | undefined => {
+  const descriptor = Object.getOwnPropertyDescriptor(limits, key);
+  if (descriptor === undefined) return undefined;
+  if (!descriptor.enumerable || !('value' in descriptor)) return Number.NaN;
+  return typeof descriptor.value === 'number' && Number.isSafeInteger(descriptor.value)
+    ? descriptor.value
+    : Number.NaN;
+};
+
+const defaultEffectiveLimits = Object.freeze({
+  wallClockTimeoutMs: AGENT_MANAGER_LIMITS.wallClockTimeoutMs.default,
+  idleTimeoutMs: AGENT_MANAGER_LIMITS.idleTimeoutMs.default,
+  maxEventBytes: AGENT_MANAGER_LIMITS.maxEventBytes.default,
+  maxEventsFileBytes: AGENT_MANAGER_LIMITS.maxEventsFileBytes.default,
+  maxStdoutBytes: AGENT_MANAGER_LIMITS.maxStdoutBytes.default,
+  maxStderrBytes: AGENT_MANAGER_LIMITS.maxStderrBytes.default,
+  maxRawResponseBytes: AGENT_MANAGER_LIMITS.maxRawResponseBytes.default,
+});
+
+const createEffectiveLimits = (
+  value: unknown,
+  managerLimits: InvocationLimitDefaults = defaultEffectiveLimits,
+): InvocationEffectiveLimits | undefined => {
+  if (value !== undefined) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+    const keys = Reflect.ownKeys(value);
+    if (keys.some((key) => typeof key !== 'string' || !limitKeys.includes(key))) return undefined;
+  }
+  const source = value === undefined ? undefined : value;
+  const limit = (
+    key: keyof InvocationEffectiveLimits,
+    range: Readonly<{ minimum: number; default: number; maximum: number }>,
+  ): number | undefined => {
+    const next = source === undefined ? undefined : optionalLimit(source, key);
+    const managerDefault = managerLimits[key];
+    if (
+      managerDefault === undefined ||
+      !Number.isSafeInteger(managerDefault) ||
+      managerDefault < range.minimum ||
+      managerDefault > range.maximum
+    )
+      return undefined;
+    if (next === undefined) return managerDefault;
+    if (!Number.isSafeInteger(next) || next < range.minimum || next > managerDefault)
+      return undefined;
+    return next;
+  };
+  const wallClockTimeoutMs = limit('wallClockTimeoutMs', AGENT_MANAGER_LIMITS.wallClockTimeoutMs);
+  const idleTimeoutMs = limit('idleTimeoutMs', AGENT_MANAGER_LIMITS.idleTimeoutMs);
+  const maxEventBytes = limit('maxEventBytes', AGENT_MANAGER_LIMITS.maxEventBytes);
+  const maxEventsFileBytes = limit(
+    'maxEventsFileBytes',
+    Object.freeze({
+      minimum:
+        AGENT_MANAGER_LIMITS.maxTerminalEventBytes + AGENT_MANAGER_LIMITS.maxEventBytes.minimum + 2,
+      default: AGENT_MANAGER_LIMITS.maxEventsFileBytes.default,
+      maximum: AGENT_MANAGER_LIMITS.maxEventsFileBytes.maximum,
+    }),
+  );
+  const maxStdoutBytes = limit('maxStdoutBytes', AGENT_MANAGER_LIMITS.maxStdoutBytes);
+  const maxStderrBytes = limit('maxStderrBytes', AGENT_MANAGER_LIMITS.maxStderrBytes);
+  const maxRawResponseBytes = limit(
+    'maxRawResponseBytes',
+    AGENT_MANAGER_LIMITS.maxRawResponseBytes,
+  );
+  if (
+    wallClockTimeoutMs === undefined ||
+    idleTimeoutMs === undefined ||
+    maxEventBytes === undefined ||
+    maxEventsFileBytes === undefined ||
+    maxStdoutBytes === undefined ||
+    maxStderrBytes === undefined ||
+    maxRawResponseBytes === undefined ||
+    idleTimeoutMs > wallClockTimeoutMs ||
+    maxEventsFileBytes < AGENT_MANAGER_LIMITS.maxTerminalEventBytes + maxEventBytes + 2
+  )
+    return undefined;
+  return Object.freeze({
+    wallClockTimeoutMs,
+    idleTimeoutMs,
+    maxEventBytes,
+    maxEventsFileBytes,
+    maxStdoutBytes,
+    maxStderrBytes,
+    maxRawResponseBytes,
+  });
+};
+
 export class InvocationInputSnapshot {
   readonly agent: AgentRef | undefined;
   readonly invocationId: string;
+  readonly limits: InvocationEffectiveLimits;
   readonly metadata: SnapshotRecord | undefined;
+  readonly outputDirectory: string | undefined;
+  readonly parameters: SnapshotRecord | undefined;
+  readonly permissions: SnapshotRecord | undefined;
+  readonly prompt: string | undefined;
   readonly resultSchema: SnapshotRecord;
   readonly wallClockTimeoutMs: number;
   readonly workspace: string | undefined;
@@ -437,7 +587,12 @@ export class InvocationInputSnapshot {
     input: Readonly<{
       agent: AgentRef | undefined;
       invocationId: string;
+      limits: InvocationEffectiveLimits;
       metadata: SnapshotRecord | undefined;
+      outputDirectory: string | undefined;
+      parameters: SnapshotRecord | undefined;
+      permissions: SnapshotRecord | undefined;
+      prompt: string | undefined;
       resultSchema: SnapshotRecord;
       wallClockTimeoutMs: number;
       workspace: string | undefined;
@@ -445,14 +600,22 @@ export class InvocationInputSnapshot {
   ) {
     this.agent = input.agent;
     this.invocationId = input.invocationId;
+    this.limits = input.limits;
     this.metadata = input.metadata;
+    this.outputDirectory = input.outputDirectory;
+    this.parameters = input.parameters;
+    this.permissions = input.permissions;
+    this.prompt = input.prompt;
     this.resultSchema = input.resultSchema;
     this.wallClockTimeoutMs = input.wallClockTimeoutMs;
     this.workspace = input.workspace;
     Object.freeze(this);
   }
 
-  static create(value: unknown): InvocationInputSnapshot | undefined {
+  static create(
+    value: unknown,
+    managerLimits: InvocationLimitDefaults = defaultEffectiveLimits,
+  ): InvocationInputSnapshot | undefined {
     const input = readRequest(value);
     if (
       input === undefined ||
@@ -467,32 +630,35 @@ export class InvocationInputSnapshot {
     )
       return undefined;
     const agent = copyAgentRef(input.agent);
-    if (input.agent !== undefined && agent === undefined) return undefined;
+    if (agent === undefined) return undefined;
     const metadata = input.metadata === undefined ? undefined : copyMetadata(input.metadata);
     if (input.metadata !== undefined && metadata === undefined) return undefined;
-    const resultSchema = copyMetadata(
-      input.resultSchema,
-      AGENT_MANAGER_LIMITS.maxRawResponseBytes.default,
-    );
-    if (input.resultSchema === undefined || resultSchema === undefined) return undefined;
-    const deadline = input.wallClockTimeoutMs ?? AGENT_MANAGER_LIMITS.wallClockTimeoutMs.default;
-    if (
-      typeof deadline !== 'number' ||
-      !Number.isSafeInteger(deadline) ||
-      deadline < AGENT_MANAGER_LIMITS.wallClockTimeoutMs.minimum ||
-      deadline > AGENT_MANAGER_LIMITS.wallClockTimeoutMs.maximum
-    )
-      return undefined;
-    let workspace: string | undefined;
-    if (input.workspace !== undefined) workspace = copyWorkspace(input.workspace);
-    if (input.workspace !== undefined && workspace === undefined) return undefined;
+    const prompt = copyPrompt(input.prompt);
+    if (prompt === undefined) return undefined;
+    const parameters = copyMetadata(input.parameters, maximumParametersBytes);
+    if (parameters === undefined) return undefined;
+    const permissions = copyMetadata(input.permissions, maximumPermissionsBytes);
+    if (permissions === undefined) return undefined;
+    const resultSchema = readResultSchema(input);
+    if (resultSchema === undefined) return undefined;
+    const limits = createEffectiveLimits(input.limits, managerLimits);
+    if (limits === undefined) return undefined;
+    const workspace = copyDirectory(input.workspace, maximumWorkspacePathBytes);
+    if (workspace === undefined) return undefined;
+    const outputDirectory = copyDirectory(input.output, maximumOutputPathBytes);
+    if (outputDirectory === undefined) return undefined;
     return new InvocationInputSnapshot(
       Object.freeze({
         agent,
         invocationId: input.invocationId,
+        limits,
         metadata,
+        outputDirectory,
+        parameters,
+        permissions,
+        prompt,
         resultSchema,
-        wallClockTimeoutMs: deadline,
+        wallClockTimeoutMs: limits.wallClockTimeoutMs,
         workspace,
       }),
     );

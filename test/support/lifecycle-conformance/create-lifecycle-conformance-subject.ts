@@ -42,11 +42,21 @@ const createInput = (
   Object.freeze({
     agent,
     invocationId,
-    resultSchema: overrides.resultSchema ?? defaultResultSchema,
+    prompt: 'Return JSON.',
+    workspace: Object.freeze({ directory: '/workspace/project' }),
+    parameters: Object.freeze({}),
+    permissions: Object.freeze({}),
+    result: Object.freeze({ schema: overrides.resultSchema ?? defaultResultSchema }),
+    output: Object.freeze({ directory: '/outputs/invocation' }),
     ...(overrides.metadata === undefined ? {} : { metadata: overrides.metadata }),
     ...(overrides.wallClockTimeoutMs === undefined
       ? {}
-      : { wallClockTimeoutMs: overrides.wallClockTimeoutMs }),
+      : {
+          limits: Object.freeze({
+            wallClockTimeoutMs: overrides.wallClockTimeoutMs,
+            idleTimeoutMs: overrides.wallClockTimeoutMs,
+          }),
+        }),
   });
 
 export const createLifecycleConformanceSubject = (
@@ -67,6 +77,10 @@ export const createLifecycleConformanceSubject = (
     clock,
     output,
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
+    workspace: {
+      admit: async () =>
+        Object.freeze({ status: 'admitted' as const, directory: '/workspace/project' }),
+    },
   });
   const manager = createInvocationLifecycleManager(managerOptions, ports);
 

@@ -10,7 +10,16 @@ import {
 } from '../../../support/execution/fake-execution-port.js';
 
 const testSnapshot = (): InvocationInputSnapshot => {
-  const snapshot = InvocationInputSnapshot.create({ resultSchema, invocationId: 'test' });
+  const snapshot = InvocationInputSnapshot.create({
+    invocationId: 'test',
+    agent: { id: 'fixture-agent', version: '1.0.0' },
+    prompt: 'Return JSON.',
+    workspace: { directory: '/workspace/project' },
+    parameters: {},
+    permissions: {},
+    result: { schema: resultSchema },
+    output: { directory: '/outputs/invocation' },
+  });
   if (snapshot === undefined) throw new Error('Unable to create test snapshot');
   return snapshot;
 };
@@ -24,6 +33,7 @@ const preparedLaunch = (): PreparedLaunch => {
     },
     executable: '/resolved/fixture-agent',
     reportedVersion: '1.0.0',
+    limits: testSnapshot().limits,
   });
   if (value === undefined) throw new Error('Unable to create prepared launch evidence');
   return value;

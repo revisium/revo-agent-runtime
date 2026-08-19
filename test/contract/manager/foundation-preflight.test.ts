@@ -19,6 +19,32 @@ const resultSchema = Object.freeze({
   type: 'object',
 });
 
+const defaultEffectiveLimits = Object.freeze({
+  wallClockTimeoutMs: 1_800_000,
+  idleTimeoutMs: 300_000,
+  maxEventBytes: 65_536,
+  maxEventsFileBytes: 16_777_216,
+  maxStdoutBytes: 8_388_608,
+  maxStderrBytes: 8_388_608,
+  maxRawResponseBytes: 1_048_576,
+});
+
+const createStartInput = (
+  definition: ReturnType<typeof buildAgentDefinition>,
+  overrides: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> =>
+  Object.freeze({
+    invocationId: 'foundation-preflight',
+    agent: Object.freeze({ id: definition.id, version: definition.version }),
+    prompt: 'Return JSON.',
+    workspace: Object.freeze({ directory: '/approved/workspace' }),
+    parameters: Object.freeze({}),
+    permissions: Object.freeze({}),
+    result: Object.freeze({ schema: resultSchema }),
+    output: Object.freeze({ directory: '/outputs/invocation' }),
+    ...overrides,
+  });
+
 const exited = (version = '1.0.0') =>
   Object.freeze({
     status: 'exited' as const,
@@ -52,9 +78,13 @@ const createPorts = (
     output,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     executableProbe: probe,
-    ...(workspaceAdmission === undefined
-      ? {}
-      : { workspace: { admit: vi.fn(async () => workspaceAdmission) } }),
+    workspace: {
+      admit: vi.fn(
+        async () =>
+          workspaceAdmission ??
+          Object.freeze({ status: 'admitted', directory: '/approved/workspace' }),
+      ),
+    },
   } as InvocationExecutionPorts;
   return Object.freeze({ execution, output, probe, ports });
 };
@@ -68,12 +98,12 @@ test('rejects workspace admission before output preparation or execution delegat
   const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
 
   await expect(
-    manager.start({
-      invocationId: 'invalid-workspace',
-      agent: { id: definition.id, version: definition.version },
-      resultSchema,
-      workspace: { directory: '../relative/./hostile\u0000path' },
-    }),
+    manager.start(
+      createStartInput(definition, {
+        invocationId: 'invalid-workspace',
+        workspace: { directory: '../relative/./hostile\u0000path' },
+      }),
+    ),
   ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
   expect(probe.calls()).toEqual([]);
   expect(output.calls()).toEqual([]);
@@ -93,12 +123,12 @@ test('admits a normalized absolute workspace before output preparation and execu
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
 
-  const started = manager.start({
-    invocationId: 'valid-workspace',
-    agent: { id: definition.id, version: definition.version },
-    resultSchema,
-    workspace: { directory: '/approved/workspace' },
-  });
+  const started = manager.start(
+    createStartInput(definition, {
+      invocationId: 'valid-workspace',
+      workspace: { directory: '/approved/workspace' },
+    }),
+  );
   await flush();
   probe.settleCompletion(1, exited());
 
@@ -122,11 +152,7 @@ test('freshly probes every invocation before output preparation and execution de
     execution.enqueueStart('running');
   }
 
-  const first = manager.start({
-    invocationId: 'first',
-    agent: { id: definition.id, version: definition.version },
-    resultSchema,
-  });
+  const first = manager.start(createStartInput(definition, { invocationId: 'first' }));
   await flush();
   expect(execution.calls()).toEqual([]);
   expect(output.calls()).toEqual([]);
@@ -134,11 +160,7 @@ test('freshly probes every invocation before output preparation and execution de
   const firstAccepted = await first;
   expect(firstAccepted.status).toBe('accepted');
 
-  const second = manager.start({
-    invocationId: 'second',
-    agent: { id: definition.id, version: definition.version },
-    resultSchema,
-  });
+  const second = manager.start(createStartInput(definition, { invocationId: 'second' }));
   await flush();
   probe.settleCompletion(2, exited('1.0.1'));
   const secondAccepted = await second;
@@ -176,6 +198,7 @@ test('freshly probes every invocation before output preparation and execution de
     },
     executable: '/resolved/first',
     reportedVersion: '1.0.0',
+    limits: defaultEffectiveLimits,
   });
   expect(secondPrepared).toEqual({
     pin: {
@@ -185,6 +208,7 @@ test('freshly probes every invocation before output preparation and execution de
     },
     executable: '/resolved/second',
     reportedVersion: '1.0.1',
+    limits: defaultEffectiveLimits,
   });
   expect(firstPrepared).not.toBe(secondPrepared);
 });
@@ -196,11 +220,9 @@ test('rejects malformed launch evidence before output preparation or execution d
   probe.enqueueResolution({ status: 'resolved', executable: '' });
   probe.enqueueVersionStart('running');
 
-  const started = manager.start({
-    invocationId: 'malformed-launch-evidence',
-    agent: { id: definition.id, version: definition.version },
-    resultSchema,
-  });
+  const started = manager.start(
+    createStartInput(definition, { invocationId: 'malformed-launch-evidence' }),
+  );
   await flush();
   probe.settleCompletion(1, exited());
 
@@ -215,11 +237,7 @@ test('fails target-platform preflight before output preparation or execution del
   const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
 
   try {
-    await manager.start({
-      invocationId: 'unsupported',
-      agent: { id: definition.id, version: definition.version },
-      resultSchema,
-    });
+    await manager.start(createStartInput(definition, { invocationId: 'unsupported' }));
     throw new Error('Expected target-platform preflight rejection.');
   } catch (error: unknown) {
     expect(error).toBeInstanceOf(AgentManagerError);
@@ -246,11 +264,7 @@ test('reserves an invocation id before probing and retains that reservation afte
   output.enqueuePrepare();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
-  const input = {
-    invocationId: 'duplicate',
-    agent: { id: definition.id, version: definition.version },
-    resultSchema,
-  };
+  const input = createStartInput(definition, { invocationId: 'duplicate' });
 
   const first = manager.start(input);
   await flush();
@@ -286,11 +300,7 @@ test('maps a missing preflight composition port to a typed pre-acceptance reject
   );
 
   await expect(
-    manager.start({
-      invocationId: 'missing-probe-port',
-      agent: { id: definition.id, version: definition.version },
-      resultSchema,
-    }),
+    manager.start(createStartInput(definition, { invocationId: 'missing-probe-port' })),
   ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
   expect(output.calls()).toEqual([]);
   expect(execution.calls()).toEqual([]);
