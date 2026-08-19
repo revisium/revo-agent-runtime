@@ -6,6 +6,9 @@
   process recovery, lifecycle, shutdown, results, events, files, bounds, errors, and invariants. It is not implemented yet.
 - [Internal module structure specification](./specs/internal-module-structure.spec.md) — accepted internal ownership,
   layering, barrels, and architecture-enforcement rules. It does not add a package export.
+- [B+ execution handoff specification](./specs/execution-handoff.spec.md) — accepted package-private target for sealed
+  preparation, preregistered ownership, paused-I/O supervision, and terminal publication. It is not implemented and does not
+  add a public export.
 - [Internal definition canonical-byte adapter specification](./specs/definition-canonical-bytes.spec.md) — accepted target
   for the private RFC 8785 canonical-byte boundary; it does not add a package export or describe shipped behavior.
 - [Consumer-schema profile specification](./specs/consumer-schema-profile.spec.md) — accepted target for bounded consumer-schema
@@ -35,6 +38,10 @@
   trusted stable ancestors through terminal filesystem quiescence.
 - [ADR-0011](./adr/0011-consumer-governed-local-supervision.md) — define consumer-governed admission, synchronous listener
   ownership, workspace authorization, and authoritative local supervision.
+- [ADR-0012](./adr/0012-public-agentmanager-after-first-adapter.md) — permit the provider-neutral public AgentManager only
+  after the frozen real-process harness and first supported adapter pass their separate gates.
+- [ADR-0013](./adr/0013-seal-invocation-intent-before-preregistered-execution-handoff.md) — adopt B+ sealed intent,
+  preregistered capability-bound execution, paused-I/O acceptance, and one terminal authority.
 
 ## Repository policy
 

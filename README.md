@@ -79,6 +79,11 @@ await manager.shutdown('Consumer is stopping');
   diagnostics are not event payloads.
 - The manager records bounded redacted `events.ndjson`, `stdout.log`, `stderr.log`, optional failure-only
   `raw-final-response.txt`, and `result.json` under `output.directory`.
+- Target execution completes deterministic preparation before a preregistered exclusive output claim. A spawned process keeps
+  I/O paused through identity capture and the initial active-state save; acceptance then precedes one-use coordinator/I/O
+  activation. The current code has not shipped this B+ handoff.
+- Eligible `raw-final-response.txt` and `result.json` are separate non-replacing publications. Their target ordering and
+  failure precedence do not claim current implementation.
 - The consumer provisions the existing parent of `output.directory` and warrants trusted stable ancestors until every package
   filesystem operation for the start has settled; the manager creates only the absent final leaf.
 - `result()` waits for the terminal result; `getResult()` retrieves a retained result after completion.
@@ -167,6 +172,8 @@ The package owns:
 - native and ACP process lifecycle, lifecycle-only events, files, structured results, cancellation, shutdown, and reaping;
 - local process fingerprints, active-state notifications, and cleanup of consumer-supplied active snapshots;
 - package-owned protocol, result-parser, and permission strategies;
+- target-only sealed preclaim preparation, preregistered claim/preparation/start ownership, paused-I/O acceptance, one duplex
+  coordinator, and capability-authenticated terminal publication;
 - bounds and redaction before subscriber delivery or file writes.
 
 The consumer owns:
@@ -182,6 +189,8 @@ The consumer owns:
 
 - [AgentManager v1 specification](./docs/specs/agent-manager-v1.spec.md) — exact target types, lifecycle, files, errors, and
   invariants.
+- [B+ execution handoff specification](./docs/specs/execution-handoff.spec.md) — accepted, not-yet-implemented package-private
+  preparation, supervision, and publication contract; it creates no public export.
 - [Internal module structure](./docs/specs/internal-module-structure.spec.md) — accepted internal layering and module rules;
   it does not create a public export.
 - [Architecture](./docs/architecture.md) — implementation structure, dependency direction, and ownership boundaries.
