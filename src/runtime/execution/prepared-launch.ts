@@ -2,6 +2,7 @@ import type { AgentValidationDetails, JsonObject } from '../spec/index.js';
 import type { InterpretedArgumentTemplate } from './argument-template-interpretation/index.js';
 import { canonicalEffectiveInputs } from './canonical-effective-inputs.js';
 import { ExecutionBindingToken } from './execution-binding-token.js';
+import type { ExecutionBinding } from './execution-binding.js';
 import type { OutputResourcePlan } from './output-resource-plan.js';
 import type { PreparedInvocationPayloads } from './payload-preparation/index.js';
 import type { ResultSchemaValidator } from './result-schema-validator.js';
@@ -42,19 +43,8 @@ interface PreparedLaunchOptions {
   readonly preparedPayloads: PreparedInvocationPayloads;
 }
 
-interface PreparedLaunchBinding {
-  readonly protocolDriverId: 'native/stdio-v1' | 'acp/v1';
-  readonly resultParserId?: 'codex-jsonl/v1' | 'claude-stream-json/v1';
-  readonly permissionStrategyId: 'codex-cli/v1' | 'claude-cli/v1' | 'acp/v1';
-  readonly delivery: {
-    readonly prompt: 'argument' | 'stdin' | 'file' | 'protocol';
-    readonly resultSchema: 'argument' | 'file' | 'protocol';
-    readonly result: 'stdout' | 'protocol';
-  };
-}
-
 interface PreparedLaunchMaterial extends PreparedLaunchOptions {
-  readonly binding: PreparedLaunchBinding;
+  readonly binding: ExecutionBinding;
   readonly bindingToken: unknown;
 }
 
@@ -141,34 +131,28 @@ const copyLimits = (value: unknown): PreparedLaunchLimits | undefined => {
   });
 };
 
-const asProtocolDriverId = (
-  value: unknown,
-): PreparedLaunchBinding['protocolDriverId'] | undefined =>
+const asProtocolDriverId = (value: unknown): ExecutionBinding['protocolDriverId'] | undefined =>
   value === 'native/stdio-v1' || value === 'acp/v1' ? value : undefined;
 
-const asResultParserId = (value: unknown): PreparedLaunchBinding['resultParserId'] | undefined =>
+const asResultParserId = (value: unknown): ExecutionBinding['resultParserId'] | undefined =>
   value === 'codex-jsonl/v1' || value === 'claude-stream-json/v1' ? value : undefined;
 
 const asPermissionStrategyId = (
   value: unknown,
-): PreparedLaunchBinding['permissionStrategyId'] | undefined =>
+): ExecutionBinding['permissionStrategyId'] | undefined =>
   value === 'codex-cli/v1' || value === 'claude-cli/v1' || value === 'acp/v1' ? value : undefined;
 
-const asPromptDelivery = (
-  value: unknown,
-): PreparedLaunchBinding['delivery']['prompt'] | undefined =>
+const asPromptDelivery = (value: unknown): ExecutionBinding['delivery']['prompt'] | undefined =>
   value === 'argument' || value === 'stdin' || value === 'file' || value === 'protocol'
     ? value
     : undefined;
 
 const asResultSchemaDelivery = (
   value: unknown,
-): PreparedLaunchBinding['delivery']['resultSchema'] | undefined =>
+): ExecutionBinding['delivery']['resultSchema'] | undefined =>
   value === 'argument' || value === 'file' || value === 'protocol' ? value : undefined;
 
-const asResultDelivery = (
-  value: unknown,
-): PreparedLaunchBinding['delivery']['result'] | undefined =>
+const asResultDelivery = (value: unknown): ExecutionBinding['delivery']['result'] | undefined =>
   value === 'stdout' || value === 'protocol' ? value : undefined;
 
 const isValidatorFunction = (value: unknown): value is (input: JsonObject) => unknown =>
@@ -206,7 +190,7 @@ const ownString = (value: object, key: string): string | undefined => {
   return typeof descriptor.value === 'string' ? descriptor.value : undefined;
 };
 
-const copyBinding = (value: unknown): PreparedLaunchBinding | undefined => {
+const copyBinding = (value: unknown): ExecutionBinding | undefined => {
   if (value === null || typeof value !== 'object') return undefined;
   if (!isPlainObservedObject(value)) return undefined;
   const keys = Reflect.ownKeys(value);
