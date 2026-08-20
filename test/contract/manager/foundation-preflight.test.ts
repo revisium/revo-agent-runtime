@@ -8,6 +8,7 @@ import type {
   WorkspaceAdmissionResult,
 } from '../../../src/runtime/execution/index.js';
 import { AGENT_FAULT_MESSAGES } from '../../../src/runtime/policy/index.js';
+import type { ExecutableProbePort } from '../../../src/runtime/probe/index.js';
 import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
@@ -233,6 +234,91 @@ test('freshly probes every invocation before output preparation and execution de
   expect(firstPrepared).not.toBe(secondPrepared);
 });
 
+test('rejects version mismatch before output preparation or execution delegation', async () => {
+  const { execution, output, probe, ports } = createPorts('linux');
+  const definition = buildAgentDefinition();
+  const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+  probe.enqueueResolution({ status: 'resolved', executable: '/resolved/version-mismatch-agent' });
+  probe.enqueueVersionStart('running');
+
+  const started = manager.start(createStartInput(definition, { invocationId: 'version-mismatch' }));
+  await flush();
+  probe.settleCompletion(1, exited('2.0.0'));
+
+  await expect(started).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  expect(output.calls()).toEqual([outputAdmissionCall('version-mismatch')]);
+  expect(execution.calls()).toEqual([]);
+});
+
+test('orders fresh executable proof after resource-bound preflight and before output claim', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const probe = new FakeExecutableProbePort({ platform: 'linux' });
+  const order: string[] = [];
+  const definition = buildAgentDefinition();
+  probe.enqueueResolution({ status: 'resolved', executable: '/resolved/ordered-agent' });
+  probe.enqueueVersionStart('running');
+  output.enqueuePrepare();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const ports: InvocationExecutionPorts & Readonly<{ executableProbe: ExecutableProbePort }> = {
+    execution: {
+      start: async (snapshot, preparedLaunch) => {
+        order.push('execution-start');
+        return await execution.start(snapshot, preparedLaunch);
+      },
+    },
+    output: {
+      admit: async (request) => {
+        order.push('output-admit');
+        return await output.admit(request);
+      },
+      prepare: async () => {
+        order.push('output-prepare');
+        return await output.prepare();
+      },
+      recordTerminalResult: (outcome) => output.recordTerminalResult(outcome),
+      recordEvent: () => output.recordEvent(),
+    },
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    executableProbe: {
+      hostPlatform: () => probe.hostPlatform(),
+      resolveExecutable: async (request) => {
+        order.push('probe-resolve');
+        return await probe.resolveExecutable(request);
+      },
+      startVersionProbe: async (request) => {
+        order.push('probe-start');
+        return await probe.startVersionProbe(request);
+      },
+    },
+    workspace: {
+      admit: async () => {
+        order.push('workspace-admit');
+        return Object.freeze({ status: 'admitted' as const, directory: '/approved/workspace' });
+      },
+    },
+  };
+  const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+
+  const started = manager.start(createStartInput(definition, { invocationId: 'ordered-proof' }));
+  await flush();
+  await flush();
+  expect([...order]).toEqual(['workspace-admit', 'output-admit', 'probe-resolve', 'probe-start']);
+
+  probe.settleCompletion(1, exited());
+  await expect(started).resolves.toMatchObject({ status: 'accepted' });
+  expect([...order]).toEqual([
+    'workspace-admit',
+    'output-admit',
+    'probe-resolve',
+    'probe-start',
+    'output-prepare',
+    'execution-start',
+  ]);
+  expect(execution.startedPreparedLaunches()[0]?.executable).toBe('/resolved/ordered-agent');
+});
+
 test('rejects malformed launch evidence before output preparation or execution delegation', async () => {
   const { execution, output, probe, ports } = createPorts('linux');
   const definition = buildAgentDefinition();
@@ -244,10 +330,10 @@ test('rejects malformed launch evidence before output preparation or execution d
     createStartInput(definition, { invocationId: 'malformed-launch-evidence' }),
   );
   await flush();
-  probe.settleCompletion(1, exited());
 
   await expect(started).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
   expect(output.calls()).toEqual([outputAdmissionCall('malformed-launch-evidence')]);
+  expect(probe.calls()).toEqual([{ type: 'resolve', command: '/fixture/bin/agent' }]);
   expect(execution.calls()).toEqual([]);
 });
 

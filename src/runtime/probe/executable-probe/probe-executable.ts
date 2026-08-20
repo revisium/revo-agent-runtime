@@ -1,3 +1,5 @@
+import { posix as posixPath, win32 as win32Path } from 'node:path';
+
 import {
   matchesExecutableVersionConstraint,
   parseExecutableVersionConstraint,
@@ -99,6 +101,12 @@ const isProbePlatform = (value: unknown): value is 'darwin' | 'linux' | 'win32' 
 
 const isResolutionReason = (value: unknown): value is 'not_found' | 'not_launchable' =>
   value === 'not_found' || value === 'not_launchable';
+
+const isAbsoluteExecutable = (
+  platform: 'darwin' | 'linux' | 'win32',
+  executable: string,
+): boolean =>
+  platform === 'win32' ? win32Path.isAbsolute(executable) : posixPath.isAbsolute(executable);
 
 const isSafeSignal = (value: unknown): value is string => {
   if (typeof value !== 'string' || !value.isWellFormed() || !/^[A-Z][A-Z0-9_]*$/.test(value))
@@ -260,6 +268,14 @@ export const probeExecutable = async (
     }
     if (resolution.status !== 'resolved' || typeof resolution.executable !== 'string')
       return internalFailure();
+    if (!isAbsoluteExecutable(platform, resolution.executable))
+      return unavailable(
+        target,
+        'revo.agent.probe_spawn_failed',
+        AGENT_FAULT_MESSAGES.probeExecutableUnavailable,
+        false,
+        { reason: 'not_launchable' },
+      );
     return await evaluateVersionProbe(target, resolution.executable, port);
   } catch (error: unknown) {
     if (error instanceof AgentManagerError && evaluatorInternalErrors.has(error)) throw error;

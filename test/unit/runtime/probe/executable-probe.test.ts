@@ -125,6 +125,23 @@ test.each(['not_found', 'not_launchable'] as const)(
   },
 );
 
+test('rejects a resolved relative executable without starting a version probe', async () => {
+  const probeTarget = target();
+  const port = new FakeExecutableProbePort({ platform: 'linux' });
+  resolved(port, 'relative/fixture-agent');
+
+  await expect(probeExecutable(probeTarget, port)).resolves.toEqual(
+    unavailable(
+      probeTarget,
+      'revo.agent.probe_spawn_failed',
+      AGENT_FAULT_MESSAGES.probeExecutableUnavailable,
+      false,
+      { reason: 'not_launchable' },
+    ),
+  );
+  expect(port.calls()).toEqual([{ type: 'resolve', command: 'fixture-agent' }]);
+});
+
 test('freezes every unavailable result constituent independently of the target', async () => {
   const probeTarget = target();
   const port = new FakeExecutableProbePort({ platform: 'other' });
