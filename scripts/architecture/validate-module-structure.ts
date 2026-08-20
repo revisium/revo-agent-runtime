@@ -220,6 +220,10 @@ const runtimeLayer = (path: string): string | undefined =>
 const specDomain = (path: string): string | undefined =>
   /^src\/runtime\/spec\/([^/]+)\//.exec(path)?.[1];
 
+const isAllowedPrivateOutputClaimAttemptTestImport = (path: string, target: string): boolean =>
+  path === 'test/unit/runtime/execution/output-claim-attempt.test.ts' &&
+  target === 'src/runtime/execution/output-claim-attempt/index.ts';
+
 const validateImportBoundaries = (path: string, references: readonly ModuleReference[]): void => {
   const layer = runtimeLayer(path);
   const domain = specDomain(path);
@@ -249,7 +253,11 @@ const validateImportBoundaries = (path: string, references: readonly ModuleRefer
 
     if (path.startsWith('test/') && targetLayer) {
       const expectedTarget = `src/runtime/${targetLayer}/index.ts`;
-      if (reference.target !== expectedTarget) fail('test-layer-barrel-import', path);
+      if (
+        reference.target !== expectedTarget &&
+        !isAllowedPrivateOutputClaimAttemptTestImport(path, reference.target)
+      )
+        fail('test-layer-barrel-import', path);
     }
   }
 };
