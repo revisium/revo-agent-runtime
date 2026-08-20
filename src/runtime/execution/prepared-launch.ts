@@ -1,3 +1,5 @@
+import type { JsonObject } from '../spec/index.js';
+import { canonicalEffectiveInputs } from './canonical-effective-inputs.js';
 import { ExecutionBindingToken } from './execution-binding-token.js';
 
 interface PreparedLaunchPin {
@@ -184,6 +186,8 @@ const ownNonEmptyString = (value: object, key: string): string | undefined => {
 };
 
 export class PreparedLaunch {
+  readonly effectiveParameters: JsonObject;
+  readonly effectivePermissions: JsonObject;
   readonly pin: PreparedLaunchPin;
   readonly executable: string;
   readonly limits: PreparedLaunchLimits;
@@ -194,7 +198,11 @@ export class PreparedLaunch {
     executable: string,
     reportedVersion: string,
     limits: PreparedLaunchLimits,
+    effectiveParameters: JsonObject,
+    effectivePermissions: JsonObject,
   ) {
+    this.effectiveParameters = effectiveParameters;
+    this.effectivePermissions = effectivePermissions;
     this.pin = Object.freeze({
       agentId: pin.agentId,
       agentVersion: pin.agentVersion,
@@ -215,6 +223,8 @@ export class PreparedLaunch {
         'executable',
         'reportedVersion',
         'limits',
+        'effectiveParameters',
+        'effectivePermissions',
         'binding',
         'bindingToken',
       ])
@@ -239,6 +249,20 @@ export class PreparedLaunch {
     const limits = isDataDescriptor(limitsDescriptor)
       ? copyLimits(limitsDescriptor.value)
       : undefined;
+    const effectiveParametersDescriptor = Object.getOwnPropertyDescriptor(
+      value,
+      'effectiveParameters',
+    );
+    const effectiveParameters = isDataDescriptor(effectiveParametersDescriptor)
+      ? canonicalEffectiveInputs.parameters(effectiveParametersDescriptor.value)
+      : undefined;
+    const effectivePermissionsDescriptor = Object.getOwnPropertyDescriptor(
+      value,
+      'effectivePermissions',
+    );
+    const effectivePermissions = isDataDescriptor(effectivePermissionsDescriptor)
+      ? canonicalEffectiveInputs.permissions(effectivePermissionsDescriptor.value)
+      : undefined;
     const bindingDescriptor = Object.getOwnPropertyDescriptor(value, 'binding');
     const binding = isDataDescriptor(bindingDescriptor)
       ? copyBinding(bindingDescriptor.value)
@@ -254,6 +278,8 @@ export class PreparedLaunch {
       executable === undefined ||
       reportedVersion === undefined ||
       limits === undefined ||
+      effectiveParameters === undefined ||
+      effectivePermissions === undefined ||
       binding === undefined ||
       !ExecutionBindingToken.matches(bindingToken, {
         agentId,
@@ -268,6 +294,8 @@ export class PreparedLaunch {
       executable,
       reportedVersion,
       limits,
+      effectiveParameters,
+      effectivePermissions,
     );
   }
 }

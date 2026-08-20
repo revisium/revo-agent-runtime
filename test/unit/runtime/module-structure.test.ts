@@ -66,6 +66,8 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/bounded-command-port/command-resolution.ts',
     'execution/bounded-command-port/index.ts',
     'execution/bounded-command-port/running-bounded-command.ts',
+    'execution/canonical-effective-inputs.ts',
+    'execution/canonical-json-record.ts',
     'execution/child-environment/capture-child-environment.ts',
     'execution/child-environment/child-environment-capture.ts',
     'execution/child-environment/child-environment-request.ts',

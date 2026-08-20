@@ -42,6 +42,8 @@ const preparedLaunch = (): PreparedLaunch => {
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
     limits: snapshot().limits,
+    effectiveParameters: {},
+    effectivePermissions: {},
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',

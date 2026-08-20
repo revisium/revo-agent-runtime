@@ -127,25 +127,30 @@ const createEffectiveInputValidators = (
   return validators;
 };
 
+interface EffectiveInvocationInputs {
+  readonly parameters: JsonObject;
+  readonly permissions: JsonObject;
+}
+
 const validateEffectiveInvocationInputs = (
   validators: EffectiveInputValidators,
   definition: AgentDefinitionContract,
   snapshot: InvocationInputSnapshot,
-): boolean => {
-  if (snapshot.parameters === undefined || snapshot.permissions === undefined) return false;
+): EffectiveInvocationInputs | undefined => {
+  if (snapshot.parameters === undefined || snapshot.permissions === undefined) return undefined;
   const effectiveParameters = overlayTopLevelDefaults(
     definition.parameters.defaults,
     snapshot.parameters,
   );
   if (validators.parameters.validate(effectiveParameters, effectiveParametersPath) !== undefined)
-    return false;
+    return undefined;
   const effectivePermissions = overlayTopLevelDefaults(
     definition.permissions.defaults,
     snapshot.permissions,
   );
-  return (
-    validators.permissions.validate(effectivePermissions, effectivePermissionsPath) === undefined
-  );
+  if (validators.permissions.validate(effectivePermissions, effectivePermissionsPath) !== undefined)
+    return undefined;
+  return Object.freeze({ parameters: effectiveParameters, permissions: effectivePermissions });
 };
 
 const createDeferred = <Value>(): Deferred<Value> => {
@@ -276,11 +281,13 @@ class InternalInvocationLifecycleManager {
     if (target === undefined) return undefined;
     const binding = this.installedBindings.createBinding(target);
     const effectiveInputValidators = this.effectiveInputValidators.get(target.definitionDigest);
-    if (
-      effectiveInputValidators === undefined ||
-      !validateEffectiveInvocationInputs(effectiveInputValidators, target.definition, snapshot)
-    )
-      return undefined;
+    if (effectiveInputValidators === undefined) return undefined;
+    const effectiveInputs = validateEffectiveInvocationInputs(
+      effectiveInputValidators,
+      target.definition,
+      snapshot,
+    );
+    if (effectiveInputs === undefined) return undefined;
     if (snapshot.workspace !== undefined) {
       const workspace = this.ports.workspace;
       if (
@@ -308,6 +315,8 @@ class InternalInvocationLifecycleManager {
         executable: result.executable,
         reportedVersion: result.reportedVersion,
         limits: snapshot.limits,
+        effectiveParameters: effectiveInputs.parameters,
+        effectivePermissions: effectiveInputs.permissions,
         binding: binding.binding,
         bindingToken: binding.bindingToken,
       });

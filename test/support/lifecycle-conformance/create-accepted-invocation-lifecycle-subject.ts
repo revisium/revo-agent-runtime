@@ -67,6 +67,8 @@ export const createAcceptedInvocationLifecycleSubject = (
     executable: '/resolved/fixture-agent',
     reportedVersion: '1.0.0',
     limits: snapshot.limits,
+    effectiveParameters: {},
+    effectivePermissions: {},
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
