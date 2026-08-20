@@ -11,6 +11,7 @@ import {
   InvocationInputSnapshot,
   InvocationLifecycle,
   PreparedLaunch,
+  registerSecrets,
   StartContextSnapshot,
   type ChildEnvironmentCapture,
   type InvocationExecutionPorts,
@@ -145,6 +146,7 @@ interface ResourceIndependentPreflight {
   readonly effectiveInputs: EffectiveInvocationInputs;
   readonly resultSchemaValidator: ResultSchemaValidator;
   readonly childEnvironment: CapturedChildEnvironment;
+  readonly secretValues: readonly string[];
 }
 
 type PreflightRejection =
@@ -224,6 +226,7 @@ const createHandle = (
   });
 
 class InternalInvocationLifecycleManager {
+  readonly #configuredSecretValues: readonly string[];
   private readonly active = new Map<string, ActiveInvocation>();
   private readonly pending = new Set<string>();
   constructor(
@@ -234,7 +237,10 @@ class InternalInvocationLifecycleManager {
     private readonly installedBindings: InstalledBindingRegistry,
     private readonly effectiveInputValidators: ReadonlyMap<string, EffectiveInputValidators>,
     private readonly limits: Readonly<AgentManagerLimits>,
-  ) {}
+    configuredSecretValues: readonly string[],
+  ) {
+    this.#configuredSecretValues = configuredSecretValues;
+  }
 
   async start(input: unknown, context?: unknown): Promise<LifecycleStartOutcome> {
     const snapshot = InvocationInputSnapshot.create(input, this.limits);
@@ -319,8 +325,14 @@ class InternalInvocationLifecycleManager {
   > {
     const resourceIndependent = this.prepareResourceIndependentPreflight(snapshot, context);
     if (resourceIndependent.status !== 'accepted') return resourceIndependent;
-    const { target, binding, effectiveInputs, resultSchemaValidator, childEnvironment } =
-      resourceIndependent;
+    const {
+      target,
+      binding,
+      effectiveInputs,
+      resultSchemaValidator,
+      childEnvironment,
+      secretValues,
+    } = resourceIndependent;
     if (snapshot.workspace !== undefined) {
       const workspace = this.ports.workspace;
       if (
@@ -352,6 +364,7 @@ class InternalInvocationLifecycleManager {
         effectivePermissions: effectiveInputs.permissions,
         childEnvironment: childEnvironment.environment,
         childEnvironmentSecretValues: childEnvironment.secretValues,
+        secretValues,
         resultSchemaValidator,
         binding: binding.binding,
         bindingToken: binding.bindingToken,
@@ -395,6 +408,11 @@ class InternalInvocationLifecycleManager {
     const hostSnapshot = createNamedHostEnvironmentSnapshot(context.environment.inherit);
     const childEnvironment = captureChildEnvironment(context.environment, hostSnapshot);
     if (childEnvironment.status === 'rejected') return Object.freeze({ status: 'rejected' });
+    const registeredSecrets = registerSecrets({
+      configuredSecrets: this.#configuredSecretValues,
+      invocationSecrets: childEnvironment.secretValues,
+    });
+    if (registeredSecrets.status === 'rejected') return Object.freeze({ status: 'rejected' });
     return Object.freeze({
       status: 'accepted',
       target,
@@ -402,6 +420,7 @@ class InternalInvocationLifecycleManager {
       effectiveInputs,
       resultSchemaValidator,
       childEnvironment,
+      secretValues: registeredSecrets.secretValues,
     });
   }
 
@@ -444,6 +463,7 @@ export const createInvocationLifecycleManager = (
       installedBindings,
       effectiveInputValidators,
       validated.limits,
+      validated.redaction.secrets,
     ),
   );
 };

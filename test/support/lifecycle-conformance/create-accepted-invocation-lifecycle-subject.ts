@@ -71,6 +71,7 @@ export const createAcceptedInvocationLifecycleSubject = (
     effectivePermissions: {},
     childEnvironment: {},
     childEnvironmentSecretValues: [],
+    secretValues: [],
     resultSchemaValidator: validator,
     binding: {
       protocolDriverId: 'native/stdio-v1',

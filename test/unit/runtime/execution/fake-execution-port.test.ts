@@ -39,6 +39,7 @@ const preparedLaunch = (): PreparedLaunch => {
     effectivePermissions: {},
     childEnvironment: {},
     childEnvironmentSecretValues: [],
+    secretValues: [],
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
