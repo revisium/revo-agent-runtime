@@ -1,10 +1,18 @@
 import { expect, test, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ probeExecutable: vi.fn() }));
+const mocks = vi.hoisted(() => ({ compileConsumerSchema: vi.fn(), probeExecutable: vi.fn() }));
+
+type DefinitionModule = typeof import('../../../../src/runtime/definition/index.js');
 
 vi.mock('../../../../src/runtime/probe/index.js', () => ({
   probeExecutable: mocks.probeExecutable,
 }));
+
+vi.mock('../../../../src/runtime/definition/index.js', async (importOriginal) => {
+  const actual = await importOriginal<DefinitionModule>();
+  mocks.compileConsumerSchema.mockImplementation(actual.compileConsumerSchema);
+  return { ...actual, compileConsumerSchema: mocks.compileConsumerSchema };
+});
 
 import { createInvocationLifecycleManager } from '../../../../src/application/manager/index.js';
 import { InstalledBindingRegistry } from '../../../../src/application/manager/installed-bindings.js';
@@ -21,6 +29,188 @@ import { FakeExecutableProbePort } from '../../../support/probe/fake-executable-
 const resultSchema = Object.freeze({
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   type: 'object',
+});
+
+const compileCallsFor = (schemaPath: string): number =>
+  mocks.compileConsumerSchema.mock.calls.filter(([, path]) => path === schemaPath).length;
+
+test('reuses compiled effective input validators across starts for the same definition', async () => {
+  const definition = buildAgentDefinition({
+    parameters: {
+      schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: { model: { type: 'string' } },
+        required: ['model'],
+        additionalProperties: false,
+      },
+      defaults: { model: 'default-model' },
+    },
+    permissions: {
+      schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: { network: { type: 'boolean' } },
+        required: ['network'],
+        additionalProperties: false,
+      },
+      defaults: { network: false },
+    },
+  });
+  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  if (validatedDefinition === undefined) throw new Error('Expected validated definition');
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  mocks.compileConsumerSchema.mockClear();
+  const availableProbe = {
+    status: 'available' as const,
+    agent: { id: definition.id, version: definition.version },
+    definitionDigest: validatedDefinition.definitionDigest,
+    executable: '/resolved/fixture-agent',
+    reportedVersion: '1.0.0',
+  };
+  mocks.probeExecutable.mockResolvedValueOnce(availableProbe).mockResolvedValueOnce(availableProbe);
+  output.enqueuePrepare();
+  output.enqueuePrepare();
+  execution.enqueueStart('running');
+  execution.enqueueStart('running');
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition] },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
+      workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
+    },
+  );
+
+  const outcomes = await Promise.all(
+    ['cached-effective-input-one', 'cached-effective-input-two'].map((invocationId) =>
+      manager.start({
+        invocationId,
+        agent: { id: definition.id, version: definition.version },
+        prompt: 'Return JSON.',
+        workspace: { directory: '/workspace/project' },
+        parameters: {},
+        permissions: {},
+        result: { schema: resultSchema },
+        output: { directory: '/outputs/invocation' },
+      }),
+    ),
+  );
+
+  expect(outcomes.map((outcome) => outcome.status)).toEqual(['accepted', 'accepted']);
+
+  expect(compileCallsFor('/definition/parameters/schema')).toBe(1);
+  expect(compileCallsFor('/definition/permissions/schema')).toBe(1);
+});
+
+test('rejects effective parameters before workspace, output, and execution when shallow overlay does not deep merge', async () => {
+  const definition = buildAgentDefinition({
+    parameters: {
+      schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {
+          config: {
+            type: 'object',
+            required: ['mode'],
+            properties: { mode: { type: 'string' }, level: { type: 'integer' } },
+            additionalProperties: false,
+          },
+        },
+        required: ['config'],
+        additionalProperties: false,
+      },
+      defaults: { config: { mode: 'default' } },
+    },
+  });
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const probe = new FakeExecutableProbePort({ platform: 'linux' });
+  const workspace = vi.fn(async () => ({
+    status: 'admitted' as const,
+    directory: '/workspace/project',
+  }));
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition] },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: probe,
+      workspace: { admit: workspace },
+    },
+  );
+
+  await expect(
+    manager.start({
+      invocationId: 'invalid-effective-parameters',
+      agent: { id: definition.id, version: definition.version },
+      prompt: 'Return JSON.',
+      workspace: { directory: '/workspace/project' },
+      parameters: { config: { level: 1 } },
+      permissions: {},
+      result: { schema: resultSchema },
+      output: { directory: '/outputs/invocation' },
+    }),
+  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+
+  expect(workspace).not.toHaveBeenCalled();
+  expect(probe.calls()).toEqual([]);
+  expect(output.calls()).toEqual([]);
+  expect(execution.calls()).toEqual([]);
+});
+
+test('rejects effective permissions before workspace, output, and execution when caller and defaults violate schema', async () => {
+  const definition = buildAgentDefinition({
+    permissions: {
+      schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: { mode: { enum: ['read-only'] }, network: { type: 'boolean' } },
+        required: ['mode', 'network'],
+        additionalProperties: false,
+      },
+      defaults: { mode: 'read-only', network: false },
+    },
+  });
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const probe = new FakeExecutableProbePort({ platform: 'linux' });
+  const workspace = vi.fn(async () => ({
+    status: 'admitted' as const,
+    directory: '/workspace/project',
+  }));
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition] },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: probe,
+      workspace: { admit: workspace },
+    },
+  );
+
+  await expect(
+    manager.start({
+      invocationId: 'invalid-effective-permissions',
+      agent: { id: definition.id, version: definition.version },
+      prompt: 'Return JSON.',
+      workspace: { directory: '/workspace/project' },
+      parameters: {},
+      permissions: { network: 'yes' },
+      result: { schema: resultSchema },
+      output: { directory: '/outputs/invocation' },
+    }),
+  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+
+  expect(workspace).not.toHaveBeenCalled();
+  expect(probe.calls()).toEqual([]);
+  expect(output.calls()).toEqual([]);
+  expect(execution.calls()).toEqual([]);
 });
 
 test('rejects mismatched or incomplete available probe evidence before output and execution', async () => {
