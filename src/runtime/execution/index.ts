@@ -1,4 +1,6 @@
 export type { InvocationExecutionPorts } from './execution-ports.js';
+export { prepareInvocationPayloads } from './payload-preparation/index.js';
+export type { PreparedInvocationPayloads } from './payload-preparation/index.js';
 export { interpretArgumentTemplate } from './argument-template-interpretation/index.js';
 export type { InterpretedArgumentTemplate } from './argument-template-interpretation/index.js';
 export type {

@@ -3,6 +3,7 @@ import type { InterpretedArgumentTemplate } from './argument-template-interpreta
 import { canonicalEffectiveInputs } from './canonical-effective-inputs.js';
 import { ExecutionBindingToken } from './execution-binding-token.js';
 import type { OutputResourcePlan } from './output-resource-plan.js';
+import type { PreparedInvocationPayloads } from './payload-preparation/index.js';
 import type { ResultSchemaValidator } from './result-schema-validator.js';
 
 interface PreparedLaunchPin {
@@ -38,6 +39,7 @@ interface PreparedLaunchOptions {
   readonly resultSchemaValidator: ResultSchemaValidator;
   readonly outputResourcePlan: OutputResourcePlan;
   readonly interpretedArgumentTemplate: InterpretedArgumentTemplate;
+  readonly preparedPayloads: PreparedInvocationPayloads;
 }
 
 interface PreparedLaunchBinding {
@@ -69,6 +71,7 @@ const preparedLaunchKeys = Object.freeze([
   'resultSchemaValidator',
   'outputResourcePlan',
   'interpretedArgumentTemplate',
+  'preparedPayloads',
   'binding',
   'bindingToken',
 ]);
@@ -347,6 +350,60 @@ const copyStringArray = (value: unknown): readonly string[] | undefined => {
   return Object.freeze(result);
 };
 
+const copyBytes = (value: unknown): Uint8Array | undefined => {
+  if (!(value instanceof Uint8Array)) return undefined;
+  return new Uint8Array(value);
+};
+
+const copyPreparedPayloadFile = (
+  value: unknown,
+): PreparedInvocationPayloads['files'][number] | undefined => {
+  if (value === null || typeof value !== 'object') return undefined;
+  if (!isPlainObservedObject(value)) return undefined;
+  if (!hasExactKeys(value, ['kind', 'path', 'bytes'])) return undefined;
+  const kind = ownString(value, 'kind');
+  const path = ownNonEmptyString(value, 'path');
+  const bytes = ownCopiedValue(value, 'bytes', copyBytes);
+  if ((kind !== 'prompt' && kind !== 'result-schema') || path === undefined || bytes === undefined)
+    return undefined;
+  return Object.freeze({ kind, path, bytes });
+};
+
+const copyPreparedPayloadFiles = (
+  value: unknown,
+): readonly PreparedInvocationPayloads['files'][number][] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+  if (!isDataDescriptor(lengthDescriptor)) return undefined;
+  const length = lengthDescriptor.value;
+  if (typeof length !== 'number' || !Number.isSafeInteger(length) || length < 0) return undefined;
+  const result: PreparedInvocationPayloads['files'][number][] = [];
+  for (let index = 0; index < length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (descriptor?.enumerable !== true || !isDataDescriptor(descriptor)) return undefined;
+    const item = copyPreparedPayloadFile(descriptor.value);
+    if (item === undefined) return undefined;
+    result.push(item);
+  }
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== length + 1 || !keys.includes('length')) return undefined;
+  return Object.freeze(result);
+};
+
+const copyPreparedPayloads = (value: unknown): PreparedInvocationPayloads | undefined => {
+  if (value === null || typeof value !== 'object') return undefined;
+  if (!isPlainObservedObject(value)) return undefined;
+  const keys = Reflect.ownKeys(value);
+  if (!(keys.length === 2 || keys.length === 3)) return undefined;
+  if (!keys.includes('arguments') || !keys.includes('files')) return undefined;
+  const args = ownCopiedValue(value, 'arguments', copyStringArray);
+  const files = ownCopiedValue(value, 'files', copyPreparedPayloadFiles);
+  const stdin = keys.includes('stdin') ? ownCopiedValue(value, 'stdin', copyBytes) : undefined;
+  if (args === undefined || files === undefined || (keys.includes('stdin') && stdin === undefined))
+    return undefined;
+  return Object.freeze({ arguments: args, ...(stdin === undefined ? {} : { stdin }), files });
+};
+
 const copyInterpretedArgumentTemplate = (
   value: unknown,
 ): InterpretedArgumentTemplate | undefined => {
@@ -446,6 +503,7 @@ const copyPreparedLaunchMaterial = (value: object): PreparedLaunchMaterial | und
     'interpretedArgumentTemplate',
     copyInterpretedArgumentTemplate,
   );
+  const preparedPayloads = ownCopiedValue(value, 'preparedPayloads', copyPreparedPayloads);
   const binding = ownCopiedValue(value, 'binding', copyBinding);
   const bindingTokenDescriptor = Object.getOwnPropertyDescriptor(value, 'bindingToken');
   const bindingToken = isDataDescriptor(bindingTokenDescriptor)
@@ -464,6 +522,7 @@ const copyPreparedLaunchMaterial = (value: object): PreparedLaunchMaterial | und
     resultSchemaValidator === undefined ||
     outputResourcePlan === undefined ||
     interpretedArgumentTemplate === undefined ||
+    preparedPayloads === undefined ||
     binding === undefined
   )
     return undefined;
@@ -480,6 +539,7 @@ const copyPreparedLaunchMaterial = (value: object): PreparedLaunchMaterial | und
     resultSchemaValidator,
     outputResourcePlan,
     interpretedArgumentTemplate,
+    preparedPayloads,
     binding,
     bindingToken,
   });
@@ -500,6 +560,7 @@ export class PreparedLaunch {
   readonly resultSchemaValidator!: ResultSchemaValidator;
   readonly outputResourcePlan!: OutputResourcePlan;
   readonly interpretedArgumentTemplate!: InterpretedArgumentTemplate;
+  readonly preparedPayloads!: PreparedInvocationPayloads;
   readonly pin: PreparedLaunchPin;
   readonly executable: string;
   readonly limits: PreparedLaunchLimits;
@@ -540,6 +601,12 @@ export class PreparedLaunch {
     });
     Object.defineProperty(this, 'interpretedArgumentTemplate', {
       value: options.interpretedArgumentTemplate,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
+    Object.defineProperty(this, 'preparedPayloads', {
+      value: options.preparedPayloads,
       enumerable: false,
       writable: false,
       configurable: false,
