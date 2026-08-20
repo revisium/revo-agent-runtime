@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 
 import {
+  ExecutionBindingToken,
   InvocationInputSnapshot,
   PreparedLaunch,
 } from '../../../../src/runtime/execution/index.js';
@@ -34,10 +35,28 @@ const preparedLaunch = (): PreparedLaunch => {
     executable: '/resolved/fixture-agent',
     reportedVersion: '1.0.0',
     limits: testSnapshot().limits,
+    binding: {
+      protocolDriverId: 'native/stdio-v1',
+      resultParserId: 'codex-jsonl/v1',
+      permissionStrategyId: 'codex-cli/v1',
+      delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    },
+    bindingToken: bindingToken('fixture-agent', 'fixture-definition-digest'),
   });
   if (value === undefined) throw new Error('Unable to create prepared launch evidence');
   return value;
 };
+
+const bindingToken = (agentId: string, definitionDigest: string): ExecutionBindingToken =>
+  ExecutionBindingToken.create({
+    agentId,
+    agentVersion: '1.0.0',
+    definitionDigest,
+    protocolDriverId: 'native/stdio-v1',
+    resultParserId: 'codex-jsonl/v1',
+    permissionStrategyId: 'codex-cli/v1',
+    delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+  });
 
 const resultSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',

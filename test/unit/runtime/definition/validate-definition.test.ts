@@ -87,6 +87,13 @@ const coherenceFault = (instancePath: string): AgentFault =>
     'Agent definition fields are not coherent.',
   );
 
+const strategyUnsupportedFault: AgentFault = {
+  code: 'revo.agent.strategy_unsupported',
+  message: AGENT_FAULT_MESSAGES.strategyUnsupported,
+  phase: 'construction',
+  retryable: false,
+};
+
 const limitShapeFault = (instancePath: string): AgentFault => ({
   code: 'revo.agent.limit_invalid',
   message: AGENT_FAULT_MESSAGES.limitInvalid,
@@ -233,11 +240,9 @@ test.each([
   ],
 ] as const)('rejects incoherent known strategy fields: %s', (_name, definition, instancePath) => {
   expect(faultFrom(() => validateManagerOptions({ definitions: [definition] }))).toEqual(
-    definitionInvalidFault(
-      'definition_coherence',
-      instancePath,
-      'Agent definition fields are not coherent.',
-    ),
+    instancePath === '/definitions/0/launch/args'
+      ? coherenceFault(instancePath)
+      : strategyUnsupportedFault,
   );
 });
 
@@ -722,9 +727,9 @@ test.each([
   ],
 ] as const)(
   'rejects each native or ACP coherence violation: %s',
-  (_name, definition, instancePath) => {
+  (_name, definition, _instancePath) => {
     expect(faultFrom(() => validateManagerOptions({ definitions: [definition] }))).toEqual(
-      coherenceFault(instancePath),
+      strategyUnsupportedFault,
     );
   },
 );

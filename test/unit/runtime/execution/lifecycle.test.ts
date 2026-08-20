@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 
 import {
+  ExecutionBindingToken,
   InvocationInputSnapshot,
   InvocationLifecycle,
   PreparedLaunch,
@@ -41,6 +42,13 @@ const preparedLaunch = (): PreparedLaunch => {
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
     limits: snapshot().limits,
+    binding: {
+      protocolDriverId: 'native/stdio-v1',
+      resultParserId: 'codex-jsonl/v1',
+      permissionStrategyId: 'codex-cli/v1',
+      delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    },
+    bindingToken: bindingToken('codex', 'definition-digest'),
   });
   if (value === undefined) throw new Error('Unable to create prepared launch evidence');
   return value;
@@ -63,6 +71,17 @@ const startLifecycle = (
   lifecycle.begin();
   return { lifecycle, settlements, clock, prepared };
 };
+
+const bindingToken = (agentId: string, definitionDigest: string): ExecutionBindingToken =>
+  ExecutionBindingToken.create({
+    agentId,
+    agentVersion: '1.0.0',
+    definitionDigest,
+    protocolDriverId: 'native/stdio-v1',
+    resultParserId: 'codex-jsonl/v1',
+    permissionStrategyId: 'codex-cli/v1',
+    delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+  });
 
 const resultSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',

@@ -316,12 +316,8 @@ const assertTemplateCoherence = (definition: AgentDefinitionContract, index: num
     );
 };
 
-const rejectCoherence = (index: number, path: string): never =>
-  rejectDiagnostic(
-    'revo.agent.definition_invalid',
-    'definition_coherence',
-    `/definitions/${index}${path}`,
-  );
+const rejectCoherence = (_index: number, _path: string): never =>
+  reject('revo.agent.strategy_unsupported', AGENT_FAULT_MESSAGES.strategyUnsupported);
 
 const assertNativeStrategyCoherence = (
   protocol: AgentDefinitionContract['protocol'],

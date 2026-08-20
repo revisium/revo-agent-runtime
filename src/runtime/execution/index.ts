@@ -11,6 +11,7 @@ export type {
   ChildEnvironmentRequest,
 } from './child-environment/index.js';
 export { captureChildEnvironment } from './child-environment/index.js';
+export { ExecutionBindingToken } from './execution-binding-token.js';
 export type { InvocationTerminalObservation } from './execution-terminal-observation.js';
 export { finalizeInvocationOutcome } from './finalize-invocation-outcome.js';
 export { InvocationInputSnapshot } from './input-snapshot.js';

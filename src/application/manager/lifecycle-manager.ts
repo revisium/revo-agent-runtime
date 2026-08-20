@@ -18,6 +18,7 @@ import type { ExecutableProbePort } from '../../runtime/probe/index.js';
 import { SealedAgentRegistry } from '../../runtime/registry/index.js';
 import type { AgentManagerLimits, JsonObject } from '../../runtime/spec/index.js';
 import { CompletedInvocations } from './completed-invocations.js';
+import { InstalledBindingRegistry } from './installed-bindings.js';
 import { TerminalSubscriptions } from './subscriptions.js';
 
 type RejectionReason =
@@ -105,6 +106,7 @@ class InternalInvocationLifecycleManager {
     private readonly completed: CompletedInvocations,
     private readonly subscriptions: TerminalSubscriptions,
     private readonly registry: SealedAgentRegistry,
+    private readonly installedBindings: InstalledBindingRegistry,
     private readonly limits: Readonly<AgentManagerLimits>,
   ) {}
 
@@ -185,6 +187,10 @@ class InternalInvocationLifecycleManager {
   }
 
   private async preflight(snapshot: InvocationInputSnapshot): Promise<PreparedLaunch | undefined> {
+    if (snapshot.agent === undefined) return undefined;
+    const target = this.registry.getDefinition(snapshot.agent);
+    if (target === undefined) return undefined;
+    const binding = this.installedBindings.createBinding(target);
     if (snapshot.workspace !== undefined) {
       const workspace = this.ports.workspace;
       if (
@@ -193,9 +199,6 @@ class InternalInvocationLifecycleManager {
       )
         return undefined;
     }
-    if (snapshot.agent === undefined) return undefined;
-    const target = this.registry.getDefinition(snapshot.agent);
-    if (target === undefined) return undefined;
     const port = this.ports.executableProbe;
     if (port === undefined) return undefined;
     const result = await probeExecutable(target, port);
@@ -215,6 +218,8 @@ class InternalInvocationLifecycleManager {
         executable: result.executable,
         reportedVersion: result.reportedVersion,
         limits: snapshot.limits,
+        binding: binding.binding,
+        bindingToken: binding.bindingToken,
       });
     }
     if (result.error.code !== 'revo.agent.probe_platform_unsupported') return undefined;
@@ -257,12 +262,14 @@ export const createInvocationLifecycleManager = (
   const completed = new CompletedInvocations(capacity);
   const subscriptions = new TerminalSubscriptions();
   const registry = SealedAgentRegistry.create(validated.definitions);
+  const installedBindings = InstalledBindingRegistry.create(validated.definitions);
   return Object.freeze(
     new InternalInvocationLifecycleManager(
       ports,
       completed,
       subscriptions,
       registry,
+      installedBindings,
       validated.limits,
     ),
   );

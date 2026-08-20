@@ -3,6 +3,7 @@ import {
   validateConsumerSchemaProfile,
 } from '../../../src/runtime/definition/index.js';
 import {
+  ExecutionBindingToken,
   InvocationInputSnapshot,
   InvocationLifecycle,
   PreparedLaunch,
@@ -12,6 +13,17 @@ import {
 import { FakeInvocationClock } from '../execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../execution/fake-execution-port.js';
 import { FakeInvocationOutputPort } from '../execution/fake-output-port.js';
+
+const bindingToken = (agentId: string, definitionDigest: string): ExecutionBindingToken =>
+  ExecutionBindingToken.create({
+    agentId,
+    agentVersion: '1.0.0',
+    definitionDigest,
+    protocolDriverId: 'native/stdio-v1',
+    resultParserId: 'codex-jsonl/v1',
+    permissionStrategyId: 'codex-cli/v1',
+    delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+  });
 
 const resultSchema = Object.freeze({
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -55,6 +67,13 @@ export const createAcceptedInvocationLifecycleSubject = (
     executable: '/resolved/fixture-agent',
     reportedVersion: '1.0.0',
     limits: snapshot.limits,
+    binding: {
+      protocolDriverId: 'native/stdio-v1',
+      resultParserId: 'codex-jsonl/v1',
+      permissionStrategyId: 'codex-cli/v1',
+      delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    },
+    bindingToken: bindingToken('fixture-agent', 'fixture-definition-digest'),
   });
   if (preparedLaunch === undefined)
     throw new Error('Unable to create accepted prepared launch evidence.');

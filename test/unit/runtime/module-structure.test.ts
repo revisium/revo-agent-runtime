@@ -70,6 +70,7 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/child-environment/child-environment-capture.ts',
     'execution/child-environment/child-environment-request.ts',
     'execution/child-environment/index.ts',
+    'execution/execution-binding-token.ts',
     'execution/execution-ports.ts',
     'execution/execution-terminal-observation.ts',
     'execution/finalize-invocation-outcome.ts',
