@@ -35,6 +35,8 @@ const preparedLaunch = (): PreparedLaunch => {
     executable: '/resolved/fixture-agent',
     reportedVersion: '1.0.0',
     limits: testSnapshot().limits,
+    effectiveParameters: {},
+    effectivePermissions: {},
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',

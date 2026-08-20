@@ -199,6 +199,8 @@ test('freshly probes every invocation before output preparation and execution de
     executable: '/resolved/first',
     reportedVersion: '1.0.0',
     limits: defaultEffectiveLimits,
+    effectiveParameters: {},
+    effectivePermissions: {},
   });
   expect(secondPrepared).toEqual({
     pin: {
@@ -209,6 +211,8 @@ test('freshly probes every invocation before output preparation and execution de
     executable: '/resolved/second',
     reportedVersion: '1.0.1',
     limits: defaultEffectiveLimits,
+    effectiveParameters: {},
+    effectivePermissions: {},
   });
   expect(firstPrepared).not.toBe(secondPrepared);
 });

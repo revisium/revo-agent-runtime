@@ -213,6 +213,101 @@ test('rejects effective permissions before workspace, output, and execution when
   expect(execution.calls()).toEqual([]);
 });
 
+test('retains package-owned canonical effective parameter and permission copies for launch', async () => {
+  const callerParameters = { config: { mode: 'caller' }, nested: ['request'] };
+  const callerPermissions = { grants: { write: false }, flags: ['request'] };
+  const definition = buildAgentDefinition({
+    parameters: {
+      schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {
+          config: {
+            type: 'object',
+            required: ['mode'],
+            properties: { mode: { type: 'string' } },
+            additionalProperties: false,
+          },
+          nested: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['config', 'nested'],
+        additionalProperties: false,
+      },
+      defaults: { config: { mode: 'default' }, nested: ['default'] },
+    },
+    permissions: {
+      schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {
+          grants: {
+            type: 'object',
+            required: ['write'],
+            properties: { write: { type: 'boolean' } },
+            additionalProperties: false,
+          },
+          flags: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['grants', 'flags'],
+        additionalProperties: false,
+      },
+      defaults: { grants: { write: true }, flags: ['default'] },
+    },
+  });
+  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  if (validatedDefinition === undefined) throw new Error('Expected validated definition');
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  mocks.probeExecutable.mockResolvedValueOnce({
+    status: 'available',
+    agent: { id: definition.id, version: definition.version },
+    definitionDigest: validatedDefinition.definitionDigest,
+    executable: '/resolved/fixture-agent',
+    reportedVersion: '1.0.0',
+  });
+  output.enqueuePrepare();
+  execution.enqueueStart('running');
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition] },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
+      workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
+    },
+  );
+
+  const outcome = await manager.start({
+    invocationId: 'canonical-effective-inputs',
+    agent: { id: definition.id, version: definition.version },
+    prompt: 'Return JSON.',
+    workspace: { directory: '/workspace/project' },
+    parameters: callerParameters,
+    permissions: callerPermissions,
+    result: { schema: resultSchema },
+    output: { directory: '/outputs/invocation' },
+  });
+  callerParameters.config.mode = 'mutated';
+  callerParameters.nested.push('mutated');
+  callerPermissions.grants.write = true;
+  callerPermissions.flags.push('mutated');
+
+  expect(outcome.status).toBe('accepted');
+  expect(execution.startedPreparedLaunches()).toEqual([
+    expect.objectContaining({
+      effectiveParameters: {
+        config: { mode: 'caller' },
+        nested: ['request'],
+      },
+      effectivePermissions: {
+        grants: { write: false },
+        flags: ['request'],
+      },
+    }),
+  ]);
+});
+
 test('rejects mismatched or incomplete available probe evidence before output and execution', async () => {
   const definition = buildAgentDefinition();
   const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;

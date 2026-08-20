@@ -25,6 +25,8 @@ const effectiveLimits = Object.freeze({
   maxStderrBytes: 8_388_608,
   maxRawResponseBytes: 1_048_576,
 });
+const effectiveParameters = Object.freeze({ model: 'gpt-5' });
+const effectivePermissions = Object.freeze({ mode: 'workspace-write' });
 
 test('rejects prepared launch evidence without a reported version', () => {
   expect(
@@ -50,6 +52,8 @@ test('creates prepared launch evidence with the exact execution-owned shape', ()
       executable: '/usr/bin/codex',
       reportedVersion: '1.2.3',
       limits: effectiveLimits,
+      effectiveParameters,
+      effectivePermissions,
       binding: {
         protocolDriverId: 'native/stdio-v1',
         resultParserId: 'codex-jsonl/v1',
@@ -67,6 +71,8 @@ test('creates prepared launch evidence with the exact execution-owned shape', ()
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
     limits: effectiveLimits,
+    effectiveParameters,
+    effectivePermissions,
   });
 });
 
@@ -81,6 +87,8 @@ test('accepts null-prototype record containers', () => {
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
     limits: effectiveLimits,
+    effectiveParameters,
+    effectivePermissions,
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -101,6 +109,8 @@ test('accepts null-prototype record containers', () => {
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
     limits: effectiveLimits,
+    effectiveParameters,
+    effectivePermissions,
   });
 });
 
@@ -285,6 +295,8 @@ test('rejects missing, empty, and wrong-type semantic values', () => {
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
     limits: effectiveLimits,
+    effectiveParameters,
+    effectivePermissions,
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -317,6 +329,8 @@ test('authenticates the exact full binding tuple in finalization material', () =
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
     limits: effectiveLimits,
+    effectiveParameters,
+    effectivePermissions,
     binding: {
       protocolDriverId: 'native/stdio-v1' as const,
       resultParserId: 'codex-jsonl/v1' as const,
@@ -348,6 +362,8 @@ test('requires an authentic binding token matched to the launch pin', () => {
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
     limits: effectiveLimits,
+    effectiveParameters,
+    effectivePermissions,
     binding: {
       protocolDriverId: 'native/stdio-v1' as const,
       resultParserId: 'codex-jsonl/v1' as const,
@@ -390,6 +406,8 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
     limits: { ...effectiveLimits },
+    effectiveParameters: { nested: { value: 'parameter' } },
+    effectivePermissions: { nested: { value: 'permission' } },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -407,9 +425,15 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
   expect(Object.isFrozen(prepared)).toBe(true);
   expect(Object.isFrozen(prepared.pin)).toBe(true);
   expect(Object.isFrozen(prepared.limits)).toBe(true);
+  expect(Object.isFrozen(prepared.effectiveParameters)).toBe(true);
+  expect(Object.isFrozen(prepared.effectiveParameters.nested)).toBe(true);
+  expect(Object.isFrozen(prepared.effectivePermissions)).toBe(true);
+  expect(Object.isFrozen(prepared.effectivePermissions.nested)).toBe(true);
 
   candidate.pin.agentId = 'mutated';
   candidate.executable = '/tmp/mutated';
+  candidate.effectiveParameters.nested.value = 'mutated';
+  candidate.effectivePermissions.nested.value = 'mutated';
   expect(prepared).toEqual({
     pin: {
       agentId: 'codex',
@@ -419,6 +443,8 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
     limits: effectiveLimits,
+    effectiveParameters: { nested: { value: 'parameter' } },
+    effectivePermissions: { nested: { value: 'permission' } },
   });
 });
 
@@ -454,6 +480,8 @@ test('requires copied effective limits in finalization material', () => {
     executable: '/usr/bin/codex',
     reportedVersion: '1.2.3',
     limits,
+    effectiveParameters,
+    effectivePermissions,
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
