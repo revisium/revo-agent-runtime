@@ -10,6 +10,7 @@ import { FakeInvocationClock } from '../../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../../support/execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../../../support/execution/fake-output-claim-port.js';
 import { FakeInvocationOutputPort } from '../../../support/execution/fake-output-port.js';
+import { FakeOutputPreparationPort } from '../../../support/execution/fake-output-preparation-port.js';
 
 const flush = async (): Promise<void> => {
   await Promise.resolve();
@@ -82,6 +83,7 @@ const startLifecycle = (
       execution,
       clock,
       output,
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       outputClaim: new FakeOutputClaimPort('created'),
       workspace: {
         admit: async () =>

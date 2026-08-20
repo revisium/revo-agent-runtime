@@ -17,3 +17,4 @@ export { isConsumedRedactionMaterialBoundToToken } from './is-consumed-redaction
 export { isConsumedOutputPreparationMaterialBoundToToken } from './is-consumed-output-preparation-material-bound-to-token.js';
 export { takeOutputPreparationFileSlots } from './take-output-preparation-file-slots.js';
 export { takeRegisteredSecretsForRedaction } from './take-registered-secrets-for-redaction.js';
+export { takePreparedInvocationResourcesPayload } from './take-prepared-invocation-resources-payload.js';

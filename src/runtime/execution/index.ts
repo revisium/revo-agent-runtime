@@ -6,6 +6,10 @@ export type {
   PreparedInvocation,
   PreparedInvocationMaterial,
 } from './prepared-invocation/index.js';
+export {
+  createPreparedInvocation,
+  consumeOutputPreparationMaterial,
+} from './prepared-invocation/index.js';
 export { interpretArgumentTemplate } from './argument-template-interpretation/index.js';
 export type { InterpretedArgumentTemplate } from './argument-template-interpretation/index.js';
 export type {
@@ -65,7 +69,10 @@ export type {
   TerminalPublicationAuthority,
 } from './output-preparation-attempt/index.js';
 export {
+  beginOutputPreparation,
+  createOutputPreparationAttempt,
   takeOutputPreparationFileSlots,
+  takePreparedInvocationResourcesPayload,
   takeRegisteredSecretsForRedaction,
 } from './output-preparation-attempt/index.js';
 export { PreparedLaunch } from './prepared-launch.js';
@@ -81,6 +88,11 @@ export type { ResultSchemaValidator } from './result-schema-validator.js';
 export type {
   PreparedExecutionSecurity,
   PreparedExecutionSecurityRequest,
+} from './prepared-execution-security/index.js';
+export {
+  createPreparedExecutionSecurity,
+  consumeRedactionMaterial,
+  takePreparedChildEnvironment,
 } from './prepared-execution-security/index.js';
 export type {
   RegisteredSecrets,

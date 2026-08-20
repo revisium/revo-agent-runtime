@@ -7,20 +7,25 @@ import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../../support/execution/fake-output-claim-port.js';
 import { FakeInvocationOutputPort } from '../../support/execution/fake-output-port.js';
+import { FakeOutputPreparationPort } from '../../support/execution/fake-output-preparation-port.js';
 import { FreshAvailableExecutableProbePort } from '../../support/probe/fresh-available-executable-probe-port.js';
 
 const definition = buildAgentDefinition();
 const agent = Object.freeze({ id: definition.id, version: definition.version });
 const lifecycleOptions = Object.freeze({ definitions: Object.freeze([definition]) });
 
-type LifecycleManagerPortsInput = Omit<InvocationExecutionPorts, 'workspace' | 'outputClaim'> &
-  Partial<Pick<InvocationExecutionPorts, 'workspace' | 'outputClaim'>>;
+type LifecycleManagerPortsInput = Omit<
+  InvocationExecutionPorts,
+  'workspace' | 'outputClaim' | 'outputPreparation'
+> &
+  Partial<Pick<InvocationExecutionPorts, 'workspace' | 'outputClaim' | 'outputPreparation'>>;
 
 const createLifecycleManager = (ports: LifecycleManagerPortsInput) =>
   createInvocationLifecycleManager(lifecycleOptions, {
     ...ports,
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
     outputClaim: ports.outputClaim ?? new FakeOutputClaimPort('created'),
+    outputPreparation: ports.outputPreparation ?? new FakeOutputPreparationPort('prepared'),
     workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
   });
 
@@ -53,8 +58,6 @@ test('admits one concurrent duplicate after preparation and passes an immutable 
   output.enqueueTerminalResultRecording();
   const metadata = { nested: { state: 'accepted' } };
   execution.enqueueStart('running');
-  output.enqueuePrepare();
-  output.enqueuePrepare();
   const manager = createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -76,11 +79,13 @@ test('does not admit output preparation failures', async () => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
   output.enqueueTerminalResultRecording();
-  output.enqueuePrepare(new Error('unavailable'));
+  const outputPreparation = new FakeOutputPreparationPort();
+  outputPreparation.enqueue('scratch-create-failed');
   const manager = createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output,
+    outputPreparation,
   });
 
   await expect(
@@ -112,15 +117,75 @@ const flush = async (): Promise<void> => {
   await Promise.resolve();
 };
 
+test('prepared output settlement reaches accepted start and delegates unchanged prepared launch to execution', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const outputPreparation = new FakeOutputPreparationPort('prepared');
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+    outputPreparation,
+  });
+
+  await expect(
+    manager.start(createStartInput({ invocationId: 'prepared-output' })),
+  ).resolves.toMatchObject({
+    status: 'accepted',
+  });
+  expect(outputPreparation.requests()).toHaveLength(1);
+  expect(execution.calls()).toEqual([{ type: 'start' }]);
+});
+
+test('uncertain output preparation quarantines the invocation id and output directory', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const outputPreparation = new FakeOutputPreparationPort('throw-after-dispatch');
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+    outputPreparation,
+  });
+
+  await expect(
+    manager.start(
+      createStartInput({
+        invocationId: 'uncertain-preparation',
+        output: { directory: '/out/uncertain' },
+      }),
+    ),
+  ).resolves.toEqual({
+    status: 'rejected',
+    reason: 'output_prepare_uncertain',
+  });
+  expect(execution.calls()).toEqual([]);
+  await expect(
+    manager.start(
+      createStartInput({
+        invocationId: 'uncertain-preparation',
+        output: { directory: '/out/other' },
+      }),
+    ),
+  ).resolves.toEqual({ status: 'rejected', reason: 'duplicate_invocation' });
+  await expect(
+    manager.start(
+      createStartInput({
+        invocationId: 'contender-preparation',
+        output: { directory: '/out/uncertain' },
+      }),
+    ),
+  ).resolves.toEqual({ status: 'rejected', reason: 'output_prepare_uncertain' });
+});
+
 test('retains an id after terminal settlement until FIFO eviction', async () => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
   execution.enqueueStart('running');
-  output.enqueuePrepare();
-  output.enqueuePrepare();
-  output.enqueuePrepare();
   const manager = createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -151,9 +216,6 @@ test('retains failed composition admission after completion rejection', async ()
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
   execution.enqueueStart('running');
-  output.enqueuePrepare();
-  output.enqueuePrepare();
-  output.enqueuePrepare();
   const manager = createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -179,9 +241,6 @@ test('retains caller-cancelled composition admission after confirmed cancellatio
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
   execution.enqueueStart('running');
-  output.enqueuePrepare();
-  output.enqueuePrepare();
-  output.enqueuePrepare();
   const manager = createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -220,9 +279,6 @@ test('retains deadline-cancelled composition admission after confirmed cancellat
   const clock = new FakeInvocationClock({ initialNowMs: 0 });
   execution.enqueueStart('running');
   execution.enqueueStart('running');
-  output.enqueuePrepare();
-  output.enqueuePrepare();
-  output.enqueuePrepare();
   const manager = createLifecycleManager({ execution, clock, output });
 
   const lifecycle = expectAccepted(
@@ -260,8 +316,6 @@ test('keeps a racing natural completion as the only terminal composition settlem
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
   execution.enqueueStart('running');
-  output.enqueuePrepare();
-  output.enqueuePrepare();
   const manager = createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -292,9 +346,6 @@ test('keeps an id active until its one pending terminal-result commit settles', 
   const clock = new FakeInvocationClock({ initialNowMs: 0 });
   execution.enqueueStart('running');
   execution.enqueueStart('running');
-  output.enqueuePrepare();
-  output.enqueuePrepare();
-  output.enqueuePrepare();
   output.enqueuePendingTerminalResultRecording();
   const manager = createLifecycleManager({ execution, clock, output });
 
@@ -326,9 +377,6 @@ test('retains the id after one output commit failure without retrying the commit
   const output = new FakeInvocationOutputPort();
   execution.enqueueStart('running');
   execution.enqueueStart('running');
-  output.enqueuePrepare();
-  output.enqueuePrepare();
-  output.enqueuePrepare();
   output.enqueueTerminalResultRecording(new Error('write failed'));
   const manager = createLifecycleManager({
     execution,
@@ -383,7 +431,6 @@ test('checks retained invocation ids before rejecting an invalid result schema',
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
   execution.enqueueStart('running');
-  output.enqueuePrepare();
   output.enqueueTerminalResultRecording();
   const manager = createLifecycleManager({
     execution,
@@ -419,9 +466,6 @@ test('finalizes a deep in-bound response with one output commit before retaining
   const response = new TextEncoder().encode(`${'{"next":'.repeat(depth)}{}${'}'.repeat(depth)}`);
   execution.enqueueStart('running');
   execution.enqueueStart('running');
-  output.enqueuePrepare();
-  output.enqueuePrepare();
-  output.enqueuePrepare();
   output.enqueuePendingTerminalResultRecording();
   const manager = createLifecycleManager({ execution, clock, output });
 

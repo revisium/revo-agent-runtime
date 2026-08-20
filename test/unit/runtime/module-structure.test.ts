@@ -123,6 +123,7 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/output-preparation-attempt/output-preparation-result.ts',
     'execution/output-preparation-attempt/prepared-invocation-resources.ts',
     'execution/output-preparation-attempt/take-output-preparation-file-slots.ts',
+    'execution/output-preparation-attempt/take-prepared-invocation-resources-payload.ts',
     'execution/output-preparation-attempt/take-registered-secrets-for-redaction.ts',
     'execution/output-preparation-attempt/terminal-publication-authority.ts',
     'execution/output-resource-plan.ts',

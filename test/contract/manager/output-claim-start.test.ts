@@ -11,12 +11,16 @@ import type {
   OutputClaimExclusiveCreatePort,
   OutputClaimExclusiveCreateRequest,
   OutputClaimPlatformResult,
+  OutputPreparationMutationPort,
+  OutputPreparationMutationRequest,
+  OutputPreparationPlatformResult,
 } from '../../../src/runtime/execution/index.js';
 import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../../support/execution/fake-output-claim-port.js';
 import { FakeInvocationOutputPort } from '../../support/execution/fake-output-port.js';
+import { FakeOutputPreparationPort } from '../../support/execution/fake-output-preparation-port.js';
 import { FreshAvailableExecutableProbePort } from '../../support/probe/fresh-available-executable-probe-port.js';
 
 let temporaryRoot: string | undefined;
@@ -74,6 +78,20 @@ const createStartInput = (
     ...overrides,
   });
 
+class OrderedPreparationPort implements OutputPreparationMutationPort {
+  constructor(
+    private readonly delegate: OutputPreparationMutationPort,
+    private readonly order: string[],
+  ) {}
+
+  prepareClaimedOutput(
+    request: OutputPreparationMutationRequest,
+  ): Promise<OutputPreparationPlatformResult> {
+    this.order.push('prepare');
+    return this.delegate.prepareClaimedOutput(request);
+  }
+}
+
 class OrderedClaimPort implements OutputClaimExclusiveCreatePort {
   constructor(
     private readonly delegate: FakeOutputClaimPort,
@@ -90,6 +108,7 @@ class OrderedClaimPort implements OutputClaimExclusiveCreatePort {
 
 const createSubject = (
   outputClaim: OutputClaimExclusiveCreatePort = new FakeOutputClaimPort('created'),
+  outputPreparation: FakeOutputPreparationPort = new FakeOutputPreparationPort('prepared'),
 ) => {
   const clock = new FakeInvocationClock({ initialNowMs: 0 });
   const execution = new FakeInvocationExecutionPort();
@@ -99,6 +118,7 @@ const createSubject = (
     clock,
     output,
     outputClaim,
+    outputPreparation,
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
     workspace: {
       admit: async () =>
@@ -110,6 +130,7 @@ const createSubject = (
     execution,
     manager: createInvocationLifecycleManager({ definitions: [definition] }, ports),
     output,
+    outputPreparation,
     ports,
   });
 };
@@ -121,7 +142,6 @@ test('claims output before preparing the admitted output plan', async () => {
   const clock = new FakeInvocationClock({ initialNowMs: 0 });
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
-  output.enqueuePrepare();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
   const ports: InvocationExecutionPorts & {
@@ -129,15 +149,8 @@ test('claims output before preparing the admitted output plan', async () => {
   } = {
     execution,
     clock,
-    output: {
-      admit: (request) => output.admit(request),
-      prepare: async () => {
-        order.push('prepare');
-        await output.prepare();
-      },
-      recordTerminalResult: (outcome) => output.recordTerminalResult(outcome),
-      recordEvent: () => output.recordEvent(),
-    },
+    output,
+    outputPreparation: new OrderedPreparationPort(new FakeOutputPreparationPort('prepared'), order),
     outputClaim: new OrderedClaimPort(claim, order),
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
     workspace: {
@@ -163,7 +176,7 @@ test.each(['leaf-exists', 'create-failed'] as const)(
   async (operation) => {
     const claim = new FakeOutputClaimPort();
     claim.enqueue(operation);
-    const { manager, output } = createSubject(claim);
+    const { manager, outputPreparation } = createSubject(claim);
 
     await expect(
       manager.start(createStartInput({ invocationId: `rejected-${operation}` })),
@@ -171,8 +184,8 @@ test.each(['leaf-exists', 'create-failed'] as const)(
       status: 'rejected',
       reason: 'output_claim_failed',
     });
-    expect(output.calls()).not.toContainEqual({ type: 'prepare' });
     expect(manager.getResult(`rejected-${operation}`)).toEqual({ state: 'unknown' });
+    expect(outputPreparation.requests()).toHaveLength(0);
     await expect(
       manager.start(createStartInput({ invocationId: `rejected-${operation}` })),
     ).resolves.not.toEqual({ status: 'rejected', reason: 'duplicate_invocation' });
@@ -195,7 +208,7 @@ test.each(['pending', 'throw-after-dispatch'] as const)(
   async (operation) => {
     const claim = new FakeOutputClaimPort();
     claim.enqueue(operation);
-    const { manager, clock, output } = createSubject(claim);
+    const { manager, clock, outputPreparation } = createSubject(claim);
 
     const started = manager.start(createStartInput({ invocationId: `uncertain-${operation}` }));
     if (operation === 'pending') {
@@ -206,11 +219,11 @@ test.each(['pending', 'throw-after-dispatch'] as const)(
       status: 'rejected',
       reason: 'output_claim_uncertain',
     });
-    expect(output.calls()).not.toContainEqual({ type: 'prepare' });
     expect(manager.getResult(`uncertain-${operation}`)).toEqual({ state: 'unknown' });
     await expect(manager.waitForResult(`uncertain-${operation}`)).resolves.toEqual({
       state: 'unknown',
     });
+    expect(outputPreparation.requests()).toHaveLength(0);
     await expect(
       manager.start(createStartInput({ invocationId: `uncertain-${operation}` })),
     ).resolves.toEqual({
@@ -283,11 +296,11 @@ test('trailing-slash output admission rejects before a second claim attempt is c
         await output.admit(request);
         return await admission.admit(request);
       },
-      prepare: () => output.prepare(),
       recordTerminalResult: (outcome) => output.recordTerminalResult(outcome),
       recordEvent: () => output.recordEvent(),
     },
     outputClaim: claim,
+    outputPreparation: new FakeOutputPreparationPort('prepared'),
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
     workspace: {
       admit: async () =>
@@ -352,7 +365,6 @@ test('fails closed when the output claim port is missing', async () => {
 test('records exactly one claim request for one start call', async () => {
   const claim = new FakeOutputClaimPort('created');
   const { manager, output, execution } = createSubject(claim);
-  output.enqueuePrepare();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
 

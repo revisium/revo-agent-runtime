@@ -30,6 +30,7 @@ interface PreparedLaunchLimits {
 
 interface PreparedLaunchOptions {
   readonly pin: PreparedLaunchPin;
+  readonly binding: ExecutionBinding;
   readonly executable: string;
   readonly reportedVersion: string;
   readonly limits: PreparedLaunchLimits;
@@ -483,6 +484,7 @@ export class PreparedLaunch {
   readonly executable: string;
   readonly limits: PreparedLaunchLimits;
   readonly reportedVersion: string;
+  readonly binding: ExecutionBinding;
 
   private constructor(options: PreparedLaunchOptions) {
     Object.defineProperty(this, 'childEnvironment', {
@@ -537,6 +539,7 @@ export class PreparedLaunch {
     this.executable = options.executable;
     this.limits = options.limits;
     this.reportedVersion = options.reportedVersion;
+    this.binding = options.binding;
     Object.freeze(this);
   }
 

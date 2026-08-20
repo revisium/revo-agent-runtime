@@ -25,6 +25,7 @@ import { FakeInvocationClock } from '../../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../../support/execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../../../support/execution/fake-output-claim-port.js';
 import { FakeInvocationOutputPort } from '../../../support/execution/fake-output-port.js';
+import { FakeOutputPreparationPort } from '../../../support/execution/fake-output-preparation-port.js';
 import { FakeExecutableProbePort } from '../../../support/probe/fake-executable-probe-port.js';
 
 const resultSchema = Object.freeze({
@@ -77,8 +78,6 @@ test('reuses compiled effective input validators across starts for the same defi
     reportedVersion: '1.0.0',
   };
   mocks.probeExecutable.mockResolvedValueOnce(availableProbe).mockResolvedValueOnce(availableProbe);
-  output.enqueuePrepare();
-  output.enqueuePrepare();
   execution.enqueueStart('running');
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
@@ -88,6 +87,7 @@ test('reuses compiled effective input validators across starts for the same defi
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
@@ -148,6 +148,7 @@ test('rejects effective parameters before workspace, output, and execution when 
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: probe,
       workspace: { admit: workspace },
     },
@@ -199,6 +200,7 @@ test('rejects effective permissions before workspace, output, and execution when
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: probe,
       workspace: { admit: workspace },
     },
@@ -275,7 +277,6 @@ test('retains package-owned canonical effective parameter and permission copies 
     executable: '/resolved/fixture-agent',
     reportedVersion: '1.0.0',
   });
-  output.enqueuePrepare();
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
     { definitions: [definition] },
@@ -284,6 +285,7 @@ test('retains package-owned canonical effective parameter and permission copies 
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
@@ -359,7 +361,6 @@ test('plans output resources after workspace admission and before executable pro
       reportedVersion: '1.0.0',
     };
   });
-  output.enqueuePrepare();
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
     { definitions: [definition] },
@@ -368,6 +369,7 @@ test('plans output resources after workspace admission and before executable pro
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: workspace },
     },
@@ -396,7 +398,6 @@ test('plans output resources after workspace admission and before executable pro
         needsResultSchemaFile: true,
       },
     },
-    { type: 'prepare' },
   ]);
   expect(execution.startedPreparedLaunches()).toEqual([
     expect.objectContaining({
@@ -434,6 +435,7 @@ test('rejects output admission failures before executable probe, output prepare,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: probe,
       workspace: { admit: workspace },
     },
@@ -481,6 +483,7 @@ test('rejects mismatched or incomplete available probe evidence after output adm
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
@@ -572,6 +575,7 @@ test('preclaim binding disagreement rejects before workspace admission', async (
       output: new FakeInvocationOutputPort(),
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: workspace },
     },
@@ -624,6 +628,7 @@ test('rejects coherent but uninstalled package bindings during manager construct
           output: new FakeInvocationOutputPort(),
           clock: new FakeInvocationClock({ initialNowMs: 0 }),
           outputClaim: new FakeOutputClaimPort('created'),
+          outputPreparation: new FakeOutputPreparationPort('prepared'),
           executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
           workspace: {
             admit: async () => ({ status: 'admitted', directory: '/workspace/project' }),
@@ -639,6 +644,7 @@ test('rejects coherent but uninstalled package bindings during manager construct
           output: new FakeInvocationOutputPort(),
           clock: new FakeInvocationClock({ initialNowMs: 0 }),
           outputClaim: new FakeOutputClaimPort('created'),
+          outputPreparation: new FakeOutputPreparationPort('prepared'),
           executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
           workspace: {
             admit: async () => ({ status: 'admitted', directory: '/workspace/project' }),
@@ -705,7 +711,6 @@ test('captures named child environment from start context before workspace, outp
     executable: '/resolved/fixture-agent',
     reportedVersion: '1.0.0',
   });
-  output.enqueuePrepare();
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
     { definitions: [definition], redaction: { secrets: ['configured-secret'] } },
@@ -714,6 +719,7 @@ test('captures named child environment from start context before workspace, outp
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
@@ -770,7 +776,6 @@ test('keeps registered secrets out of enumerable launch views', async () => {
     executable: '/resolved/fixture-agent',
     reportedVersion: '1.0.0',
   });
-  output.enqueuePrepare();
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
     { definitions: [definition], redaction: { secrets: ['configured-secret'] } },
@@ -779,6 +784,7 @@ test('keeps registered secrets out of enumerable launch views', async () => {
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
@@ -836,6 +842,7 @@ test('keeps configured redaction secrets out of enumerable manager views', () =>
       output: new FakeInvocationOutputPort(),
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: {
         admit: async () =>
@@ -870,6 +877,7 @@ test('rejects registered secret failures before workspace, output, and execution
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: probe,
       workspace: { admit: workspace },
     },
@@ -911,6 +919,7 @@ test('rejects missing inherited child environment names before workspace, output
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: probe,
       workspace: { admit: workspace },
     },
@@ -947,6 +956,7 @@ test('rejects malformed start context before reserving invocation ids', async ()
       output: new FakeInvocationOutputPort(),
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
@@ -1058,7 +1068,6 @@ test('interprets launch template in definition order and maps each permission it
       reportedVersion: '1.0.0',
     };
   });
-  output.enqueuePrepare();
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
     { definitions: [definition] },
@@ -1067,6 +1076,7 @@ test('interprets launch template in definition order and maps each permission it
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: workspace },
     },
@@ -1135,6 +1145,7 @@ test('rejects permission mapping failures before executable probe, output prepar
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: probe,
       workspace: { admit: workspace },
     },
@@ -1189,7 +1200,6 @@ test('retains resolved prompt stdin and canonical result-schema file payloads be
     executable: '/resolved/fixture-agent',
     reportedVersion: '1.0.0',
   });
-  output.enqueuePrepare();
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
     { definitions: [definition] },
@@ -1198,6 +1208,7 @@ test('retains resolved prompt stdin and canonical result-schema file payloads be
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
@@ -1277,6 +1288,7 @@ test('rejects prospective argv total bytes including the resolved executable bef
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
@@ -1340,6 +1352,7 @@ test('rejects registered secret byte substrings in prospective argv with environ
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
@@ -1399,6 +1412,7 @@ test('rejects registered secret byte substrings in prospective scratch payloads 
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },

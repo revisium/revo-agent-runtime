@@ -14,6 +14,7 @@ import { FakeInvocationClock } from '../execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../execution/fake-output-claim-port.js';
 import { FakeInvocationOutputPort } from '../execution/fake-output-port.js';
+import { FakeOutputPreparationPort } from '../execution/fake-output-preparation-port.js';
 
 const bindingToken = (agentId: string, definitionDigest: string): ExecutionBindingToken =>
   ExecutionBindingToken.create({
@@ -102,6 +103,7 @@ export const createAcceptedInvocationLifecycleSubject = (
       execution,
       clock,
       output,
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       outputClaim: new FakeOutputClaimPort('created'),
       workspace: {
         admit: async () =>

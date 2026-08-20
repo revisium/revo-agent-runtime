@@ -5,6 +5,7 @@ import { FakeInvocationClock } from '../execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../execution/fake-output-claim-port.js';
 import { FakeInvocationOutputPort } from '../execution/fake-output-port.js';
+import { FakeOutputPreparationPort } from '../execution/fake-output-preparation-port.js';
 import { FreshAvailableExecutableProbePort } from '../probe/fresh-available-executable-probe-port.js';
 
 const defaultResultSchema = Object.freeze({
@@ -21,6 +22,7 @@ export interface LifecycleConformanceSubject {
   readonly execution: FakeInvocationExecutionPort;
   readonly manager: LifecycleManager;
   readonly output: FakeInvocationOutputPort;
+  readonly outputPreparation: FakeOutputPreparationPort;
   createInput(
     invocationId: string,
     overrides?: Readonly<{
@@ -66,6 +68,7 @@ export const createLifecycleConformanceSubject = (
   const clock = new FakeInvocationClock({ initialNowMs: 0 });
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
+  const outputPreparation = new FakeOutputPreparationPort('prepared');
   const managerOptions = Object.freeze({
     definitions: Object.freeze([definition]),
     ...(options.maxCompletedInvocations === undefined
@@ -77,6 +80,7 @@ export const createLifecycleConformanceSubject = (
     execution,
     clock,
     output,
+    outputPreparation,
     outputClaim: new FakeOutputClaimPort('created'),
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
     workspace: {
@@ -91,6 +95,7 @@ export const createLifecycleConformanceSubject = (
     execution,
     manager,
     output,
+    outputPreparation,
     createInput,
     start: (input: unknown) => manager.start(input),
   });
