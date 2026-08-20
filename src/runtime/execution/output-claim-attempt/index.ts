@@ -5,6 +5,7 @@ export type { ClaimedInvocationOutput } from './claimed-invocation-output.js';
 export type { OutputClaimGuard } from './output-claim-guard.js';
 export { beginOutputClaim } from './begin-output-claim.js';
 export { inspectOutputClaimGuard } from './inspect-output-claim-guard.js';
+export { isClaimedInvocationOutput } from './is-claimed-invocation-output.js';
 export { createOutputClaimAttempt } from './create-output-claim-attempt.js';
 export type { OutputClaimExclusiveCreatePort } from './output-claim-exclusive-create-port.js';
 export type { OutputClaimExclusiveCreateRequest } from './output-claim-exclusive-create-request.js';
