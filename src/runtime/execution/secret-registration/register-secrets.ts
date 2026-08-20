@@ -1,4 +1,5 @@
 import { reflectiveObjectRead } from '../reflective-object-read.js';
+import { RegisteredSecrets } from './registered-secrets.js';
 import type { SealedSecretRegistration } from './sealed-secret-registration.js';
 import type { SecretRegistrationRequest } from './secret-registration-request.js';
 
@@ -94,7 +95,7 @@ export const registerSecrets = (request: SecretRegistrationRequest): SealedSecre
     for (const secret of observed.invocationSecrets) unique.add(secret);
     return Object.freeze({
       status: 'registered',
-      secretValues: Object.freeze([...unique]),
+      registeredSecrets: RegisteredSecrets.create([...unique]),
     });
   } catch {
     return Object.freeze({ status: 'rejected', reason: 'invalid_request' });

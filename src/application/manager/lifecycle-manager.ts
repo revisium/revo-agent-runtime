@@ -17,6 +17,7 @@ import {
   PreparedLaunch,
   prepareInvocationPayloads,
   registerSecrets,
+  revealRegisteredSecrets,
   StartContextSnapshot,
   type ChildEnvironmentCapture,
   type InvocationExecutionPorts,
@@ -580,6 +581,8 @@ class InternalInvocationLifecycleManager {
       invocationSecrets: childEnvironment.secretValues,
     });
     if (registeredSecrets.status === 'rejected') return Object.freeze({ status: 'rejected' });
+    const secretValues = revealRegisteredSecrets(registeredSecrets.registeredSecrets);
+    if (secretValues === undefined) return Object.freeze({ status: 'rejected' });
     return Object.freeze({
       status: 'accepted',
       target,
@@ -587,7 +590,7 @@ class InternalInvocationLifecycleManager {
       effectiveInputs,
       resultSchemaValidator,
       childEnvironment,
-      secretValues: registeredSecrets.secretValues,
+      secretValues,
     });
   }
 

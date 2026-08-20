@@ -1,7 +1,9 @@
+import type { RegisteredSecrets } from './registered-secrets.js';
+
 export type SealedSecretRegistration =
   | Readonly<{
       status: 'registered';
-      secretValues: readonly string[];
+      registeredSecrets: RegisteredSecrets;
     }>
   | Readonly<{
       status: 'rejected';
