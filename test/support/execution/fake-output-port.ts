@@ -4,12 +4,17 @@ import type {
 } from '../../../src/runtime/execution/index.js';
 import type { JsonObject, JsonValue } from '../../../src/runtime/spec/index.js';
 
+type OutputAdmissionRequest = Parameters<InvocationExecutionPorts['output']['admit']>[0];
+type OutputAdmissionResult = Awaited<ReturnType<InvocationExecutionPorts['output']['admit']>>;
+
 export type InvocationOutputCall =
+  | { readonly type: 'admit'; readonly request: OutputAdmissionRequest }
   | { readonly type: 'prepare' }
   | { readonly type: 'record-terminal-result'; readonly outcome: NormalizedInvocationOutcome }
   | { readonly type: 'record-event' };
 
 export interface FakeInvocationOutputControls {
+  enqueueAdmission(result: OutputAdmissionResult | (() => OutputAdmissionResult)): void;
   enqueuePrepare(result?: Error): void;
   enqueueTerminalResultRecording(result?: Error): void;
   enqueuePendingTerminalResultRecording(): void;
@@ -143,6 +148,8 @@ const copyOutcome = (outcome: NormalizedInvocationOutcome): NormalizedInvocation
 export class FakeInvocationOutputPort
   implements InvocationOutputPort, FakeInvocationOutputControls
 {
+  private readonly admissionQueue: Array<OutputAdmissionResult | (() => OutputAdmissionResult)> =
+    [];
   private readonly prepareQueue: (Error | undefined)[] = [];
   private readonly terminalResultRecordingQueue: TerminalResultRecording[] = [];
   private readonly pendingTerminalResultRecordings = new Map<number, Deferred>();
@@ -150,6 +157,10 @@ export class FakeInvocationOutputPort
   private readonly callLog: InvocationOutputCall[] = [];
   private readonly terminalResults: NormalizedInvocationOutcome[] = [];
   private nextPendingTerminalResultRecordingId = 1;
+
+  enqueueAdmission(result: OutputAdmissionResult | (() => OutputAdmissionResult)): void {
+    this.admissionQueue.push(result);
+  }
 
   enqueuePrepare(result?: Error): void {
     this.prepareQueue.push(result);
@@ -177,6 +188,14 @@ export class FakeInvocationOutputPort
 
   enqueueEventRecording(result?: Error): void {
     this.eventRecordingQueue.push(result);
+  }
+
+  async admit(request: OutputAdmissionRequest): Promise<OutputAdmissionResult> {
+    const copiedRequest = Object.freeze({ ...request });
+    this.record(Object.freeze({ type: 'admit', request: copiedRequest }));
+    const result = this.admissionQueue.shift();
+    if (result === undefined) return Object.freeze({ status: 'admitted', plan: copiedRequest });
+    return typeof result === 'function' ? result() : result;
   }
 
   async prepare(): Promise<void> {
@@ -248,5 +267,6 @@ export class FakeInvocationOutputPort
 const copyOutcomeCall = (call: InvocationOutputCall): InvocationOutputCall => {
   if (call.type === 'record-terminal-result')
     return Object.freeze({ type: call.type, outcome: copyOutcome(call.outcome) });
+  if (call.type === 'admit') return Object.freeze({ type: call.type, request: call.request });
   return Object.freeze({ type: call.type });
 };

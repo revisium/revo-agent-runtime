@@ -1,20 +1,13 @@
 import { stat } from 'node:fs/promises';
-import { posix } from 'node:path';
 
 import type { WorkspaceAdmissionResult } from '../../runtime/execution/index.js';
+import { nodePosixPathAdmission } from './node-posix-path-admission.js';
 
 export class NodePosixWorkspacePort {
   async admit(path: string): Promise<WorkspaceAdmissionResult> {
     if (process.platform !== 'linux')
       return Object.freeze({ status: 'rejected', reason: 'unsupported_platform' });
-    if (
-      path.length === 0 ||
-      path.length > 4_096 ||
-      new TextEncoder().encode(path).byteLength > 4_096 ||
-      path.includes('\0') ||
-      !path.startsWith('/') ||
-      path !== posix.normalize(path)
-    )
+    if (nodePosixPathAdmission.isInvalidNormalizedAbsolutePosixPath(path))
       return Object.freeze({ status: 'rejected', reason: 'invalid_path' });
     try {
       if (!(await stat(path)).isDirectory())

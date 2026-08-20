@@ -3,6 +3,13 @@ import { canonicalEffectiveInputs } from './canonical-effective-inputs.js';
 import { ExecutionBindingToken } from './execution-binding-token.js';
 import type { ResultSchemaValidator } from './result-schema-validator.js';
 
+interface OutputResourcePlan {
+  readonly invocationId: string;
+  readonly outputDirectory: string;
+  readonly needsPromptFile: boolean;
+  readonly needsResultSchemaFile: boolean;
+}
+
 interface PreparedLaunchPin {
   readonly agentId: string;
   readonly agentVersion: string;
@@ -34,6 +41,7 @@ interface PreparedLaunchOptions {
   readonly childEnvironmentSecretValues: readonly string[];
   readonly secretValues: readonly string[];
   readonly resultSchemaValidator: ResultSchemaValidator;
+  readonly outputResourcePlan: OutputResourcePlan;
 }
 
 interface PreparedLaunchBinding {
@@ -46,6 +54,27 @@ interface PreparedLaunchBinding {
     readonly result: 'stdout' | 'protocol';
   };
 }
+
+interface PreparedLaunchMaterial extends PreparedLaunchOptions {
+  readonly binding: PreparedLaunchBinding;
+  readonly bindingToken: unknown;
+}
+
+const preparedLaunchKeys = Object.freeze([
+  'pin',
+  'executable',
+  'reportedVersion',
+  'limits',
+  'effectiveParameters',
+  'effectivePermissions',
+  'childEnvironment',
+  'childEnvironmentSecretValues',
+  'secretValues',
+  'resultSchemaValidator',
+  'outputResourcePlan',
+  'binding',
+  'bindingToken',
+]);
 
 const hasExactKeys = (value: object, expected: readonly string[]): boolean => {
   const keys = Reflect.ownKeys(value);
@@ -262,6 +291,39 @@ const copyStringRecord = (value: unknown): Readonly<Record<string, string>> | un
   return Object.freeze(record);
 };
 
+const copyOutputResourcePlan = (value: unknown): OutputResourcePlan | undefined => {
+  if (value === null || typeof value !== 'object') return undefined;
+  if (!isPlainObservedObject(value)) return undefined;
+  if (
+    !hasExactKeys(value, [
+      'invocationId',
+      'outputDirectory',
+      'needsPromptFile',
+      'needsResultSchemaFile',
+    ])
+  )
+    return undefined;
+  const invocationId = ownNonEmptyString(value, 'invocationId');
+  const outputDirectory = ownNonEmptyString(value, 'outputDirectory');
+  const needsPromptFile = Object.getOwnPropertyDescriptor(value, 'needsPromptFile');
+  const needsResultSchemaFile = Object.getOwnPropertyDescriptor(value, 'needsResultSchemaFile');
+  if (
+    invocationId === undefined ||
+    outputDirectory === undefined ||
+    !isDataDescriptor(needsPromptFile) ||
+    !isDataDescriptor(needsResultSchemaFile) ||
+    typeof needsPromptFile.value !== 'boolean' ||
+    typeof needsResultSchemaFile.value !== 'boolean'
+  )
+    return undefined;
+  return Object.freeze({
+    invocationId,
+    outputDirectory,
+    needsPromptFile: needsPromptFile.value,
+    needsResultSchemaFile: needsResultSchemaFile.value,
+  });
+};
+
 const copyStringArray = (value: unknown): readonly string[] | undefined => {
   if (!Array.isArray(value)) return undefined;
   const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
@@ -288,6 +350,100 @@ const copyStringArray = (value: unknown): readonly string[] | undefined => {
   return Object.freeze(result);
 };
 
+const ownCopiedValue = <Value>(
+  source: object,
+  key: string,
+  copy: (value: unknown) => Value | undefined,
+): Value | undefined => {
+  const descriptor = Object.getOwnPropertyDescriptor(source, key);
+  return isDataDescriptor(descriptor) ? copy(descriptor.value) : undefined;
+};
+
+const copyPreparedLaunchPin = (value: object): PreparedLaunchPin | undefined => {
+  const pinDescriptor = Object.getOwnPropertyDescriptor(value, 'pin');
+  if (
+    !isDataDescriptor(pinDescriptor) ||
+    pinDescriptor.value === null ||
+    typeof pinDescriptor.value !== 'object' ||
+    !isPlainObservedObject(pinDescriptor.value) ||
+    !hasExactKeys(pinDescriptor.value, ['agentId', 'agentVersion', 'definitionDigest'])
+  )
+    return undefined;
+  const agentId = ownNonEmptyString(pinDescriptor.value, 'agentId');
+  const agentVersion = ownNonEmptyString(pinDescriptor.value, 'agentVersion');
+  const definitionDigest = ownNonEmptyString(pinDescriptor.value, 'definitionDigest');
+  if (agentId === undefined || agentVersion === undefined || definitionDigest === undefined)
+    return undefined;
+  return Object.freeze({ agentId, agentVersion, definitionDigest });
+};
+
+const copyPreparedLaunchMaterial = (value: object): PreparedLaunchMaterial | undefined => {
+  const pin = copyPreparedLaunchPin(value);
+  const executable = ownNonEmptyString(value, 'executable');
+  const reportedVersion = ownNonEmptyString(value, 'reportedVersion');
+  const limits = ownCopiedValue(value, 'limits', copyLimits);
+  const effectiveParameters = ownCopiedValue(
+    value,
+    'effectiveParameters',
+    canonicalEffectiveInputs.parameters,
+  );
+  const effectivePermissions = ownCopiedValue(
+    value,
+    'effectivePermissions',
+    canonicalEffectiveInputs.permissions,
+  );
+  const childEnvironment = ownCopiedValue(value, 'childEnvironment', copyStringRecord);
+  const childEnvironmentSecretValues = ownCopiedValue(
+    value,
+    'childEnvironmentSecretValues',
+    copyStringArray,
+  );
+  const secretValues = ownCopiedValue(value, 'secretValues', copyStringArray);
+  const resultSchemaValidator = ownResultSchemaValidator(value);
+  const outputResourcePlan = ownCopiedValue(value, 'outputResourcePlan', copyOutputResourcePlan);
+  const binding = ownCopiedValue(value, 'binding', copyBinding);
+  const bindingTokenDescriptor = Object.getOwnPropertyDescriptor(value, 'bindingToken');
+  const bindingToken = isDataDescriptor(bindingTokenDescriptor)
+    ? bindingTokenDescriptor.value
+    : undefined;
+  if (
+    pin === undefined ||
+    executable === undefined ||
+    reportedVersion === undefined ||
+    limits === undefined ||
+    effectiveParameters === undefined ||
+    effectivePermissions === undefined ||
+    childEnvironment === undefined ||
+    childEnvironmentSecretValues === undefined ||
+    secretValues === undefined ||
+    resultSchemaValidator === undefined ||
+    outputResourcePlan === undefined ||
+    binding === undefined
+  )
+    return undefined;
+  return Object.freeze({
+    pin,
+    executable,
+    reportedVersion,
+    limits,
+    effectiveParameters,
+    effectivePermissions,
+    childEnvironment,
+    childEnvironmentSecretValues,
+    secretValues,
+    resultSchemaValidator,
+    outputResourcePlan,
+    binding,
+    bindingToken,
+  });
+};
+
+const hasValidBindingToken = (material: PreparedLaunchMaterial): boolean =>
+  ExecutionBindingToken.matches(material.bindingToken, {
+    ...material.pin,
+    ...material.binding,
+  });
+
 export class PreparedLaunch {
   readonly childEnvironment!: Readonly<Record<string, string>>;
   readonly childEnvironmentSecretValues!: readonly string[];
@@ -295,6 +451,7 @@ export class PreparedLaunch {
   readonly effectiveParameters: JsonObject;
   readonly effectivePermissions: JsonObject;
   readonly resultSchemaValidator!: ResultSchemaValidator;
+  readonly outputResourcePlan!: OutputResourcePlan;
   readonly pin: PreparedLaunchPin;
   readonly executable: string;
   readonly limits: PreparedLaunchLimits;
@@ -327,6 +484,12 @@ export class PreparedLaunch {
       writable: false,
       configurable: false,
     });
+    Object.defineProperty(this, 'outputResourcePlan', {
+      value: options.outputResourcePlan,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
     this.pin = Object.freeze({
       agentId: options.pin.agentId,
       agentVersion: options.pin.agentVersion,
@@ -341,113 +504,9 @@ export class PreparedLaunch {
   static create(value: unknown): PreparedLaunch | undefined {
     if (value === null || typeof value !== 'object') return undefined;
     if (!isPlainObservedObject(value)) return undefined;
-    if (
-      !hasExactKeys(value, [
-        'pin',
-        'executable',
-        'reportedVersion',
-        'limits',
-        'effectiveParameters',
-        'effectivePermissions',
-        'childEnvironment',
-        'childEnvironmentSecretValues',
-        'secretValues',
-        'resultSchemaValidator',
-        'binding',
-        'bindingToken',
-      ])
-    )
-      return undefined;
-    const pinDescriptor = Object.getOwnPropertyDescriptor(value, 'pin');
-    if (
-      !isDataDescriptor(pinDescriptor) ||
-      pinDescriptor.value === null ||
-      typeof pinDescriptor.value !== 'object'
-    )
-      return undefined;
-    if (!isPlainObservedObject(pinDescriptor.value)) return undefined;
-    if (!hasExactKeys(pinDescriptor.value, ['agentId', 'agentVersion', 'definitionDigest']))
-      return undefined;
-    const agentId = ownNonEmptyString(pinDescriptor.value, 'agentId');
-    const agentVersion = ownNonEmptyString(pinDescriptor.value, 'agentVersion');
-    const definitionDigest = ownNonEmptyString(pinDescriptor.value, 'definitionDigest');
-    const executable = ownNonEmptyString(value, 'executable');
-    const reportedVersion = ownNonEmptyString(value, 'reportedVersion');
-    const limitsDescriptor = Object.getOwnPropertyDescriptor(value, 'limits');
-    const limits = isDataDescriptor(limitsDescriptor)
-      ? copyLimits(limitsDescriptor.value)
-      : undefined;
-    const effectiveParametersDescriptor = Object.getOwnPropertyDescriptor(
-      value,
-      'effectiveParameters',
-    );
-    const effectiveParameters = isDataDescriptor(effectiveParametersDescriptor)
-      ? canonicalEffectiveInputs.parameters(effectiveParametersDescriptor.value)
-      : undefined;
-    const effectivePermissionsDescriptor = Object.getOwnPropertyDescriptor(
-      value,
-      'effectivePermissions',
-    );
-    const effectivePermissions = isDataDescriptor(effectivePermissionsDescriptor)
-      ? canonicalEffectiveInputs.permissions(effectivePermissionsDescriptor.value)
-      : undefined;
-    const childEnvironmentDescriptor = Object.getOwnPropertyDescriptor(value, 'childEnvironment');
-    const childEnvironment = isDataDescriptor(childEnvironmentDescriptor)
-      ? copyStringRecord(childEnvironmentDescriptor.value)
-      : undefined;
-    const childEnvironmentSecretValuesDescriptor = Object.getOwnPropertyDescriptor(
-      value,
-      'childEnvironmentSecretValues',
-    );
-    const childEnvironmentSecretValues = isDataDescriptor(childEnvironmentSecretValuesDescriptor)
-      ? copyStringArray(childEnvironmentSecretValuesDescriptor.value)
-      : undefined;
-    const secretValuesDescriptor = Object.getOwnPropertyDescriptor(value, 'secretValues');
-    const secretValues = isDataDescriptor(secretValuesDescriptor)
-      ? copyStringArray(secretValuesDescriptor.value)
-      : undefined;
-    const resultSchemaValidator = ownResultSchemaValidator(value);
-    const bindingDescriptor = Object.getOwnPropertyDescriptor(value, 'binding');
-    const binding = isDataDescriptor(bindingDescriptor)
-      ? copyBinding(bindingDescriptor.value)
-      : undefined;
-    const bindingTokenDescriptor = Object.getOwnPropertyDescriptor(value, 'bindingToken');
-    const bindingToken = isDataDescriptor(bindingTokenDescriptor)
-      ? bindingTokenDescriptor.value
-      : undefined;
-    if (
-      agentId === undefined ||
-      agentVersion === undefined ||
-      definitionDigest === undefined ||
-      executable === undefined ||
-      reportedVersion === undefined ||
-      limits === undefined ||
-      effectiveParameters === undefined ||
-      effectivePermissions === undefined ||
-      childEnvironment === undefined ||
-      childEnvironmentSecretValues === undefined ||
-      secretValues === undefined ||
-      resultSchemaValidator === undefined ||
-      binding === undefined ||
-      !ExecutionBindingToken.matches(bindingToken, {
-        agentId,
-        agentVersion,
-        definitionDigest,
-        ...binding,
-      })
-    )
-      return undefined;
-    return new PreparedLaunch({
-      pin: { agentId, agentVersion, definitionDigest },
-      executable,
-      reportedVersion,
-      limits,
-      effectiveParameters,
-      effectivePermissions,
-      childEnvironment,
-      childEnvironmentSecretValues,
-      secretValues,
-      resultSchemaValidator,
-    });
+    if (!hasExactKeys(value, preparedLaunchKeys)) return undefined;
+    const material = copyPreparedLaunchMaterial(value);
+    if (material === undefined || !hasValidBindingToken(material)) return undefined;
+    return new PreparedLaunch(material);
   }
 }

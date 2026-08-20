@@ -22,6 +22,34 @@ export interface InvocationExecutionPorts {
     schedule(delayMs: number, callback: () => void): () => void;
   };
   readonly output: {
+    admit(
+      request: Readonly<{
+        invocationId: string;
+        outputDirectory: string;
+        needsPromptFile: boolean;
+        needsResultSchemaFile: boolean;
+      }>,
+    ): Promise<
+      | Readonly<{
+          status: 'admitted';
+          plan: Readonly<{
+            invocationId: string;
+            outputDirectory: string;
+            needsPromptFile: boolean;
+            needsResultSchemaFile: boolean;
+          }>;
+        }>
+      | Readonly<{
+          status: 'rejected';
+          reason:
+            | 'unsupported_platform'
+            | 'invalid_path'
+            | 'missing_parent'
+            | 'parent_not_directory'
+            | 'leaf_exists'
+            | 'inspection_failed';
+        }>
+    >;
     prepare(): Promise<void>;
     recordTerminalResult(outcome: NormalizedInvocationOutcome): Promise<void>;
     recordEvent(): Promise<void>;

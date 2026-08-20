@@ -48,6 +48,12 @@ const preparedLaunch = (): PreparedLaunch => {
     childEnvironmentSecretValues: [],
     secretValues: [],
     resultSchemaValidator,
+    outputResourcePlan: {
+      invocationId: 'test-invocation',
+      outputDirectory: '/outputs/invocation',
+      needsPromptFile: false,
+      needsResultSchemaFile: false,
+    },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',

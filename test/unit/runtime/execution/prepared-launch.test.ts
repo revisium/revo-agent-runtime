@@ -61,6 +61,12 @@ test('creates prepared launch evidence with the exact execution-owned shape', ()
     childEnvironmentSecretValues,
     secretValues,
     resultSchemaValidator,
+    outputResourcePlan: {
+      invocationId: 'test-invocation',
+      outputDirectory: '/outputs/invocation',
+      needsPromptFile: false,
+      needsResultSchemaFile: false,
+    },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -104,6 +110,12 @@ test('accepts null-prototype record containers', () => {
     childEnvironmentSecretValues,
     secretValues,
     resultSchemaValidator,
+    outputResourcePlan: {
+      invocationId: 'test-invocation',
+      outputDirectory: '/outputs/invocation',
+      needsPromptFile: false,
+      needsResultSchemaFile: false,
+    },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -316,6 +328,12 @@ test('rejects missing, empty, and wrong-type semantic values', () => {
     childEnvironmentSecretValues,
     secretValues,
     resultSchemaValidator,
+    outputResourcePlan: {
+      invocationId: 'test-invocation',
+      outputDirectory: '/outputs/invocation',
+      needsPromptFile: false,
+      needsResultSchemaFile: false,
+    },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -354,6 +372,12 @@ test('authenticates the exact full binding tuple in finalization material', () =
     childEnvironmentSecretValues,
     secretValues,
     resultSchemaValidator,
+    outputResourcePlan: {
+      invocationId: 'test-invocation',
+      outputDirectory: '/outputs/invocation',
+      needsPromptFile: false,
+      needsResultSchemaFile: false,
+    },
     binding: {
       protocolDriverId: 'native/stdio-v1' as const,
       resultParserId: 'codex-jsonl/v1' as const,
@@ -391,6 +415,12 @@ test('requires an authentic binding token matched to the launch pin', () => {
     childEnvironmentSecretValues,
     secretValues,
     resultSchemaValidator,
+    outputResourcePlan: {
+      invocationId: 'test-invocation',
+      outputDirectory: '/outputs/invocation',
+      needsPromptFile: false,
+      needsResultSchemaFile: false,
+    },
     binding: {
       protocolDriverId: 'native/stdio-v1' as const,
       resultParserId: 'codex-jsonl/v1' as const,
@@ -439,6 +469,12 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
     childEnvironmentSecretValues: ['secret'],
     secretValues: ['configured-secret', 'secret'],
     resultSchemaValidator,
+    outputResourcePlan: {
+      invocationId: 'test-invocation',
+      outputDirectory: '/outputs/invocation',
+      needsPromptFile: false,
+      needsResultSchemaFile: false,
+    },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -520,6 +556,12 @@ test('requires copied effective limits in finalization material', () => {
     childEnvironmentSecretValues,
     secretValues,
     resultSchemaValidator,
+    outputResourcePlan: {
+      invocationId: 'test-invocation',
+      outputDirectory: '/outputs/invocation',
+      needsPromptFile: false,
+      needsResultSchemaFile: false,
+    },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -551,6 +593,12 @@ test('keeps registered secret values out of enumerable launch views', () => {
     childEnvironmentSecretValues,
     secretValues,
     resultSchemaValidator,
+    outputResourcePlan: {
+      invocationId: 'test-invocation',
+      outputDirectory: '/outputs/invocation',
+      needsPromptFile: false,
+      needsResultSchemaFile: false,
+    },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',

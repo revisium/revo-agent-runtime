@@ -51,6 +51,13 @@ type TerminalInvocationEvent = Readonly<{
 type TerminalEventListener = (event: TerminalInvocationEvent) => void;
 type TerminalSubscriptionAdmission = ReturnType<TerminalSubscriptions['subscribe']>;
 
+interface OutputResourcePlan {
+  readonly invocationId: string;
+  readonly outputDirectory: string;
+  readonly needsPromptFile: boolean;
+  readonly needsResultSchemaFile: boolean;
+}
+
 interface LifecycleHandle {
   readonly invocationId: string;
   result(): Promise<NormalizedInvocationOutcome>;
@@ -216,6 +223,19 @@ const createNamedHostEnvironmentSnapshot = (
   return Object.freeze(snapshot);
 };
 
+const createOutputAdmissionRequest = (
+  snapshot: InvocationInputSnapshot,
+  binding: PreflightBinding,
+): OutputResourcePlan | undefined => {
+  if (snapshot.outputDirectory === undefined) return undefined;
+  return Object.freeze({
+    invocationId: snapshot.invocationId,
+    outputDirectory: snapshot.outputDirectory,
+    needsPromptFile: binding.binding.delivery.prompt === 'file',
+    needsResultSchemaFile: binding.binding.delivery.resultSchema === 'file',
+  });
+};
+
 const createHandle = (
   invocationId: string,
   completion: Deferred<NormalizedInvocationOutcome>,
@@ -340,6 +360,10 @@ class InternalInvocationLifecycleManager {
       (await workspace.admit(snapshot.workspace)).status !== 'admitted'
     )
       return Object.freeze({ status: 'rejected' });
+    const outputAdmissionRequest = createOutputAdmissionRequest(snapshot, binding);
+    if (outputAdmissionRequest === undefined) return Object.freeze({ status: 'rejected' });
+    const outputAdmission = await this.ports.output.admit(outputAdmissionRequest);
+    if (outputAdmission.status !== 'admitted') return Object.freeze({ status: 'rejected' });
     const port = this.ports.executableProbe;
     if (port === undefined) return Object.freeze({ status: 'rejected' });
     const result = await probeExecutable(target, port);
@@ -365,6 +389,7 @@ class InternalInvocationLifecycleManager {
         childEnvironmentSecretValues: childEnvironment.secretValues,
         secretValues,
         resultSchemaValidator,
+        outputResourcePlan: outputAdmission.plan,
         binding: binding.binding,
         bindingToken: binding.bindingToken,
       });

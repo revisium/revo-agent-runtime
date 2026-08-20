@@ -314,7 +314,154 @@ test('retains package-owned canonical effective parameter and permission copies 
   ]);
 });
 
-test('rejects mismatched or incomplete available probe evidence before output and execution', async () => {
+test('plans output resources after workspace admission and before executable probe', async () => {
+  const definition = buildAgentDefinition({
+    delivery: { prompt: 'file', resultSchema: 'file', result: 'stdout' },
+    launch: {
+      command: '/fixture/bin/agent',
+      args: [{ kind: 'prompt-file' }, { kind: 'result-schema-file' }],
+      versionProbe: { args: ['--version'], stream: 'stdout', prefix: 'agent ', timeoutMs: 1_000 },
+    },
+  });
+  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  if (validatedDefinition === undefined) throw new Error('Expected validated definition');
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const calls: string[] = [];
+  const workspace = vi.fn(async () => {
+    calls.push('workspace');
+    return { status: 'admitted' as const, directory: '/workspace/project' };
+  });
+  output.enqueueAdmission(() => {
+    calls.push('output-admission');
+    return {
+      status: 'admitted' as const,
+      plan: {
+        invocationId: 'output-resource-plan',
+        outputDirectory: '/outputs/invocation',
+        needsPromptFile: true,
+        needsResultSchemaFile: true,
+      },
+    };
+  });
+  mocks.probeExecutable.mockImplementationOnce(async () => {
+    calls.push('probe');
+    return {
+      status: 'available' as const,
+      agent: { id: definition.id, version: definition.version },
+      definitionDigest: validatedDefinition.definitionDigest,
+      executable: '/resolved/fixture-agent',
+      reportedVersion: '1.0.0',
+    };
+  });
+  output.enqueuePrepare();
+  execution.enqueueStart('running');
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition] },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
+      workspace: { admit: workspace },
+    },
+  );
+
+  const outcome = await manager.start({
+    invocationId: 'output-resource-plan',
+    agent: { id: definition.id, version: definition.version },
+    prompt: 'Return JSON.',
+    workspace: { directory: '/workspace/project' },
+    parameters: {},
+    permissions: {},
+    result: { schema: resultSchema },
+    output: { directory: '/outputs/invocation' },
+  });
+
+  expect(outcome.status).toBe('accepted');
+  expect(calls).toEqual(['workspace', 'output-admission', 'probe']);
+  expect(output.calls()).toEqual([
+    {
+      type: 'admit',
+      request: {
+        invocationId: 'output-resource-plan',
+        outputDirectory: '/outputs/invocation',
+        needsPromptFile: true,
+        needsResultSchemaFile: true,
+      },
+    },
+    { type: 'prepare' },
+  ]);
+  expect(execution.startedPreparedLaunches()).toEqual([
+    expect.objectContaining({
+      outputResourcePlan: {
+        invocationId: 'output-resource-plan',
+        outputDirectory: '/outputs/invocation',
+        needsPromptFile: true,
+        needsResultSchemaFile: true,
+      },
+    }),
+  ]);
+});
+
+test('rejects output admission failures before executable probe, output prepare, and execution', async () => {
+  const definition = buildAgentDefinition({
+    delivery: { prompt: 'stdin', resultSchema: 'argument', result: 'stdout' },
+    launch: {
+      command: '/fixture/bin/agent',
+      args: [{ kind: 'result-schema' }],
+      versionProbe: { args: ['--version'], stream: 'stdout', prefix: 'agent ', timeoutMs: 1_000 },
+    },
+  });
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const probe = new FakeExecutableProbePort({ platform: 'linux' });
+  const workspace = vi.fn(async () => ({
+    status: 'admitted' as const,
+    directory: '/workspace/project',
+  }));
+  output.enqueueAdmission({ status: 'rejected', reason: 'leaf_exists' });
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition] },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: probe,
+      workspace: { admit: workspace },
+    },
+  );
+
+  await expect(
+    manager.start({
+      invocationId: 'inadmissible-output',
+      agent: { id: definition.id, version: definition.version },
+      prompt: 'Return JSON.',
+      workspace: { directory: '/workspace/project' },
+      parameters: {},
+      permissions: {},
+      result: { schema: resultSchema },
+      output: { directory: '/outputs/invocation' },
+    }),
+  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+
+  expect(workspace).toHaveBeenCalledTimes(1);
+  expect(output.calls()).toEqual([
+    {
+      type: 'admit',
+      request: {
+        invocationId: 'inadmissible-output',
+        outputDirectory: '/outputs/invocation',
+        needsPromptFile: false,
+        needsResultSchemaFile: false,
+      },
+    },
+  ]);
+  expect(probe.calls()).toEqual([]);
+  expect(execution.calls()).toEqual([]);
+});
+
+test('rejects mismatched or incomplete available probe evidence after output admission and before prepare and execution', async () => {
   const definition = buildAgentDefinition();
   const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
   if (validatedDefinition === undefined) throw new Error('Expected validated definition');
@@ -375,7 +522,22 @@ test('rejects mismatched or incomplete available probe evidence before output an
     { status: 'rejected', reason: 'preflight_failed' },
   ]);
 
-  expect(output.calls()).toEqual([]);
+  expect(output.calls()).toEqual(
+    [
+      'mismatched-agent-id',
+      'mismatched-agent-version',
+      'mismatched-definition-digest',
+      'missing-reported-version',
+    ].map((invocationId) => ({
+      type: 'admit' as const,
+      request: {
+        invocationId,
+        outputDirectory: '/outputs/invocation',
+        needsPromptFile: false,
+        needsResultSchemaFile: false,
+      },
+    })),
+  );
   expect(execution.calls()).toEqual([]);
 });
 
