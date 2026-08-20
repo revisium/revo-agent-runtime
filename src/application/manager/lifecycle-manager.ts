@@ -1,4 +1,5 @@
 import {
+  canonicalizeJsonBytes,
   compileConsumerSchema,
   validateConsumerSchemaProfile,
   validateManagerOptions,
@@ -12,6 +13,7 @@ import {
   InvocationLifecycle,
   interpretArgumentTemplate,
   PreparedLaunch,
+  prepareInvocationPayloads,
   registerSecrets,
   StartContextSnapshot,
   type ChildEnvironmentCapture,
@@ -155,6 +157,18 @@ interface ResourceIndependentPreflight {
   readonly resultSchemaValidator: ResultSchemaValidator;
   readonly childEnvironment: CapturedChildEnvironment;
   readonly secretValues: readonly string[];
+}
+
+interface ResourceBoundPreflight {
+  readonly interpretedTemplate: Extract<
+    ReturnType<typeof interpretArgumentTemplate>,
+    { status: 'interpreted' }
+  >;
+  readonly outputPlan: OutputResourcePlan;
+  readonly preparedPayloads: Extract<
+    ReturnType<typeof prepareInvocationPayloads>,
+    { status: 'prepared' }
+  >;
 }
 
 type PreflightRejection =
@@ -336,6 +350,51 @@ class InternalInvocationLifecycleManager {
     }
   }
 
+  private async prepareResourceBoundPreflight(
+    snapshot: InvocationInputSnapshot,
+    request: Readonly<{
+      binding: PreflightBinding;
+      effectiveInputs: EffectiveInvocationInputs;
+      target: ValidatedDefinition;
+    }>,
+  ): Promise<
+    Readonly<{ status: 'accepted' } & ResourceBoundPreflight> | Readonly<{ status: 'rejected' }>
+  > {
+    const workspace = this.ports.workspace;
+    if (workspace === undefined || typeof workspace.admit !== 'function')
+      return Object.freeze({ status: 'rejected' });
+    const workspaceAdmission = await workspace.admit(snapshot.workspace);
+    if (workspaceAdmission.status !== 'admitted') return Object.freeze({ status: 'rejected' });
+    const outputAdmissionRequest = createOutputAdmissionRequest(snapshot, request.binding);
+    if (outputAdmissionRequest === undefined) return Object.freeze({ status: 'rejected' });
+    const outputAdmission = await this.ports.output.admit(outputAdmissionRequest);
+    if (outputAdmission.status !== 'admitted') return Object.freeze({ status: 'rejected' });
+    const interpretedTemplate = interpretArgumentTemplate({
+      template: request.target.definition.launch.args,
+      effectiveParameters: request.effectiveInputs.parameters,
+      effectivePermissions: request.effectiveInputs.permissions,
+      outputResourcePlan: outputAdmission.plan,
+      permissionStrategy: request.binding.permissionStrategy,
+      workspace: workspaceAdmission,
+    });
+    if (interpretedTemplate.status === 'rejected') return Object.freeze({ status: 'rejected' });
+    if (snapshot.prompt === undefined) return Object.freeze({ status: 'rejected' });
+    const preparedPayloads = prepareInvocationPayloads({
+      binding: request.binding.binding,
+      interpretedArgumentTemplate: interpretedTemplate.template,
+      outputResourcePlan: outputAdmission.plan,
+      prompt: snapshot.prompt,
+      resultSchemaBytes: canonicalizeJsonBytes(snapshot.resultSchema),
+    });
+    if (preparedPayloads.status === 'rejected') return Object.freeze({ status: 'rejected' });
+    return Object.freeze({
+      status: 'accepted',
+      interpretedTemplate,
+      outputPlan: outputAdmission.plan,
+      preparedPayloads,
+    });
+  }
+
   private async preflight(
     snapshot: InvocationInputSnapshot,
     context: StartContextSnapshot,
@@ -354,24 +413,12 @@ class InternalInvocationLifecycleManager {
       childEnvironment,
       secretValues,
     } = resourceIndependent;
-    const workspace = this.ports.workspace;
-    if (workspace === undefined || typeof workspace.admit !== 'function')
-      return Object.freeze({ status: 'rejected' });
-    const workspaceAdmission = await workspace.admit(snapshot.workspace);
-    if (workspaceAdmission.status !== 'admitted') return Object.freeze({ status: 'rejected' });
-    const outputAdmissionRequest = createOutputAdmissionRequest(snapshot, binding);
-    if (outputAdmissionRequest === undefined) return Object.freeze({ status: 'rejected' });
-    const outputAdmission = await this.ports.output.admit(outputAdmissionRequest);
-    if (outputAdmission.status !== 'admitted') return Object.freeze({ status: 'rejected' });
-    const interpretedTemplate = interpretArgumentTemplate({
-      template: target.definition.launch.args,
-      effectiveParameters: effectiveInputs.parameters,
-      effectivePermissions: effectiveInputs.permissions,
-      outputResourcePlan: outputAdmission.plan,
-      permissionStrategy: binding.permissionStrategy,
-      workspace: workspaceAdmission,
+    const resourceBound = await this.prepareResourceBoundPreflight(snapshot, {
+      binding,
+      effectiveInputs,
+      target,
     });
-    if (interpretedTemplate.status === 'rejected') return Object.freeze({ status: 'rejected' });
+    if (resourceBound.status === 'rejected') return Object.freeze({ status: 'rejected' });
     const port = this.ports.executableProbe;
     if (port === undefined) return Object.freeze({ status: 'rejected' });
     const result = await probeExecutable(target, port);
@@ -397,8 +444,9 @@ class InternalInvocationLifecycleManager {
         childEnvironmentSecretValues: childEnvironment.secretValues,
         secretValues,
         resultSchemaValidator,
-        outputResourcePlan: outputAdmission.plan,
-        interpretedArgumentTemplate: interpretedTemplate.template,
+        outputResourcePlan: resourceBound.outputPlan,
+        interpretedArgumentTemplate: resourceBound.interpretedTemplate.template,
+        preparedPayloads: resourceBound.preparedPayloads.payloads,
         binding: binding.binding,
         bindingToken: binding.bindingToken,
       });

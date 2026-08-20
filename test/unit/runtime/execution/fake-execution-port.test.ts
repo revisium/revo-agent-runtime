@@ -48,6 +48,7 @@ const preparedLaunch = (): PreparedLaunch => {
       needsResultSchemaFile: false,
     },
     interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
+    preparedPayloads: { arguments: ['exec'], files: [] },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',

@@ -1149,3 +1149,67 @@ test('rejects permission mapping failures before executable probe, output prepar
   expect(probe.calls()).toEqual([]);
   expect(execution.calls()).toEqual([]);
 });
+
+test('retains resolved prompt stdin and canonical result-schema file payloads before output prepare', async () => {
+  const definition = buildAgentDefinition({
+    delivery: { prompt: 'stdin', resultSchema: 'file', result: 'stdout' },
+    launch: {
+      command: '/fixture/bin/agent',
+      args: [{ kind: 'literal', value: 'exec' }, { kind: 'result-schema-file' }],
+      versionProbe: { args: ['--version'], stream: 'stdout', prefix: 'agent ', timeoutMs: 1_000 },
+    },
+  });
+  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  if (validatedDefinition === undefined) throw new Error('Expected validated definition');
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  mocks.probeExecutable.mockResolvedValueOnce({
+    status: 'available',
+    agent: { id: definition.id, version: definition.version },
+    definitionDigest: validatedDefinition.definitionDigest,
+    executable: '/resolved/fixture-agent',
+    reportedVersion: '1.0.0',
+  });
+  output.enqueuePrepare();
+  execution.enqueueStart('running');
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition] },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
+      workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
+    },
+  );
+
+  const outcome = await manager.start({
+    invocationId: 'prepared-payloads',
+    agent: { id: definition.id, version: definition.version },
+    prompt: 'Return JSON.',
+    workspace: { directory: '/workspace/project' },
+    parameters: {},
+    permissions: {},
+    result: { schema: { type: 'object', $schema: 'https://json-schema.org/draft/2020-12/schema' } },
+    output: { directory: '/outputs/invocation' },
+  });
+
+  expect(outcome.status).toBe('accepted');
+  expect(execution.startedPreparedLaunches()).toEqual([
+    expect.objectContaining({
+      preparedPayloads: {
+        arguments: ['exec'],
+        stdin: new TextEncoder().encode('Return JSON.'),
+        files: [
+          {
+            kind: 'result-schema',
+            path: '/outputs/invocation/.scratch/result-schema.json',
+            bytes: new TextEncoder().encode(
+              '{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object"}',
+            ),
+          },
+        ],
+      },
+    }),
+  ]);
+});

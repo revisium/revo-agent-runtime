@@ -68,6 +68,7 @@ test('creates prepared launch evidence with the exact execution-owned shape', ()
       needsResultSchemaFile: false,
     },
     interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
+    preparedPayloads: { arguments: ['exec'], files: [] },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -121,6 +122,7 @@ test('accepts null-prototype record containers', () => {
       needsResultSchemaFile: false,
     },
     interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
+    preparedPayloads: { arguments: ['exec'], files: [] },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -340,6 +342,7 @@ test('rejects missing, empty, and wrong-type semantic values', () => {
       needsResultSchemaFile: false,
     },
     interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
+    preparedPayloads: { arguments: ['exec'], files: [] },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -385,6 +388,7 @@ test('authenticates the exact full binding tuple in finalization material', () =
       needsResultSchemaFile: false,
     },
     interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
+    preparedPayloads: { arguments: ['exec'], files: [] },
     binding: {
       protocolDriverId: 'native/stdio-v1' as const,
       resultParserId: 'codex-jsonl/v1' as const,
@@ -429,6 +433,7 @@ test('requires an authentic binding token matched to the launch pin', () => {
       needsResultSchemaFile: false,
     },
     interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
+    preparedPayloads: { arguments: ['exec'], files: [] },
     binding: {
       protocolDriverId: 'native/stdio-v1' as const,
       resultParserId: 'codex-jsonl/v1' as const,
@@ -484,6 +489,7 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
       needsResultSchemaFile: false,
     },
     interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
+    preparedPayloads: { arguments: ['exec'], files: [] },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -572,6 +578,7 @@ test('requires copied effective limits in finalization material', () => {
       needsResultSchemaFile: false,
     },
     interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
+    preparedPayloads: { arguments: ['exec'], files: [] },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -610,6 +617,7 @@ test('keeps registered secret values out of enumerable launch views', () => {
       needsResultSchemaFile: false,
     },
     interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
+    preparedPayloads: { arguments: ['exec'], files: [] },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -629,4 +637,172 @@ test('keeps registered secret values out of enumerable launch views', () => {
   expect(Object.isFrozen(prepared.secretValues)).toBe(true);
   expect(Object.keys(prepared)).not.toContain('secretValues');
   expect(JSON.stringify(prepared)).not.toContain('secret-value');
+});
+
+const preparedLaunchCandidate = (overrides: Record<string, unknown> = {}) => ({
+  pin: {
+    agentId: 'codex',
+    agentVersion: '1.0.0',
+    definitionDigest: 'definition-digest',
+  },
+  executable: '/usr/bin/codex',
+  reportedVersion: '1.2.3',
+  limits: effectiveLimits,
+  effectiveParameters,
+  effectivePermissions,
+  childEnvironment,
+  childEnvironmentSecretValues,
+  secretValues,
+  resultSchemaValidator,
+  outputResourcePlan: {
+    invocationId: 'test-invocation',
+    outputDirectory: '/outputs/invocation',
+    needsPromptFile: true,
+    needsResultSchemaFile: true,
+  },
+  interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
+  preparedPayloads: { arguments: ['exec'], files: [] },
+  binding: {
+    protocolDriverId: 'native/stdio-v1',
+    resultParserId: 'codex-jsonl/v1',
+    permissionStrategyId: 'codex-cli/v1',
+    delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+  },
+  bindingToken: bindingToken(),
+  ...overrides,
+});
+
+test('copies stdin and file prepared payload material for launch finalization', () => {
+  const stdin = new TextEncoder().encode('Return JSON.');
+  const promptBytes = new TextEncoder().encode('prompt bytes');
+  const schemaBytes = new TextEncoder().encode('{"type":"object"}');
+  const candidate = preparedLaunchCandidate({
+    preparedPayloads: {
+      arguments: ['exec', '--schema', '{"type":"object"}'],
+      stdin,
+      files: [
+        {
+          kind: 'prompt',
+          path: '/outputs/invocation/.scratch/prompt.txt',
+          bytes: promptBytes,
+        },
+        {
+          kind: 'result-schema',
+          path: '/outputs/invocation/.scratch/result-schema.json',
+          bytes: schemaBytes,
+        },
+      ],
+    },
+  });
+
+  const prepared = PreparedLaunch.create(candidate);
+  if (prepared === undefined) throw new Error('Expected prepared launch evidence');
+  stdin[0] = 0;
+  promptBytes[0] = 0;
+  schemaBytes[0] = 0;
+
+  expect(prepared.preparedPayloads).toEqual({
+    arguments: ['exec', '--schema', '{"type":"object"}'],
+    stdin: new TextEncoder().encode('Return JSON.'),
+    files: [
+      {
+        kind: 'prompt',
+        path: '/outputs/invocation/.scratch/prompt.txt',
+        bytes: new TextEncoder().encode('prompt bytes'),
+      },
+      {
+        kind: 'result-schema',
+        path: '/outputs/invocation/.scratch/result-schema.json',
+        bytes: new TextEncoder().encode('{"type":"object"}'),
+      },
+    ],
+  });
+  expect(Object.isFrozen(prepared.preparedPayloads)).toBe(true);
+  expect(Object.isFrozen(prepared.preparedPayloads.arguments)).toBe(true);
+  expect(Object.isFrozen(prepared.preparedPayloads.files)).toBe(true);
+  expect(Object.isFrozen(prepared.preparedPayloads.files[0])).toBe(true);
+});
+
+test('keeps prepared payload material out of enumerable launch views', () => {
+  const prepared = PreparedLaunch.create(
+    preparedLaunchCandidate({
+      preparedPayloads: {
+        arguments: ['exec', 'raw prompt'],
+        stdin: new TextEncoder().encode('stdin prompt'),
+        files: [
+          {
+            kind: 'prompt',
+            path: '/outputs/invocation/.scratch/prompt.txt',
+            bytes: new TextEncoder().encode('file prompt'),
+          },
+        ],
+      },
+    }),
+  );
+  if (prepared === undefined) throw new Error('Expected prepared launch evidence');
+
+  expect(Object.getOwnPropertyDescriptor(prepared, 'preparedPayloads')).toMatchObject({
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  const enumerableViews = [Object.keys(prepared).join('\n'), JSON.stringify(prepared)];
+  for (const view of enumerableViews) {
+    expect(view).not.toContain('raw prompt');
+    expect(view).not.toContain('stdin prompt');
+    expect(view).not.toContain('file prompt');
+  }
+});
+
+test('rejects malformed prepared payload finalization material', () => {
+  const sparseFiles = [
+    {
+      kind: 'prompt',
+      path: '/outputs/invocation/.scratch/prompt.txt',
+      bytes: new TextEncoder().encode('prompt'),
+    },
+  ];
+  Object.defineProperty(sparseFiles, 'extra', { value: true, enumerable: true });
+
+  for (const preparedPayloads of [
+    null,
+    [],
+    { arguments: ['exec'] },
+    { files: [] },
+    { arguments: ['exec'], files: 'not-files' },
+    { arguments: ['exec'], files: sparseFiles },
+    { arguments: ['exec'], stdin: 'not-bytes', files: [] },
+    {
+      arguments: ['exec'],
+      files: [
+        {
+          kind: 'stdout',
+          path: '/outputs/invocation/.scratch/prompt.txt',
+          bytes: new TextEncoder().encode('prompt'),
+        },
+      ],
+    },
+    {
+      arguments: ['exec'],
+      files: [
+        {
+          kind: 'prompt',
+          path: '',
+          bytes: new TextEncoder().encode('prompt'),
+        },
+      ],
+    },
+    {
+      arguments: ['exec'],
+      files: [
+        {
+          kind: 'prompt',
+          path: '/outputs/invocation/.scratch/prompt.txt',
+          bytes: 'not-bytes',
+        },
+      ],
+    },
+  ]) {
+    expect(PreparedLaunch.create(preparedLaunchCandidate({ preparedPayloads }))).toBeUndefined();
+  }
 });
