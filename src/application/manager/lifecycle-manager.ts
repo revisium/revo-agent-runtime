@@ -333,14 +333,13 @@ class InternalInvocationLifecycleManager {
       childEnvironment,
       secretValues,
     } = resourceIndependent;
-    if (snapshot.workspace !== undefined) {
-      const workspace = this.ports.workspace;
-      if (
-        workspace === undefined ||
-        (await workspace.admit(snapshot.workspace)).status !== 'admitted'
-      )
-        return Object.freeze({ status: 'rejected' });
-    }
+    const workspace = this.ports.workspace;
+    if (
+      workspace === undefined ||
+      typeof workspace.admit !== 'function' ||
+      (await workspace.admit(snapshot.workspace)).status !== 'admitted'
+    )
+      return Object.freeze({ status: 'rejected' });
     const port = this.ports.executableProbe;
     if (port === undefined) return Object.freeze({ status: 'rejected' });
     const result = await probeExecutable(target, port);

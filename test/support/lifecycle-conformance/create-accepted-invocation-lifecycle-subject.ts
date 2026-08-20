@@ -89,7 +89,15 @@ export const createAcceptedInvocationLifecycleSubject = (
   const output = new FakeInvocationOutputPort();
   const settlements: NormalizedInvocationOutcome[] = [];
   const lifecycle = new InvocationLifecycle(
-    { execution, clock, output },
+    {
+      execution,
+      clock,
+      output,
+      workspace: {
+        admit: async () =>
+          Object.freeze({ status: 'admitted' as const, directory: '/workspace/project' }),
+      },
+    },
     snapshot,
     preparedLaunch,
     (settlement) => settlements.push(settlement),

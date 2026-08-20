@@ -69,7 +69,15 @@ const startLifecycle = (
   output.enqueueTerminalResultRecording();
   const prepared = preparedLaunch();
   const lifecycle = new InvocationLifecycle(
-    { execution, clock, output },
+    {
+      execution,
+      clock,
+      output,
+      workspace: {
+        admit: async () =>
+          Object.freeze({ status: 'admitted' as const, directory: '/workspace/project' }),
+      },
+    },
     snapshot(),
     prepared,
     (settlement) => settlements.push(settlement),

@@ -12,7 +12,10 @@ const definition = buildAgentDefinition();
 const agent = Object.freeze({ id: definition.id, version: definition.version });
 const lifecycleOptions = Object.freeze({ definitions: Object.freeze([definition]) });
 
-const createLifecycleManager = (ports: InvocationExecutionPorts) =>
+type LifecycleManagerPortsInput = Omit<InvocationExecutionPorts, 'workspace'> &
+  Partial<Pick<InvocationExecutionPorts, 'workspace'>>;
+
+const createLifecycleManager = (ports: LifecycleManagerPortsInput) =>
   createInvocationLifecycleManager(lifecycleOptions, {
     ...ports,
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),

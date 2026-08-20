@@ -14,7 +14,7 @@ export interface InvocationExecutionPorts {
       requestCancellation(): Promise<void>;
     }>;
   };
-  readonly workspace?: {
+  readonly workspace: {
     admit(path: string): Promise<WorkspaceAdmissionResult>;
   };
   readonly clock: {

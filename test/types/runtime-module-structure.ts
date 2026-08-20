@@ -44,6 +44,7 @@ import type {
   registerSecrets,
   SealedSecretRegistration,
   SecretRegistrationRequest,
+  WorkspaceAdmissionResult,
 } from '../../src/runtime/execution/index.js';
 import type {
   ExecutableProbePort,
@@ -529,6 +530,9 @@ type ExpectedInvocationExecutionPorts = {
       readonly completion: Promise<InvocationTerminalObservation>;
       requestCancellation(): Promise<void>;
     }>;
+  };
+  readonly workspace: {
+    admit(path: string): Promise<WorkspaceAdmissionResult>;
   };
   readonly clock: {
     now(): number;

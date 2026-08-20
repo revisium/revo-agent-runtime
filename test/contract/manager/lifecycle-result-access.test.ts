@@ -11,7 +11,10 @@ import { FreshAvailableExecutableProbePort } from '../../support/probe/fresh-ava
 const definition = buildAgentDefinition();
 const agent = Object.freeze({ id: definition.id, version: definition.version });
 const lifecycleOptions = Object.freeze({ definitions: Object.freeze([definition]) });
-const createLifecycleManager = (ports: InvocationExecutionPorts) =>
+type LifecycleManagerPortsInput = Omit<InvocationExecutionPorts, 'workspace'> &
+  Partial<Pick<InvocationExecutionPorts, 'workspace'>>;
+
+const createLifecycleManager = (ports: LifecycleManagerPortsInput) =>
   createInvocationLifecycleManager(lifecycleOptions, {
     ...ports,
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
@@ -189,6 +192,10 @@ test('uses validated default capacity and rejects invalid capacity through lifec
     execution: new FakeInvocationExecutionPort(),
     output: new FakeInvocationOutputPort(),
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    workspace: {
+      admit: async () =>
+        Object.freeze({ status: 'admitted' as const, directory: '/workspace/project' }),
+    },
   });
   const invalidMinimum = createPorts();
   expect(() =>

@@ -661,6 +661,10 @@ test('keeps configured redaction secrets out of enumerable manager views', () =>
       output: new FakeInvocationOutputPort(),
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
+      workspace: {
+        admit: async () =>
+          Object.freeze({ status: 'admitted' as const, directory: '/workspace/project' }),
+      },
     },
   );
 
