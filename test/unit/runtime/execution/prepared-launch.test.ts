@@ -89,6 +89,18 @@ test('creates prepared launch evidence with the exact execution-owned shape', ()
     limits: effectiveLimits,
     effectiveParameters,
     effectivePermissions,
+    binding: {
+      protocolDriverId: 'native/stdio-v1',
+      resultParserId: 'codex-jsonl/v1',
+      permissionStrategyId: 'codex-cli/v1',
+      delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    },
+  });
+  expect(prepared?.binding).toEqual({
+    protocolDriverId: 'native/stdio-v1',
+    resultParserId: 'codex-jsonl/v1',
+    permissionStrategyId: 'codex-cli/v1',
+    delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
   });
   expect(prepared?.childEnvironment).toEqual({ REVO_ENV: 'value' });
   expect(prepared?.secretValues).toEqual(['configured-secret', 'secret-value']);
@@ -145,6 +157,12 @@ test('accepts null-prototype record containers', () => {
     limits: effectiveLimits,
     effectiveParameters,
     effectivePermissions,
+    binding: {
+      protocolDriverId: 'native/stdio-v1',
+      resultParserId: 'codex-jsonl/v1',
+      permissionStrategyId: 'codex-cli/v1',
+      delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    },
   });
 });
 
@@ -530,6 +548,12 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
     limits: effectiveLimits,
     effectiveParameters: { nested: { value: 'parameter' } },
     effectivePermissions: { nested: { value: 'permission' } },
+    binding: {
+      protocolDriverId: 'native/stdio-v1',
+      resultParserId: 'codex-jsonl/v1',
+      permissionStrategyId: 'codex-cli/v1',
+      delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    },
   });
 });
 

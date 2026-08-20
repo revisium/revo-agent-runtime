@@ -7,19 +7,24 @@ import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../../support/execution/fake-output-claim-port.js';
 import { FakeInvocationOutputPort } from '../../support/execution/fake-output-port.js';
+import { FakeOutputPreparationPort } from '../../support/execution/fake-output-preparation-port.js';
 import { FreshAvailableExecutableProbePort } from '../../support/probe/fresh-available-executable-probe-port.js';
 
 const definition = buildAgentDefinition();
 const agent = Object.freeze({ id: definition.id, version: definition.version });
 const lifecycleOptions = Object.freeze({ definitions: Object.freeze([definition]) });
-type LifecycleManagerPortsInput = Omit<InvocationExecutionPorts, 'workspace' | 'outputClaim'> &
-  Partial<Pick<InvocationExecutionPorts, 'workspace' | 'outputClaim'>>;
+type LifecycleManagerPortsInput = Omit<
+  InvocationExecutionPorts,
+  'workspace' | 'outputClaim' | 'outputPreparation'
+> &
+  Partial<Pick<InvocationExecutionPorts, 'workspace' | 'outputClaim' | 'outputPreparation'>>;
 
 const createLifecycleManager = (ports: LifecycleManagerPortsInput) =>
   createInvocationLifecycleManager(lifecycleOptions, {
     ...ports,
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
     outputClaim: ports.outputClaim ?? new FakeOutputClaimPort('created'),
+    outputPreparation: ports.outputPreparation ?? new FakeOutputPreparationPort('prepared'),
     workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
   });
 
@@ -57,7 +62,6 @@ const expectAcceptedInvocation = (
 test('publishes a completed canonical result before synchronous terminal delivery and resolves active waiters afterward', async () => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
-  output.enqueuePrepare();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
   const manager = createLifecycleManager({
@@ -105,9 +109,6 @@ test('publishes a completed canonical result before synchronous terminal deliver
 test('keeps an active waiter and handle result after later FIFO eviction while fresh access becomes unknown', async () => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
-  output.enqueuePrepare();
-  output.enqueuePrepare();
-  output.enqueuePrepare();
   output.enqueueTerminalResultRecording();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
@@ -120,6 +121,7 @@ test('keeps an active waiter and handle result after later FIFO eviction while f
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       output,
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
@@ -155,7 +157,6 @@ test('keeps an active waiter and handle result after later FIFO eviction while f
 test('does not publish a pending terminal result before its output commit settles', async () => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
-  output.enqueuePrepare();
   output.enqueuePendingTerminalResultRecording();
   execution.enqueueStart('running');
   const manager = createLifecycleManager({
@@ -196,6 +197,7 @@ test('uses validated default capacity and rejects invalid capacity through lifec
     output: new FakeInvocationOutputPort(),
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     outputClaim: new FakeOutputClaimPort('created'),
+    outputPreparation: new FakeOutputPreparationPort('prepared'),
     workspace: {
       admit: async () =>
         Object.freeze({ status: 'admitted' as const, directory: '/workspace/project' }),
@@ -218,7 +220,6 @@ test('uses validated default capacity and rejects invalid capacity through lifec
 
   const { execution, output, clock } = createPorts();
   for (let index = 0; index <= 1_000; index += 1) {
-    output.enqueuePrepare();
     output.enqueueTerminalResultRecording();
     execution.enqueueStart('running');
   }
@@ -243,7 +244,6 @@ test('delivers one canonical terminal event for output failure, execution failur
   const outputFailureExecution = new FakeInvocationExecutionPort();
   const outputFailureOutput = new FakeInvocationOutputPort();
   outputFailureExecution.enqueueStart('running');
-  outputFailureOutput.enqueuePrepare();
   outputFailureOutput.enqueueTerminalResultRecording(new Error('write failed'));
   const outputFailureManager = createLifecycleManager({
     execution: outputFailureExecution,
@@ -265,7 +265,6 @@ test('delivers one canonical terminal event for output failure, execution failur
   const executionFailureExecution = new FakeInvocationExecutionPort();
   const executionFailureOutput = new FakeInvocationOutputPort();
   executionFailureExecution.enqueueStart('running');
-  executionFailureOutput.enqueuePrepare();
   executionFailureOutput.enqueueTerminalResultRecording();
   const executionFailureManager = createLifecycleManager({
     execution: executionFailureExecution,
@@ -289,7 +288,6 @@ test('delivers one canonical terminal event for output failure, execution failur
   const cancellationExecution = new FakeInvocationExecutionPort();
   const cancellationOutput = new FakeInvocationOutputPort();
   cancellationExecution.enqueueStart('running');
-  cancellationOutput.enqueuePrepare();
   cancellationOutput.enqueueTerminalResultRecording();
   const cancellationManager = createLifecycleManager({
     execution: cancellationExecution,
@@ -316,7 +314,6 @@ test('delivers one canonical terminal event for output failure, execution failur
   const deadlineOutput = new FakeInvocationOutputPort();
   const deadlineClock = new FakeInvocationClock({ initialNowMs: 0 });
   deadlineExecution.enqueueStart('running');
-  deadlineOutput.enqueuePrepare();
   deadlineOutput.enqueueTerminalResultRecording();
   const deadlineManager = createLifecycleManager({
     execution: deadlineExecution,
@@ -347,8 +344,6 @@ test('delivers one canonical terminal event for output failure, execution failur
 test('isolates a throwing listener without stranding manager handle or active waiter resolution', async () => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
-  output.enqueuePrepare();
-  output.enqueuePrepare();
   output.enqueueTerminalResultRecording();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
@@ -415,7 +410,6 @@ test('isolates a throwing listener without stranding manager handle or active wa
 test('admits subscriptions independently from completed result retention', async () => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
-  output.enqueuePrepare();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
@@ -425,6 +419,7 @@ test('admits subscriptions independently from completed result retention', async
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       output,
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },

@@ -382,8 +382,8 @@ test('consumed output material survives base freeze and still supports one priva
   expect(ConsumedOutputPreparationMaterial.take(consumed)).toBeUndefined();
 });
 
-test('runtime execution layer barrel does not expose prepared-invocation values', () => {
-  expect('createPreparedInvocation' in runtimeExecution).toBe(false);
-  expect('consumeOutputPreparationMaterial' in runtimeExecution).toBe(false);
+test('runtime execution layer barrel exposes only prepared-invocation wiring helpers as values', () => {
+  expect('createPreparedInvocation' in runtimeExecution).toBe(true);
+  expect('consumeOutputPreparationMaterial' in runtimeExecution).toBe(true);
   expect('PreparedInvocation' in runtimeExecution).toBe(false);
 });

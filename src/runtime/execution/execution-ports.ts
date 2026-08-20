@@ -3,6 +3,7 @@ import type { InvocationInputSnapshot } from './input-snapshot.js';
 import type { InvocationClockPort } from './invocation-clock-port.js';
 import type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
 import type { OutputClaimExclusiveCreatePort } from './output-claim-attempt/index.js';
+import type { OutputPreparationMutationPort } from './output-preparation-attempt/index.js';
 import type { PreparedLaunch } from './prepared-launch.js';
 import type { WorkspaceAdmissionResult } from './workspace-admission-result.js';
 
@@ -21,6 +22,7 @@ export interface InvocationExecutionPorts {
   };
   readonly clock: InvocationClockPort;
   readonly outputClaim: OutputClaimExclusiveCreatePort;
+  readonly outputPreparation: OutputPreparationMutationPort;
   readonly output: {
     admit(
       request: Readonly<{
@@ -50,7 +52,6 @@ export interface InvocationExecutionPorts {
             | 'inspection_failed';
         }>
     >;
-    prepare(): Promise<void>;
     recordTerminalResult(outcome: NormalizedInvocationOutcome): Promise<void>;
     recordEvent(): Promise<void>;
   };

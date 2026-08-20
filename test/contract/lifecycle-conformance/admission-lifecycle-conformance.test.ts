@@ -34,7 +34,7 @@ test('rejects invalid preflight inputs without accepting an invocation', async (
   const unavailableOutput = createLifecycleConformanceSubject();
   const unavailableOutputEvents: unknown[] = [];
   unavailableOutput.manager.subscribe({}, (event) => unavailableOutputEvents.push(event));
-  unavailableOutput.output.enqueuePrepare(new Error('output unavailable'));
+  unavailableOutput.outputPreparation.enqueue('scratch-create-failed');
   await expect(
     unavailableOutput.start(unavailableOutput.createInput('output-unavailable')),
   ).resolves.toEqual({
@@ -49,8 +49,6 @@ test('rejects invalid preflight inputs without accepting an invocation', async (
 test('accepts only one concurrent invocation and snapshots caller-owned input', async () => {
   const subject = createLifecycleConformanceSubject();
   const metadata = { nested: { state: 'accepted' } };
-  subject.output.enqueuePrepare();
-  subject.output.enqueuePrepare();
   subject.output.enqueueTerminalResultRecording();
   subject.execution.enqueueStart('running');
   const input = subject.createInput('same-id', { metadata });
@@ -76,8 +74,6 @@ test('accepts only one concurrent invocation and snapshots caller-owned input', 
 
 test('cancels one pending accepted invocation exactly once after start confirmation', async () => {
   const subject = createLifecycleConformanceSubject();
-  subject.output.enqueuePrepare();
-  subject.output.enqueuePrepare();
   subject.output.enqueueTerminalResultRecording();
   subject.execution.enqueuePendingStart();
 

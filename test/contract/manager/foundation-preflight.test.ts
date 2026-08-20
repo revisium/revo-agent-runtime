@@ -14,6 +14,7 @@ import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../../support/execution/fake-output-claim-port.js';
 import { FakeInvocationOutputPort } from '../../support/execution/fake-output-port.js';
+import { FakeOutputPreparationPort } from '../../support/execution/fake-output-preparation-port.js';
 import { FakeExecutableProbePort } from '../../support/probe/fake-executable-probe-port.js';
 
 const resultSchema = Object.freeze({
@@ -86,6 +87,7 @@ const createPorts = (
 }> => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
+  const outputPreparation = new FakeOutputPreparationPort('prepared');
   const probe = new FakeExecutableProbePort({ platform });
   const workspace = vi.fn(
     async () =>
@@ -95,6 +97,7 @@ const createPorts = (
   const ports = {
     execution,
     output,
+    outputPreparation,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     outputClaim: new FakeOutputClaimPort('created'),
     executableProbe: probe,
@@ -134,7 +137,6 @@ test('admits a normalized absolute workspace before output preparation and execu
   const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
   probe.enqueueResolution({ status: 'resolved', executable: '/resolved/workspace-agent' });
   probe.enqueueVersionStart('running');
-  output.enqueuePrepare();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
 
@@ -150,7 +152,6 @@ test('admits a normalized absolute workspace before output preparation and execu
   await expect(started).resolves.toMatchObject({ status: 'accepted' });
   expect(workspace).toHaveBeenCalledExactlyOnceWith('/approved/workspace');
   expect(output.calls()[0]).toEqual(outputAdmissionCall('valid-workspace'));
-  expect(output.calls()[1]).toEqual({ type: 'prepare' });
   expect(execution.calls()).toEqual([{ type: 'start' }]);
 });
 
@@ -164,7 +165,6 @@ test('freshly probes every invocation before output preparation and execution de
   for (const executable of ['/resolved/first', '/resolved/second']) {
     probe.enqueueResolution({ status: 'resolved', executable });
     probe.enqueueVersionStart('running');
-    output.enqueuePrepare();
     output.enqueueTerminalResultRecording();
     execution.enqueueStart('running');
   }
@@ -218,6 +218,12 @@ test('freshly probes every invocation before output preparation and execution de
     limits: defaultEffectiveLimits,
     effectiveParameters: {},
     effectivePermissions: {},
+    binding: {
+      protocolDriverId: 'native/stdio-v1',
+      resultParserId: 'codex-jsonl/v1',
+      permissionStrategyId: 'codex-cli/v1',
+      delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    },
   });
   expect(secondPrepared).toEqual({
     pin: {
@@ -230,6 +236,12 @@ test('freshly probes every invocation before output preparation and execution de
     limits: defaultEffectiveLimits,
     effectiveParameters: {},
     effectivePermissions: {},
+    binding: {
+      protocolDriverId: 'native/stdio-v1',
+      resultParserId: 'codex-jsonl/v1',
+      permissionStrategyId: 'codex-cli/v1',
+      delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    },
   });
   expect(firstPrepared?.childEnvironment).toEqual({});
   expect(secondPrepared?.childEnvironment).toEqual({});
@@ -260,7 +272,6 @@ test('orders fresh executable proof after resource-bound preflight and before ou
   const definition = buildAgentDefinition();
   probe.enqueueResolution({ status: 'resolved', executable: '/resolved/ordered-agent' });
   probe.enqueueVersionStart('running');
-  output.enqueuePrepare();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
   const ports: InvocationExecutionPorts & Readonly<{ executableProbe: ExecutableProbePort }> = {
@@ -275,15 +286,17 @@ test('orders fresh executable proof after resource-bound preflight and before ou
         order.push('output-admit');
         return await output.admit(request);
       },
-      prepare: async () => {
-        order.push('output-prepare');
-        return await output.prepare();
-      },
       recordTerminalResult: (outcome) => output.recordTerminalResult(outcome),
       recordEvent: () => output.recordEvent(),
     },
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     outputClaim: new FakeOutputClaimPort('created'),
+    outputPreparation: {
+      prepareClaimedOutput: (request) => {
+        order.push('output-prepare');
+        return new FakeOutputPreparationPort('prepared').prepareClaimedOutput(request);
+      },
+    },
     executableProbe: {
       hostPlatform: () => probe.hostPlatform(),
       resolveExecutable: async (request) => {
@@ -370,7 +383,6 @@ test('reserves an invocation id before probing and retains that reservation afte
   const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
   probe.enqueueResolution({ status: 'resolved', executable: '/resolved/duplicate' });
   probe.enqueueVersionStart('running');
-  output.enqueuePrepare();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
   const input = createStartInput(definition, { invocationId: 'duplicate' });
@@ -396,7 +408,6 @@ test('reserves an invocation id before probing and retains that reservation afte
     reason: 'duplicate_invocation',
   });
   expect(probe.calls()).toHaveLength(2);
-  expect(output.calls().filter((call) => call.type === 'prepare')).toHaveLength(1);
 });
 
 test('maps a missing preflight composition port to a typed pre-acceptance rejection', async () => {
@@ -410,6 +421,7 @@ test('maps a missing preflight composition port to a typed pre-acceptance reject
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       workspace: {
         admit: async () =>
           Object.freeze({ status: 'admitted' as const, directory: '/approved/workspace' }),
@@ -439,6 +451,7 @@ test.each([
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: probe,
       ...malformedWorkspacePort,
     };

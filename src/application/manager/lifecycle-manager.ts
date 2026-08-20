@@ -10,20 +10,28 @@ import { AgentManagerError } from '../../runtime/errors/index.js';
 import {
   captureChildEnvironment,
   beginOutputClaim,
+  beginOutputPreparation,
   createOutputClaimAttempt,
+  createOutputPreparationAttempt,
+  createPreparedExecutionSecurity,
+  createPreparedInvocation,
   InvocationInputSnapshot,
   InvocationLifecycle,
   interpretArgumentTemplate,
   PreparedLaunch,
   prepareInvocationPayloads,
   registerSecrets,
+  consumeOutputPreparationMaterial,
+  consumeRedactionMaterial,
   revealRegisteredSecrets,
+  takePreparedInvocationResourcesPayload,
   StartContextSnapshot,
   type ChildEnvironmentCapture,
   type InvocationExecutionPorts,
   type NormalizedInvocationOutcome,
   type OutputClaimGuard,
   type OutputClaimResult,
+  type OutputPreparationAttempt,
   type OutputResourcePlan,
   type ResultSchemaValidator,
 } from '../../runtime/execution/index.js';
@@ -48,6 +56,7 @@ type RejectionReason =
   | 'output_claim_failed'
   | 'output_claim_uncertain'
   | 'output_prepare_failed'
+  | 'output_prepare_uncertain'
   | 'environment_invalid'
   | 'preflight_failed';
 
@@ -333,6 +342,9 @@ class InternalInvocationLifecycleManager {
   // these guards; dropping them here would make late reconciliation impossible.
   private readonly quarantinedInvocationIds = new Map<string, OutputClaimGuard>();
   private readonly quarantinedOutputDirectories = new Set<string>();
+  private readonly quarantinedPreparationInvocationIds = new Set<string>();
+  private readonly quarantinedPreparationOutputDirectories = new Set<string>();
+  private readonly pendingPreparationAttempts = new Map<string, OutputPreparationAttempt>();
   constructor(
     private readonly ports: LifecycleManagerPorts,
     private readonly completed: CompletedInvocations,
@@ -366,6 +378,8 @@ class InternalInvocationLifecycleManager {
       const plan = preparedLaunch.outputResourcePlan;
       if (this.quarantinedOutputDirectories.has(plan.outputDirectory))
         return Object.freeze({ status: 'rejected', reason: 'output_claim_failed' });
+      if (this.quarantinedPreparationOutputDirectories.has(plan.outputDirectory))
+        return Object.freeze({ status: 'rejected', reason: 'output_prepare_uncertain' });
       const claim = await this.claimInvocationOutput(plan);
       if (claim === undefined || claim.status === 'rejected')
         return Object.freeze({ status: 'rejected', reason: 'output_claim_failed' });
@@ -374,10 +388,23 @@ class InternalInvocationLifecycleManager {
         this.quarantinedOutputDirectories.add(plan.outputDirectory);
         return Object.freeze({ status: 'rejected', reason: 'output_claim_uncertain' });
       }
-      try {
-        await this.ports.output.prepare();
-      } catch {
+      const preparation = this.createOutputPreparation(
+        snapshot,
+        preparedLaunch,
+        plan,
+        claim.session,
+      );
+      if (preparation === undefined)
         return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
+      this.pendingPreparationAttempts.set(snapshot.invocationId, preparation.attempt);
+      const preparationResult = await this.consumeAndBeginOutputPreparation(preparation);
+      this.pendingPreparationAttempts.delete(snapshot.invocationId);
+      if (preparationResult.status === 'rejected')
+        return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
+      if (preparationResult.status === 'uncertain') {
+        this.quarantinedPreparationInvocationIds.add(snapshot.invocationId);
+        this.quarantinedPreparationOutputDirectories.add(plan.outputDirectory);
+        return Object.freeze({ status: 'rejected', reason: 'output_prepare_uncertain' });
       }
 
       const completion = createDeferred<NormalizedInvocationOutcome>();
@@ -390,6 +417,7 @@ class InternalInvocationLifecycleManager {
       lifecycle.begin();
       return Object.freeze({ status: 'accepted', handle, lifecycle });
     } finally {
+      this.pendingPreparationAttempts.delete(snapshot.invocationId);
       this.pending.delete(snapshot.invocationId);
     }
   }
@@ -599,11 +627,81 @@ class InternalInvocationLifecycleManager {
       this.pending.has(invocationId) ||
       this.active.has(invocationId) ||
       this.completed.has(invocationId) ||
-      this.quarantinedInvocationIds.has(invocationId)
+      this.quarantinedInvocationIds.has(invocationId) ||
+      this.quarantinedPreparationInvocationIds.has(invocationId)
     )
       return false;
     this.pending.add(invocationId);
     return true;
+  }
+
+  private createOutputPreparation(
+    snapshot: InvocationInputSnapshot,
+    preparedLaunch: PreparedLaunch,
+    plan: OutputResourcePlan,
+    session: Extract<OutputClaimResult, { status: 'claimed' }>['session'],
+  ):
+    | Readonly<{
+        attempt: OutputPreparationAttempt;
+        preparedInvocation: NonNullable<ReturnType<typeof createPreparedInvocation>>;
+        preparedSecurity: NonNullable<ReturnType<typeof createPreparedExecutionSecurity>>;
+      }>
+    | undefined {
+    const registeredSecrets = registerSecrets({
+      configuredSecrets: this.#configuredSecretValues,
+      invocationSecrets: preparedLaunch.secretValues,
+    });
+    if (registeredSecrets.status !== 'registered') return undefined;
+    const preparedInvocation = createPreparedInvocation({
+      pin: preparedLaunch.pin,
+      workspaceDirectory: snapshot.workspace,
+      reportedVersion: preparedLaunch.reportedVersion,
+      binding: preparedLaunch.binding,
+      outputResourcePlan: plan,
+      preparedPayloads: preparedLaunch.preparedPayloads,
+    });
+    if (preparedInvocation === undefined) return undefined;
+    const preparedSecurity = createPreparedExecutionSecurity({
+      invocationId: snapshot.invocationId,
+      childEnvironment: preparedLaunch.childEnvironment,
+      registeredSecrets: registeredSecrets.registeredSecrets,
+    });
+    if (preparedSecurity === undefined) return undefined;
+    const attempt = createOutputPreparationAttempt({
+      session,
+      clock: this.ports.clock,
+      port: this.ports.outputPreparation,
+    });
+    return attempt === undefined
+      ? undefined
+      : Object.freeze({ attempt, preparedInvocation, preparedSecurity });
+  }
+
+  private async consumeAndBeginOutputPreparation(
+    preparation: Readonly<{
+      attempt: OutputPreparationAttempt;
+      preparedInvocation: NonNullable<ReturnType<typeof createPreparedInvocation>>;
+      preparedSecurity: NonNullable<ReturnType<typeof createPreparedExecutionSecurity>>;
+    }>,
+  ): Promise<Readonly<{ status: 'prepared' | 'rejected' | 'uncertain' }>> {
+    const material = consumeOutputPreparationMaterial(
+      preparation.preparedInvocation,
+      preparation.attempt,
+    );
+    const redaction = consumeRedactionMaterial(preparation.preparedSecurity, preparation.attempt);
+    if (material === undefined || redaction === undefined)
+      return Object.freeze({ status: 'rejected' as const });
+    beginOutputPreparation(preparation.attempt, material, redaction);
+    const result = await preparation.attempt.settlement;
+    if (result.status === 'prepared') {
+      const resources = takePreparedInvocationResourcesPayload(result.resources);
+      if (resources === undefined) return Object.freeze({ status: 'rejected' as const });
+      resources.frontEnds.stdout.dispose();
+      resources.frontEnds.stderr.dispose();
+      resources.frontEnds.rawResponse.dispose();
+      return Object.freeze({ status: 'prepared' as const });
+    }
+    return Object.freeze({ status: result.status });
   }
 
   private async claimInvocationOutput(

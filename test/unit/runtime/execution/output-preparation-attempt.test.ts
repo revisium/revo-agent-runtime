@@ -472,11 +472,12 @@ test('inauthentic session makes the factory return undefined without clock or po
   expect(clock.pendingActionCount()).toBe(0);
 });
 
-test('runtime execution layer barrel does not expose preparation authority or invoker values', () => {
+test('runtime execution layer barrel exposes only preparation wiring helpers as values', () => {
   expect('TerminalPublicationAuthority' in runtimeExecution).toBe(false);
   expect('PreparedInvocationResources' in runtimeExecution).toBe(false);
-  expect('createOutputPreparationAttempt' in runtimeExecution).toBe(false);
-  expect('beginOutputPreparation' in runtimeExecution).toBe(false);
+  expect('createOutputPreparationAttempt' in runtimeExecution).toBe(true);
+  expect('beginOutputPreparation' in runtimeExecution).toBe(true);
+  expect('takePreparedInvocationResourcesPayload' in runtimeExecution).toBe(true);
 });
 
 test('factory returns a synchronously registered unsettled attempt with authority and armed deadline', async () => {

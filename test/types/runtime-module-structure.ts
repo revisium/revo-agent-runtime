@@ -861,6 +861,7 @@ type ExpectedInvocationExecutionPorts = {
     schedule(delayMs: number, callback: () => void): () => void;
   };
   readonly outputClaim: OutputClaimExclusiveCreatePort;
+  readonly outputPreparation: OutputPreparationMutationPort;
   readonly output: {
     admit(
       request: Readonly<{
@@ -890,7 +891,6 @@ type ExpectedInvocationExecutionPorts = {
             | 'inspection_failed';
         }>
     >;
-    prepare(): Promise<void>;
     recordTerminalResult(outcome: NormalizedInvocationOutcome): Promise<void>;
     recordEvent(): Promise<void>;
   };

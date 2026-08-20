@@ -5,7 +5,6 @@ import { waitForLifecycleConformanceQuiescence } from '../../support/lifecycle-c
 
 test('waits for caller and deadline cancellation confirmation before terminal settlement', async () => {
   const caller = createLifecycleConformanceSubject();
-  caller.output.enqueuePrepare();
   caller.output.enqueueTerminalResultRecording();
   caller.execution.enqueueStart('running');
   const callerAccepted = await caller.start(caller.createInput('caller-cancellation'));
@@ -24,7 +23,6 @@ test('waits for caller and deadline cancellation confirmation before terminal se
   await expect(callerAccepted.handle.result()).resolves.toEqual({ status: 'cancelled' });
 
   const deadline = createLifecycleConformanceSubject();
-  deadline.output.enqueuePrepare();
   deadline.output.enqueueTerminalResultRecording();
   deadline.execution.enqueueStart('running');
   const deadlineAccepted = await deadline.start(
@@ -46,7 +44,6 @@ test('waits for caller and deadline cancellation confirmation before terminal se
 
 test('keeps natural completion as the first terminal result when cancellation races it', async () => {
   const subject = createLifecycleConformanceSubject();
-  subject.output.enqueuePrepare();
   subject.output.enqueueTerminalResultRecording();
   subject.execution.enqueueStart('running');
   const accepted = await subject.start(subject.createInput('natural-wins'));
@@ -70,8 +67,6 @@ test('keeps natural completion as the first terminal result when cancellation ra
 
 test('keeps finalizing work out of completed lookup and terminal delivery until one release', async () => {
   const subject = createLifecycleConformanceSubject();
-  subject.output.enqueuePrepare();
-  subject.output.enqueuePrepare();
   subject.output.enqueuePendingTerminalResultRecording();
   subject.execution.enqueueStart('running');
   const events: unknown[] = [];
@@ -124,7 +119,6 @@ test.each([
     const subject = createLifecycleConformanceSubject();
     const events: unknown[] = [];
     subject.manager.subscribe({}, (event) => events.push(event));
-    subject.output.enqueuePrepare();
     subject.output.enqueueTerminalResultRecording(new Error('write failed'));
     subject.execution.enqueueStart('running');
     const invocationId = `failed-terminal-recording-${caseId}`;
@@ -152,8 +146,6 @@ test.each([
 
 test('delivers one canonical result after lookup visibility and isolates listeners', async () => {
   const subject = createLifecycleConformanceSubject({ maxCompletedInvocations: 3 });
-  subject.output.enqueuePrepare();
-  subject.output.enqueuePrepare();
   subject.output.enqueueTerminalResultRecording();
   subject.output.enqueueTerminalResultRecording();
   subject.execution.enqueueStart('running');
@@ -221,13 +213,6 @@ test('delivers one canonical result after lookup visibility and isolates listene
 
 test('reaccepts the same literal id only after completed FIFO eviction while active ids remain protected', async () => {
   const subject = createLifecycleConformanceSubject({ maxCompletedInvocations: 2 });
-  subject.output.enqueuePrepare();
-  subject.output.enqueuePrepare();
-  subject.output.enqueuePrepare();
-  subject.output.enqueuePrepare();
-  subject.output.enqueuePrepare();
-  subject.output.enqueuePrepare();
-  subject.output.enqueuePrepare();
   subject.output.enqueueTerminalResultRecording();
   subject.output.enqueueTerminalResultRecording();
   subject.output.enqueueTerminalResultRecording();

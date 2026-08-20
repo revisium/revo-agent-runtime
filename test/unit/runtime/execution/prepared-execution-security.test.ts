@@ -232,9 +232,9 @@ test('taking child environment from a forged capability returns undefined withou
   expect(takePreparedChildEnvironment(undefined)).toBeUndefined();
 });
 
-test('runtime execution layer barrel does not expose prepared-execution-security values', () => {
-  expect('createPreparedExecutionSecurity' in runtimeExecution).toBe(false);
-  expect('consumeRedactionMaterial' in runtimeExecution).toBe(false);
-  expect('takePreparedChildEnvironment' in runtimeExecution).toBe(false);
+test('runtime execution layer barrel exposes only prepared-execution-security wiring helpers as values', () => {
+  expect('createPreparedExecutionSecurity' in runtimeExecution).toBe(true);
+  expect('consumeRedactionMaterial' in runtimeExecution).toBe(true);
+  expect('takePreparedChildEnvironment' in runtimeExecution).toBe(true);
   expect('PreparedExecutionSecurity' in runtimeExecution).toBe(false);
 });

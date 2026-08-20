@@ -9,13 +9,11 @@ type OutputAdmissionResult = Awaited<ReturnType<InvocationExecutionPorts['output
 
 export type InvocationOutputCall =
   | { readonly type: 'admit'; readonly request: OutputAdmissionRequest }
-  | { readonly type: 'prepare' }
   | { readonly type: 'record-terminal-result'; readonly outcome: NormalizedInvocationOutcome }
   | { readonly type: 'record-event' };
 
 export interface FakeInvocationOutputControls {
   enqueueAdmission(result: OutputAdmissionResult | (() => OutputAdmissionResult)): void;
-  enqueuePrepare(result?: Error): void;
   enqueueTerminalResultRecording(result?: Error): void;
   enqueuePendingTerminalResultRecording(): void;
   fulfilPendingTerminalResultRecording(recordingId: number): void;
@@ -150,7 +148,6 @@ export class FakeInvocationOutputPort
 {
   private readonly admissionQueue: Array<OutputAdmissionResult | (() => OutputAdmissionResult)> =
     [];
-  private readonly prepareQueue: (Error | undefined)[] = [];
   private readonly terminalResultRecordingQueue: TerminalResultRecording[] = [];
   private readonly pendingTerminalResultRecordings = new Map<number, Deferred>();
   private readonly eventRecordingQueue: (Error | undefined)[] = [];
@@ -160,10 +157,6 @@ export class FakeInvocationOutputPort
 
   enqueueAdmission(result: OutputAdmissionResult | (() => OutputAdmissionResult)): void {
     this.admissionQueue.push(result);
-  }
-
-  enqueuePrepare(result?: Error): void {
-    this.prepareQueue.push(result);
   }
 
   enqueueTerminalResultRecording(result?: Error): void {
@@ -196,11 +189,6 @@ export class FakeInvocationOutputPort
     const result = this.admissionQueue.shift();
     if (result === undefined) return Object.freeze({ status: 'admitted', plan: copiedRequest });
     return typeof result === 'function' ? result() : result;
-  }
-
-  async prepare(): Promise<void> {
-    this.record(Object.freeze({ type: 'prepare' }));
-    this.complete(this.take(this.prepareQueue, 'prepare'));
   }
 
   async recordTerminalResult(outcome: NormalizedInvocationOutcome): Promise<void> {
