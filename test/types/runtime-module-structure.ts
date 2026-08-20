@@ -27,11 +27,21 @@ import type {
   ChildEnvironmentRequest,
   createRedactingBoundedOutputSink,
   createRedactionChannel,
+  ClaimedInvocationOutput,
+  inspectOutputClaimGuard,
   InvocationExecutionPorts,
   InvocationInputSnapshot,
   InvocationTerminalObservation,
   LiveOwnedProcess,
   NormalizedInvocationOutcome,
+  OutputClaimAttempt,
+  OutputClaimExclusiveCreatePort,
+  OutputClaimExclusiveCreateRequest,
+  OutputClaimGuard,
+  OutputClaimPlatformResult,
+  OutputClaimQuiescence,
+  OutputClaimReconciliation,
+  OutputClaimResult,
   PreparedLaunch,
   ProcessExitObservation,
   ProcessIdentity,
@@ -520,6 +530,86 @@ export type RuntimeContractSurface = readonly [
   JsonSchema202012,
   JsonValue,
 ];
+
+type ExpectedOutputClaimResult =
+  | Readonly<{ status: 'claimed'; session: ClaimedInvocationOutput }>
+  | Readonly<{
+      status: 'rejected';
+      reason:
+        | 'cancelled_before_dispatch'
+        | 'leaf_exists'
+        | 'create_failed'
+        | 'internal_before_dispatch';
+    }>
+  | Readonly<{
+      status: 'uncertain';
+      reason: 'claim_timeout' | 'claim_state_unknown';
+      guard: OutputClaimGuard;
+    }>;
+
+type ExpectedOutputClaimQuiescence =
+  | Readonly<{ status: 'quiescent'; syscallDispatched: boolean }>
+  | Readonly<{ status: 'retained'; guard: OutputClaimGuard }>;
+
+type ExpectedOutputClaimReconciliation =
+  | Readonly<{ status: 'absent' }>
+  | Readonly<{ status: 'claimed'; session: ClaimedInvocationOutput }>
+  | Readonly<{ status: 'unknown'; reason: 'pending' | 'unreconciled' | 'deadline' }>;
+
+type ExpectedOutputClaimAttempt = {
+  readonly invocationId: string;
+  readonly outputDirectory: string;
+  readonly settlement: Promise<OutputClaimResult>;
+  readonly quiescence: Promise<OutputClaimQuiescence>;
+  requestCancellation(): void;
+};
+
+type ExpectedOutputClaimPlatformResult =
+  | Readonly<{ status: 'created' }>
+  | Readonly<{ status: 'leaf_exists' }>
+  | Readonly<{ status: 'create_failed' }>;
+
+type ExpectedOutputClaimExclusiveCreateRequest = {
+  readonly invocationId: string;
+  readonly outputDirectory: string;
+  markSyscallDispatched(): void;
+};
+
+type ExpectedOutputClaimExclusiveCreatePort = {
+  createExclusiveOutputDirectory(
+    request: OutputClaimExclusiveCreateRequest,
+  ): Promise<OutputClaimPlatformResult>;
+};
+
+export type OutputClaimResultIsExact = Expect<Equal<OutputClaimResult, ExpectedOutputClaimResult>>;
+
+export type OutputClaimQuiescenceIsExact = Expect<
+  Equal<OutputClaimQuiescence, ExpectedOutputClaimQuiescence>
+>;
+
+export type OutputClaimAttemptIsExact = Expect<
+  Equal<OutputClaimAttempt, ExpectedOutputClaimAttempt>
+>;
+
+export type OutputClaimReconciliationIsExact = Expect<
+  Equal<OutputClaimReconciliation, ExpectedOutputClaimReconciliation>
+>;
+
+export type InspectOutputClaimGuardIsExact = Expect<
+  Equal<typeof inspectOutputClaimGuard, (guard: unknown) => OutputClaimReconciliation>
+>;
+
+export type OutputClaimPlatformResultIsExact = Expect<
+  Equal<OutputClaimPlatformResult, ExpectedOutputClaimPlatformResult>
+>;
+
+export type OutputClaimExclusiveCreateRequestIsExact = Expect<
+  Equal<OutputClaimExclusiveCreateRequest, ExpectedOutputClaimExclusiveCreateRequest>
+>;
+
+export type OutputClaimExclusiveCreatePortIsExact = Expect<
+  Equal<OutputClaimExclusiveCreatePort, ExpectedOutputClaimExclusiveCreatePort>
+>;
 
 type ExpectedInvocationExecutionPorts = {
   readonly execution: {

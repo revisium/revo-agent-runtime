@@ -29,6 +29,18 @@ export { normalizeInvocationOutcome } from './normalize-invocation-outcome.js';
 export type { NormalizedInvocationFailureReason } from './normalized-invocation-failure-reason.js';
 export type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
 export type { OutputResourcePlan } from './output-resource-plan.js';
+export type {
+  OutputClaimAttempt,
+  OutputClaimExclusiveCreatePort,
+  OutputClaimExclusiveCreateRequest,
+  ClaimedInvocationOutput,
+  OutputClaimGuard,
+  OutputClaimPlatformResult,
+  OutputClaimQuiescence,
+  OutputClaimReconciliation,
+  OutputClaimResult,
+} from './output-claim-attempt/index.js';
+export { inspectOutputClaimGuard } from './output-claim-attempt/index.js';
 export { PreparedLaunch } from './prepared-launch.js';
 export type { RawResponseDiagnostic } from './raw-response-diagnostic.js';
 export type { RedactionChannel } from './redaction/index.js';
