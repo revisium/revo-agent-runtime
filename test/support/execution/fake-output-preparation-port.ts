@@ -27,6 +27,20 @@ interface PendingPreparation {
   readonly reject: (error: Error) => void;
 }
 
+const createFakeRedactionChannel = () =>
+  Object.freeze({
+    feed: (chunk: Uint8Array): Uint8Array => chunk.slice(),
+    flush: (): Uint8Array => new Uint8Array(),
+    dispose: (): void => undefined,
+  });
+
+const createFakeFrontEnds = () =>
+  Object.freeze({
+    stdout: createFakeRedactionChannel(),
+    stderr: createFakeRedactionChannel(),
+    rawResponse: createFakeRedactionChannel(),
+  });
+
 const platformRejected = (
   reason: Extract<OutputPreparationPlatformResult, { status: 'rejected' }>['reason'],
 ): OutputPreparationPlatformResult => Object.freeze({ status: 'rejected', reason });
@@ -62,7 +76,14 @@ export class FakeOutputPreparationPort implements OutputPreparationMutationPort 
 
     request.markMutationDispatched();
     if (operation === 'throw-after-dispatch') throw new Error('failed after mutation dispatch');
-    if (operation === 'prepared') return Promise.resolve(Object.freeze({ status: 'prepared' }));
+    if (operation === 'prepared')
+      return Promise.resolve(
+        Object.freeze({
+          status: 'prepared',
+          attestations: Object.freeze([]),
+          frontEnds: createFakeFrontEnds(),
+        }),
+      );
     if (operation === 'reject') return Promise.reject(new Error('preparation failed'));
     if (operation === 'scratch-conflict')
       return Promise.resolve(platformRejected('scratch_conflict'));
@@ -85,7 +106,14 @@ export class FakeOutputPreparationPort implements OutputPreparationMutationPort 
   }
 
   settlePendingPrepared(preparationId: number): void {
-    this.settlePending(preparationId, Object.freeze({ status: 'prepared' }));
+    this.settlePending(
+      preparationId,
+      Object.freeze({
+        status: 'prepared',
+        attestations: Object.freeze([]),
+        frontEnds: createFakeFrontEnds(),
+      }),
+    );
   }
 
   settlePendingRejected(

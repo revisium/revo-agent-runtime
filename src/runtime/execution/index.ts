@@ -55,6 +55,7 @@ export type {
   ConsumedRedactionMaterial,
   OutputPreparationAttempt,
   OutputPreparationFileSlot,
+  OutputPreparationFileAttestation,
   OutputPreparationMutationPort,
   OutputPreparationMutationRequest,
   OutputPreparationPlatformResult,
@@ -62,6 +63,10 @@ export type {
   OutputPreparationResult,
   PreparedInvocationResources,
   TerminalPublicationAuthority,
+} from './output-preparation-attempt/index.js';
+export {
+  takeOutputPreparationFileSlots,
+  takeRegisteredSecretsForRedaction,
 } from './output-preparation-attempt/index.js';
 export { PreparedLaunch } from './prepared-launch.js';
 export type { RawResponseDiagnostic } from './raw-response-diagnostic.js';

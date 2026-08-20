@@ -1,5 +1,16 @@
+import type { RedactionChannel } from '../redaction/index.js';
+import type { OutputPreparationFileAttestation } from './output-preparation-file-attestation.js';
+
 export type OutputPreparationPlatformResult =
-  | Readonly<{ status: 'prepared' }>
+  | Readonly<{
+      status: 'prepared';
+      attestations: readonly OutputPreparationFileAttestation[];
+      frontEnds: Readonly<{
+        stdout: RedactionChannel;
+        stderr: RedactionChannel;
+        rawResponse: RedactionChannel;
+      }>;
+    }>
   | Readonly<{
       status: 'rejected';
       reason:

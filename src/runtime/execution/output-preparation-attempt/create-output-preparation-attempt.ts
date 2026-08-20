@@ -179,7 +179,7 @@ const settlePlatformResult = (
 ): void => {
   if (state.phase !== 'pending') return;
   if (result.status === 'prepared') {
-    settlePrepared(state);
+    settlePrepared(state, result);
     return;
   }
   if (result.status === 'rejected') {
@@ -194,12 +194,19 @@ const settlePreparationTimeout = (state: PreparationState): void => {
   settleUncertain(state, 'preparation_timeout');
 };
 
-const settlePrepared = (state: PreparationState): void => {
+const settlePrepared = (
+  state: PreparationState,
+  result: Extract<OutputPreparationPlatformResult, { status: 'prepared' }>,
+): void => {
   settleBoth(
     state,
     Object.freeze({
       status: 'prepared',
-      resources: PreparedInvocationResources.create(state),
+      resources: PreparedInvocationResources.create({
+        ...state,
+        attestations: result.attestations,
+        frontEnds: result.frontEnds,
+      }),
       authority: state.authority,
     }),
     Object.freeze({ status: 'quiescent', mutationDispatched: true }),

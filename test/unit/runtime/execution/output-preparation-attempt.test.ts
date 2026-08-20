@@ -8,18 +8,24 @@ import {
 import type {
   ConsumedOutputPreparationMaterial,
   ConsumedRedactionMaterial,
+  OutputPreparationFileAttestation,
+  OutputPreparationMutationPort,
+  OutputPreparationPlatformResult,
   OutputPreparationQuiescence,
   OutputPreparationResult,
+  RedactionChannel,
 } from '../../../../src/runtime/execution/index.js';
 import { registerSecrets } from '../../../../src/runtime/execution/index.js';
 import { ConsumedOutputPreparationMaterial as AuthenticConsumedOutputPreparationMaterial } from '../../../../src/runtime/execution/output-preparation-attempt/consumed-output-preparation-material.js';
 import {
   beginOutputPreparation,
   createOutputPreparationAttempt,
+  getOutputPreparationInvocationToken,
   type OutputPreparationAttempt,
   type PreparedInvocationResources,
   type TerminalPublicationAuthority,
 } from '../../../../src/runtime/execution/output-preparation-attempt/index.js';
+import { PreparedInvocationResources as AuthenticPreparedInvocationResources } from '../../../../src/runtime/execution/output-preparation-attempt/prepared-invocation-resources.js';
 import {
   consumeRedactionMaterial,
   createPreparedExecutionSecurity,
@@ -76,7 +82,7 @@ const claimedSession = async () => {
   return result.session;
 };
 
-const createAttempt = async (port: FakeOutputPreparationPort) => {
+const createAttempt = async (port: OutputPreparationMutationPort) => {
   const clock = new FakeInvocationClock({ initialNowMs: 1_000 });
   const attempt = createOutputPreparationAttempt({ session: await claimedSession(), clock, port });
   if (attempt === undefined) throw new Error('Expected authentic output preparation attempt.');
@@ -114,6 +120,24 @@ const authorityFields = (authority: TerminalPublicationAuthority): readonly stri
 const resourceFields = (resources: PreparedInvocationResources): readonly string[] =>
   Reflect.ownKeys(resources).map(String);
 
+const distinctRedactionChannel = (label: string): RedactionChannel =>
+  Object.freeze({
+    feed: (chunk: Uint8Array): Uint8Array =>
+      new TextEncoder().encode(`${label}:${chunk.byteLength}`),
+    flush: (): Uint8Array => new TextEncoder().encode(`${label}:flush`),
+    dispose: (): void => undefined,
+  });
+
+class PreparedPayloadPort implements OutputPreparationMutationPort {
+  constructor(
+    private readonly result: Extract<OutputPreparationPlatformResult, { status: 'prepared' }>,
+  ) {}
+
+  prepareClaimedOutput(): Promise<OutputPreparationPlatformResult> {
+    return Promise.resolve(this.result);
+  }
+}
+
 test('successful preparation before the deadline fulfills quiescence no later than prepared settlement', async () => {
   const port = new FakeOutputPreparationPort();
   port.enqueue('prepared');
@@ -132,6 +156,43 @@ test('successful preparation before the deadline fulfills quiescence no later th
   expect(observed).toEqual(['quiescence', 'settlement']);
   expect(clock.pendingActionCount()).toBe(0);
   await expectNeverRejects(attempt.settlement, attempt.quiescence);
+});
+
+test('prepared resources retain the platform attestations and redaction fronts under the attempt token', async () => {
+  const attestations: readonly OutputPreparationFileAttestation[] = Object.freeze([
+    Object.freeze({
+      slot: 'prompt',
+      path: '/outputs/preparation-test/.scratch/prompt.txt',
+      byteLength: 11,
+      sha256: 'a'.repeat(64),
+    }),
+  ]);
+  const frontEnds = Object.freeze({
+    stdout: distinctRedactionChannel('stdout'),
+    stderr: distinctRedactionChannel('stderr'),
+    rawResponse: distinctRedactionChannel('raw'),
+  });
+  const port = new PreparedPayloadPort(
+    Object.freeze({ status: 'prepared', attestations, frontEnds }),
+  );
+  const { attempt } = await createAttempt(port);
+
+  beginPreparation(attempt);
+  const result = await attempt.settlement;
+
+  expect(result.status).toBe('prepared');
+  if (result.status !== 'prepared') throw new Error('Expected prepared result.');
+  const token = getOutputPreparationInvocationToken(attempt);
+  if (token === undefined) throw new Error('Expected output preparation invocation token.');
+  expect(AuthenticPreparedInvocationResources.isAuthentic(result.resources)).toBe(true);
+  expect(AuthenticPreparedInvocationResources.isBoundToToken(result.resources, token)).toBe(true);
+  const taken = AuthenticPreparedInvocationResources.take(result.resources);
+  expect(taken).toEqual({ attestations, frontEnds });
+  expect(taken?.attestations).toBe(attestations);
+  expect(taken?.frontEnds.stdout).toBe(frontEnds.stdout);
+  expect(taken?.frontEnds.stderr).toBe(frontEnds.stderr);
+  expect(taken?.frontEnds.rawResponse).toBe(frontEnds.rawResponse);
+  expect(AuthenticPreparedInvocationResources.take(result.resources)).toBeUndefined();
 });
 
 test('prepared result returns the attempt authority by identity and resources for the claimed session', async () => {

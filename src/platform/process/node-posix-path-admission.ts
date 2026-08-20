@@ -17,8 +17,12 @@ const isInvalidOutputLeafPath = (path: string): boolean =>
 const isMissingPathError = (error: unknown): boolean =>
   error instanceof Error && 'code' in error && error.code === 'ENOENT';
 
+const isExistingPathError = (error: unknown): boolean =>
+  error instanceof Error && 'code' in error && error.code === 'EEXIST';
+
 export const nodePosixPathAdmission = Object.freeze({
   isInvalidNormalizedAbsolutePosixPath,
   isInvalidOutputLeafPath,
   isMissingPathError,
+  isExistingPathError,
 });

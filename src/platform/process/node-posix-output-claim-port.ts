@@ -17,9 +17,6 @@ const isDispatchable = (request: OutputClaimExclusiveCreateRequest): boolean =>
   process.platform === 'linux' &&
   !nodePosixPathAdmission.isInvalidOutputLeafPath(request.outputDirectory);
 
-const isExistingPathError = (error: unknown): boolean =>
-  error instanceof Error && 'code' in error && error.code === 'EEXIST';
-
 export class NodePosixOutputClaimPort implements OutputClaimExclusiveCreatePort {
   async createExclusiveOutputDirectory(
     request: OutputClaimExclusiveCreateRequest,
@@ -32,7 +29,7 @@ export class NodePosixOutputClaimPort implements OutputClaimExclusiveCreatePort 
       await mkdir(request.outputDirectory);
       return created;
     } catch (error: unknown) {
-      return isExistingPathError(error) ? leafExists : createFailed;
+      return nodePosixPathAdmission.isExistingPathError(error) ? leafExists : createFailed;
     }
   }
 }

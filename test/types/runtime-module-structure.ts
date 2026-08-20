@@ -30,6 +30,7 @@ import type {
   PreparedInvocationMaterial,
   PreparedInvocation,
   OutputPreparationFileSlot,
+  OutputPreparationFileAttestation,
   ExecutionBinding,
   beginOutputClaim,
   createRedactingBoundedOutputSink,
@@ -742,7 +743,15 @@ type ExpectedOutputPreparationMutationRequest = {
 };
 
 type ExpectedOutputPreparationPlatformResult =
-  | Readonly<{ status: 'prepared' }>
+  | Readonly<{
+      status: 'prepared';
+      attestations: readonly OutputPreparationFileAttestation[];
+      frontEnds: Readonly<{
+        stdout: RedactionChannel;
+        stderr: RedactionChannel;
+        rawResponse: RedactionChannel;
+      }>;
+    }>
   | Readonly<{
       status: 'rejected';
       reason:
