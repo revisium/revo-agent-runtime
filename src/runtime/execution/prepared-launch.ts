@@ -2,8 +2,10 @@ import type { AgentValidationDetails, JsonObject } from '../spec/index.js';
 import type { InterpretedArgumentTemplate } from './argument-template-interpretation/index.js';
 import { canonicalEffectiveInputs } from './canonical-effective-inputs.js';
 import { ExecutionBindingToken } from './execution-binding-token.js';
+import type { ExecutionBinding } from './execution-binding.js';
 import type { OutputResourcePlan } from './output-resource-plan.js';
 import type { PreparedInvocationPayloads } from './payload-preparation/index.js';
+import { readExecutionBinding } from './read-execution-binding.js';
 import type { ResultSchemaValidator } from './result-schema-validator.js';
 
 interface PreparedLaunchPin {
@@ -42,19 +44,8 @@ interface PreparedLaunchOptions {
   readonly preparedPayloads: PreparedInvocationPayloads;
 }
 
-interface PreparedLaunchBinding {
-  readonly protocolDriverId: 'native/stdio-v1' | 'acp/v1';
-  readonly resultParserId?: 'codex-jsonl/v1' | 'claude-stream-json/v1';
-  readonly permissionStrategyId: 'codex-cli/v1' | 'claude-cli/v1' | 'acp/v1';
-  readonly delivery: {
-    readonly prompt: 'argument' | 'stdin' | 'file' | 'protocol';
-    readonly resultSchema: 'argument' | 'file' | 'protocol';
-    readonly result: 'stdout' | 'protocol';
-  };
-}
-
 interface PreparedLaunchMaterial extends PreparedLaunchOptions {
-  readonly binding: PreparedLaunchBinding;
+  readonly binding: ExecutionBinding;
   readonly bindingToken: unknown;
 }
 
@@ -141,36 +132,6 @@ const copyLimits = (value: unknown): PreparedLaunchLimits | undefined => {
   });
 };
 
-const asProtocolDriverId = (
-  value: unknown,
-): PreparedLaunchBinding['protocolDriverId'] | undefined =>
-  value === 'native/stdio-v1' || value === 'acp/v1' ? value : undefined;
-
-const asResultParserId = (value: unknown): PreparedLaunchBinding['resultParserId'] | undefined =>
-  value === 'codex-jsonl/v1' || value === 'claude-stream-json/v1' ? value : undefined;
-
-const asPermissionStrategyId = (
-  value: unknown,
-): PreparedLaunchBinding['permissionStrategyId'] | undefined =>
-  value === 'codex-cli/v1' || value === 'claude-cli/v1' || value === 'acp/v1' ? value : undefined;
-
-const asPromptDelivery = (
-  value: unknown,
-): PreparedLaunchBinding['delivery']['prompt'] | undefined =>
-  value === 'argument' || value === 'stdin' || value === 'file' || value === 'protocol'
-    ? value
-    : undefined;
-
-const asResultSchemaDelivery = (
-  value: unknown,
-): PreparedLaunchBinding['delivery']['resultSchema'] | undefined =>
-  value === 'argument' || value === 'file' || value === 'protocol' ? value : undefined;
-
-const asResultDelivery = (
-  value: unknown,
-): PreparedLaunchBinding['delivery']['result'] | undefined =>
-  value === 'stdout' || value === 'protocol' ? value : undefined;
-
 const isValidatorFunction = (value: unknown): value is (input: JsonObject) => unknown =>
   typeof value === 'function';
 
@@ -204,49 +165,6 @@ const ownString = (value: object, key: string): string | undefined => {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
   if (!isDataDescriptor(descriptor)) return undefined;
   return typeof descriptor.value === 'string' ? descriptor.value : undefined;
-};
-
-const copyBinding = (value: unknown): PreparedLaunchBinding | undefined => {
-  if (value === null || typeof value !== 'object') return undefined;
-  if (!isPlainObservedObject(value)) return undefined;
-  const keys = Reflect.ownKeys(value);
-  if (
-    !(
-      (keys.length === 3 || keys.length === 4) &&
-      keys.includes('protocolDriverId') &&
-      keys.includes('permissionStrategyId') &&
-      keys.includes('delivery')
-    ) ||
-    (keys.length === 4 && !keys.includes('resultParserId'))
-  )
-    return undefined;
-  const protocolDriverId = asProtocolDriverId(ownString(value, 'protocolDriverId'));
-  const resultParserId = keys.includes('resultParserId')
-    ? asResultParserId(ownString(value, 'resultParserId'))
-    : undefined;
-  const permissionStrategyId = asPermissionStrategyId(ownString(value, 'permissionStrategyId'));
-  const deliveryDescriptor = Object.getOwnPropertyDescriptor(value, 'delivery');
-  if (
-    protocolDriverId === undefined ||
-    (keys.includes('resultParserId') && resultParserId === undefined) ||
-    permissionStrategyId === undefined ||
-    !isDataDescriptor(deliveryDescriptor) ||
-    deliveryDescriptor.value === null ||
-    typeof deliveryDescriptor.value !== 'object' ||
-    !isPlainObservedObject(deliveryDescriptor.value) ||
-    !hasExactKeys(deliveryDescriptor.value, ['prompt', 'resultSchema', 'result'])
-  )
-    return undefined;
-  const prompt = asPromptDelivery(ownString(deliveryDescriptor.value, 'prompt'));
-  const resultSchema = asResultSchemaDelivery(ownString(deliveryDescriptor.value, 'resultSchema'));
-  const result = asResultDelivery(ownString(deliveryDescriptor.value, 'result'));
-  if (prompt === undefined || resultSchema === undefined || result === undefined) return undefined;
-  return Object.freeze({
-    protocolDriverId,
-    ...(resultParserId === undefined ? {} : { resultParserId }),
-    permissionStrategyId,
-    delivery: Object.freeze({ prompt, resultSchema, result }),
-  });
 };
 
 const ownNonEmptyString = (value: object, key: string): string | undefined => {
@@ -504,7 +422,7 @@ const copyPreparedLaunchMaterial = (value: object): PreparedLaunchMaterial | und
     copyInterpretedArgumentTemplate,
   );
   const preparedPayloads = ownCopiedValue(value, 'preparedPayloads', copyPreparedPayloads);
-  const binding = ownCopiedValue(value, 'binding', copyBinding);
+  const binding = ownCopiedValue(value, 'binding', readExecutionBinding);
   const bindingTokenDescriptor = Object.getOwnPropertyDescriptor(value, 'bindingToken');
   const bindingToken = isDataDescriptor(bindingTokenDescriptor)
     ? bindingTokenDescriptor.value

@@ -32,22 +32,7 @@ export class ExecutionBindingToken {
     return new ExecutionBindingToken(input);
   }
 
-  static matches(
-    token: unknown,
-    proof: Readonly<{
-      readonly agentId: string;
-      readonly agentVersion: string;
-      readonly definitionDigest: string;
-      readonly protocolDriverId: 'native/stdio-v1' | 'acp/v1';
-      readonly resultParserId?: 'codex-jsonl/v1' | 'claude-stream-json/v1';
-      readonly permissionStrategyId: 'codex-cli/v1' | 'claude-cli/v1' | 'acp/v1';
-      readonly delivery: {
-        readonly prompt: 'argument' | 'stdin' | 'file' | 'protocol';
-        readonly resultSchema: 'argument' | 'file' | 'protocol';
-        readonly result: 'stdout' | 'protocol';
-      };
-    }>,
-  ): boolean {
+  static matches(token: unknown, proof: ExecutionBindingTokenInput): boolean {
     if (typeof token !== 'object' || token === null || !(#proof in token)) return false;
     return (
       token.#proof.agentId === proof.agentId &&

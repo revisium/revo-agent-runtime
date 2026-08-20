@@ -12,6 +12,7 @@ import type {
   OutputPreparationResult,
 } from '../../../../src/runtime/execution/index.js';
 import { registerSecrets } from '../../../../src/runtime/execution/index.js';
+import { ConsumedOutputPreparationMaterial as AuthenticConsumedOutputPreparationMaterial } from '../../../../src/runtime/execution/output-preparation-attempt/consumed-output-preparation-material.js';
 import {
   beginOutputPreparation,
   createOutputPreparationAttempt,
@@ -35,7 +36,12 @@ const sessionInput = () => ({
   outputDirectory: '/outputs/preparation-test',
 });
 
-const material = (): ConsumedOutputPreparationMaterial => ({ ...sessionInput() });
+const material = (): ConsumedOutputPreparationMaterial =>
+  AuthenticConsumedOutputPreparationMaterial.create({
+    ...sessionInput(),
+    invocationToken: Object.freeze({}),
+    files: Object.freeze([]),
+  });
 
 const flushPromises = async (): Promise<void> => {
   await Promise.resolve();
@@ -249,7 +255,12 @@ test('beginOutputPreparation is one-use while the first mutation is still pendin
   const { attempt } = await createAttempt(port);
   const firstMaterial = material();
   const firstRedaction = redaction(attempt);
-  const secondMaterial = { invocationId: 'second', outputDirectory: '/outputs/second' };
+  const secondMaterial = AuthenticConsumedOutputPreparationMaterial.create({
+    invocationId: 'second',
+    outputDirectory: '/outputs/second',
+    invocationToken: Object.freeze({}),
+    files: Object.freeze([]),
+  });
   const secondAttempt = await createAttempt(new FakeOutputPreparationPort());
   const secondRedaction = redaction(secondAttempt.attempt);
 

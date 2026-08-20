@@ -75,6 +75,7 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/child-environment/child-environment-capture.ts',
     'execution/child-environment/child-environment-request.ts',
     'execution/child-environment/index.ts',
+    'execution/execution-binding.ts',
     'execution/execution-binding-token.ts',
     'execution/execution-ports.ts',
     'execution/execution-terminal-observation.ts',
@@ -108,9 +109,11 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/output-preparation-attempt/get-output-preparation-invocation-token.ts',
     'execution/output-preparation-attempt/index.ts',
     'execution/output-preparation-attempt/invocation-bound-carrier.ts',
+    'execution/output-preparation-attempt/is-consumed-output-preparation-material-bound-to-token.ts',
     'execution/output-preparation-attempt/is-consumed-redaction-material-bound-to-token.ts',
     'execution/output-preparation-attempt/output-preparation-attempt.ts',
     'execution/output-preparation-attempt/output-preparation-beginners.ts',
+    'execution/output-preparation-attempt/output-preparation-file-slot.ts',
     'execution/output-preparation-attempt/output-preparation-invocation-tokens.ts',
     'execution/output-preparation-attempt/output-preparation-mutation-port.ts',
     'execution/output-preparation-attempt/output-preparation-mutation-request.ts',
@@ -132,6 +135,11 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/prepared-execution-security/prepared-execution-security-request.ts',
     'execution/prepared-execution-security/prepared-execution-security.ts',
     'execution/prepared-execution-security/take-prepared-child-environment.ts',
+    'execution/prepared-invocation/consume-output-preparation-material.ts',
+    'execution/prepared-invocation/create-prepared-invocation.ts',
+    'execution/prepared-invocation/index.ts',
+    'execution/prepared-invocation/prepared-invocation-material.ts',
+    'execution/prepared-invocation/prepared-invocation.ts',
     'execution/prepared-launch.ts',
     'execution/process-supervision-port/index.ts',
     'execution/process-supervision-port/live-owned-process.ts',
@@ -148,6 +156,7 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/redacting-output-guard/index.ts',
     'execution/redacting-output-guard/redacting-bounded-output-sink.ts',
     'execution/redacting-output-guard/redacting-output-guard-request.ts',
+    'execution/read-execution-binding.ts',
     'execution/reflective-object-read.ts',
     'execution/result-schema-validator.ts',
     'execution/secret-registration/index.ts',
@@ -211,5 +220,8 @@ test('runtime tree comparison is independent of directory enumeration order', as
     sources[index]?.includes("from 'node:crypto'"),
   );
 
-  expect(cryptoImporters).toEqual(['definition/definition-digest/create-definition-identity.ts']);
+  expect(cryptoImporters).toEqual([
+    'definition/definition-digest/create-definition-identity.ts',
+    'execution/prepared-invocation/create-prepared-invocation.ts',
+  ]);
 });

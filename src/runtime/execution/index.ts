@@ -1,6 +1,11 @@
+export type { ExecutionBinding } from './execution-binding.js';
 export type { InvocationExecutionPorts } from './execution-ports.js';
 export { prepareInvocationPayloads } from './payload-preparation/index.js';
 export type { PreparedInvocationPayloads } from './payload-preparation/index.js';
+export type {
+  PreparedInvocation,
+  PreparedInvocationMaterial,
+} from './prepared-invocation/index.js';
 export { interpretArgumentTemplate } from './argument-template-interpretation/index.js';
 export type { InterpretedArgumentTemplate } from './argument-template-interpretation/index.js';
 export type {
@@ -49,6 +54,7 @@ export type {
   ConsumedOutputPreparationMaterial,
   ConsumedRedactionMaterial,
   OutputPreparationAttempt,
+  OutputPreparationFileSlot,
   OutputPreparationMutationPort,
   OutputPreparationMutationRequest,
   OutputPreparationPlatformResult,
