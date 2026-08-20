@@ -105,21 +105,24 @@ const beginClaim = (state: ClaimState): void => {
     return;
   }
 
+  let platformSettlement: Promise<OutputClaimPlatformResult>;
   try {
-    const platformSettlement = state.port.createExclusiveOutputDirectory({
+    platformSettlement = state.port.createExclusiveOutputDirectory({
       invocationId: state.invocationId,
       outputDirectory: state.outputDirectory,
       markSyscallDispatched: () => {
         state.dispatchStarted = true;
       },
     });
-    void platformSettlement.then(
-      (result) => state.platformOutcome.resolve(result),
-      () => state.platformOutcome.resolve({ status: 'unknown_failure' }),
-    );
   } catch {
     settleSynchronousFailure(state);
+    return;
   }
+
+  void platformSettlement.then(
+    (result) => state.platformOutcome.resolve(result),
+    () => state.platformOutcome.resolve({ status: 'unknown_failure' }),
+  );
 };
 
 const settleSynchronousFailure = (state: ClaimState): void => {
