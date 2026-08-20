@@ -25,6 +25,8 @@ import type {
   captureChildEnvironment,
   ChildEnvironmentCapture,
   ChildEnvironmentRequest,
+  ConsumedOutputPreparationMaterial,
+  ConsumedRedactionMaterial,
   beginOutputClaim,
   createRedactingBoundedOutputSink,
   createRedactionChannel,
@@ -44,6 +46,13 @@ import type {
   OutputClaimQuiescence,
   OutputClaimReconciliation,
   OutputClaimResult,
+  OutputPreparationAttempt,
+  OutputPreparationMutationPort,
+  OutputPreparationMutationRequest,
+  OutputPreparationPlatformResult,
+  OutputPreparationQuiescence,
+  OutputPreparationResult,
+  PreparedInvocationResources,
   PreparedLaunch,
   ProcessExitObservation,
   ProcessIdentity,
@@ -58,6 +67,7 @@ import type {
   revealRegisteredSecrets,
   SealedSecretRegistration,
   SecretRegistrationRequest,
+  TerminalPublicationAuthority,
   WorkspaceAdmissionResult,
 } from '../../src/runtime/execution/index.js';
 import type {
@@ -636,6 +646,120 @@ export type OutputClaimExclusiveCreateRequestIsExact = Expect<
 
 export type OutputClaimExclusiveCreatePortIsExact = Expect<
   Equal<OutputClaimExclusiveCreatePort, ExpectedOutputClaimExclusiveCreatePort>
+>;
+
+type ExpectedOutputPreparationResult =
+  | Readonly<{
+      status: 'prepared';
+      resources: PreparedInvocationResources;
+      authority: TerminalPublicationAuthority;
+    }>
+  | Readonly<{
+      status: 'rejected';
+      reason:
+        | 'cancelled_before_mutation'
+        | 'scratch_conflict'
+        | 'scratch_create_failed'
+        | 'scratch_write_failed'
+        | 'scratch_flush_failed'
+        | 'redaction_sink_create_failed'
+        | 'evidence_open_failed'
+        | 'internal_before_mutation';
+      authority: TerminalPublicationAuthority;
+    }>
+  | Readonly<{
+      status: 'uncertain';
+      reason: 'preparation_timeout' | 'preparation_state_unknown';
+      authority: TerminalPublicationAuthority;
+    }>;
+
+type ExpectedOutputPreparationQuiescence =
+  | Readonly<{ status: 'quiescent'; mutationDispatched: boolean }>
+  | Readonly<{ status: 'retained'; authority: TerminalPublicationAuthority }>;
+
+type ExpectedOutputPreparationAttempt = {
+  readonly invocationId: string;
+  readonly outputDirectory: string;
+  readonly authority: TerminalPublicationAuthority;
+  readonly settlement: Promise<OutputPreparationResult>;
+  readonly quiescence: Promise<OutputPreparationQuiescence>;
+  requestCancellation(): void;
+};
+
+type ExpectedConsumedOutputPreparationMaterial = {
+  readonly invocationId: string;
+  readonly outputDirectory: string;
+};
+
+type ExpectedConsumedRedactionMaterial = {
+  readonly invocationId: string;
+};
+
+type ExpectedOutputPreparationMutationRequest = {
+  readonly invocationId: string;
+  readonly outputDirectory: string;
+  readonly material: ConsumedOutputPreparationMaterial;
+  readonly redaction: ConsumedRedactionMaterial;
+  markMutationDispatched(): void;
+};
+
+type ExpectedOutputPreparationPlatformResult =
+  | Readonly<{ status: 'prepared' }>
+  | Readonly<{
+      status: 'rejected';
+      reason:
+        | 'scratch_conflict'
+        | 'scratch_create_failed'
+        | 'scratch_write_failed'
+        | 'scratch_flush_failed'
+        | 'redaction_sink_create_failed'
+        | 'evidence_open_failed';
+    }>;
+
+type ExpectedOutputPreparationMutationPort = {
+  prepareClaimedOutput(
+    request: OutputPreparationMutationRequest,
+  ): Promise<OutputPreparationPlatformResult>;
+};
+
+export type OutputPreparationResultIsExact = Expect<
+  Equal<OutputPreparationResult, ExpectedOutputPreparationResult>
+>;
+
+export type OutputPreparationQuiescenceIsExact = Expect<
+  Equal<OutputPreparationQuiescence, ExpectedOutputPreparationQuiescence>
+>;
+
+export type OutputPreparationAttemptIsExact = Expect<
+  Equal<OutputPreparationAttempt, ExpectedOutputPreparationAttempt>
+>;
+
+export type ConsumedOutputPreparationMaterialIsExact = Expect<
+  Equal<ConsumedOutputPreparationMaterial, ExpectedConsumedOutputPreparationMaterial>
+>;
+
+export type ConsumedRedactionMaterialIsExact = Expect<
+  Equal<ConsumedRedactionMaterial, ExpectedConsumedRedactionMaterial>
+>;
+
+export type TerminalPublicationAuthorityIsExact = Expect<
+  Equal<TerminalPublicationAuthority, TerminalPublicationAuthority>
+>;
+
+export type PreparedInvocationResourcesIsExact = Expect<
+  Equal<PreparedInvocationResources, PreparedInvocationResources>
+>;
+
+export type OutputPreparationMutationRequestIsExact = Expect<
+  Equal<OutputPreparationMutationRequest, ExpectedOutputPreparationMutationRequest>
+>;
+
+export type OutputPreparationMutationPortIsExact = Expect<
+  Equal<OutputPreparationMutationPort, ExpectedOutputPreparationMutationPort>
+>;
+
+export type OutputPreparationPlatformResultIsExact = Expect<
+  Equal<OutputPreparationPlatformResult, ExpectedOutputPreparationPlatformResult>
 >;
 
 type ExpectedInvocationExecutionPorts = {

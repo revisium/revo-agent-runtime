@@ -45,6 +45,18 @@ export {
   createOutputClaimAttempt,
   inspectOutputClaimGuard,
 } from './output-claim-attempt/index.js';
+export type {
+  ConsumedOutputPreparationMaterial,
+  ConsumedRedactionMaterial,
+  OutputPreparationAttempt,
+  OutputPreparationMutationPort,
+  OutputPreparationMutationRequest,
+  OutputPreparationPlatformResult,
+  OutputPreparationQuiescence,
+  OutputPreparationResult,
+  PreparedInvocationResources,
+  TerminalPublicationAuthority,
+} from './output-preparation-attempt/index.js';
 export { PreparedLaunch } from './prepared-launch.js';
 export type { RawResponseDiagnostic } from './raw-response-diagnostic.js';
 export type { RedactionChannel } from './redaction/index.js';

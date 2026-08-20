@@ -220,9 +220,13 @@ const runtimeLayer = (path: string): string | undefined =>
 const specDomain = (path: string): string | undefined =>
   /^src\/runtime\/spec\/([^/]+)\//.exec(path)?.[1];
 
-const isAllowedPrivateOutputClaimAttemptTestImport = (path: string, target: string): boolean =>
-  path === 'test/unit/runtime/execution/output-claim-attempt.test.ts' &&
-  target === 'src/runtime/execution/output-claim-attempt/index.ts';
+const allowedPrivateTestImports = new Set([
+  'test/unit/runtime/execution/output-claim-attempt.test.ts->src/runtime/execution/output-claim-attempt/index.ts',
+  'test/unit/runtime/execution/output-preparation-attempt.test.ts->src/runtime/execution/output-preparation-attempt/index.ts',
+]);
+
+const isAllowedPrivateTestImport = (path: string, target: string): boolean =>
+  allowedPrivateTestImports.has(`${path}->${target}`);
 
 const validateImportBoundaries = (path: string, references: readonly ModuleReference[]): void => {
   const layer = runtimeLayer(path);
@@ -255,7 +259,7 @@ const validateImportBoundaries = (path: string, references: readonly ModuleRefer
       const expectedTarget = `src/runtime/${targetLayer}/index.ts`;
       if (
         reference.target !== expectedTarget &&
-        !isAllowedPrivateOutputClaimAttemptTestImport(path, reference.target)
+        !isAllowedPrivateTestImport(path, reference.target)
       )
         fail('test-layer-barrel-import', path);
     }
