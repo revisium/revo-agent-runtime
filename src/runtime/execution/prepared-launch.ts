@@ -358,8 +358,7 @@ const copyInterpretedArgumentTemplate = (
   const result: Array<InterpretedArgumentTemplate[number]> = [];
   for (let index = 0; index < length; index += 1) {
     const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-    if (descriptor === undefined || descriptor.enumerable !== true || !isDataDescriptor(descriptor))
-      return undefined;
+    if (descriptor?.enumerable !== true || !isDataDescriptor(descriptor)) return undefined;
     const item = copyInterpretedArgumentTemplateItem(descriptor.value);
     if (item === undefined) return undefined;
     result.push(item);

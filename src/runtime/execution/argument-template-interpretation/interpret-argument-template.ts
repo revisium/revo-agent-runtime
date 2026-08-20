@@ -15,8 +15,7 @@ type TemplateInterpretationResult =
 const renderJsonArgument = (value: JsonValue): string | undefined => {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' && !Number.isFinite(value)) return undefined;
-  const rendered = canonicalize(value);
-  return rendered === undefined ? undefined : rendered;
+  return canonicalize(value);
 };
 
 const ownJsonValue = (source: JsonObject, key: string): JsonValue | undefined =>
