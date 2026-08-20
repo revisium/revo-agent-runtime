@@ -53,6 +53,8 @@ import type {
   OutputPreparationQuiescence,
   OutputPreparationResult,
   PreparedInvocationResources,
+  PreparedExecutionSecurity,
+  PreparedExecutionSecurityRequest,
   PreparedLaunch,
   ProcessExitObservation,
   ProcessIdentity,
@@ -691,8 +693,10 @@ type ExpectedConsumedOutputPreparationMaterial = {
   readonly outputDirectory: string;
 };
 
-type ExpectedConsumedRedactionMaterial = {
+type ExpectedPreparedExecutionSecurityRequest = {
   readonly invocationId: string;
+  readonly childEnvironment: Readonly<Record<string, string>>;
+  readonly registeredSecrets: RegisteredSecrets;
 };
 
 type ExpectedOutputPreparationMutationRequest = {
@@ -738,8 +742,16 @@ export type ConsumedOutputPreparationMaterialIsExact = Expect<
   Equal<ConsumedOutputPreparationMaterial, ExpectedConsumedOutputPreparationMaterial>
 >;
 
-export type ConsumedRedactionMaterialIsExact = Expect<
-  Equal<ConsumedRedactionMaterial, ExpectedConsumedRedactionMaterial>
+export type ConsumedRedactionMaterialVisibleFieldsAreExact = Expect<
+  Equal<keyof ConsumedRedactionMaterial, 'invocationId'>
+>;
+
+export type PreparedExecutionSecurityVisibleFieldsAreExact = Expect<
+  Equal<keyof PreparedExecutionSecurity, 'invocationId'>
+>;
+
+export type PreparedExecutionSecurityRequestIsExact = Expect<
+  Equal<PreparedExecutionSecurityRequest, ExpectedPreparedExecutionSecurityRequest>
 >;
 
 export type TerminalPublicationAuthorityIsExact = Expect<

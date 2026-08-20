@@ -17,7 +17,7 @@ export class RegisteredSecrets {
     return capability.#secretValues;
   }
 
-  private static isAuthentic(capability: unknown): capability is RegisteredSecrets {
+  static isAuthentic(capability: unknown): capability is RegisteredSecrets {
     return (
       typeof capability === 'object' &&
       capability !== null &&

@@ -223,6 +223,9 @@ const specDomain = (path: string): string | undefined =>
 const allowedPrivateTestImports = new Set([
   'test/unit/runtime/execution/output-claim-attempt.test.ts->src/runtime/execution/output-claim-attempt/index.ts',
   'test/unit/runtime/execution/output-preparation-attempt.test.ts->src/runtime/execution/output-preparation-attempt/index.ts',
+  'test/unit/runtime/execution/output-preparation-attempt.test.ts->src/runtime/execution/prepared-execution-security/index.ts',
+  'test/unit/runtime/execution/prepared-execution-security.test.ts->src/runtime/execution/output-preparation-attempt/index.ts',
+  'test/unit/runtime/execution/prepared-execution-security.test.ts->src/runtime/execution/prepared-execution-security/index.ts',
 ]);
 
 const isAllowedPrivateTestImport = (path: string, target: string): boolean =>
