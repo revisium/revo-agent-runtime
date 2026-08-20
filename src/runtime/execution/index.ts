@@ -34,6 +34,7 @@ export { finalizeInvocationOutcome } from './finalize-invocation-outcome.js';
 export { InvocationInputSnapshot } from './input-snapshot.js';
 export { StartContextSnapshot } from './start-context-snapshot.js';
 export { InvocationLifecycle } from './lifecycle.js';
+export { freezeJsonValue } from './freeze-json-value.js';
 export { normalizeInvocationOutcome } from './normalize-invocation-outcome.js';
 export type { NormalizedInvocationFailureReason } from './normalized-invocation-failure-reason.js';
 export type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
@@ -84,6 +85,14 @@ export type {
   RedactingOutputGuardRequest,
 } from './redacting-output-guard/index.js';
 export { createRedactingBoundedOutputSink } from './redacting-output-guard/index.js';
+export type {
+  ParserFailureReason,
+  ResultParserEndResult,
+  ResultParserId,
+  ResultParserPort,
+  ResultParserUsage,
+  ResultParserWriteResult,
+} from './result-parser/index.js';
 export type { ResultSchemaValidator } from './result-schema-validator.js';
 export type {
   PreparedExecutionSecurity,

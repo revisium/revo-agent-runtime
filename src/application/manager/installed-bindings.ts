@@ -1,14 +1,13 @@
 import type { ValidatedDefinition } from '../../runtime/definition/index.js';
 import { AgentManagerError } from '../../runtime/errors/index.js';
 import { ExecutionBindingToken } from '../../runtime/execution/execution-binding-token.js';
-import type { PermissionStrategyPort } from '../../runtime/execution/index.js';
+import type { PermissionStrategyPort, ResultParserId } from '../../runtime/execution/index.js';
 import { AGENT_FAULT_MESSAGES } from '../../runtime/policy/index.js';
 import type { AgentDefinitionContract, AgentFault } from '../../runtime/spec/index.js';
 import { CodexPermissionStrategy } from '../../strategies/permissions/index.js';
 import { CodexJsonlResultParser } from '../../strategies/result-parser/index.js';
 
 type ProtocolDriverId = AgentDefinitionContract['protocol']['driver'];
-type ResultParserId = NonNullable<AgentDefinitionContract['protocol']['resultParser']>;
 type PermissionStrategyId = AgentDefinitionContract['protocol']['permissionStrategy'];
 type PromptDelivery = AgentDefinitionContract['delivery']['prompt'];
 type ResultSchemaDelivery = AgentDefinitionContract['delivery']['resultSchema'];
