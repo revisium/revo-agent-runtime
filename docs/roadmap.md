@@ -203,10 +203,10 @@ the later roadmap responsibility that consumes it.
       ([ADR-0011](./adr/0011-consumer-governed-local-supervision.md)).
 - [x] Idle timing is terminal-only: stdout, stderr, valid protocol frames, listeners, file work, and internal timers do not
       reset it. Legacy heartbeat and operation counters are not adopted.
-- [ ] The proposed provider-version and OS/filesystem support matrix for Provider and platform conformance research is explicit,
-      including unsupported-cell behavior.
-- [ ] Shared-conformance evidence is classified as deterministic real-process fixtures, credentialed live-provider runs, or a
-      required combination; missing credentials are never reported as a pass.
+- [x] The proposed provider-version and OS/filesystem support matrix for Provider and platform conformance research is explicit,
+      including unsupported-cell behavior. Closed by the dated decision record below.
+- [x] Shared-conformance evidence is classified as deterministic real-process fixtures, credentialed live-provider runs, or a
+      required combination; missing credentials are never reported as a pass. Closed by the dated decision record below.
 
 #### Platform rollout decision record — 2026-07-31
 
@@ -223,8 +223,52 @@ by [ADR-0011](./adr/0011-consumer-governed-local-supervision.md).
   it remains unsupported and follows the existing `revo.agent.platform_unsupported` preflight path before output-leaf claim or
   process spawn.
 
-The unchecked matrix item remains open because provider versions, the macOS cell, and all required conformance evidence are not
-yet recorded.
+The unchecked matrix item is now closed by the decision record immediately below; provider versions beyond the Native Codex
+constraint, the macOS cell, and all required conformance evidence remain unrecorded and keep Provider and platform conformance
+research open for supported-cell closure.
+
+#### Provider-version and evidence-classification decision record — 2026-08-20
+
+Human approval closes the two remaining Human approval of contract decisions checkboxes above: the explicit provider-version/
+OS-filesystem support matrix proposal, and the shared-conformance evidence classification. Neither checkbox is a claim that
+Provider and platform conformance research or supported-cell closure is complete; both remain gated on the full exit criteria in
+this section (reproducible observations, bounded fixtures, exact recorded provider versions, and a stable contract for every
+unsupported cell).
+
+Research basis: a review of three analogue codebases (`aioncore`, `hermes-agent`, and the sibling `orchestrator` — the actual
+current consumer this package is extracted from) found no precedent among them for pinning an exact upstream CLI-provider
+version or for gating CI on a live credentialed provider run. `orchestrator`'s legacy `codex-runner.ts`/`process-executor.ts`
+(the direct behavioral precedent, since it is what already runs in production) has no version probe or platform check at all
+and tests provider wire-protocol conformance exclusively through hand-authored synthetic fixtures, while process-spawn
+mechanics are tested against real generic subprocesses (`echo`/`cat`/node, never `codex`/`claude`) with no credentials; its CI
+runs only on `ubuntu-latest` and has never had a macOS or Windows job. `aioncore` deliberately avoids version pinning in favor
+of PATH resolution plus a live capability probe, reporting drift rather than rejecting it. `hermes-agent` contributes no
+provider-version precedent (it talks to HTTP APIs, not spawned CLIs) but supplies a clear platform-conformance pattern:
+OS-specific behavior is proven only on a real CI runner for that OS, never by faking `process.platform`/`sys.platform` on
+Linux.
+
+- **Provider-version and OS/filesystem support matrix:** Native Codex's already-implemented version-probe mechanism
+  (`probeExecutable`, `parseExecutableVersionConstraint`/`matchesExecutableVersionConstraint`, `revo.agent.probe_version_mismatch`)
+  is declared against an **open-ended minimum-version constraint** (a lower bound pinned to the exact `codex` CLI version this
+  package's Native Codex adapter conformance work verifies against, with no upper bound) rather than a narrow pinned range. A
+  CLI version above the verified minimum is probed live and proceeds; it is not preflight-rejected on version alone. This
+  matches `aioncore`'s precedent and this package's existing probe design; it does not match orchestrator's legacy behavior
+  (which probes nothing), so it is a strictly stronger contract than the system being replaced. The OS/filesystem matrix itself
+  is unchanged from the Platform rollout decision record above: Linux on local `ext4` is the only supported cell until its
+  required native and provider conformance evidence exists; macOS and Windows remain unsupported and fail closed through
+  `revo.agent.platform_unsupported` before output-leaf claim or process spawn. `orchestrator`'s exclusively-`ubuntu-latest` CI
+  history is corroborating evidence, not contradicting evidence, for that existing decision.
+- **Shared-conformance evidence classification:** Shared-conformance evidence for Native Codex adapter conformance and the
+  provider-neutral frozen real-process harness is classified as **deterministic real-process fixtures, required and gating on
+  every change**. Process-spawn mechanics (signal/process-tree termination, timeout, cancellation, I/O) are proven against real
+  local subprocesses using package-owned or generic commands, requiring no provider credential. Codex-specific wire-protocol
+  conformance (argv, JSONL frames, terminal result variants, failure frames, usage fields) is proven against frozen fixtures
+  captured once from a real, manually invoked `codex` CLI run and checked in as golden evidence, not against hand-authored
+  synthetic JSONL literals and not against a live credentialed call in CI. A live credentialed provider run remains permitted
+  only as an optional, non-gating manual verification step; if it runs, a missing credential MUST be reported as skipped or
+  blocked, never as a pass, per the existing `VERIFICATION.md` rule. This matches the real evidence-classification precedent
+  already established by `orchestrator`'s legacy test suite and avoids the credential-management, flakiness, and cost risk of a
+  CI-gating live-provider run, which none of the three researched analogues do.
 
 #### Private agent discovery and executable probing entry decision record — 2026-07-20
 
