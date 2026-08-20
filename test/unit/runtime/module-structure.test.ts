@@ -156,6 +156,7 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/redacting-output-guard/index.ts',
     'execution/redacting-output-guard/redacting-bounded-output-sink.ts',
     'execution/redacting-output-guard/redacting-output-guard-request.ts',
+    'execution/read-execution-binding.ts',
     'execution/reflective-object-read.ts',
     'execution/result-schema-validator.ts',
     'execution/secret-registration/index.ts',
