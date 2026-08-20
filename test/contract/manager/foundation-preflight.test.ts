@@ -68,29 +68,29 @@ const createPorts = (
   execution: FakeInvocationExecutionPort;
   output: FakeInvocationOutputPort;
   probe: FakeExecutableProbePort;
+  workspace: ReturnType<typeof vi.fn>;
   ports: InvocationExecutionPorts;
 }> => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
   const probe = new FakeExecutableProbePort({ platform });
+  const workspace = vi.fn(
+    async () =>
+      workspaceAdmission ??
+      Object.freeze({ status: 'admitted' as const, directory: '/approved/workspace' }),
+  );
   const ports = {
     execution,
     output,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     executableProbe: probe,
-    workspace: {
-      admit: vi.fn(
-        async () =>
-          workspaceAdmission ??
-          Object.freeze({ status: 'admitted', directory: '/approved/workspace' }),
-      ),
-    },
+    workspace: { admit: workspace },
   } as InvocationExecutionPorts;
-  return Object.freeze({ execution, output, probe, ports });
+  return Object.freeze({ execution, output, probe, workspace, ports });
 };
 
 test('rejects workspace admission before output preparation or execution delegation', async () => {
-  const { execution, output, probe, ports } = createPorts('linux', {
+  const { execution, output, probe, workspace, ports } = createPorts('linux', {
     status: 'rejected',
     reason: 'invalid_path',
   });
@@ -105,13 +105,14 @@ test('rejects workspace admission before output preparation or execution delegat
       }),
     ),
   ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  expect(workspace).toHaveBeenCalledExactlyOnceWith('../relative/./hostile\u0000path');
   expect(probe.calls()).toEqual([]);
   expect(output.calls()).toEqual([]);
   expect(execution.calls()).toEqual([]);
 });
 
 test('admits a normalized absolute workspace before output preparation and execution', async () => {
-  const { execution, output, probe, ports } = createPorts('linux', {
+  const { execution, output, probe, workspace, ports } = createPorts('linux', {
     status: 'admitted',
     directory: '/approved/workspace',
   });
@@ -133,6 +134,7 @@ test('admits a normalized absolute workspace before output preparation and execu
   probe.settleCompletion(1, exited());
 
   await expect(started).resolves.toMatchObject({ status: 'accepted' });
+  expect(workspace).toHaveBeenCalledExactlyOnceWith('/approved/workspace');
   expect(output.calls()[0]).toEqual({ type: 'prepare' });
   expect(execution.calls()).toEqual([{ type: 'start' }]);
 });
@@ -302,7 +304,15 @@ test('maps a missing preflight composition port to a typed pre-acceptance reject
   const output = new FakeInvocationOutputPort();
   const manager = createInvocationLifecycleManager(
     { definitions: [definition] },
-    { execution, output, clock: new FakeInvocationClock({ initialNowMs: 0 }) },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      workspace: {
+        admit: async () =>
+          Object.freeze({ status: 'admitted' as const, directory: '/approved/workspace' }),
+      },
+    },
   );
 
   await expect(
@@ -311,3 +321,32 @@ test('maps a missing preflight composition port to a typed pre-acceptance reject
   expect(output.calls()).toEqual([]);
   expect(execution.calls()).toEqual([]);
 });
+
+test.each([
+  ['missing workspace port', {}],
+  ['missing workspace admit function', { workspace: {} }],
+] as const)(
+  'maps malformed %s to a typed pre-acceptance rejection',
+  async (_name, malformedWorkspacePort) => {
+    const definition = buildAgentDefinition();
+    const execution = new FakeInvocationExecutionPort();
+    const output = new FakeInvocationOutputPort();
+    const probe = new FakeExecutableProbePort({ platform: 'linux' });
+    const ports = {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: probe,
+      ...malformedWorkspacePort,
+    };
+    // @ts-expect-error Deliberately exercises unsafe JavaScript composition.
+    const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+
+    await expect(
+      manager.start(createStartInput(definition, { invocationId: `malformed-${_name}` })),
+    ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+    expect(probe.calls()).toEqual([]);
+    expect(output.calls()).toEqual([]);
+    expect(execution.calls()).toEqual([]);
+  },
+);

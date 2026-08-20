@@ -270,7 +270,7 @@ export class InvocationInputSnapshot {
   readonly prompt: string | undefined;
   readonly resultSchema: SnapshotRecord;
   readonly wallClockTimeoutMs: number;
-  readonly workspace: string | undefined;
+  readonly workspace: string;
 
   private constructor(
     input: Readonly<{
@@ -284,7 +284,7 @@ export class InvocationInputSnapshot {
       prompt: string | undefined;
       resultSchema: SnapshotRecord;
       wallClockTimeoutMs: number;
-      workspace: string | undefined;
+      workspace: string;
     }>,
   ) {
     this.agent = input.agent;
