@@ -73,6 +73,12 @@ export const createAcceptedInvocationLifecycleSubject = (
     childEnvironmentSecretValues: [],
     secretValues: [],
     resultSchemaValidator: validator,
+    outputResourcePlan: {
+      invocationId: 'accepted-invocation',
+      outputDirectory: '/outputs/invocation',
+      needsPromptFile: false,
+      needsResultSchemaFile: false,
+    },
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',

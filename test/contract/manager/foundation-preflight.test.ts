@@ -45,6 +45,17 @@ const createStartInput = (
     ...overrides,
   });
 
+const outputAdmissionCall = (invocationId: string) =>
+  Object.freeze({
+    type: 'admit' as const,
+    request: {
+      invocationId,
+      outputDirectory: '/outputs/invocation',
+      needsPromptFile: false,
+      needsResultSchemaFile: false,
+    },
+  });
+
 const exited = (version = '1.0.0') =>
   Object.freeze({
     status: 'exited' as const,
@@ -135,7 +146,8 @@ test('admits a normalized absolute workspace before output preparation and execu
 
   await expect(started).resolves.toMatchObject({ status: 'accepted' });
   expect(workspace).toHaveBeenCalledExactlyOnceWith('/approved/workspace');
-  expect(output.calls()[0]).toEqual({ type: 'prepare' });
+  expect(output.calls()[0]).toEqual(outputAdmissionCall('valid-workspace'));
+  expect(output.calls()[1]).toEqual({ type: 'prepare' });
   expect(execution.calls()).toEqual([{ type: 'start' }]);
 });
 
@@ -157,7 +169,7 @@ test('freshly probes every invocation before output preparation and execution de
   const first = manager.start(createStartInput(definition, { invocationId: 'first' }));
   await flush();
   expect(execution.calls()).toEqual([]);
-  expect(output.calls()).toEqual([]);
+  expect(output.calls()).toEqual([outputAdmissionCall('first')]);
   probe.settleCompletion(1, exited());
   const firstAccepted = await first;
   expect(firstAccepted.status).toBe('accepted');
@@ -235,7 +247,7 @@ test('rejects malformed launch evidence before output preparation or execution d
   probe.settleCompletion(1, exited());
 
   await expect(started).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
-  expect(output.calls()).toEqual([]);
+  expect(output.calls()).toEqual([outputAdmissionCall('malformed-launch-evidence')]);
   expect(execution.calls()).toEqual([]);
 });
 
@@ -259,7 +271,7 @@ test('fails target-platform preflight before output preparation or execution del
     });
   }
   expect(probe.calls()).toEqual([]);
-  expect(output.calls()).toEqual([]);
+  expect(output.calls()).toEqual([outputAdmissionCall('unsupported')]);
   expect(execution.calls()).toEqual([]);
 });
 
@@ -281,7 +293,7 @@ test('reserves an invocation id before probing and retains that reservation afte
     reason: 'duplicate_invocation',
   });
   expect(probe.calls()).toHaveLength(2);
-  expect(output.calls()).toEqual([]);
+  expect(output.calls()).toEqual([outputAdmissionCall('duplicate')]);
 
   probe.settleCompletion(1, exited());
   const accepted = await first;
@@ -318,7 +330,7 @@ test('maps a missing preflight composition port to a typed pre-acceptance reject
   await expect(
     manager.start(createStartInput(definition, { invocationId: 'missing-probe-port' })),
   ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
-  expect(output.calls()).toEqual([]);
+  expect(output.calls()).toEqual([outputAdmissionCall('missing-probe-port')]);
   expect(execution.calls()).toEqual([]);
 });
 
