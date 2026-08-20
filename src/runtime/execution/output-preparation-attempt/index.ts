@@ -1,6 +1,7 @@
 export type { ConsumedOutputPreparationMaterial } from './consumed-output-preparation-material.js';
 export type { ConsumedRedactionMaterial } from './consumed-redaction-material.js';
 export type { OutputPreparationFileSlot } from './output-preparation-file-slot.js';
+export type { OutputPreparationFileAttestation } from './output-preparation-file-attestation.js';
 export type { OutputPreparationAttempt } from './output-preparation-attempt.js';
 export type { OutputPreparationMutationPort } from './output-preparation-mutation-port.js';
 export type { OutputPreparationMutationRequest } from './output-preparation-mutation-request.js';
@@ -14,3 +15,5 @@ export { createOutputPreparationAttempt } from './create-output-preparation-atte
 export { getOutputPreparationInvocationToken } from './get-output-preparation-invocation-token.js';
 export { isConsumedRedactionMaterialBoundToToken } from './is-consumed-redaction-material-bound-to-token.js';
 export { isConsumedOutputPreparationMaterialBoundToToken } from './is-consumed-output-preparation-material-bound-to-token.js';
+export { takeOutputPreparationFileSlots } from './take-output-preparation-file-slots.js';
+export { takeRegisteredSecretsForRedaction } from './take-registered-secrets-for-redaction.js';

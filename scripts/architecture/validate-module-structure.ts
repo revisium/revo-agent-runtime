@@ -224,12 +224,16 @@ const allowedPrivateTestImports = new Set([
   'test/unit/runtime/execution/output-claim-attempt.test.ts->src/runtime/execution/output-claim-attempt/index.ts',
   'test/unit/runtime/execution/output-preparation-attempt.test.ts->src/runtime/execution/output-preparation-attempt/index.ts',
   'test/unit/runtime/execution/output-preparation-attempt.test.ts->src/runtime/execution/output-preparation-attempt/consumed-output-preparation-material.ts',
+  'test/unit/runtime/execution/output-preparation-attempt.test.ts->src/runtime/execution/output-preparation-attempt/prepared-invocation-resources.ts',
   'test/unit/runtime/execution/output-preparation-attempt.test.ts->src/runtime/execution/prepared-execution-security/index.ts',
   'test/unit/runtime/execution/prepared-execution-security.test.ts->src/runtime/execution/output-preparation-attempt/index.ts',
   'test/unit/runtime/execution/prepared-execution-security.test.ts->src/runtime/execution/prepared-execution-security/index.ts',
   'test/unit/runtime/execution/prepared-invocation.test.ts->src/runtime/execution/prepared-invocation/index.ts',
   'test/unit/runtime/execution/prepared-invocation.test.ts->src/runtime/execution/output-preparation-attempt/index.ts',
   'test/unit/runtime/execution/prepared-invocation.test.ts->src/runtime/execution/output-preparation-attempt/consumed-output-preparation-material.ts',
+  'test/unit/platform/node-posix-output-preparation-port.test.ts->src/runtime/execution/output-preparation-attempt/consumed-output-preparation-material.ts',
+  'test/unit/platform/node-posix-output-preparation-port.test.ts->src/runtime/execution/output-preparation-attempt/consumed-redaction-material.ts',
+  'test/unit/platform/node-posix-output-preparation-port.test.ts->src/runtime/execution/secret-registration/registered-secrets.ts',
 ]);
 
 const isAllowedPrivateTestImport = (path: string, target: string): boolean =>
