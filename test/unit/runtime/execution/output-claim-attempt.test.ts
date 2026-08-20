@@ -196,6 +196,25 @@ test('synchronous failure before dispatch is caught and settles without rejectin
   await expectNeverRejects(attempt.settlement, attempt.quiescence);
 });
 
+test('a port returning a non-promise value synchronously is treated as a failure before dispatch', async () => {
+  const port = new FakeOutputClaimPort();
+  port.enqueue('non-promise-return');
+  const { attempt, clock } = createAttempt(port);
+
+  expect(() => beginOutputClaim(attempt)).not.toThrow();
+
+  await expect(attempt.settlement).resolves.toEqual({
+    status: 'rejected',
+    reason: 'internal_before_dispatch',
+  });
+  await expect(attempt.quiescence).resolves.toEqual({
+    status: 'quiescent',
+    syscallDispatched: false,
+  });
+  expect(clock.pendingActionCount()).toBe(0);
+  await expectNeverRejects(attempt.settlement, attempt.quiescence);
+});
+
 test('synchronous failure after dispatch retains the identical guard for unknown claim state', async () => {
   const port = new FakeOutputClaimPort();
   port.enqueue('throw-after-dispatch');

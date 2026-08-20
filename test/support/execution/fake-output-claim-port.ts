@@ -12,7 +12,8 @@ export type FakeOutputClaimOperation =
   | 'pending-without-dispatch'
   | 'reject'
   | 'throw-before-dispatch'
-  | 'throw-after-dispatch';
+  | 'throw-after-dispatch'
+  | 'non-promise-return';
 
 interface PendingClaim {
   readonly request: OutputClaimExclusiveCreateRequest;
@@ -39,6 +40,12 @@ export class FakeOutputClaimPort implements OutputClaimExclusiveCreatePort {
     if (operation === 'throw-before-dispatch') throw new Error('failed before syscall dispatch');
     if (operation === 'pending-without-dispatch')
       return new Promise<OutputClaimPlatformResult>(() => undefined);
+    // Deliberately violates the port's return-type contract to exercise
+    // create-output-claim-attempt's defensive thenable check; remove only if
+    // that check or this operation is removed.
+    if (operation === 'non-promise-return')
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+      return { status: 'created' } as unknown as Promise<OutputClaimPlatformResult>;
 
     request.markSyscallDispatched();
     if (operation === 'throw-after-dispatch') throw new Error('failed after syscall dispatch');

@@ -107,13 +107,17 @@ const beginClaim = (state: ClaimState): void => {
 
   let platformSettlement: Promise<OutputClaimPlatformResult>;
   try {
-    platformSettlement = state.port.createExclusiveOutputDirectory({
+    const created = state.port.createExclusiveOutputDirectory({
       invocationId: state.invocationId,
       outputDirectory: state.outputDirectory,
       markSyscallDispatched: () => {
         state.dispatchStarted = true;
       },
     });
+    if (typeof created?.then !== 'function') {
+      throw new TypeError('Output claim exclusive-create port did not return a promise.');
+    }
+    platformSettlement = created;
   } catch {
     settleSynchronousFailure(state);
     return;
