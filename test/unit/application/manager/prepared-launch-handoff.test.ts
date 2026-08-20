@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ compileConsumerSchema: vi.fn(), probeExecutable: vi.fn() }));
 
@@ -31,8 +31,14 @@ const resultSchema = Object.freeze({
   type: 'object',
 });
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 const compileCallsFor = (schemaPath: string): number =>
   mocks.compileConsumerSchema.mock.calls.filter(([, path]) => path === schemaPath).length;
+
+const shallowSpreadObject = (value: object): Record<string, unknown> => ({ ...value });
 
 test('reuses compiled effective input validators across starts for the same definition', async () => {
   const definition = buildAgentDefinition({
@@ -510,4 +516,217 @@ test('preclaim binding defense fails internal when the sealed target disagrees w
       retryable: false,
     });
   }
+});
+
+test('captures named child environment from start context before workspace, output, and execution', async () => {
+  vi.stubEnv('REVO_VISIBLE_ENV', 'host-value');
+  const definition = buildAgentDefinition();
+  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  if (validatedDefinition === undefined) throw new Error('Expected validated definition');
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  mocks.probeExecutable.mockResolvedValueOnce({
+    status: 'available',
+    agent: { id: definition.id, version: definition.version },
+    definitionDigest: validatedDefinition.definitionDigest,
+    executable: '/resolved/fixture-agent',
+    reportedVersion: '1.0.0',
+  });
+  output.enqueuePrepare();
+  execution.enqueueStart('running');
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition] },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
+      workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
+    },
+  );
+  const context = {
+    environment: {
+      inherit: ['REVO_VISIBLE_ENV'],
+      variables: { REVO_EXPLICIT_ENV: 'explicit-value' },
+      secrets: { REVO_SECRET_ENV: 'secret-value' },
+    },
+  };
+
+  const outcome = await manager.start(
+    {
+      invocationId: 'captured-child-environment',
+      agent: { id: definition.id, version: definition.version },
+      prompt: 'Return JSON.',
+      workspace: { directory: '/workspace/project' },
+      parameters: {},
+      permissions: {},
+      result: { schema: resultSchema },
+      output: { directory: '/outputs/invocation' },
+    },
+    context,
+  );
+  context.environment.inherit.push('MUTATED_AFTER_START');
+  context.environment.variables.REVO_EXPLICIT_ENV = 'mutated';
+  context.environment.secrets.REVO_SECRET_ENV = 'mutated-secret';
+
+  expect(outcome.status).toBe('accepted');
+  const [prepared] = execution.startedPreparedLaunches();
+  expect(prepared).toMatchObject({
+    childEnvironment: {
+      REVO_VISIBLE_ENV: 'host-value',
+      REVO_EXPLICIT_ENV: 'explicit-value',
+      REVO_SECRET_ENV: 'secret-value',
+    },
+  });
+  expect(prepared?.childEnvironmentSecretValues).toEqual(['secret-value']);
+});
+
+test('keeps captured child environment secrets out of enumerable launch views', async () => {
+  vi.stubEnv('REVO_VISIBLE_ENV', 'host-value');
+  const definition = buildAgentDefinition();
+  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  if (validatedDefinition === undefined) throw new Error('Expected validated definition');
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  mocks.probeExecutable.mockResolvedValueOnce({
+    status: 'available',
+    agent: { id: definition.id, version: definition.version },
+    definitionDigest: validatedDefinition.definitionDigest,
+    executable: '/resolved/fixture-agent',
+    reportedVersion: '1.0.0',
+  });
+  output.enqueuePrepare();
+  execution.enqueueStart('running');
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition] },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
+      workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
+    },
+  );
+
+  const outcome = await manager.start(
+    {
+      invocationId: 'non-enumerable-child-environment',
+      agent: { id: definition.id, version: definition.version },
+      prompt: 'Return JSON.',
+      workspace: { directory: '/workspace/project' },
+      parameters: {},
+      permissions: {},
+      result: { schema: resultSchema },
+      output: { directory: '/outputs/invocation' },
+    },
+    {
+      environment: {
+        inherit: ['REVO_VISIBLE_ENV'],
+        variables: { REVO_EXPLICIT_ENV: 'explicit-value' },
+        secrets: { REVO_SECRET_ENV: 'secret-value' },
+      },
+    },
+  );
+
+  expect(outcome.status).toBe('accepted');
+  const [prepared] = execution.startedPreparedLaunches();
+  if (prepared === undefined) throw new Error('Expected prepared launch evidence');
+
+  expect(prepared.childEnvironment.REVO_SECRET_ENV).toBe('secret-value');
+  const enumerableViews = [
+    Object.keys(prepared).join('\n'),
+    JSON.stringify(shallowSpreadObject(prepared)),
+    JSON.stringify(prepared),
+  ];
+  for (const view of enumerableViews) {
+    expect(view).not.toContain('REVO_SECRET_ENV');
+    expect(view).not.toContain('secret-value');
+  }
+});
+
+test('rejects missing inherited child environment names before workspace, output, and execution', async () => {
+  vi.stubEnv('REVO_MISSING_ENV', undefined);
+  const definition = buildAgentDefinition();
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const probe = new FakeExecutableProbePort({ platform: 'linux' });
+  const workspace = vi.fn(async () => ({
+    status: 'admitted' as const,
+    directory: '/workspace/project',
+  }));
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition] },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: probe,
+      workspace: { admit: workspace },
+    },
+  );
+
+  await expect(
+    manager.start(
+      {
+        invocationId: 'missing-child-environment',
+        agent: { id: definition.id, version: definition.version },
+        prompt: 'Return JSON.',
+        workspace: { directory: '/workspace/project' },
+        parameters: {},
+        permissions: {},
+        result: { schema: resultSchema },
+        output: { directory: '/outputs/invocation' },
+      },
+      { environment: { inherit: ['REVO_MISSING_ENV'] } },
+    ),
+  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+
+  expect(workspace).not.toHaveBeenCalled();
+  expect(probe.calls()).toEqual([]);
+  expect(output.calls()).toEqual([]);
+  expect(execution.calls()).toEqual([]);
+});
+
+test('rejects malformed start context before reserving invocation ids', async () => {
+  const definition = buildAgentDefinition();
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition] },
+    {
+      execution: new FakeInvocationExecutionPort(),
+      output: new FakeInvocationOutputPort(),
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
+      workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
+    },
+  );
+  const context = { environment: { inherit: ['REVO_ALLOWED_ENV'] }, extra: true };
+
+  await expect(
+    manager.start(
+      {
+        invocationId: 'malformed-start-context',
+        agent: { id: definition.id, version: definition.version },
+        prompt: 'Return JSON.',
+        workspace: { directory: '/workspace/project' },
+        parameters: {},
+        permissions: {},
+        result: { schema: resultSchema },
+        output: { directory: '/outputs/invocation' },
+      },
+      context,
+    ),
+  ).resolves.toEqual({ status: 'rejected', reason: 'invalid_request' });
+
+  await expect(
+    manager.start({
+      invocationId: 'malformed-start-context',
+      agent: { id: 'unknown-agent', version: definition.version },
+      prompt: 'Return JSON.',
+      workspace: { directory: '/workspace/project' },
+      parameters: {},
+      permissions: {},
+      result: { schema: resultSchema },
+      output: { directory: '/outputs/invocation' },
+    }),
+  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
 });

@@ -7,9 +7,12 @@ import {
 } from '../../runtime/definition/index.js';
 import { AgentManagerError } from '../../runtime/errors/index.js';
 import {
+  captureChildEnvironment,
   InvocationInputSnapshot,
   InvocationLifecycle,
   PreparedLaunch,
+  StartContextSnapshot,
+  type ChildEnvironmentCapture,
   type InvocationExecutionPorts,
   type NormalizedInvocationOutcome,
   type ResultSchemaValidator,
@@ -132,6 +135,8 @@ interface EffectiveInvocationInputs {
   readonly permissions: JsonObject;
 }
 
+type CapturedChildEnvironment = Extract<ChildEnvironmentCapture, { status: 'captured' }>;
+
 type PreflightBinding = ReturnType<InstalledBindingRegistry['createBinding']>;
 
 interface ResourceIndependentPreflight {
@@ -139,6 +144,7 @@ interface ResourceIndependentPreflight {
   readonly binding: PreflightBinding;
   readonly effectiveInputs: EffectiveInvocationInputs;
   readonly resultSchemaValidator: ResultSchemaValidator;
+  readonly childEnvironment: CapturedChildEnvironment;
 }
 
 type PreflightRejection =
@@ -190,6 +196,24 @@ const createResultSchemaValidator = (
   }
 };
 
+const createNamedHostEnvironmentSnapshot = (
+  names: readonly string[],
+): Readonly<Record<string, string>> => {
+  const snapshot: Record<string, string> = {};
+  Object.setPrototypeOf(snapshot, null);
+  for (const name of names) {
+    const value = process.env[name];
+    if (value === undefined) continue;
+    Object.defineProperty(snapshot, name, {
+      value,
+      enumerable: true,
+      configurable: false,
+      writable: false,
+    });
+  }
+  return Object.freeze(snapshot);
+};
+
 const createHandle = (
   invocationId: string,
   completion: Deferred<NormalizedInvocationOutcome>,
@@ -212,14 +236,15 @@ class InternalInvocationLifecycleManager {
     private readonly limits: Readonly<AgentManagerLimits>,
   ) {}
 
-  async start(input: unknown): Promise<LifecycleStartOutcome> {
+  async start(input: unknown, context?: unknown): Promise<LifecycleStartOutcome> {
     const snapshot = InvocationInputSnapshot.create(input, this.limits);
-    if (snapshot === undefined)
+    const startContext = StartContextSnapshot.create(context);
+    if (snapshot === undefined || startContext === undefined)
       return Object.freeze({ status: 'rejected', reason: 'invalid_request' });
     if (!this.reserve(snapshot.invocationId))
       return Object.freeze({ status: 'rejected', reason: 'duplicate_invocation' });
     try {
-      const preflightResult = await this.preflight(snapshot);
+      const preflightResult = await this.preflight(snapshot, startContext);
       if (preflightResult.status === 'invalid-result-schema')
         return Object.freeze({ status: 'rejected', reason: 'invalid_result_schema' });
       if (preflightResult.status === 'rejected')
@@ -286,14 +311,16 @@ class InternalInvocationLifecycleManager {
 
   private async preflight(
     snapshot: InvocationInputSnapshot,
+    context: StartContextSnapshot,
   ): Promise<
     | Readonly<{ status: 'accepted'; preparedLaunch: PreparedLaunch }>
     | Readonly<{ status: 'rejected' }>
     | Readonly<{ status: 'invalid-result-schema' }>
   > {
-    const resourceIndependent = this.prepareResourceIndependentPreflight(snapshot);
+    const resourceIndependent = this.prepareResourceIndependentPreflight(snapshot, context);
     if (resourceIndependent.status !== 'accepted') return resourceIndependent;
-    const { target, binding, effectiveInputs, resultSchemaValidator } = resourceIndependent;
+    const { target, binding, effectiveInputs, resultSchemaValidator, childEnvironment } =
+      resourceIndependent;
     if (snapshot.workspace !== undefined) {
       const workspace = this.ports.workspace;
       if (
@@ -323,6 +350,8 @@ class InternalInvocationLifecycleManager {
         limits: snapshot.limits,
         effectiveParameters: effectiveInputs.parameters,
         effectivePermissions: effectiveInputs.permissions,
+        childEnvironment: childEnvironment.environment,
+        childEnvironmentSecretValues: childEnvironment.secretValues,
         resultSchemaValidator,
         binding: binding.binding,
         bindingToken: binding.bindingToken,
@@ -346,6 +375,7 @@ class InternalInvocationLifecycleManager {
 
   private prepareResourceIndependentPreflight(
     snapshot: InvocationInputSnapshot,
+    context: StartContextSnapshot,
   ): Readonly<{ status: 'accepted' } & ResourceIndependentPreflight> | PreflightRejection {
     if (snapshot.agent === undefined) return Object.freeze({ status: 'rejected' });
     const target = this.registry.getDefinition(snapshot.agent);
@@ -362,12 +392,16 @@ class InternalInvocationLifecycleManager {
     const resultSchemaValidator = createResultSchemaValidator(snapshot);
     if (resultSchemaValidator === undefined)
       return Object.freeze({ status: 'invalid-result-schema' });
+    const hostSnapshot = createNamedHostEnvironmentSnapshot(context.environment.inherit);
+    const childEnvironment = captureChildEnvironment(context.environment, hostSnapshot);
+    if (childEnvironment.status === 'rejected') return Object.freeze({ status: 'rejected' });
     return Object.freeze({
       status: 'accepted',
       target,
       binding,
       effectiveInputs,
       resultSchemaValidator,
+      childEnvironment,
     });
   }
 
@@ -388,7 +422,7 @@ export const createInvocationLifecycleManager = (
   ports: LifecycleManagerPorts,
 ): Readonly<{
   getResult(invocationId: string): LifecycleResultLookup;
-  start(input: unknown): Promise<LifecycleStartOutcome>;
+  start(input: unknown, context?: unknown): Promise<LifecycleStartOutcome>;
   subscribe(filter: unknown, listener: TerminalEventListener): TerminalSubscriptionAdmission;
   waitForResult(invocationId: string): Promise<LifecycleWaitResult>;
 }> => {

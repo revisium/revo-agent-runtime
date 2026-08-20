@@ -23,6 +23,18 @@ interface PreparedLaunchLimits {
   readonly maxRawResponseBytes: number;
 }
 
+interface PreparedLaunchOptions {
+  readonly pin: PreparedLaunchPin;
+  readonly executable: string;
+  readonly reportedVersion: string;
+  readonly limits: PreparedLaunchLimits;
+  readonly effectiveParameters: JsonObject;
+  readonly effectivePermissions: JsonObject;
+  readonly childEnvironment: Readonly<Record<string, string>>;
+  readonly childEnvironmentSecretValues: readonly string[];
+  readonly resultSchemaValidator: ResultSchemaValidator;
+}
+
 interface PreparedLaunchBinding {
   readonly protocolDriverId: 'native/stdio-v1' | 'acp/v1';
   readonly resultParserId?: 'codex-jsonl/v1' | 'claude-stream-json/v1';
@@ -215,7 +227,69 @@ const ownNonEmptyString = (value: object, key: string): string | undefined => {
     : undefined;
 };
 
+const createStringRecord = (): Record<string, string> => {
+  const record: Record<string, string> = {};
+  Object.setPrototypeOf(record, null);
+  return record;
+};
+
+const appendStringEntry = (target: Record<string, string>, key: string, value: string): void => {
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    configurable: false,
+    writable: false,
+  });
+};
+
+const copyStringRecord = (value: unknown): Readonly<Record<string, string>> | undefined => {
+  if (value === null || typeof value !== 'object') return undefined;
+  if (!isPlainObservedObject(value)) return undefined;
+  const record = createStringRecord();
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== 'string') return undefined;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (
+      descriptor === undefined ||
+      !Object.hasOwn(descriptor, 'value') ||
+      descriptor.enumerable !== true ||
+      typeof descriptor.value !== 'string'
+    )
+      return undefined;
+    appendStringEntry(record, key, descriptor.value);
+  }
+  return Object.freeze(record);
+};
+
+const copyStringArray = (value: unknown): readonly string[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+  if (!isDataDescriptor(lengthDescriptor)) return undefined;
+  const length = lengthDescriptor.value;
+  if (typeof length !== 'number' || !Number.isSafeInteger(length) || length < 0) return undefined;
+  const result: string[] = [];
+  for (let index = 0; index < length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (
+      descriptor === undefined ||
+      !Object.hasOwn(descriptor, 'value') ||
+      descriptor.enumerable !== true ||
+      typeof descriptor.value !== 'string'
+    )
+      return undefined;
+    result.push(descriptor.value);
+  }
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== length + 1 || !keys.includes('length')) return undefined;
+  for (let index = 0; index < length; index += 1) {
+    if (!keys.includes(String(index))) return undefined;
+  }
+  return Object.freeze(result);
+};
+
 export class PreparedLaunch {
+  readonly childEnvironment!: Readonly<Record<string, string>>;
+  readonly childEnvironmentSecretValues!: readonly string[];
   readonly effectiveParameters: JsonObject;
   readonly effectivePermissions: JsonObject;
   readonly resultSchemaValidator!: ResultSchemaValidator;
@@ -224,31 +298,35 @@ export class PreparedLaunch {
   readonly limits: PreparedLaunchLimits;
   readonly reportedVersion: string;
 
-  private constructor(
-    pin: PreparedLaunchPin,
-    executable: string,
-    reportedVersion: string,
-    limits: PreparedLaunchLimits,
-    effectiveParameters: JsonObject,
-    effectivePermissions: JsonObject,
-    resultSchemaValidator: ResultSchemaValidator,
-  ) {
-    this.effectiveParameters = effectiveParameters;
-    this.effectivePermissions = effectivePermissions;
+  private constructor(options: PreparedLaunchOptions) {
+    Object.defineProperty(this, 'childEnvironment', {
+      value: options.childEnvironment,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
+    Object.defineProperty(this, 'childEnvironmentSecretValues', {
+      value: options.childEnvironmentSecretValues,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
+    this.effectiveParameters = options.effectiveParameters;
+    this.effectivePermissions = options.effectivePermissions;
     Object.defineProperty(this, 'resultSchemaValidator', {
-      value: resultSchemaValidator,
+      value: options.resultSchemaValidator,
       enumerable: false,
       writable: false,
       configurable: false,
     });
     this.pin = Object.freeze({
-      agentId: pin.agentId,
-      agentVersion: pin.agentVersion,
-      definitionDigest: pin.definitionDigest,
+      agentId: options.pin.agentId,
+      agentVersion: options.pin.agentVersion,
+      definitionDigest: options.pin.definitionDigest,
     });
-    this.executable = executable;
-    this.limits = limits;
-    this.reportedVersion = reportedVersion;
+    this.executable = options.executable;
+    this.limits = options.limits;
+    this.reportedVersion = options.reportedVersion;
     Object.freeze(this);
   }
 
@@ -263,6 +341,8 @@ export class PreparedLaunch {
         'limits',
         'effectiveParameters',
         'effectivePermissions',
+        'childEnvironment',
+        'childEnvironmentSecretValues',
         'resultSchemaValidator',
         'binding',
         'bindingToken',
@@ -302,6 +382,17 @@ export class PreparedLaunch {
     const effectivePermissions = isDataDescriptor(effectivePermissionsDescriptor)
       ? canonicalEffectiveInputs.permissions(effectivePermissionsDescriptor.value)
       : undefined;
+    const childEnvironmentDescriptor = Object.getOwnPropertyDescriptor(value, 'childEnvironment');
+    const childEnvironment = isDataDescriptor(childEnvironmentDescriptor)
+      ? copyStringRecord(childEnvironmentDescriptor.value)
+      : undefined;
+    const childEnvironmentSecretValuesDescriptor = Object.getOwnPropertyDescriptor(
+      value,
+      'childEnvironmentSecretValues',
+    );
+    const childEnvironmentSecretValues = isDataDescriptor(childEnvironmentSecretValuesDescriptor)
+      ? copyStringArray(childEnvironmentSecretValuesDescriptor.value)
+      : undefined;
     const resultSchemaValidator = ownResultSchemaValidator(value);
     const bindingDescriptor = Object.getOwnPropertyDescriptor(value, 'binding');
     const binding = isDataDescriptor(bindingDescriptor)
@@ -320,6 +411,8 @@ export class PreparedLaunch {
       limits === undefined ||
       effectiveParameters === undefined ||
       effectivePermissions === undefined ||
+      childEnvironment === undefined ||
+      childEnvironmentSecretValues === undefined ||
       resultSchemaValidator === undefined ||
       binding === undefined ||
       !ExecutionBindingToken.matches(bindingToken, {
@@ -330,14 +423,16 @@ export class PreparedLaunch {
       })
     )
       return undefined;
-    return new PreparedLaunch(
-      { agentId, agentVersion, definitionDigest },
+    return new PreparedLaunch({
+      pin: { agentId, agentVersion, definitionDigest },
       executable,
       reportedVersion,
       limits,
       effectiveParameters,
       effectivePermissions,
+      childEnvironment,
+      childEnvironmentSecretValues,
       resultSchemaValidator,
-    );
+    });
   }
 }

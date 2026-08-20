@@ -27,6 +27,8 @@ const effectiveLimits = Object.freeze({
 });
 const effectiveParameters = Object.freeze({ model: 'gpt-5' });
 const effectivePermissions = Object.freeze({ mode: 'workspace-write' });
+const childEnvironment = Object.freeze({ REVO_ENV: 'value' });
+const childEnvironmentSecretValues = Object.freeze(['secret-value']);
 const resultSchemaValidator = Object.freeze({ validate: () => undefined });
 
 test('rejects prepared launch evidence without a reported version', () => {
@@ -54,6 +56,8 @@ test('creates prepared launch evidence with the exact execution-owned shape', ()
     limits: effectiveLimits,
     effectiveParameters,
     effectivePermissions,
+    childEnvironment,
+    childEnvironmentSecretValues,
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
@@ -76,6 +80,7 @@ test('creates prepared launch evidence with the exact execution-owned shape', ()
     effectiveParameters,
     effectivePermissions,
   });
+  expect(prepared?.childEnvironment).toEqual({ REVO_ENV: 'value' });
   expect(prepared?.resultSchemaValidator.validate({})).toBeUndefined();
 });
 
@@ -92,6 +97,8 @@ test('accepts null-prototype record containers', () => {
     limits: effectiveLimits,
     effectiveParameters,
     effectivePermissions,
+    childEnvironment,
+    childEnvironmentSecretValues,
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
@@ -301,6 +308,8 @@ test('rejects missing, empty, and wrong-type semantic values', () => {
     limits: effectiveLimits,
     effectiveParameters,
     effectivePermissions,
+    childEnvironment,
+    childEnvironmentSecretValues,
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
@@ -336,6 +345,8 @@ test('authenticates the exact full binding tuple in finalization material', () =
     limits: effectiveLimits,
     effectiveParameters,
     effectivePermissions,
+    childEnvironment,
+    childEnvironmentSecretValues,
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1' as const,
@@ -370,6 +381,8 @@ test('requires an authentic binding token matched to the launch pin', () => {
     limits: effectiveLimits,
     effectiveParameters,
     effectivePermissions,
+    childEnvironment,
+    childEnvironmentSecretValues,
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1' as const,
@@ -415,6 +428,8 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
     limits: { ...effectiveLimits },
     effectiveParameters: { nested: { value: 'parameter' } },
     effectivePermissions: { nested: { value: 'permission' } },
+    childEnvironment: { nested: 'environment' },
+    childEnvironmentSecretValues: ['secret'],
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
@@ -437,6 +452,7 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
   expect(Object.isFrozen(prepared.effectiveParameters.nested)).toBe(true);
   expect(Object.isFrozen(prepared.effectivePermissions)).toBe(true);
   expect(Object.isFrozen(prepared.effectivePermissions.nested)).toBe(true);
+  expect(prepared.childEnvironment).toEqual({ nested: 'environment' });
 
   candidate.pin.agentId = 'mutated';
   candidate.executable = '/tmp/mutated';
@@ -490,6 +506,8 @@ test('requires copied effective limits in finalization material', () => {
     limits,
     effectiveParameters,
     effectivePermissions,
+    childEnvironment,
+    childEnvironmentSecretValues,
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
