@@ -1,14 +1,12 @@
 import type { RegisteredSecrets } from '../secret-registration/index.js';
 
 export class ConsumedRedactionMaterial {
-  // oxlint-disable-next-line no-unused-private-class-members -- Section 10 will verify exact token identity; this slice only mints the carrier.
   readonly #invocationToken: object;
   readonly invocationId: string;
-  // Write-only until the real InvocationOutputPort filesystem adapter slice, which is the
-  // sole spec-legitimate reader (spec lines 334/336: the output adapter alone constructs
-  // the three redaction front ends from this bundle). No reader ships in this slice.
-  // oxlint-disable-next-line no-unused-private-class-members -- The future output adapter is the sole legitimate reader.
-  readonly #redaction: RegisteredSecrets;
+  // Taken exactly once by the real InvocationOutputPort filesystem adapter slice, the sole
+  // spec-legitimate reader (spec lines 334/336: the output adapter alone constructs the
+  // three redaction front ends from this bundle). No production caller ships in this slice.
+  #redaction: RegisteredSecrets | undefined;
 
   private constructor(
     input: Readonly<{
@@ -31,5 +29,27 @@ export class ConsumedRedactionMaterial {
     }>,
   ): ConsumedRedactionMaterial {
     return new ConsumedRedactionMaterial(input);
+  }
+
+  static take(material: unknown): RegisteredSecrets | undefined {
+    if (!ConsumedRedactionMaterial.isAuthentic(material)) return undefined;
+    const redaction = material.#redaction;
+    material.#redaction = undefined;
+    return redaction;
+  }
+
+  // The eventual section 10 finalizer's "exact token identity" check (spec line 758)
+  // against the shared per-invocation token network this material was minted with.
+  static isBoundToToken(material: unknown, token: object): boolean {
+    return ConsumedRedactionMaterial.isAuthentic(material) && material.#invocationToken === token;
+  }
+
+  static isAuthentic(material: unknown): material is ConsumedRedactionMaterial {
+    return (
+      typeof material === 'object' &&
+      material !== null &&
+      #invocationToken in material &&
+      material.#invocationToken !== undefined
+    );
   }
 }

@@ -11,6 +11,8 @@ import {
 } from '../../../../src/runtime/execution/index.js';
 import {
   createOutputPreparationAttempt,
+  getOutputPreparationInvocationToken,
+  isConsumedRedactionMaterialBoundToToken,
   type TerminalPublicationAuthority,
 } from '../../../../src/runtime/execution/output-preparation-attempt/index.js';
 import {
@@ -150,6 +152,21 @@ test('consumes redaction material into an authentic frozen invocation-only carri
   expect(redactionFields(material)).toEqual(['invocationId']);
   expect(Object.isFrozen(material)).toBe(true);
   expect(JSON.stringify(material)).not.toContain('secret-value');
+});
+
+test('consumed redaction material is bound to the same token as its source attempt', async () => {
+  const attempt = await preparationAttempt();
+  const material = consumeRedactionMaterial(security(), attempt);
+  if (material === undefined) throw new Error('Expected consumed redaction material.');
+  const attemptToken = getOutputPreparationInvocationToken(attempt);
+  if (attemptToken === undefined) throw new Error('Expected an authentic attempt token.');
+
+  expect(isConsumedRedactionMaterialBoundToToken(material, attemptToken)).toBe(true);
+
+  const otherAttempt = await preparationAttempt('other-test');
+  const otherToken = getOutputPreparationInvocationToken(otherAttempt);
+  if (otherToken === undefined) throw new Error('Expected an authentic attempt token.');
+  expect(isConsumedRedactionMaterialBoundToToken(material, otherToken)).toBe(false);
 });
 
 test('rejects forged security capabilities without throwing', async () => {
