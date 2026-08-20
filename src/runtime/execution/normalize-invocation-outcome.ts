@@ -1,6 +1,7 @@
 import { AGENT_MANAGER_LIMITS } from '../policy/index.js';
-import type { AgentValidationDetails, JsonObject, JsonValue } from '../spec/index.js';
+import type { AgentValidationDetails, JsonObject } from '../spec/index.js';
 import type { InvocationTerminalObservation } from './execution-terminal-observation.js';
+import { freezeJsonValue } from './freeze-json-value.js';
 import type { NormalizedInvocationFailureReason } from './normalized-invocation-failure-reason.js';
 import type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
 import type { RawResponseDiagnostic } from './raw-response-diagnostic.js';
@@ -10,25 +11,6 @@ const decoder = new TextDecoder('utf-8', { fatal: true });
 
 const isJsonObject = (value: unknown): value is JsonObject =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isJsonArray = (value: JsonValue): value is readonly JsonValue[] => Array.isArray(value);
-
-const freezeJsonValue = (root: JsonValue): void => {
-  const frames: Array<Readonly<{ value: JsonValue; visited: boolean }>> = [
-    Object.freeze({ value: root, visited: false }),
-  ];
-  while (frames.length > 0) {
-    const frame = frames.pop();
-    if (frame?.value === null || typeof frame?.value !== 'object') continue;
-    if (frame.visited) {
-      Object.freeze(frame.value);
-      continue;
-    }
-    frames.push(Object.freeze({ value: frame.value, visited: true }));
-    const children = isJsonArray(frame.value) ? frame.value : Object.values(frame.value);
-    for (const child of children) frames.push(Object.freeze({ value: child, visited: false }));
-  }
-};
 
 const rawResponseDiagnostic = (byteLength: number): RawResponseDiagnostic =>
   Object.freeze({
