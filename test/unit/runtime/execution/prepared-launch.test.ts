@@ -67,6 +67,7 @@ test('creates prepared launch evidence with the exact execution-owned shape', ()
       needsPromptFile: false,
       needsResultSchemaFile: false,
     },
+    interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -91,6 +92,9 @@ test('creates prepared launch evidence with the exact execution-owned shape', ()
   expect(prepared?.childEnvironment).toEqual({ REVO_ENV: 'value' });
   expect(prepared?.secretValues).toEqual(['configured-secret', 'secret-value']);
   expect(prepared?.resultSchemaValidator.validate({})).toBeUndefined();
+  expect(prepared?.interpretedArgumentTemplate).toEqual([
+    { kind: 'arguments', arguments: ['exec'] },
+  ]);
 });
 
 test('accepts null-prototype record containers', () => {
@@ -116,6 +120,7 @@ test('accepts null-prototype record containers', () => {
       needsPromptFile: false,
       needsResultSchemaFile: false,
     },
+    interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -334,6 +339,7 @@ test('rejects missing, empty, and wrong-type semantic values', () => {
       needsPromptFile: false,
       needsResultSchemaFile: false,
     },
+    interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -378,6 +384,7 @@ test('authenticates the exact full binding tuple in finalization material', () =
       needsPromptFile: false,
       needsResultSchemaFile: false,
     },
+    interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
     binding: {
       protocolDriverId: 'native/stdio-v1' as const,
       resultParserId: 'codex-jsonl/v1' as const,
@@ -421,6 +428,7 @@ test('requires an authentic binding token matched to the launch pin', () => {
       needsPromptFile: false,
       needsResultSchemaFile: false,
     },
+    interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
     binding: {
       protocolDriverId: 'native/stdio-v1' as const,
       resultParserId: 'codex-jsonl/v1' as const,
@@ -475,6 +483,7 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
       needsPromptFile: false,
       needsResultSchemaFile: false,
     },
+    interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -562,6 +571,7 @@ test('requires copied effective limits in finalization material', () => {
       needsPromptFile: false,
       needsResultSchemaFile: false,
     },
+    interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -599,6 +609,7 @@ test('keeps registered secret values out of enumerable launch views', () => {
       needsPromptFile: false,
       needsResultSchemaFile: false,
     },
+    interpretedArgumentTemplate: [{ kind: 'arguments', arguments: ['exec'] }],
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',

@@ -1,1 +1,5 @@
-export { buildCodexExecArguments, mapCodexPermissions } from './codex/index.js';
+export {
+  buildCodexExecArguments,
+  CodexPermissionStrategy,
+  mapCodexPermissions,
+} from './codex/index.js';

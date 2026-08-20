@@ -1,9 +1,10 @@
 import type { ValidatedDefinition } from '../../runtime/definition/index.js';
 import { AgentManagerError } from '../../runtime/errors/index.js';
 import { ExecutionBindingToken } from '../../runtime/execution/execution-binding-token.js';
+import type { PermissionStrategyPort } from '../../runtime/execution/index.js';
 import { AGENT_FAULT_MESSAGES } from '../../runtime/policy/index.js';
 import type { AgentDefinitionContract, AgentFault } from '../../runtime/spec/index.js';
-import { mapCodexPermissions } from '../../strategies/permissions/index.js';
+import { CodexPermissionStrategy } from '../../strategies/permissions/index.js';
 import { CodexJsonlResultParser } from '../../strategies/result-parser/index.js';
 
 type ProtocolDriverId = AgentDefinitionContract['protocol']['driver'];
@@ -29,7 +30,7 @@ interface BindingKey {
 interface InstalledBinding extends BindingKey {
   readonly driver: InstalledImplementation;
   readonly parser?: InstalledImplementation;
-  readonly permission: InstalledImplementation;
+  readonly permission: PermissionStrategyPort;
 }
 
 const nativeStdioDriver = Object.freeze({ id: 'native/stdio-v1' });
@@ -41,7 +42,9 @@ const installedParsers = Object.freeze(
   new Map<ResultParserId, InstalledImplementation>([['codex-jsonl/v1', CodexJsonlResultParser]]),
 );
 const installedPermissions = Object.freeze(
-  new Map<PermissionStrategyId, InstalledImplementation>([['codex-cli/v1', mapCodexPermissions]]),
+  new Map<PermissionStrategyId, PermissionStrategyPort>([
+    ['codex-cli/v1', CodexPermissionStrategy],
+  ]),
 );
 
 const unsupportedFault = (): AgentFault =>
@@ -145,9 +148,11 @@ export class InstalledBindingRegistry {
     return new InstalledBindingRegistry(definitions);
   }
 
-  createBinding(
-    target: ValidatedDefinition,
-  ): Readonly<{ readonly binding: BindingKey; readonly bindingToken: ExecutionBindingToken }> {
+  createBinding(target: ValidatedDefinition): Readonly<{
+    readonly binding: BindingKey;
+    readonly bindingToken: ExecutionBindingToken;
+    readonly permissionStrategy: PermissionStrategyPort;
+  }> {
     const expected = this.byDefinitionDigest.get(target.definitionDigest);
     if (expected === undefined) throw new AgentManagerError(internalFault());
     let actual: InstalledBinding;
@@ -165,6 +170,7 @@ export class InstalledBindingRegistry {
     });
     return Object.freeze({
       binding,
+      permissionStrategy: expected.permission,
       bindingToken: ExecutionBindingToken.create({
         agentId: target.definition.id,
         agentVersion: target.definition.version,
