@@ -32,6 +32,7 @@ interface PreparedLaunchOptions {
   readonly effectivePermissions: JsonObject;
   readonly childEnvironment: Readonly<Record<string, string>>;
   readonly childEnvironmentSecretValues: readonly string[];
+  readonly secretValues: readonly string[];
   readonly resultSchemaValidator: ResultSchemaValidator;
 }
 
@@ -290,6 +291,7 @@ const copyStringArray = (value: unknown): readonly string[] | undefined => {
 export class PreparedLaunch {
   readonly childEnvironment!: Readonly<Record<string, string>>;
   readonly childEnvironmentSecretValues!: readonly string[];
+  readonly secretValues!: readonly string[];
   readonly effectiveParameters: JsonObject;
   readonly effectivePermissions: JsonObject;
   readonly resultSchemaValidator!: ResultSchemaValidator;
@@ -307,6 +309,12 @@ export class PreparedLaunch {
     });
     Object.defineProperty(this, 'childEnvironmentSecretValues', {
       value: options.childEnvironmentSecretValues,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
+    Object.defineProperty(this, 'secretValues', {
+      value: options.secretValues,
       enumerable: false,
       writable: false,
       configurable: false,
@@ -343,6 +351,7 @@ export class PreparedLaunch {
         'effectivePermissions',
         'childEnvironment',
         'childEnvironmentSecretValues',
+        'secretValues',
         'resultSchemaValidator',
         'binding',
         'bindingToken',
@@ -393,6 +402,10 @@ export class PreparedLaunch {
     const childEnvironmentSecretValues = isDataDescriptor(childEnvironmentSecretValuesDescriptor)
       ? copyStringArray(childEnvironmentSecretValuesDescriptor.value)
       : undefined;
+    const secretValuesDescriptor = Object.getOwnPropertyDescriptor(value, 'secretValues');
+    const secretValues = isDataDescriptor(secretValuesDescriptor)
+      ? copyStringArray(secretValuesDescriptor.value)
+      : undefined;
     const resultSchemaValidator = ownResultSchemaValidator(value);
     const bindingDescriptor = Object.getOwnPropertyDescriptor(value, 'binding');
     const binding = isDataDescriptor(bindingDescriptor)
@@ -413,6 +426,7 @@ export class PreparedLaunch {
       effectivePermissions === undefined ||
       childEnvironment === undefined ||
       childEnvironmentSecretValues === undefined ||
+      secretValues === undefined ||
       resultSchemaValidator === undefined ||
       binding === undefined ||
       !ExecutionBindingToken.matches(bindingToken, {
@@ -432,6 +446,7 @@ export class PreparedLaunch {
       effectivePermissions,
       childEnvironment,
       childEnvironmentSecretValues,
+      secretValues,
       resultSchemaValidator,
     });
   }

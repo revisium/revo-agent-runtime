@@ -29,6 +29,7 @@ const effectiveParameters = Object.freeze({ model: 'gpt-5' });
 const effectivePermissions = Object.freeze({ mode: 'workspace-write' });
 const childEnvironment = Object.freeze({ REVO_ENV: 'value' });
 const childEnvironmentSecretValues = Object.freeze(['secret-value']);
+const secretValues = Object.freeze(['configured-secret', 'secret-value']);
 const resultSchemaValidator = Object.freeze({ validate: () => undefined });
 
 test('rejects prepared launch evidence without a reported version', () => {
@@ -58,6 +59,7 @@ test('creates prepared launch evidence with the exact execution-owned shape', ()
     effectivePermissions,
     childEnvironment,
     childEnvironmentSecretValues,
+    secretValues,
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
@@ -81,6 +83,7 @@ test('creates prepared launch evidence with the exact execution-owned shape', ()
     effectivePermissions,
   });
   expect(prepared?.childEnvironment).toEqual({ REVO_ENV: 'value' });
+  expect(prepared?.secretValues).toEqual(['configured-secret', 'secret-value']);
   expect(prepared?.resultSchemaValidator.validate({})).toBeUndefined();
 });
 
@@ -99,6 +102,7 @@ test('accepts null-prototype record containers', () => {
     effectivePermissions,
     childEnvironment,
     childEnvironmentSecretValues,
+    secretValues,
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
@@ -310,6 +314,7 @@ test('rejects missing, empty, and wrong-type semantic values', () => {
     effectivePermissions,
     childEnvironment,
     childEnvironmentSecretValues,
+    secretValues,
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
@@ -347,6 +352,7 @@ test('authenticates the exact full binding tuple in finalization material', () =
     effectivePermissions,
     childEnvironment,
     childEnvironmentSecretValues,
+    secretValues,
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1' as const,
@@ -383,6 +389,7 @@ test('requires an authentic binding token matched to the launch pin', () => {
     effectivePermissions,
     childEnvironment,
     childEnvironmentSecretValues,
+    secretValues,
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1' as const,
@@ -430,6 +437,7 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
     effectivePermissions: { nested: { value: 'permission' } },
     childEnvironment: { nested: 'environment' },
     childEnvironmentSecretValues: ['secret'],
+    secretValues: ['configured-secret', 'secret'],
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
@@ -453,11 +461,13 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
   expect(Object.isFrozen(prepared.effectivePermissions)).toBe(true);
   expect(Object.isFrozen(prepared.effectivePermissions.nested)).toBe(true);
   expect(prepared.childEnvironment).toEqual({ nested: 'environment' });
+  expect(prepared.secretValues).toEqual(['configured-secret', 'secret']);
 
   candidate.pin.agentId = 'mutated';
   candidate.executable = '/tmp/mutated';
   candidate.effectiveParameters.nested.value = 'mutated';
   candidate.effectivePermissions.nested.value = 'mutated';
+  candidate.secretValues[0] = 'mutated';
   expect(prepared).toEqual({
     pin: {
       agentId: 'codex',
@@ -508,6 +518,7 @@ test('requires copied effective limits in finalization material', () => {
     effectivePermissions,
     childEnvironment,
     childEnvironmentSecretValues,
+    secretValues,
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
@@ -522,4 +533,41 @@ test('requires copied effective limits in finalization material', () => {
   limits.wallClockTimeoutMs = 2_000;
   expect(prepared).toMatchObject({ limits: { wallClockTimeoutMs: 1_000 } });
   expect(Object.isFrozen(prepared?.limits)).toBe(true);
+});
+
+test('keeps registered secret values out of enumerable launch views', () => {
+  const prepared = PreparedLaunch.create({
+    pin: {
+      agentId: 'codex',
+      agentVersion: '1.0.0',
+      definitionDigest: 'definition-digest',
+    },
+    executable: '/usr/bin/codex',
+    reportedVersion: '1.2.3',
+    limits: effectiveLimits,
+    effectiveParameters,
+    effectivePermissions,
+    childEnvironment,
+    childEnvironmentSecretValues,
+    secretValues,
+    resultSchemaValidator,
+    binding: {
+      protocolDriverId: 'native/stdio-v1',
+      resultParserId: 'codex-jsonl/v1',
+      permissionStrategyId: 'codex-cli/v1',
+      delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    },
+    bindingToken: bindingToken(),
+  });
+  if (prepared === undefined) throw new Error('Expected valid prepared launch evidence');
+
+  expect(Object.getOwnPropertyDescriptor(prepared, 'secretValues')).toMatchObject({
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  expect(prepared.secretValues).toEqual(['configured-secret', 'secret-value']);
+  expect(Object.isFrozen(prepared.secretValues)).toBe(true);
+  expect(Object.keys(prepared)).not.toContain('secretValues');
+  expect(JSON.stringify(prepared)).not.toContain('secret-value');
 });

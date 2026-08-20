@@ -535,7 +535,7 @@ test('captures named child environment from start context before workspace, outp
   output.enqueuePrepare();
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { definitions: [definition], redaction: { secrets: ['configured-secret'] } },
     {
       execution,
       output,
@@ -579,9 +579,10 @@ test('captures named child environment from start context before workspace, outp
     },
   });
   expect(prepared?.childEnvironmentSecretValues).toEqual(['secret-value']);
+  expect(prepared?.secretValues).toEqual(['configured-secret', 'secret-value']);
 });
 
-test('keeps captured child environment secrets out of enumerable launch views', async () => {
+test('keeps registered secrets out of enumerable launch views', async () => {
   vi.stubEnv('REVO_VISIBLE_ENV', 'host-value');
   const definition = buildAgentDefinition();
   const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
@@ -598,7 +599,7 @@ test('keeps captured child environment secrets out of enumerable launch views', 
   output.enqueuePrepare();
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { definitions: [definition], redaction: { secrets: ['configured-secret'] } },
     {
       execution,
       output,
@@ -633,6 +634,12 @@ test('keeps captured child environment secrets out of enumerable launch views', 
   if (prepared === undefined) throw new Error('Expected prepared launch evidence');
 
   expect(prepared.childEnvironment.REVO_SECRET_ENV).toBe('secret-value');
+  expect(Object.getOwnPropertyDescriptor(prepared, 'secretValues')).toMatchObject({
+    enumerable: false,
+    writable: false,
+    configurable: false,
+  });
+  expect(prepared.secretValues).toEqual(['configured-secret', 'secret-value']);
   const enumerableViews = [
     Object.keys(prepared).join('\n'),
     JSON.stringify(shallowSpreadObject(prepared)),
@@ -640,8 +647,70 @@ test('keeps captured child environment secrets out of enumerable launch views', 
   ];
   for (const view of enumerableViews) {
     expect(view).not.toContain('REVO_SECRET_ENV');
+    expect(view).not.toContain('configured-secret');
     expect(view).not.toContain('secret-value');
   }
+});
+
+test('keeps configured redaction secrets out of enumerable manager views', () => {
+  const definition = buildAgentDefinition();
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition], redaction: { secrets: ['configured-secret'] } },
+    {
+      execution: new FakeInvocationExecutionPort(),
+      output: new FakeInvocationOutputPort(),
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
+    },
+  );
+
+  const enumerableViews = [
+    Object.keys(manager).join('\n'),
+    JSON.stringify(shallowSpreadObject(manager)),
+    JSON.stringify(manager),
+  ];
+  for (const view of enumerableViews) {
+    expect(view).not.toContain('configured-secret');
+  }
+});
+
+test('rejects registered secret failures before workspace, output, and execution', async () => {
+  const definition = buildAgentDefinition();
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const probe = new FakeExecutableProbePort({ platform: 'linux' });
+  const workspace = vi.fn(async () => ({
+    status: 'admitted' as const,
+    directory: '/workspace/project',
+  }));
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition], redaction: { secrets: [''] } },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: probe,
+      workspace: { admit: workspace },
+    },
+  );
+
+  await expect(
+    manager.start({
+      invocationId: 'invalid-registered-secrets',
+      agent: { id: definition.id, version: definition.version },
+      prompt: 'Return JSON.',
+      workspace: { directory: '/workspace/project' },
+      parameters: {},
+      permissions: {},
+      result: { schema: resultSchema },
+      output: { directory: '/outputs/invocation' },
+    }),
+  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+
+  expect(workspace).not.toHaveBeenCalled();
+  expect(probe.calls()).toEqual([]);
+  expect(output.calls()).toEqual([]);
+  expect(execution.calls()).toEqual([]);
 });
 
 test('rejects missing inherited child environment names before workspace, output, and execution', async () => {
