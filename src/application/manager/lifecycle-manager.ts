@@ -10,6 +10,7 @@ import {
   captureChildEnvironment,
   InvocationInputSnapshot,
   InvocationLifecycle,
+  interpretArgumentTemplate,
   PreparedLaunch,
   registerSecrets,
   StartContextSnapshot,
@@ -354,16 +355,23 @@ class InternalInvocationLifecycleManager {
       secretValues,
     } = resourceIndependent;
     const workspace = this.ports.workspace;
-    if (
-      workspace === undefined ||
-      typeof workspace.admit !== 'function' ||
-      (await workspace.admit(snapshot.workspace)).status !== 'admitted'
-    )
+    if (workspace === undefined || typeof workspace.admit !== 'function')
       return Object.freeze({ status: 'rejected' });
+    const workspaceAdmission = await workspace.admit(snapshot.workspace);
+    if (workspaceAdmission.status !== 'admitted') return Object.freeze({ status: 'rejected' });
     const outputAdmissionRequest = createOutputAdmissionRequest(snapshot, binding);
     if (outputAdmissionRequest === undefined) return Object.freeze({ status: 'rejected' });
     const outputAdmission = await this.ports.output.admit(outputAdmissionRequest);
     if (outputAdmission.status !== 'admitted') return Object.freeze({ status: 'rejected' });
+    const interpretedTemplate = interpretArgumentTemplate({
+      template: target.definition.launch.args,
+      effectiveParameters: effectiveInputs.parameters,
+      effectivePermissions: effectiveInputs.permissions,
+      outputResourcePlan: outputAdmission.plan,
+      permissionStrategy: binding.permissionStrategy,
+      workspace: workspaceAdmission,
+    });
+    if (interpretedTemplate.status === 'rejected') return Object.freeze({ status: 'rejected' });
     const port = this.ports.executableProbe;
     if (port === undefined) return Object.freeze({ status: 'rejected' });
     const result = await probeExecutable(target, port);
@@ -390,6 +398,7 @@ class InternalInvocationLifecycleManager {
         secretValues,
         resultSchemaValidator,
         outputResourcePlan: outputAdmission.plan,
+        interpretedArgumentTemplate: interpretedTemplate.template,
         binding: binding.binding,
         bindingToken: binding.bindingToken,
       });

@@ -1,4 +1,10 @@
 export type { InvocationExecutionPorts } from './execution-ports.js';
+export { interpretArgumentTemplate } from './argument-template-interpretation/index.js';
+export type { InterpretedArgumentTemplate } from './argument-template-interpretation/index.js';
+export type {
+  PermissionMappingResult,
+  PermissionStrategyPort,
+} from './permission-strategy-port/index.js';
 export type {
   BoundedCommandObservation,
   BoundedCommandPort,
@@ -20,6 +26,7 @@ export { InvocationLifecycle } from './lifecycle.js';
 export { normalizeInvocationOutcome } from './normalize-invocation-outcome.js';
 export type { NormalizedInvocationFailureReason } from './normalized-invocation-failure-reason.js';
 export type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
+export type { OutputResourcePlan } from './output-resource-plan.js';
 export { PreparedLaunch } from './prepared-launch.js';
 export type { RawResponseDiagnostic } from './raw-response-diagnostic.js';
 export type { RedactionChannel } from './redaction/index.js';

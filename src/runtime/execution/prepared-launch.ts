@@ -1,14 +1,9 @@
 import type { AgentValidationDetails, JsonObject } from '../spec/index.js';
+import type { InterpretedArgumentTemplate } from './argument-template-interpretation/index.js';
 import { canonicalEffectiveInputs } from './canonical-effective-inputs.js';
 import { ExecutionBindingToken } from './execution-binding-token.js';
+import type { OutputResourcePlan } from './output-resource-plan.js';
 import type { ResultSchemaValidator } from './result-schema-validator.js';
-
-interface OutputResourcePlan {
-  readonly invocationId: string;
-  readonly outputDirectory: string;
-  readonly needsPromptFile: boolean;
-  readonly needsResultSchemaFile: boolean;
-}
 
 interface PreparedLaunchPin {
   readonly agentId: string;
@@ -42,6 +37,7 @@ interface PreparedLaunchOptions {
   readonly secretValues: readonly string[];
   readonly resultSchemaValidator: ResultSchemaValidator;
   readonly outputResourcePlan: OutputResourcePlan;
+  readonly interpretedArgumentTemplate: InterpretedArgumentTemplate;
 }
 
 interface PreparedLaunchBinding {
@@ -72,6 +68,7 @@ const preparedLaunchKeys = Object.freeze([
   'secretValues',
   'resultSchemaValidator',
   'outputResourcePlan',
+  'interpretedArgumentTemplate',
   'binding',
   'bindingToken',
 ]);
@@ -350,6 +347,49 @@ const copyStringArray = (value: unknown): readonly string[] | undefined => {
   return Object.freeze(result);
 };
 
+const copyInterpretedArgumentTemplate = (
+  value: unknown,
+): InterpretedArgumentTemplate | undefined => {
+  if (!Array.isArray(value)) return undefined;
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+  if (!isDataDescriptor(lengthDescriptor)) return undefined;
+  const length = lengthDescriptor.value;
+  if (typeof length !== 'number' || !Number.isSafeInteger(length) || length < 0) return undefined;
+  const result: Array<InterpretedArgumentTemplate[number]> = [];
+  for (let index = 0; index < length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (descriptor?.enumerable !== true || !isDataDescriptor(descriptor)) return undefined;
+    const item = copyInterpretedArgumentTemplateItem(descriptor.value);
+    if (item === undefined) return undefined;
+    result.push(item);
+  }
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== length + 1 || !keys.includes('length')) return undefined;
+  return Object.freeze(result);
+};
+
+const copyInterpretedArgumentTemplateItem = (
+  value: unknown,
+): InterpretedArgumentTemplate[number] | undefined => {
+  if (value === null || typeof value !== 'object') return undefined;
+  if (!isPlainObservedObject(value)) return undefined;
+  const kind = ownString(value, 'kind');
+  if (kind === 'arguments') {
+    if (!hasExactKeys(value, ['kind', 'arguments'])) return undefined;
+    const args = ownCopiedValue(value, 'arguments', copyStringArray);
+    return args === undefined ? undefined : Object.freeze({ kind, arguments: args });
+  }
+  if (
+    kind === 'prompt' ||
+    kind === 'prompt-file' ||
+    kind === 'result-schema' ||
+    kind === 'result-schema-file'
+  ) {
+    return hasExactKeys(value, ['kind']) ? Object.freeze({ kind }) : undefined;
+  }
+  return undefined;
+};
+
 const ownCopiedValue = <Value>(
   source: object,
   key: string,
@@ -401,6 +441,11 @@ const copyPreparedLaunchMaterial = (value: object): PreparedLaunchMaterial | und
   const secretValues = ownCopiedValue(value, 'secretValues', copyStringArray);
   const resultSchemaValidator = ownResultSchemaValidator(value);
   const outputResourcePlan = ownCopiedValue(value, 'outputResourcePlan', copyOutputResourcePlan);
+  const interpretedArgumentTemplate = ownCopiedValue(
+    value,
+    'interpretedArgumentTemplate',
+    copyInterpretedArgumentTemplate,
+  );
   const binding = ownCopiedValue(value, 'binding', copyBinding);
   const bindingTokenDescriptor = Object.getOwnPropertyDescriptor(value, 'bindingToken');
   const bindingToken = isDataDescriptor(bindingTokenDescriptor)
@@ -418,6 +463,7 @@ const copyPreparedLaunchMaterial = (value: object): PreparedLaunchMaterial | und
     secretValues === undefined ||
     resultSchemaValidator === undefined ||
     outputResourcePlan === undefined ||
+    interpretedArgumentTemplate === undefined ||
     binding === undefined
   )
     return undefined;
@@ -433,6 +479,7 @@ const copyPreparedLaunchMaterial = (value: object): PreparedLaunchMaterial | und
     secretValues,
     resultSchemaValidator,
     outputResourcePlan,
+    interpretedArgumentTemplate,
     binding,
     bindingToken,
   });
@@ -452,6 +499,7 @@ export class PreparedLaunch {
   readonly effectivePermissions: JsonObject;
   readonly resultSchemaValidator!: ResultSchemaValidator;
   readonly outputResourcePlan!: OutputResourcePlan;
+  readonly interpretedArgumentTemplate!: InterpretedArgumentTemplate;
   readonly pin: PreparedLaunchPin;
   readonly executable: string;
   readonly limits: PreparedLaunchLimits;
@@ -486,6 +534,12 @@ export class PreparedLaunch {
     });
     Object.defineProperty(this, 'outputResourcePlan', {
       value: options.outputResourcePlan,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
+    Object.defineProperty(this, 'interpretedArgumentTemplate', {
+      value: options.interpretedArgumentTemplate,
       enumerable: false,
       writable: false,
       configurable: false,

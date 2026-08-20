@@ -965,3 +965,187 @@ test('rejects malformed start context before reserving invocation ids', async ()
     }),
   ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
 });
+
+test('interprets launch template in definition order and maps each permission item once before probe', async () => {
+  const definition = buildAgentDefinition({
+    launch: {
+      command: '/fixture/bin/agent',
+      args: [
+        { kind: 'literal', value: 'exec' },
+        { kind: 'workspace' },
+        { kind: 'parameter', name: 'model' },
+        { kind: 'parameter', name: 'options' },
+        { kind: 'permission', name: 'mode' },
+        { kind: 'permission', name: 'network' },
+        { kind: 'prompt' },
+        { kind: 'result-schema-file' },
+      ],
+      versionProbe: { args: ['--version'], stream: 'stdout', prefix: 'agent ', timeoutMs: 1_000 },
+    },
+    delivery: { prompt: 'argument', resultSchema: 'file', result: 'stdout' },
+    parameters: {
+      schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {
+          model: { type: 'string' },
+          options: {
+            type: 'object',
+            properties: { temperature: { type: 'number' } },
+            required: ['temperature'],
+            additionalProperties: false,
+          },
+        },
+        required: ['model', 'options'],
+        additionalProperties: false,
+      },
+    },
+    permissions: {
+      schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: { mode: { enum: ['workspace-write'] }, network: { type: 'boolean' } },
+        required: ['mode', 'network'],
+        additionalProperties: false,
+      },
+    },
+  });
+  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  if (validatedDefinition === undefined) throw new Error('Expected validated definition');
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const calls: string[] = [];
+  const workspace = vi.fn(async () => {
+    calls.push('workspace');
+    return { status: 'admitted' as const, directory: '/workspace/project' };
+  });
+  output.enqueueAdmission(() => {
+    calls.push('output-admission');
+    return {
+      status: 'admitted' as const,
+      plan: {
+        invocationId: 'interpreted-template',
+        outputDirectory: '/outputs/invocation',
+        needsPromptFile: false,
+        needsResultSchemaFile: true,
+      },
+    };
+  });
+  mocks.probeExecutable.mockImplementationOnce(async () => {
+    calls.push('probe');
+    return {
+      status: 'available' as const,
+      agent: { id: definition.id, version: definition.version },
+      definitionDigest: validatedDefinition.definitionDigest,
+      executable: '/resolved/fixture-agent',
+      reportedVersion: '1.0.0',
+    };
+  });
+  output.enqueuePrepare();
+  execution.enqueueStart('running');
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition] },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
+      workspace: { admit: workspace },
+    },
+  );
+
+  const outcome = await manager.start({
+    invocationId: 'interpreted-template',
+    agent: { id: definition.id, version: definition.version },
+    prompt: 'Return JSON.',
+    workspace: { directory: '/workspace/project' },
+    parameters: { model: 'gpt-5', options: { temperature: 0 } },
+    permissions: { mode: 'workspace-write', network: false },
+    result: { schema: resultSchema },
+    output: { directory: '/outputs/invocation' },
+  });
+
+  expect(outcome.status).toBe('accepted');
+  expect(calls).toEqual(['workspace', 'output-admission', 'probe']);
+  expect(execution.startedPreparedLaunches()).toEqual([
+    expect.objectContaining({
+      interpretedArgumentTemplate: [
+        { kind: 'arguments', arguments: ['exec'] },
+        { kind: 'arguments', arguments: ['/workspace/project'] },
+        { kind: 'arguments', arguments: ['gpt-5'] },
+        { kind: 'arguments', arguments: ['{"temperature":0}'] },
+        { kind: 'arguments', arguments: ['--sandbox=workspace-write', '--ask-for-approval=never'] },
+        {
+          kind: 'arguments',
+          arguments: ['--config', 'sandbox_workspace_write.network_access=false'],
+        },
+        { kind: 'prompt' },
+        { kind: 'result-schema-file' },
+      ],
+    }),
+  ]);
+});
+
+test('rejects permission mapping failures before executable probe, output prepare, and execution', async () => {
+  const definition = buildAgentDefinition({
+    launch: {
+      command: '/fixture/bin/agent',
+      args: [{ kind: 'permission', name: 'mode' }, { kind: 'prompt' }, { kind: 'result-schema' }],
+      versionProbe: { args: ['--version'], stream: 'stdout', prefix: 'agent ', timeoutMs: 1_000 },
+    },
+    permissions: {
+      schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: { mode: { enum: ['read-only'] }, network: { const: true } },
+        required: ['mode', 'network'],
+        additionalProperties: false,
+      },
+    },
+  });
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const probe = new FakeExecutableProbePort({ platform: 'linux' });
+  const workspace = vi.fn(async () => ({
+    status: 'admitted' as const,
+    directory: '/workspace/project',
+  }));
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition] },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: probe,
+      workspace: { admit: workspace },
+    },
+  );
+
+  await expect(
+    manager.start({
+      invocationId: 'permission-mapping-rejected',
+      agent: { id: definition.id, version: definition.version },
+      prompt: 'Return JSON.',
+      workspace: { directory: '/workspace/project' },
+      parameters: {},
+      permissions: { mode: 'read-only', network: true },
+      result: { schema: resultSchema },
+      output: { directory: '/outputs/invocation' },
+    }),
+  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+
+  expect(workspace).toHaveBeenCalledTimes(1);
+  expect(output.calls()).toEqual([
+    {
+      type: 'admit',
+      request: {
+        invocationId: 'permission-mapping-rejected',
+        outputDirectory: '/outputs/invocation',
+        needsPromptFile: false,
+        needsResultSchemaFile: false,
+      },
+    },
+  ]);
+  expect(probe.calls()).toEqual([]);
+  expect(execution.calls()).toEqual([]);
+});
