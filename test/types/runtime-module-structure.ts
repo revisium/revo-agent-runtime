@@ -53,7 +53,9 @@ import type {
   RedactingBoundedOutputSink,
   RedactingOutputGuardRequest,
   RedactionChannel,
+  RegisteredSecrets,
   registerSecrets,
+  revealRegisteredSecrets,
   SealedSecretRegistration,
   SecretRegistrationRequest,
   WorkspaceAdmissionResult,
@@ -280,7 +282,7 @@ type ExpectedSecretRegistrationRequest = {
 type ExpectedSealedSecretRegistration =
   | {
       readonly status: 'registered';
-      readonly secretValues: readonly string[];
+      readonly registeredSecrets: RegisteredSecrets;
     }
   | {
       readonly status: 'rejected';
@@ -419,6 +421,10 @@ export type SealedSecretRegistrationIsExact = Expect<
 
 export type RegisterSecretsIsExact = Expect<
   Equal<typeof registerSecrets, (request: SecretRegistrationRequest) => SealedSecretRegistration>
+>;
+
+export type RevealRegisteredSecretsIsExact = Expect<
+  Equal<typeof revealRegisteredSecrets, (capability: unknown) => readonly string[] | undefined>
 >;
 
 export type RedactionChannelIsExact = Expect<Equal<RedactionChannel, ExpectedRedactionChannel>>;

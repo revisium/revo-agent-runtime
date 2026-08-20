@@ -56,10 +56,11 @@ export type {
 export { createRedactingBoundedOutputSink } from './redacting-output-guard/index.js';
 export type { ResultSchemaValidator } from './result-schema-validator.js';
 export type {
+  RegisteredSecrets,
   SealedSecretRegistration,
   SecretRegistrationRequest,
 } from './secret-registration/index.js';
-export { registerSecrets } from './secret-registration/index.js';
+export { registerSecrets, revealRegisteredSecrets } from './secret-registration/index.js';
 export type { WorkspaceAdmissionResult } from './workspace-admission-result.js';
 export type {
   LiveOwnedProcess,
