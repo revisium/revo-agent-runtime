@@ -106,6 +106,7 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/output-preparation-attempt/consumed-redaction-material.ts',
     'execution/output-preparation-attempt/create-output-preparation-attempt.ts',
     'execution/output-preparation-attempt/index.ts',
+    'execution/output-preparation-attempt/invocation-bound-carrier.ts',
     'execution/output-preparation-attempt/output-preparation-attempt.ts',
     'execution/output-preparation-attempt/output-preparation-beginners.ts',
     'execution/output-preparation-attempt/output-preparation-mutation-port.ts',

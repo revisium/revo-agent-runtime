@@ -1,16 +1,10 @@
-export class PreparedInvocationResources {
-  readonly #invocationToken: object;
-  readonly invocationId: string;
-  readonly outputDirectory: string;
+import { InvocationBoundCarrier } from './invocation-bound-carrier.js';
 
+export class PreparedInvocationResources extends InvocationBoundCarrier {
   private constructor(
     input: Readonly<{ invocationId: string; outputDirectory: string; invocationToken: object }>,
   ) {
-    this.#invocationToken = input.invocationToken;
-    this.invocationId = input.invocationId;
-    this.outputDirectory = input.outputDirectory;
-    Object.freeze(this.#invocationToken);
-    Object.freeze(this);
+    super(input);
   }
 
   static create(
