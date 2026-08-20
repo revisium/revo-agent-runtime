@@ -93,6 +93,15 @@ export type {
   ResultParserUsage,
   ResultParserWriteResult,
 } from './result-parser/index.js';
+export type {
+  AttachedProtocolSession,
+  PreparedProtocolSession,
+  ProtocolAttachResult,
+  ProtocolDriverCreateRequest,
+  ProtocolDriverId,
+  ProtocolDriverPort,
+  ProtocolObservationResult,
+} from './protocol-driver/index.js';
 export type { ResultSchemaValidator } from './result-schema-validator.js';
 export type {
   PreparedExecutionSecurity,
@@ -112,9 +121,18 @@ export { registerSecrets, revealRegisteredSecrets } from './secret-registration/
 export type { WorkspaceAdmissionResult } from './workspace-admission-result.js';
 export type {
   LiveOwnedProcess,
+  ProcessIdentityInspectionResult,
+  ProcessInputSink,
+  ProcessIoActivationResult,
   ProcessExitObservation,
   ProcessOutputSink,
   ProcessIdentity,
   ProcessStartRequest,
   ProcessSupervisionPort,
+} from './process-supervision-port/index.js';
+export {
+  DuplexCoordinatorRegistration,
+  InvocationTokenCarrier,
+  PausedProcessIo,
+  SpawnAcceptedProcess,
 } from './process-supervision-port/index.js';

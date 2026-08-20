@@ -1,5 +1,12 @@
 export type { LiveOwnedProcess } from './live-owned-process.js';
 export type { ProcessExitObservation } from './process-exit-observation.js';
+export { DuplexCoordinatorRegistration } from './duplex-coordinator-registration.js';
+export { InvocationTokenCarrier } from './invocation-token-carrier.js';
+export { PausedProcessIo } from './paused-process-io.js';
+export { SpawnAcceptedProcess } from './spawn-accepted-process.js';
+export type { ProcessIdentityInspectionResult } from './process-identity-inspection-result.js';
+export type { ProcessInputSink } from './process-input-sink.js';
+export type { ProcessIoActivationResult } from './process-io-activation-result.js';
 export type { ProcessOutputSink } from './process-output-sink.js';
 export type { ProcessIdentity } from './process-identity.js';
 export type { ProcessStartRequest } from './process-start-request.js';
