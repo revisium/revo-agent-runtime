@@ -2,6 +2,8 @@ import {
   compileConsumerSchema,
   validateConsumerSchemaProfile,
   validateManagerOptions,
+  type CompiledConsumerSchema,
+  type ValidatedDefinition,
 } from '../../runtime/definition/index.js';
 import { AgentManagerError } from '../../runtime/errors/index.js';
 import {
@@ -16,7 +18,12 @@ import { AGENT_FAULT_MESSAGES } from '../../runtime/policy/index.js';
 import { probeExecutable } from '../../runtime/probe/index.js';
 import type { ExecutableProbePort } from '../../runtime/probe/index.js';
 import { SealedAgentRegistry } from '../../runtime/registry/index.js';
-import type { AgentManagerLimits, JsonObject } from '../../runtime/spec/index.js';
+import type {
+  AgentDefinitionContract,
+  AgentManagerLimits,
+  JsonObject,
+  JsonValue,
+} from '../../runtime/spec/index.js';
 import { CompletedInvocations } from './completed-invocations.js';
 import { InstalledBindingRegistry } from './installed-bindings.js';
 import { TerminalSubscriptions } from './subscriptions.js';
@@ -65,6 +72,82 @@ interface Deferred<Value> {
 const resultSchemaPath = '/resultSchema';
 const resultValuePath = '/result';
 
+const parametersSchemaPath = '/definition/parameters/schema';
+const permissionsSchemaPath = '/definition/permissions/schema';
+const effectiveParametersPath = '/parameters';
+const effectivePermissionsPath = '/permissions';
+
+interface EffectiveInputValidators {
+  readonly parameters: CompiledConsumerSchema;
+  readonly permissions: CompiledConsumerSchema;
+}
+
+type DefinitionInputSchema = AgentDefinitionContract['parameters'];
+
+const overlayTopLevelDefaults = (
+  defaults: JsonObject | undefined,
+  caller: JsonObject,
+): JsonObject => {
+  const effective: Record<string, JsonValue> = {};
+  Object.setPrototypeOf(effective, null);
+  for (const [key, value] of Object.entries(defaults ?? {})) effective[key] = value;
+  for (const [key, value] of Object.entries(caller)) effective[key] = value;
+  return Object.freeze(effective);
+};
+
+const compileEffectiveInputValidator = (
+  input: DefinitionInputSchema,
+  schemaPath: string,
+): CompiledConsumerSchema | undefined => {
+  const profile = validateConsumerSchemaProfile(input.schema, schemaPath);
+  if (!profile.valid) return undefined;
+  try {
+    return compileConsumerSchema(profile.schema, schemaPath);
+  } catch {
+    return undefined;
+  }
+};
+
+const createEffectiveInputValidators = (
+  definitions: readonly ValidatedDefinition[],
+): ReadonlyMap<string, EffectiveInputValidators> => {
+  const validators = new Map<string, EffectiveInputValidators>();
+  for (const target of definitions) {
+    const parameters = compileEffectiveInputValidator(
+      target.definition.parameters,
+      parametersSchemaPath,
+    );
+    const permissions = compileEffectiveInputValidator(
+      target.definition.permissions,
+      permissionsSchemaPath,
+    );
+    if (parameters !== undefined && permissions !== undefined)
+      validators.set(target.definitionDigest, Object.freeze({ parameters, permissions }));
+  }
+  return validators;
+};
+
+const validateEffectiveInvocationInputs = (
+  validators: EffectiveInputValidators,
+  definition: AgentDefinitionContract,
+  snapshot: InvocationInputSnapshot,
+): boolean => {
+  if (snapshot.parameters === undefined || snapshot.permissions === undefined) return false;
+  const effectiveParameters = overlayTopLevelDefaults(
+    definition.parameters.defaults,
+    snapshot.parameters,
+  );
+  if (validators.parameters.validate(effectiveParameters, effectiveParametersPath) !== undefined)
+    return false;
+  const effectivePermissions = overlayTopLevelDefaults(
+    definition.permissions.defaults,
+    snapshot.permissions,
+  );
+  return (
+    validators.permissions.validate(effectivePermissions, effectivePermissionsPath) === undefined
+  );
+};
+
 const createDeferred = <Value>(): Deferred<Value> => {
   let resolve: ((value: Value) => void) | undefined;
   const promise = new Promise<Value>((resolvePromise) => {
@@ -107,6 +190,7 @@ class InternalInvocationLifecycleManager {
     private readonly subscriptions: TerminalSubscriptions,
     private readonly registry: SealedAgentRegistry,
     private readonly installedBindings: InstalledBindingRegistry,
+    private readonly effectiveInputValidators: ReadonlyMap<string, EffectiveInputValidators>,
     private readonly limits: Readonly<AgentManagerLimits>,
   ) {}
 
@@ -191,6 +275,12 @@ class InternalInvocationLifecycleManager {
     const target = this.registry.getDefinition(snapshot.agent);
     if (target === undefined) return undefined;
     const binding = this.installedBindings.createBinding(target);
+    const effectiveInputValidators = this.effectiveInputValidators.get(target.definitionDigest);
+    if (
+      effectiveInputValidators === undefined ||
+      !validateEffectiveInvocationInputs(effectiveInputValidators, target.definition, snapshot)
+    )
+      return undefined;
     if (snapshot.workspace !== undefined) {
       const workspace = this.ports.workspace;
       if (
@@ -263,6 +353,7 @@ export const createInvocationLifecycleManager = (
   const subscriptions = new TerminalSubscriptions();
   const registry = SealedAgentRegistry.create(validated.definitions);
   const installedBindings = InstalledBindingRegistry.create(validated.definitions);
+  const effectiveInputValidators = createEffectiveInputValidators(validated.definitions);
   return Object.freeze(
     new InternalInvocationLifecycleManager(
       ports,
@@ -270,6 +361,7 @@ export const createInvocationLifecycleManager = (
       subscriptions,
       registry,
       installedBindings,
+      effectiveInputValidators,
       validated.limits,
     ),
   );
