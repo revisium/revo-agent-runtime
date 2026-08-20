@@ -25,8 +25,10 @@ import type {
   captureChildEnvironment,
   ChildEnvironmentCapture,
   ChildEnvironmentRequest,
+  beginOutputClaim,
   createRedactingBoundedOutputSink,
   createRedactionChannel,
+  createOutputClaimAttempt,
   ClaimedInvocationOutput,
   inspectOutputClaimGuard,
   InvocationExecutionPorts,
@@ -599,6 +601,25 @@ export type InspectOutputClaimGuardIsExact = Expect<
   Equal<typeof inspectOutputClaimGuard, (guard: unknown) => OutputClaimReconciliation>
 >;
 
+export type CreateOutputClaimAttemptIsExact = Expect<
+  Equal<
+    typeof createOutputClaimAttempt,
+    (input: {
+      readonly invocationId: string;
+      readonly outputDirectory: string;
+      readonly clock: {
+        now(): number;
+        schedule(delayMs: number, callback: () => void): () => void;
+      };
+      readonly port: OutputClaimExclusiveCreatePort;
+    }) => OutputClaimAttempt
+  >
+>;
+
+export type BeginOutputClaimIsExact = Expect<
+  Equal<typeof beginOutputClaim, (attempt: OutputClaimAttempt) => void>
+>;
+
 export type OutputClaimPlatformResultIsExact = Expect<
   Equal<OutputClaimPlatformResult, ExpectedOutputClaimPlatformResult>
 >;
@@ -628,6 +649,7 @@ type ExpectedInvocationExecutionPorts = {
     now(): number;
     schedule(delayMs: number, callback: () => void): () => void;
   };
+  readonly outputClaim: OutputClaimExclusiveCreatePort;
   readonly output: {
     admit(
       request: Readonly<{

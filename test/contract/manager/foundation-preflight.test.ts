@@ -12,6 +12,7 @@ import type { ExecutableProbePort } from '../../../src/runtime/probe/index.js';
 import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
+import { FakeOutputClaimPort } from '../../support/execution/fake-output-claim-port.js';
 import { FakeInvocationOutputPort } from '../../support/execution/fake-output-port.js';
 import { FakeExecutableProbePort } from '../../support/probe/fake-executable-probe-port.js';
 
@@ -95,9 +96,10 @@ const createPorts = (
     execution,
     output,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    outputClaim: new FakeOutputClaimPort('created'),
     executableProbe: probe,
     workspace: { admit: workspace },
-  } as InvocationExecutionPorts;
+  };
   return Object.freeze({ execution, output, probe, workspace, ports });
 };
 
@@ -281,6 +283,7 @@ test('orders fresh executable proof after resource-bound preflight and before ou
       recordEvent: () => output.recordEvent(),
     },
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    outputClaim: new FakeOutputClaimPort('created'),
     executableProbe: {
       hostPlatform: () => probe.hostPlatform(),
       resolveExecutable: async (request) => {
@@ -406,6 +409,7 @@ test('maps a missing preflight composition port to a typed pre-acceptance reject
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      outputClaim: new FakeOutputClaimPort('created'),
       workspace: {
         admit: async () =>
           Object.freeze({ status: 'admitted' as const, directory: '/approved/workspace' }),
@@ -434,6 +438,7 @@ test.each([
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      outputClaim: new FakeOutputClaimPort('created'),
       executableProbe: probe,
       ...malformedWorkspacePort,
     };

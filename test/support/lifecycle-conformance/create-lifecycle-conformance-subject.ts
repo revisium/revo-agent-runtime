@@ -3,6 +3,7 @@ import type { InvocationExecutionPorts } from '../../../src/runtime/execution/in
 import { buildAgentDefinition } from '../definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../execution/fake-execution-port.js';
+import { FakeOutputClaimPort } from '../execution/fake-output-claim-port.js';
 import { FakeInvocationOutputPort } from '../execution/fake-output-port.js';
 import { FreshAvailableExecutableProbePort } from '../probe/fresh-available-executable-probe-port.js';
 
@@ -76,6 +77,7 @@ export const createLifecycleConformanceSubject = (
     execution,
     clock,
     output,
+    outputClaim: new FakeOutputClaimPort('created'),
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
     workspace: {
       admit: async () =>

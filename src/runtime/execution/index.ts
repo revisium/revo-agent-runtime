@@ -40,7 +40,11 @@ export type {
   OutputClaimReconciliation,
   OutputClaimResult,
 } from './output-claim-attempt/index.js';
-export { inspectOutputClaimGuard } from './output-claim-attempt/index.js';
+export {
+  beginOutputClaim,
+  createOutputClaimAttempt,
+  inspectOutputClaimGuard,
+} from './output-claim-attempt/index.js';
 export { PreparedLaunch } from './prepared-launch.js';
 export type { RawResponseDiagnostic } from './raw-response-diagnostic.js';
 export type { RedactionChannel } from './redaction/index.js';

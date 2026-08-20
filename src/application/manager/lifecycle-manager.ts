@@ -9,6 +9,8 @@ import {
 import { AgentManagerError } from '../../runtime/errors/index.js';
 import {
   captureChildEnvironment,
+  beginOutputClaim,
+  createOutputClaimAttempt,
   InvocationInputSnapshot,
   InvocationLifecycle,
   interpretArgumentTemplate,
@@ -19,6 +21,9 @@ import {
   type ChildEnvironmentCapture,
   type InvocationExecutionPorts,
   type NormalizedInvocationOutcome,
+  type OutputClaimGuard,
+  type OutputClaimResult,
+  type OutputResourcePlan,
   type ResultSchemaValidator,
 } from '../../runtime/execution/index.js';
 import { AGENT_FAULT_MESSAGES, AGENT_RUNTIME_LIMITS } from '../../runtime/policy/index.js';
@@ -39,6 +44,8 @@ type RejectionReason =
   | 'invalid_request'
   | 'invalid_result_schema'
   | 'duplicate_invocation'
+  | 'output_claim_failed'
+  | 'output_claim_uncertain'
   | 'output_prepare_failed'
   | 'environment_invalid'
   | 'preflight_failed';
@@ -54,13 +61,6 @@ type TerminalInvocationEvent = Readonly<{
 }>;
 type TerminalEventListener = (event: TerminalInvocationEvent) => void;
 type TerminalSubscriptionAdmission = ReturnType<TerminalSubscriptions['subscribe']>;
-
-interface OutputResourcePlan {
-  readonly invocationId: string;
-  readonly outputDirectory: string;
-  readonly needsPromptFile: boolean;
-  readonly needsResultSchemaFile: boolean;
-}
 
 interface LifecycleHandle {
   readonly invocationId: string;
@@ -328,6 +328,10 @@ class InternalInvocationLifecycleManager {
   readonly #configuredSecretValues: readonly string[];
   private readonly active = new Map<string, ActiveInvocation>();
   private readonly pending = new Set<string>();
+  // Retained until the future retained-claim reconciliation slice can inspect
+  // these guards; dropping them here would make late reconciliation impossible.
+  private readonly quarantinedInvocationIds = new Map<string, OutputClaimGuard>();
+  private readonly quarantinedOutputDirectories = new Set<string>();
   constructor(
     private readonly ports: LifecycleManagerPorts,
     private readonly completed: CompletedInvocations,
@@ -358,6 +362,17 @@ class InternalInvocationLifecycleManager {
           reason: preflightResult.reason ?? 'preflight_failed',
         });
       const preparedLaunch = preflightResult.preparedLaunch;
+      const plan = preparedLaunch.outputResourcePlan;
+      if (this.quarantinedOutputDirectories.has(plan.outputDirectory))
+        return Object.freeze({ status: 'rejected', reason: 'output_claim_failed' });
+      const claim = await this.claimInvocationOutput(plan);
+      if (claim === undefined || claim.status === 'rejected')
+        return Object.freeze({ status: 'rejected', reason: 'output_claim_failed' });
+      if (claim.status === 'uncertain') {
+        this.quarantinedInvocationIds.set(snapshot.invocationId, claim.guard);
+        this.quarantinedOutputDirectories.add(plan.outputDirectory);
+        return Object.freeze({ status: 'rejected', reason: 'output_claim_uncertain' });
+      }
       try {
         await this.ports.output.prepare();
       } catch {
@@ -580,11 +595,28 @@ class InternalInvocationLifecycleManager {
     if (
       this.pending.has(invocationId) ||
       this.active.has(invocationId) ||
-      this.completed.has(invocationId)
+      this.completed.has(invocationId) ||
+      this.quarantinedInvocationIds.has(invocationId)
     )
       return false;
     this.pending.add(invocationId);
     return true;
+  }
+
+  private async claimInvocationOutput(
+    plan: OutputResourcePlan,
+  ): Promise<OutputClaimResult | undefined> {
+    const port = this.ports.outputClaim;
+    if (port === undefined || typeof port.createExclusiveOutputDirectory !== 'function')
+      return undefined;
+    const attempt = createOutputClaimAttempt({
+      invocationId: plan.invocationId,
+      outputDirectory: plan.outputDirectory,
+      clock: this.ports.clock,
+      port,
+    });
+    beginOutputClaim(attempt);
+    return attempt.settlement;
   }
 }
 
