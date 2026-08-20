@@ -21,7 +21,7 @@ import {
   type NormalizedInvocationOutcome,
   type ResultSchemaValidator,
 } from '../../runtime/execution/index.js';
-import { AGENT_FAULT_MESSAGES } from '../../runtime/policy/index.js';
+import { AGENT_FAULT_MESSAGES, AGENT_RUNTIME_LIMITS } from '../../runtime/policy/index.js';
 import { probeExecutable } from '../../runtime/probe/index.js';
 import type { ExecutableProbePort } from '../../runtime/probe/index.js';
 import { SealedAgentRegistry } from '../../runtime/registry/index.js';
@@ -40,6 +40,7 @@ type RejectionReason =
   | 'invalid_result_schema'
   | 'duplicate_invocation'
   | 'output_prepare_failed'
+  | 'environment_invalid'
   | 'preflight_failed';
 
 type LifecycleResultLookup =
@@ -172,8 +173,71 @@ interface ResourceBoundPreflight {
 }
 
 type PreflightRejection =
-  | Readonly<{ status: 'rejected' }>
+  | Readonly<{ status: 'rejected'; reason?: Extract<RejectionReason, 'environment_invalid'> }>
   | Readonly<{ status: 'invalid-result-schema' }>;
+
+const textEncoder = new TextEncoder();
+
+const utf8Bytes = (value: string): Uint8Array => textEncoder.encode(value);
+
+const totalProspectiveArgvBytes = (executable: string, argumentsOut: readonly string[]): number => {
+  let total = utf8Bytes(executable).byteLength;
+  for (const argument of argumentsOut) total += utf8Bytes(argument).byteLength;
+  return total;
+};
+
+const containsByteSubstring = (source: Uint8Array, needle: Uint8Array): boolean => {
+  if (needle.byteLength === 0 || needle.byteLength > source.byteLength) return false;
+  const lastStart = source.byteLength - needle.byteLength;
+  for (let start = 0; start <= lastStart; start += 1) {
+    let matched = true;
+    for (let index = 0; index < needle.byteLength; index += 1) {
+      if (source[start + index] === needle[index]) continue;
+      matched = false;
+      break;
+    }
+    if (matched) return true;
+  }
+  return false;
+};
+
+const deterministicInputContainsSecret = (
+  secret: Uint8Array,
+  payloads: Extract<
+    ReturnType<typeof prepareInvocationPayloads>,
+    { status: 'prepared' }
+  >['payloads'],
+): boolean => {
+  for (const argument of payloads.arguments) {
+    if (containsByteSubstring(utf8Bytes(argument), secret)) return true;
+  }
+  for (const file of payloads.files) {
+    if (containsByteSubstring(file.bytes, secret)) return true;
+  }
+  return false;
+};
+
+const validateProspectiveBounds = (
+  request: Readonly<{
+    executable: string;
+    payloads: Extract<
+      ReturnType<typeof prepareInvocationPayloads>,
+      { status: 'prepared' }
+    >['payloads'];
+    secretValues: readonly string[];
+  }>,
+): PreflightRejection | undefined => {
+  if (
+    totalProspectiveArgvBytes(request.executable, request.payloads.arguments) >
+    AGENT_RUNTIME_LIMITS.argvBytes
+  )
+    return Object.freeze({ status: 'rejected' });
+  for (const secret of request.secretValues) {
+    if (deterministicInputContainsSecret(utf8Bytes(secret), request.payloads))
+      return Object.freeze({ status: 'rejected', reason: 'environment_invalid' });
+  }
+  return undefined;
+};
 
 const validateEffectiveInvocationInputs = (
   validators: EffectiveInputValidators,
@@ -289,7 +353,10 @@ class InternalInvocationLifecycleManager {
       if (preflightResult.status === 'invalid-result-schema')
         return Object.freeze({ status: 'rejected', reason: 'invalid_result_schema' });
       if (preflightResult.status === 'rejected')
-        return Object.freeze({ status: 'rejected', reason: 'preflight_failed' });
+        return Object.freeze({
+          status: 'rejected',
+          reason: preflightResult.reason ?? 'preflight_failed',
+        });
       const preparedLaunch = preflightResult.preparedLaunch;
       try {
         await this.ports.output.prepare();
@@ -399,9 +466,7 @@ class InternalInvocationLifecycleManager {
     snapshot: InvocationInputSnapshot,
     context: StartContextSnapshot,
   ): Promise<
-    | Readonly<{ status: 'accepted'; preparedLaunch: PreparedLaunch }>
-    | Readonly<{ status: 'rejected' }>
-    | Readonly<{ status: 'invalid-result-schema' }>
+    Readonly<{ status: 'accepted'; preparedLaunch: PreparedLaunch }> | PreflightRejection
   > {
     const resourceIndependent = this.prepareResourceIndependentPreflight(snapshot, context);
     if (resourceIndependent.status !== 'accepted') return resourceIndependent;
@@ -429,6 +494,12 @@ class InternalInvocationLifecycleManager {
         result.definitionDigest !== target.definitionDigest
       )
         return Object.freeze({ status: 'rejected' });
+      const boundsRejection = validateProspectiveBounds({
+        executable: result.executable,
+        payloads: resourceBound.preparedPayloads.payloads,
+        secretValues,
+      });
+      if (boundsRejection !== undefined) return boundsRejection;
       const preparedLaunch = PreparedLaunch.create({
         pin: {
           agentId: target.definition.id,

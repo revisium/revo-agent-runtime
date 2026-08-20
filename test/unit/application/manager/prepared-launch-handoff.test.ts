@@ -1213,3 +1213,197 @@ test('retains resolved prompt stdin and canonical result-schema file payloads be
     }),
   ]);
 });
+
+test('rejects prospective argv total bytes including the resolved executable before output prepare and execution', async () => {
+  const definition = buildAgentDefinition({
+    launch: {
+      command: '/fixture/bin/agent',
+      args: [{ kind: 'prompt' }, { kind: 'result-schema-file' }],
+      versionProbe: { args: ['--version'], stream: 'stdout', prefix: 'agent ', timeoutMs: 1_000 },
+    },
+    delivery: { prompt: 'argument', resultSchema: 'file', result: 'stdout' },
+  });
+  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  if (validatedDefinition === undefined) throw new Error('Expected validated definition');
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const calls: string[] = [];
+  mocks.probeExecutable.mockImplementationOnce(async () => {
+    calls.push('probe');
+    return {
+      status: 'available' as const,
+      agent: { id: definition.id, version: definition.version },
+      definitionDigest: validatedDefinition.definitionDigest,
+      executable: '/resolved/fixture-agent',
+      reportedVersion: '1.0.0',
+    };
+  });
+  output.enqueueAdmission(() => {
+    calls.push('output-admission');
+    return {
+      status: 'admitted' as const,
+      plan: {
+        invocationId: 'oversized-prospective-argv',
+        outputDirectory: '/outputs/invocation',
+        needsPromptFile: false,
+        needsResultSchemaFile: true,
+      },
+    };
+  });
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition] },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
+      workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
+    },
+  );
+
+  await expect(
+    manager.start({
+      invocationId: 'oversized-prospective-argv',
+      agent: { id: definition.id, version: definition.version },
+      prompt: 'x'.repeat(1_048_576),
+      workspace: { directory: '/workspace/project' },
+      parameters: {},
+      permissions: {},
+      result: { schema: resultSchema },
+      output: { directory: '/outputs/invocation' },
+    }),
+  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+
+  expect(calls).toEqual(['output-admission', 'probe']);
+  expect(output.calls()).toEqual([
+    {
+      type: 'admit',
+      request: {
+        invocationId: 'oversized-prospective-argv',
+        outputDirectory: '/outputs/invocation',
+        needsPromptFile: false,
+        needsResultSchemaFile: true,
+      },
+    },
+  ]);
+  expect(execution.calls()).toEqual([]);
+});
+
+test('rejects registered secret byte substrings in prospective argv with environment invalid', async () => {
+  const definition = buildAgentDefinition({
+    launch: {
+      command: '/fixture/bin/agent',
+      args: [
+        { kind: 'literal', value: 'prefix-secret-value-suffix' },
+        { kind: 'result-schema-file' },
+      ],
+      versionProbe: { args: ['--version'], stream: 'stdout', prefix: 'agent ', timeoutMs: 1_000 },
+    },
+    delivery: { prompt: 'stdin', resultSchema: 'file', result: 'stdout' },
+  });
+  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  if (validatedDefinition === undefined) throw new Error('Expected validated definition');
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  mocks.probeExecutable.mockResolvedValueOnce({
+    status: 'available',
+    agent: { id: definition.id, version: definition.version },
+    definitionDigest: validatedDefinition.definitionDigest,
+    executable: '/resolved/fixture-agent',
+    reportedVersion: '1.0.0',
+  });
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition], redaction: { secrets: ['secret-value'] } },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
+      workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
+    },
+  );
+
+  await expect(
+    manager.start({
+      invocationId: 'secret-argv-rejected',
+      agent: { id: definition.id, version: definition.version },
+      prompt: 'Return JSON.',
+      workspace: { directory: '/workspace/project' },
+      parameters: {},
+      permissions: {},
+      result: { schema: resultSchema },
+      output: { directory: '/outputs/invocation' },
+    }),
+  ).resolves.toEqual({ status: 'rejected', reason: 'environment_invalid' });
+
+  expect(output.calls()).toEqual([
+    {
+      type: 'admit',
+      request: {
+        invocationId: 'secret-argv-rejected',
+        outputDirectory: '/outputs/invocation',
+        needsPromptFile: false,
+        needsResultSchemaFile: true,
+      },
+    },
+  ]);
+  expect(execution.calls()).toEqual([]);
+});
+
+test('rejects registered secret byte substrings in prospective scratch payloads with environment invalid', async () => {
+  const definition = buildAgentDefinition({
+    launch: {
+      command: '/fixture/bin/agent',
+      args: [{ kind: 'prompt-file' }, { kind: 'result-schema' }],
+      versionProbe: { args: ['--version'], stream: 'stdout', prefix: 'agent ', timeoutMs: 1_000 },
+    },
+    delivery: { prompt: 'file', resultSchema: 'argument', result: 'stdout' },
+  });
+  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  if (validatedDefinition === undefined) throw new Error('Expected validated definition');
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  mocks.probeExecutable.mockResolvedValueOnce({
+    status: 'available',
+    agent: { id: definition.id, version: definition.version },
+    definitionDigest: validatedDefinition.definitionDigest,
+    executable: '/resolved/fixture-agent',
+    reportedVersion: '1.0.0',
+  });
+  const manager = createInvocationLifecycleManager(
+    { definitions: [definition], redaction: { secrets: ['secret-value'] } },
+    {
+      execution,
+      output,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
+      workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
+    },
+  );
+
+  await expect(
+    manager.start({
+      invocationId: 'secret-scratch-payload-rejected',
+      agent: { id: definition.id, version: definition.version },
+      prompt: 'prefix-secret-value-suffix',
+      workspace: { directory: '/workspace/project' },
+      parameters: {},
+      permissions: {},
+      result: { schema: resultSchema },
+      output: { directory: '/outputs/invocation' },
+    }),
+  ).resolves.toEqual({ status: 'rejected', reason: 'environment_invalid' });
+
+  expect(output.calls()).toEqual([
+    {
+      type: 'admit',
+      request: {
+        invocationId: 'secret-scratch-payload-rejected',
+        outputDirectory: '/outputs/invocation',
+        needsPromptFile: true,
+        needsResultSchemaFile: false,
+      },
+    },
+  ]);
+  expect(execution.calls()).toEqual([]);
+});
