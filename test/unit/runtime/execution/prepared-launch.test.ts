@@ -27,6 +27,7 @@ const effectiveLimits = Object.freeze({
 });
 const effectiveParameters = Object.freeze({ model: 'gpt-5' });
 const effectivePermissions = Object.freeze({ mode: 'workspace-write' });
+const resultSchemaValidator = Object.freeze({ validate: () => undefined });
 
 test('rejects prepared launch evidence without a reported version', () => {
   expect(
@@ -42,27 +43,28 @@ test('rejects prepared launch evidence without a reported version', () => {
 });
 
 test('creates prepared launch evidence with the exact execution-owned shape', () => {
-  expect(
-    PreparedLaunch.create({
-      pin: {
-        agentId: 'codex',
-        agentVersion: '1.0.0',
-        definitionDigest: 'definition-digest',
-      },
-      executable: '/usr/bin/codex',
-      reportedVersion: '1.2.3',
-      limits: effectiveLimits,
-      effectiveParameters,
-      effectivePermissions,
-      binding: {
-        protocolDriverId: 'native/stdio-v1',
-        resultParserId: 'codex-jsonl/v1',
-        permissionStrategyId: 'codex-cli/v1',
-        delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
-      },
-      bindingToken: bindingToken(),
-    }),
-  ).toEqual({
+  const prepared = PreparedLaunch.create({
+    pin: {
+      agentId: 'codex',
+      agentVersion: '1.0.0',
+      definitionDigest: 'definition-digest',
+    },
+    executable: '/usr/bin/codex',
+    reportedVersion: '1.2.3',
+    limits: effectiveLimits,
+    effectiveParameters,
+    effectivePermissions,
+    resultSchemaValidator,
+    binding: {
+      protocolDriverId: 'native/stdio-v1',
+      resultParserId: 'codex-jsonl/v1',
+      permissionStrategyId: 'codex-cli/v1',
+      delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    },
+    bindingToken: bindingToken(),
+  });
+
+  expect(prepared).toEqual({
     pin: {
       agentId: 'codex',
       agentVersion: '1.0.0',
@@ -74,6 +76,7 @@ test('creates prepared launch evidence with the exact execution-owned shape', ()
     effectiveParameters,
     effectivePermissions,
   });
+  expect(prepared?.resultSchemaValidator.validate({})).toBeUndefined();
 });
 
 test('accepts null-prototype record containers', () => {
@@ -89,6 +92,7 @@ test('accepts null-prototype record containers', () => {
     limits: effectiveLimits,
     effectiveParameters,
     effectivePermissions,
+    resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -297,6 +301,7 @@ test('rejects missing, empty, and wrong-type semantic values', () => {
     limits: effectiveLimits,
     effectiveParameters,
     effectivePermissions,
+    resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -331,6 +336,7 @@ test('authenticates the exact full binding tuple in finalization material', () =
     limits: effectiveLimits,
     effectiveParameters,
     effectivePermissions,
+    resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1' as const,
       resultParserId: 'codex-jsonl/v1' as const,
@@ -364,6 +370,7 @@ test('requires an authentic binding token matched to the launch pin', () => {
     limits: effectiveLimits,
     effectiveParameters,
     effectivePermissions,
+    resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1' as const,
       resultParserId: 'codex-jsonl/v1' as const,
@@ -408,6 +415,7 @@ test('copies caller containers and deeply freezes prepared launch evidence', () 
     limits: { ...effectiveLimits },
     effectiveParameters: { nested: { value: 'parameter' } },
     effectivePermissions: { nested: { value: 'permission' } },
+    resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -482,6 +490,7 @@ test('requires copied effective limits in finalization material', () => {
     limits,
     effectiveParameters,
     effectivePermissions,
+    resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',

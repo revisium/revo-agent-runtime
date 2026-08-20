@@ -374,6 +374,38 @@ test('rejects an out-of-profile result schema before output preparation or execu
   expect(execution.calls()).toEqual([]);
 });
 
+test('checks retained invocation ids before rejecting an invalid result schema', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  execution.enqueueStart('running');
+  output.enqueuePrepare();
+  output.enqueueTerminalResultRecording();
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+
+  const accepted = expectAccepted(
+    await manager.start(createStartInput({ invocationId: 'retained-before-schema' })),
+  );
+  await flush();
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
+  await flush();
+  expect(accepted.terminalSettlement()).toEqual({ status: 'succeeded', value: { ok: true } });
+
+  await expect(
+    manager.start(
+      createStartInput({
+        invocationId: 'retained-before-schema',
+        result: {
+          schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', format: 'email' },
+        },
+      }),
+    ),
+  ).resolves.toEqual({ status: 'rejected', reason: 'duplicate_invocation' });
+});
+
 test('finalizes a deep in-bound response with one output commit before retaining its id', async () => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();

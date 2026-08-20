@@ -37,6 +37,7 @@ const preparedLaunch = (): PreparedLaunch => {
     limits: testSnapshot().limits,
     effectiveParameters: {},
     effectivePermissions: {},
+    resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -64,6 +65,7 @@ const resultSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   type: 'object',
 };
+const resultSchemaValidator = Object.freeze({ validate: () => undefined });
 
 test('starts queued executions in FIFO order and exposes frozen copied calls', async () => {
   const port = new FakeInvocationExecutionPort();

@@ -132,6 +132,19 @@ interface EffectiveInvocationInputs {
   readonly permissions: JsonObject;
 }
 
+type PreflightBinding = ReturnType<InstalledBindingRegistry['createBinding']>;
+
+interface ResourceIndependentPreflight {
+  readonly target: ValidatedDefinition;
+  readonly binding: PreflightBinding;
+  readonly effectiveInputs: EffectiveInvocationInputs;
+  readonly resultSchemaValidator: ResultSchemaValidator;
+}
+
+type PreflightRejection =
+  | Readonly<{ status: 'rejected' }>
+  | Readonly<{ status: 'invalid-result-schema' }>;
+
 const validateEffectiveInvocationInputs = (
   validators: EffectiveInputValidators,
   definition: AgentDefinitionContract,
@@ -203,15 +216,15 @@ class InternalInvocationLifecycleManager {
     const snapshot = InvocationInputSnapshot.create(input, this.limits);
     if (snapshot === undefined)
       return Object.freeze({ status: 'rejected', reason: 'invalid_request' });
-    const resultSchemaValidator = createResultSchemaValidator(snapshot);
-    if (resultSchemaValidator === undefined)
-      return Object.freeze({ status: 'rejected', reason: 'invalid_result_schema' });
     if (!this.reserve(snapshot.invocationId))
       return Object.freeze({ status: 'rejected', reason: 'duplicate_invocation' });
     try {
-      const preparedLaunch = await this.preflight(snapshot);
-      if (preparedLaunch === undefined)
+      const preflightResult = await this.preflight(snapshot);
+      if (preflightResult.status === 'invalid-result-schema')
+        return Object.freeze({ status: 'rejected', reason: 'invalid_result_schema' });
+      if (preflightResult.status === 'rejected')
         return Object.freeze({ status: 'rejected', reason: 'preflight_failed' });
+      const preparedLaunch = preflightResult.preparedLaunch;
       try {
         await this.ports.output.prepare();
       } catch {
@@ -219,12 +232,8 @@ class InternalInvocationLifecycleManager {
       }
 
       const completion = createDeferred<NormalizedInvocationOutcome>();
-      const lifecycle = new InvocationLifecycle(
-        this.ports,
-        snapshot,
-        preparedLaunch,
-        (outcome) => this.complete(snapshot.invocationId, completion, outcome),
-        resultSchemaValidator,
+      const lifecycle = new InvocationLifecycle(this.ports, snapshot, preparedLaunch, (outcome) =>
+        this.complete(snapshot.invocationId, completion, outcome),
       );
       this.active.set(snapshot.invocationId, Object.freeze({ completion, lifecycle }));
       this.pending.delete(snapshot.invocationId);
@@ -275,29 +284,26 @@ class InternalInvocationLifecycleManager {
     }
   }
 
-  private async preflight(snapshot: InvocationInputSnapshot): Promise<PreparedLaunch | undefined> {
-    if (snapshot.agent === undefined) return undefined;
-    const target = this.registry.getDefinition(snapshot.agent);
-    if (target === undefined) return undefined;
-    const binding = this.installedBindings.createBinding(target);
-    const effectiveInputValidators = this.effectiveInputValidators.get(target.definitionDigest);
-    if (effectiveInputValidators === undefined) return undefined;
-    const effectiveInputs = validateEffectiveInvocationInputs(
-      effectiveInputValidators,
-      target.definition,
-      snapshot,
-    );
-    if (effectiveInputs === undefined) return undefined;
+  private async preflight(
+    snapshot: InvocationInputSnapshot,
+  ): Promise<
+    | Readonly<{ status: 'accepted'; preparedLaunch: PreparedLaunch }>
+    | Readonly<{ status: 'rejected' }>
+    | Readonly<{ status: 'invalid-result-schema' }>
+  > {
+    const resourceIndependent = this.prepareResourceIndependentPreflight(snapshot);
+    if (resourceIndependent.status !== 'accepted') return resourceIndependent;
+    const { target, binding, effectiveInputs, resultSchemaValidator } = resourceIndependent;
     if (snapshot.workspace !== undefined) {
       const workspace = this.ports.workspace;
       if (
         workspace === undefined ||
         (await workspace.admit(snapshot.workspace)).status !== 'admitted'
       )
-        return undefined;
+        return Object.freeze({ status: 'rejected' });
     }
     const port = this.ports.executableProbe;
-    if (port === undefined) return undefined;
+    if (port === undefined) return Object.freeze({ status: 'rejected' });
     const result = await probeExecutable(target, port);
     if (result.status === 'available') {
       if (
@@ -305,8 +311,8 @@ class InternalInvocationLifecycleManager {
         result.agent.version !== target.definition.version ||
         result.definitionDigest !== target.definitionDigest
       )
-        return undefined;
-      return PreparedLaunch.create({
+        return Object.freeze({ status: 'rejected' });
+      const preparedLaunch = PreparedLaunch.create({
         pin: {
           agentId: target.definition.id,
           agentVersion: target.definition.version,
@@ -317,11 +323,16 @@ class InternalInvocationLifecycleManager {
         limits: snapshot.limits,
         effectiveParameters: effectiveInputs.parameters,
         effectivePermissions: effectiveInputs.permissions,
+        resultSchemaValidator,
         binding: binding.binding,
         bindingToken: binding.bindingToken,
       });
+      return preparedLaunch === undefined
+        ? Object.freeze({ status: 'rejected' })
+        : Object.freeze({ status: 'accepted', preparedLaunch });
     }
-    if (result.error.code !== 'revo.agent.probe_platform_unsupported') return undefined;
+    if (result.error.code !== 'revo.agent.probe_platform_unsupported')
+      return Object.freeze({ status: 'rejected' });
     throw new AgentManagerError(
       Object.freeze({
         code: 'revo.agent.platform_unsupported',
@@ -331,6 +342,33 @@ class InternalInvocationLifecycleManager {
         ...(result.error.details === undefined ? {} : { details: result.error.details }),
       }),
     );
+  }
+
+  private prepareResourceIndependentPreflight(
+    snapshot: InvocationInputSnapshot,
+  ): Readonly<{ status: 'accepted' } & ResourceIndependentPreflight> | PreflightRejection {
+    if (snapshot.agent === undefined) return Object.freeze({ status: 'rejected' });
+    const target = this.registry.getDefinition(snapshot.agent);
+    if (target === undefined) return Object.freeze({ status: 'rejected' });
+    const binding = this.installedBindings.createBinding(target);
+    const effectiveInputValidators = this.effectiveInputValidators.get(target.definitionDigest);
+    if (effectiveInputValidators === undefined) return Object.freeze({ status: 'rejected' });
+    const effectiveInputs = validateEffectiveInvocationInputs(
+      effectiveInputValidators,
+      target.definition,
+      snapshot,
+    );
+    if (effectiveInputs === undefined) return Object.freeze({ status: 'rejected' });
+    const resultSchemaValidator = createResultSchemaValidator(snapshot);
+    if (resultSchemaValidator === undefined)
+      return Object.freeze({ status: 'invalid-result-schema' });
+    return Object.freeze({
+      status: 'accepted',
+      target,
+      binding,
+      effectiveInputs,
+      resultSchemaValidator,
+    });
   }
 
   private reserve(invocationId: string): boolean {

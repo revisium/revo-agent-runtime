@@ -5,7 +5,6 @@ import { InvocationInputSnapshot } from './input-snapshot.js';
 import { normalizeInvocationOutcome } from './normalize-invocation-outcome.js';
 import type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
 import type { PreparedLaunch } from './prepared-launch.js';
-import type { ResultSchemaValidator } from './result-schema-validator.js';
 
 type LifecycleState =
   | 'accepted'
@@ -48,9 +47,6 @@ export class InvocationLifecycle {
     private readonly snapshot: InvocationInputSnapshot,
     private readonly preparedLaunch: PreparedLaunch,
     private readonly onTerminal: (settlement: NormalizedInvocationOutcome) => void,
-    private readonly resultSchemaValidator: ResultSchemaValidator = Object.freeze({
-      validate: () => undefined,
-    }),
   ) {}
 
   begin(): void {
@@ -140,7 +136,7 @@ export class InvocationLifecycle {
                   ? ('timed_out' as const)
                   : ('cancelled' as const),
             })
-          : normalizeInvocationOutcome(observation, this.resultSchemaValidator);
+          : normalizeInvocationOutcome(observation, this.preparedLaunch.resultSchemaValidator);
     } catch {
       normalized = Object.freeze({ status: 'failed', reason: 'execution_failed' });
     }

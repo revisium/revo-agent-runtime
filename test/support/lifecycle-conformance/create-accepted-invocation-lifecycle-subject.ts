@@ -69,6 +69,7 @@ export const createAcceptedInvocationLifecycleSubject = (
     limits: snapshot.limits,
     effectiveParameters: {},
     effectivePermissions: {},
+    resultSchemaValidator: validator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
       resultParserId: 'codex-jsonl/v1',
@@ -89,7 +90,6 @@ export const createAcceptedInvocationLifecycleSubject = (
     snapshot,
     preparedLaunch,
     (settlement) => settlements.push(settlement),
-    validator,
   );
 
   return Object.freeze({

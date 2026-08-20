@@ -1,6 +1,7 @@
-import type { JsonObject } from '../spec/index.js';
+import type { AgentValidationDetails, JsonObject } from '../spec/index.js';
 import { canonicalEffectiveInputs } from './canonical-effective-inputs.js';
 import { ExecutionBindingToken } from './execution-binding-token.js';
+import type { ResultSchemaValidator } from './result-schema-validator.js';
 
 interface PreparedLaunchPin {
   readonly agentId: string;
@@ -128,6 +129,35 @@ const asResultDelivery = (
 ): PreparedLaunchBinding['delivery']['result'] | undefined =>
   value === 'stdout' || value === 'protocol' ? value : undefined;
 
+const isValidatorFunction = (value: unknown): value is (input: JsonObject) => unknown =>
+  typeof value === 'function';
+
+const isValidationDetails = (value: unknown): value is AgentValidationDetails =>
+  value !== null &&
+  typeof value === 'object' &&
+  Array.isArray(Object.getOwnPropertyDescriptor(value, 'diagnostics')?.value) &&
+  typeof Object.getOwnPropertyDescriptor(value, 'truncated')?.value === 'boolean';
+
+const ownResultSchemaValidator = (value: object): ResultSchemaValidator | undefined => {
+  const descriptor = Object.getOwnPropertyDescriptor(value, 'resultSchemaValidator');
+  if (!isDataDescriptor(descriptor)) return undefined;
+  const candidate = descriptor.value;
+  if (candidate === null || typeof candidate !== 'object' || !isPlainObservedObject(candidate))
+    return undefined;
+  if (!hasExactKeys(candidate, ['validate'])) return undefined;
+  const validateDescriptor = Object.getOwnPropertyDescriptor(candidate, 'validate');
+  if (!isDataDescriptor(validateDescriptor) || !isValidatorFunction(validateDescriptor.value))
+    return undefined;
+  const validate = validateDescriptor.value;
+  return Object.freeze({
+    validate: (input: JsonObject) => {
+      const result = validate(input);
+      if (result === undefined || isValidationDetails(result)) return result;
+      throw new Error('Prepared result schema validator returned invalid diagnostics.');
+    },
+  });
+};
+
 const ownString = (value: object, key: string): string | undefined => {
   const descriptor = Object.getOwnPropertyDescriptor(value, key);
   if (!isDataDescriptor(descriptor)) return undefined;
@@ -188,6 +218,7 @@ const ownNonEmptyString = (value: object, key: string): string | undefined => {
 export class PreparedLaunch {
   readonly effectiveParameters: JsonObject;
   readonly effectivePermissions: JsonObject;
+  readonly resultSchemaValidator!: ResultSchemaValidator;
   readonly pin: PreparedLaunchPin;
   readonly executable: string;
   readonly limits: PreparedLaunchLimits;
@@ -200,9 +231,16 @@ export class PreparedLaunch {
     limits: PreparedLaunchLimits,
     effectiveParameters: JsonObject,
     effectivePermissions: JsonObject,
+    resultSchemaValidator: ResultSchemaValidator,
   ) {
     this.effectiveParameters = effectiveParameters;
     this.effectivePermissions = effectivePermissions;
+    Object.defineProperty(this, 'resultSchemaValidator', {
+      value: resultSchemaValidator,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
     this.pin = Object.freeze({
       agentId: pin.agentId,
       agentVersion: pin.agentVersion,
@@ -225,6 +263,7 @@ export class PreparedLaunch {
         'limits',
         'effectiveParameters',
         'effectivePermissions',
+        'resultSchemaValidator',
         'binding',
         'bindingToken',
       ])
@@ -263,6 +302,7 @@ export class PreparedLaunch {
     const effectivePermissions = isDataDescriptor(effectivePermissionsDescriptor)
       ? canonicalEffectiveInputs.permissions(effectivePermissionsDescriptor.value)
       : undefined;
+    const resultSchemaValidator = ownResultSchemaValidator(value);
     const bindingDescriptor = Object.getOwnPropertyDescriptor(value, 'binding');
     const binding = isDataDescriptor(bindingDescriptor)
       ? copyBinding(bindingDescriptor.value)
@@ -280,6 +320,7 @@ export class PreparedLaunch {
       limits === undefined ||
       effectiveParameters === undefined ||
       effectivePermissions === undefined ||
+      resultSchemaValidator === undefined ||
       binding === undefined ||
       !ExecutionBindingToken.matches(bindingToken, {
         agentId,
@@ -296,6 +337,7 @@ export class PreparedLaunch {
       limits,
       effectiveParameters,
       effectivePermissions,
+      resultSchemaValidator,
     );
   }
 }
