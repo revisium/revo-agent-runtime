@@ -214,6 +214,8 @@ test('freshly probes every invocation before output preparation and execution de
     effectiveParameters: {},
     effectivePermissions: {},
   });
+  expect(firstPrepared?.childEnvironment).toEqual({});
+  expect(secondPrepared?.childEnvironment).toEqual({});
   expect(firstPrepared).not.toBe(secondPrepared);
 });
 

@@ -44,6 +44,8 @@ const preparedLaunch = (): PreparedLaunch => {
     limits: snapshot().limits,
     effectiveParameters: {},
     effectivePermissions: {},
+    childEnvironment: {},
+    childEnvironmentSecretValues: [],
     resultSchemaValidator,
     binding: {
       protocolDriverId: 'native/stdio-v1',

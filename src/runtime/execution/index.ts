@@ -15,6 +15,7 @@ export { ExecutionBindingToken } from './execution-binding-token.js';
 export type { InvocationTerminalObservation } from './execution-terminal-observation.js';
 export { finalizeInvocationOutcome } from './finalize-invocation-outcome.js';
 export { InvocationInputSnapshot } from './input-snapshot.js';
+export { StartContextSnapshot } from './start-context-snapshot.js';
 export { InvocationLifecycle } from './lifecycle.js';
 export { normalizeInvocationOutcome } from './normalize-invocation-outcome.js';
 export type { NormalizedInvocationFailureReason } from './normalized-invocation-failure-reason.js';

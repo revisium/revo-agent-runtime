@@ -104,6 +104,7 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/secret-registration/register-secrets.ts',
     'execution/secret-registration/sealed-secret-registration.ts',
     'execution/secret-registration/secret-registration-request.ts',
+    'execution/start-context-snapshot.ts',
     'execution/workspace-admission-result.ts',
     'policy/fault-messages.ts',
     'policy/index.ts',

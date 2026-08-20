@@ -69,6 +69,8 @@ export const createAcceptedInvocationLifecycleSubject = (
     limits: snapshot.limits,
     effectiveParameters: {},
     effectivePermissions: {},
+    childEnvironment: {},
+    childEnvironmentSecretValues: [],
     resultSchemaValidator: validator,
     binding: {
       protocolDriverId: 'native/stdio-v1',
