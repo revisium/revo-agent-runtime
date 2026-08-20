@@ -3,6 +3,15 @@ export abstract class InvocationBoundCarrier {
   readonly invocationId: string;
   readonly outputDirectory: string;
 
+  static isBoundToToken(carrier: unknown, token: object): boolean {
+    return (
+      typeof carrier === 'object' &&
+      carrier !== null &&
+      #invocationToken in carrier &&
+      carrier.#invocationToken === token
+    );
+  }
+
   protected constructor(
     input: Readonly<{ invocationId: string; outputDirectory: string; invocationToken: object }>,
   ) {

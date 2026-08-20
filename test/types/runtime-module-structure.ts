@@ -27,6 +27,10 @@ import type {
   ChildEnvironmentRequest,
   ConsumedOutputPreparationMaterial,
   ConsumedRedactionMaterial,
+  PreparedInvocationMaterial,
+  PreparedInvocation,
+  OutputPreparationFileSlot,
+  ExecutionBinding,
   beginOutputClaim,
   createRedactingBoundedOutputSink,
   createRedactionChannel,
@@ -52,6 +56,8 @@ import type {
   OutputPreparationPlatformResult,
   OutputPreparationQuiescence,
   OutputPreparationResult,
+  PreparedInvocationPayloads,
+  OutputResourcePlan,
   PreparedInvocationResources,
   PreparedExecutionSecurity,
   PreparedExecutionSecurityRequest,
@@ -693,6 +699,34 @@ type ExpectedConsumedOutputPreparationMaterial = {
   readonly outputDirectory: string;
 };
 
+type ExpectedExecutionBinding = {
+  readonly protocolDriverId: 'native/stdio-v1' | 'acp/v1';
+  readonly resultParserId?: 'codex-jsonl/v1' | 'claude-stream-json/v1';
+  readonly permissionStrategyId: 'codex-cli/v1' | 'claude-cli/v1' | 'acp/v1';
+  readonly delivery: {
+    readonly prompt: 'argument' | 'stdin' | 'file' | 'protocol';
+    readonly resultSchema: 'argument' | 'file' | 'protocol';
+    readonly result: 'stdout' | 'protocol';
+  };
+};
+
+type ExpectedOutputPreparationFileSlot = {
+  readonly slot: 'prompt' | 'result-schema';
+  readonly path: string;
+  readonly bytes: Uint8Array;
+  readonly expectedByteLength: number;
+  readonly expectedSha256: string;
+};
+
+type ExpectedPreparedInvocationMaterial = {
+  readonly pin: Readonly<{ agentId: string; agentVersion: string; definitionDigest: string }>;
+  readonly workspaceDirectory: string;
+  readonly reportedVersion: string;
+  readonly binding: ExecutionBinding;
+  readonly outputResourcePlan: OutputResourcePlan;
+  readonly preparedPayloads: PreparedInvocationPayloads;
+};
+
 type ExpectedPreparedExecutionSecurityRequest = {
   readonly invocationId: string;
   readonly childEnvironment: Readonly<Record<string, string>>;
@@ -738,12 +772,38 @@ export type OutputPreparationAttemptIsExact = Expect<
   Equal<OutputPreparationAttempt, ExpectedOutputPreparationAttempt>
 >;
 
-export type ConsumedOutputPreparationMaterialIsExact = Expect<
-  Equal<ConsumedOutputPreparationMaterial, ExpectedConsumedOutputPreparationMaterial>
+export type ConsumedOutputPreparationMaterialVisibleFieldsAreExact = Expect<
+  Equal<keyof ConsumedOutputPreparationMaterial, keyof ExpectedConsumedOutputPreparationMaterial>
 >;
 
 export type ConsumedRedactionMaterialVisibleFieldsAreExact = Expect<
   Equal<keyof ConsumedRedactionMaterial, 'invocationId'>
+>;
+
+export type PreparedInvocationVisibleFieldsAreExact = Expect<
+  Equal<
+    keyof PreparedInvocation,
+    | 'invocationId'
+    | 'pin'
+    | 'workspaceDirectory'
+    | 'outputDirectory'
+    | 'reportedVersion'
+    | 'binding'
+  >
+>;
+
+export type PreparedInvocationBindingIsExact = Expect<
+  Equal<PreparedInvocation['binding'], ExecutionBinding>
+>;
+
+export type PreparedInvocationMaterialIsExact = Expect<
+  Equal<PreparedInvocationMaterial, ExpectedPreparedInvocationMaterial>
+>;
+
+export type ExecutionBindingIsExact = Expect<Equal<ExecutionBinding, ExpectedExecutionBinding>>;
+
+export type OutputPreparationFileSlotIsExact = Expect<
+  Equal<OutputPreparationFileSlot, ExpectedOutputPreparationFileSlot>
 >;
 
 export type PreparedExecutionSecurityVisibleFieldsAreExact = Expect<
