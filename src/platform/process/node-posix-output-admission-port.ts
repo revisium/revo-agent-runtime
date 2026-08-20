@@ -7,14 +7,11 @@ import { nodePosixPathAdmission } from './node-posix-path-admission.js';
 type OutputAdmissionRequest = Parameters<InvocationExecutionPorts['output']['admit']>[0];
 type OutputAdmissionResult = Awaited<ReturnType<InvocationExecutionPorts['output']['admit']>>;
 
-const invalidOutputLeaf = (path: string): boolean =>
-  nodePosixPathAdmission.isInvalidNormalizedAbsolutePosixPath(path) || path === '/';
-
 export class NodePosixOutputAdmissionPort {
   async admit(request: OutputAdmissionRequest): Promise<OutputAdmissionResult> {
     if (process.platform !== 'linux')
       return Object.freeze({ status: 'rejected', reason: 'unsupported_platform' });
-    if (invalidOutputLeaf(request.outputDirectory))
+    if (nodePosixPathAdmission.isInvalidOutputLeafPath(request.outputDirectory))
       return Object.freeze({ status: 'rejected', reason: 'invalid_path' });
     const parent = posix.dirname(request.outputDirectory);
     try {

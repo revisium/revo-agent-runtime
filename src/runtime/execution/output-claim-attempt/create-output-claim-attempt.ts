@@ -1,4 +1,4 @@
-import type { InvocationExecutionPorts } from '../execution-ports.js';
+import type { InvocationClockPort } from '../invocation-clock-port.js';
 import { ClaimedInvocationOutput } from './claimed-invocation-output.js';
 import type { OutputClaimAttempt } from './output-claim-attempt.js';
 import { OUTPUT_CLAIM_BEGINNERS } from './output-claim-beginners.js';
@@ -20,7 +20,7 @@ interface Deferred<Value> {
 interface OutputClaimAttemptInput {
   readonly invocationId: string;
   readonly outputDirectory: string;
-  readonly clock: InvocationExecutionPorts['clock'];
+  readonly clock: InvocationClockPort;
   readonly port: OutputClaimExclusiveCreatePort;
 }
 
@@ -149,7 +149,11 @@ const settlePlatformResult = (state: ClaimState, result: ClaimPlatformOutcome): 
     settleClaimed(state);
     return;
   }
-  settleRejected(state, result.status === 'leaf_exists' ? 'leaf_exists' : 'create_failed', true);
+  settleRejected(
+    state,
+    result.status === 'leaf_exists' ? 'leaf_exists' : 'create_failed',
+    state.dispatchStarted,
+  );
 };
 
 const reconcileRetainedClaim = (state: ClaimState, result: ClaimPlatformOutcome): void => {

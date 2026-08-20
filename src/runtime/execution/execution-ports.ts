@@ -1,6 +1,8 @@
 import type { InvocationTerminalObservation } from './execution-terminal-observation.js';
 import type { InvocationInputSnapshot } from './input-snapshot.js';
+import type { InvocationClockPort } from './invocation-clock-port.js';
 import type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
+import type { OutputClaimExclusiveCreatePort } from './output-claim-attempt/index.js';
 import type { PreparedLaunch } from './prepared-launch.js';
 import type { WorkspaceAdmissionResult } from './workspace-admission-result.js';
 
@@ -17,10 +19,8 @@ export interface InvocationExecutionPorts {
   readonly workspace: {
     admit(path: string): Promise<WorkspaceAdmissionResult>;
   };
-  readonly clock: {
-    now(): number;
-    schedule(delayMs: number, callback: () => void): () => void;
-  };
+  readonly clock: InvocationClockPort;
+  readonly outputClaim: OutputClaimExclusiveCreatePort;
   readonly output: {
     admit(
       request: Readonly<{

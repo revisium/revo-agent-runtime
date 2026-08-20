@@ -67,6 +67,10 @@ test('rejects relative, non-normalized, oversized, hostile, and root output path
     status: 'rejected',
     reason: 'invalid_path',
   });
+  await expect(port.admit(request('/tmp/output/'))).resolves.toEqual({
+    status: 'rejected',
+    reason: 'invalid_path',
+  });
 });
 
 test('rejects missing and non-directory parents and existing leaves', async () => {

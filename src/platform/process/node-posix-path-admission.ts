@@ -11,10 +11,14 @@ const isInvalidNormalizedAbsolutePosixPath = (path: string): boolean =>
   !path.startsWith('/') ||
   path !== posix.normalize(path);
 
+const isInvalidOutputLeafPath = (path: string): boolean =>
+  isInvalidNormalizedAbsolutePosixPath(path) || path.endsWith('/');
+
 const isMissingPathError = (error: unknown): boolean =>
   error instanceof Error && 'code' in error && error.code === 'ENOENT';
 
 export const nodePosixPathAdmission = Object.freeze({
   isInvalidNormalizedAbsolutePosixPath,
+  isInvalidOutputLeafPath,
   isMissingPathError,
 });

@@ -2,3 +2,4 @@ export { NodePosixBoundedCommandPort } from './node-posix-bounded-command-port.j
 export { NodePosixProcessSupervisionPort } from './node-posix-process-supervision-port.js';
 export { NodePosixWorkspacePort } from './node-posix-workspace-port.js';
 export { NodePosixOutputAdmissionPort } from './node-posix-output-admission-port.js';
+export { NodePosixOutputClaimPort } from './node-posix-output-claim-port.js';

@@ -5,6 +5,7 @@ import type { InvocationExecutionPorts } from '../../../src/runtime/execution/in
 import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
+import { FakeOutputClaimPort } from '../../support/execution/fake-output-claim-port.js';
 import { FakeInvocationOutputPort } from '../../support/execution/fake-output-port.js';
 import { FreshAvailableExecutableProbePort } from '../../support/probe/fresh-available-executable-probe-port.js';
 
@@ -12,13 +13,14 @@ const definition = buildAgentDefinition();
 const agent = Object.freeze({ id: definition.id, version: definition.version });
 const lifecycleOptions = Object.freeze({ definitions: Object.freeze([definition]) });
 
-type LifecycleManagerPortsInput = Omit<InvocationExecutionPorts, 'workspace'> &
-  Partial<Pick<InvocationExecutionPorts, 'workspace'>>;
+type LifecycleManagerPortsInput = Omit<InvocationExecutionPorts, 'workspace' | 'outputClaim'> &
+  Partial<Pick<InvocationExecutionPorts, 'workspace' | 'outputClaim'>>;
 
 const createLifecycleManager = (ports: LifecycleManagerPortsInput) =>
   createInvocationLifecycleManager(lifecycleOptions, {
     ...ports,
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
+    outputClaim: ports.outputClaim ?? new FakeOutputClaimPort('created'),
     workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
   });
 

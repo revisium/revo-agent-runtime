@@ -108,6 +108,23 @@ test('create failure before deadline fulfills quiescence no later than rejected 
   });
 });
 
+test('create failure before dispatch reports undispatched quiescence', async () => {
+  const port = new FakeOutputClaimPort();
+  port.enqueue('create-failed-without-dispatch');
+  const { attempt } = createAttempt(port);
+
+  beginClaim(attempt);
+
+  await expect(attempt.settlement).resolves.toEqual({
+    status: 'rejected',
+    reason: 'create_failed',
+  });
+  await expect(attempt.quiescence).resolves.toEqual({
+    status: 'quiescent',
+    syscallDispatched: false,
+  });
+});
+
 test('promise rejection before deadline is typed as create_failed and never rejects claim promises', async () => {
   const port = new FakeOutputClaimPort();
   port.enqueue('reject');
@@ -358,8 +375,8 @@ test('public entrypoint cannot mint claim guards or claimed sessions', async () 
   expect(claimedResult.session).toEqual(claimInput());
   expect('OutputClaimGuard' in runtimeExecution).toBe(false);
   expect('ClaimedInvocationOutput' in runtimeExecution).toBe(false);
-  expect('createOutputClaimAttempt' in runtimeExecution).toBe(false);
-  expect('beginOutputClaim' in runtimeExecution).toBe(false);
+  expect('createOutputClaimAttempt' in runtimeExecution).toBe(true);
+  expect('beginOutputClaim' in runtimeExecution).toBe(true);
   expect(inspectOutputClaimGuard(timedOutResult.guard)).toEqual({
     status: 'unknown',
     reason: 'pending',

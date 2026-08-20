@@ -5,19 +5,21 @@ import type { InvocationExecutionPorts } from '../../../src/runtime/execution/in
 import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
+import { FakeOutputClaimPort } from '../../support/execution/fake-output-claim-port.js';
 import { FakeInvocationOutputPort } from '../../support/execution/fake-output-port.js';
 import { FreshAvailableExecutableProbePort } from '../../support/probe/fresh-available-executable-probe-port.js';
 
 const definition = buildAgentDefinition();
 const agent = Object.freeze({ id: definition.id, version: definition.version });
 const lifecycleOptions = Object.freeze({ definitions: Object.freeze([definition]) });
-type LifecycleManagerPortsInput = Omit<InvocationExecutionPorts, 'workspace'> &
-  Partial<Pick<InvocationExecutionPorts, 'workspace'>>;
+type LifecycleManagerPortsInput = Omit<InvocationExecutionPorts, 'workspace' | 'outputClaim'> &
+  Partial<Pick<InvocationExecutionPorts, 'workspace' | 'outputClaim'>>;
 
 const createLifecycleManager = (ports: LifecycleManagerPortsInput) =>
   createInvocationLifecycleManager(lifecycleOptions, {
     ...ports,
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
+    outputClaim: ports.outputClaim ?? new FakeOutputClaimPort('created'),
     workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
   });
 
@@ -117,6 +119,7 @@ test('keeps an active waiter and handle result after later FIFO eviction while f
       execution,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       output,
+      outputClaim: new FakeOutputClaimPort('created'),
       executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
@@ -192,6 +195,7 @@ test('uses validated default capacity and rejects invalid capacity through lifec
     execution: new FakeInvocationExecutionPort(),
     output: new FakeInvocationOutputPort(),
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    outputClaim: new FakeOutputClaimPort('created'),
     workspace: {
       admit: async () =>
         Object.freeze({ status: 'admitted' as const, directory: '/workspace/project' }),
@@ -420,6 +424,7 @@ test('admits subscriptions independently from completed result retention', async
       execution,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       output,
+      outputClaim: new FakeOutputClaimPort('created'),
       executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },

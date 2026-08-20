@@ -8,6 +8,7 @@ export type FakeOutputClaimOperation =
   | 'created'
   | 'leaf-exists'
   | 'create-failed'
+  | 'create-failed-without-dispatch'
   | 'pending'
   | 'pending-without-dispatch'
   | 'reject'
@@ -27,6 +28,8 @@ export class FakeOutputClaimPort implements OutputClaimExclusiveCreatePort {
   private readonly requestLog: OutputClaimExclusiveCreateRequest[] = [];
   private nextPendingClaimId = 1;
 
+  constructor(private readonly defaultOperation?: FakeOutputClaimOperation) {}
+
   enqueue(operation: FakeOutputClaimOperation): void {
     this.queue.push(operation);
   }
@@ -35,9 +38,11 @@ export class FakeOutputClaimPort implements OutputClaimExclusiveCreatePort {
     request: OutputClaimExclusiveCreateRequest,
   ): Promise<OutputClaimPlatformResult> {
     this.requestLog.push(request);
-    const operation = this.queue.shift();
+    const operation = this.queue.shift() ?? this.defaultOperation;
     if (operation === undefined) throw new Error('No output claim operation is queued');
     if (operation === 'throw-before-dispatch') throw new Error('failed before syscall dispatch');
+    if (operation === 'create-failed-without-dispatch')
+      return Promise.resolve({ status: 'create_failed' });
     if (operation === 'pending-without-dispatch')
       return new Promise<OutputClaimPlatformResult>(() => undefined);
     // Deliberately violates the port's return-type contract to exercise
