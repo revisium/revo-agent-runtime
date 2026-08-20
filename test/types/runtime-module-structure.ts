@@ -41,6 +41,7 @@ import type {
   InvocationExecutionPorts,
   InvocationInputSnapshot,
   InvocationTerminalObservation,
+  InvocationTokenCarrier,
   LiveOwnedProcess,
   NormalizedInvocationOutcome,
   OutputClaimAttempt,
@@ -63,19 +64,36 @@ import type {
   PreparedExecutionSecurity,
   PreparedExecutionSecurityRequest,
   PreparedLaunch,
+  ParserFailureReason,
+  AttachedProtocolSession,
+  DuplexCoordinatorRegistration,
+  PausedProcessIo,
+  PreparedProtocolSession,
+  ProcessIdentityInspectionResult,
+  ProcessInputSink,
+  ProcessIoActivationResult,
   ProcessExitObservation,
   ProcessIdentity,
   ProcessOutputSink,
   ProcessStartRequest,
   ProcessSupervisionPort,
+  ProtocolAttachResult,
+  ProtocolDriverCreateRequest,
+  ProtocolDriverId,
+  ProtocolDriverPort,
+  ProtocolObservationResult,
+  RawResponseDiagnostic,
   RedactingBoundedOutputSink,
   RedactingOutputGuardRequest,
   RedactionChannel,
+  ResultParserPort,
+  ResultParserUsage,
   RegisteredSecrets,
   registerSecrets,
   revealRegisteredSecrets,
   SealedSecretRegistration,
   SecretRegistrationRequest,
+  SpawnAcceptedProcess,
   TerminalPublicationAuthority,
   WorkspaceAdmissionResult,
 } from '../../src/runtime/execution/index.js';
@@ -769,6 +787,83 @@ type ExpectedOutputPreparationMutationPort = {
   ): Promise<OutputPreparationPlatformResult>;
 };
 
+type ExpectedProcessInputSink = {
+  write(chunk: Uint8Array): Promise<void>;
+  end(): Promise<void>;
+  abort(): Promise<void>;
+};
+
+type ExpectedSpawnAcceptedProcess = {
+  readonly invocationId: string;
+  readonly spawnedAt: number;
+};
+
+type ExpectedInvocationOnlyCarrier = {
+  readonly invocationId: string;
+};
+
+type ExpectedProcessIdentityInspectionResult =
+  | Readonly<{ status: 'identified'; identity: ProcessIdentity }>
+  | Readonly<{
+      status: 'failed';
+      reason: 'inspection_failed' | 'fingerprint_failed' | 'deadline';
+    }>;
+
+type ExpectedProcessIoActivationResult =
+  | Readonly<{ status: 'activated'; process: LiveOwnedProcess }>
+  | Readonly<{ status: 'rejected'; reason: 'internal_invariant_violation' }>;
+
+type ExpectedProtocolDriverId = AgentDefinitionContract['protocol']['driver'];
+
+type ExpectedProtocolDriverCreateRequest = {
+  readonly invocationId: string;
+  readonly delivery: ExecutionBinding['delivery'];
+  readonly cancellationSupported: boolean;
+  readonly promptBytes?: Uint8Array;
+  readonly canonicalResultSchemaBytes?: Uint8Array;
+  readonly resultParser?: ResultParserPort;
+};
+
+type ExpectedPreparedProtocolSession = {
+  readonly protocolOutput: ProcessOutputSink;
+  attach(input: ProcessInputSink): Promise<ProtocolAttachResult>;
+  dispose(): void;
+};
+
+type ExpectedProtocolAttachResult =
+  | Readonly<{ status: 'attached'; session: AttachedProtocolSession }>
+  | Readonly<{
+      status: 'failed';
+      reason: 'attach_failed' | 'stdin_write_failed' | 'stdin_end_failed';
+    }>;
+
+type ExpectedAttachedProtocolSession = {
+  finishAfterProtocolOutputEnd(): Promise<ProtocolObservationResult>;
+  requestCancellation(): Promise<'sent' | 'unsupported' | 'failed'>;
+  closeInput(): Promise<void>;
+  dispose(): void;
+};
+
+type ExpectedProtocolObservationResult =
+  | Readonly<{
+      status: 'completed';
+      response: JsonObject;
+      usage?: ResultParserUsage;
+      rawResponse?: RawResponseDiagnostic;
+    }>
+  | Readonly<{
+      status: 'failed';
+      failure:
+        | Readonly<{ kind: 'protocol_sink_failed' }>
+        | Readonly<{ kind: 'parser_failed'; reason: ParserFailureReason }>;
+      rawResponse?: RawResponseDiagnostic;
+    }>;
+
+type ExpectedProtocolDriverPort = {
+  readonly id: ProtocolDriverId;
+  create(request: ProtocolDriverCreateRequest): PreparedProtocolSession;
+};
+
 export type OutputPreparationResultIsExact = Expect<
   Equal<OutputPreparationResult, ExpectedOutputPreparationResult>
 >;
@@ -841,6 +936,58 @@ export type OutputPreparationMutationPortIsExact = Expect<
 
 export type OutputPreparationPlatformResultIsExact = Expect<
   Equal<OutputPreparationPlatformResult, ExpectedOutputPreparationPlatformResult>
+>;
+
+export type InvocationTokenCarrierVisibleFieldsAreExact = Expect<
+  Equal<keyof InvocationTokenCarrier, 'invocationId'>
+>;
+
+export type ProcessInputSinkIsExact = Expect<Equal<ProcessInputSink, ExpectedProcessInputSink>>;
+
+export type SpawnAcceptedProcessVisibleFieldsAreExact = Expect<
+  Equal<keyof SpawnAcceptedProcess, keyof ExpectedSpawnAcceptedProcess>
+>;
+
+export type PausedProcessIoVisibleFieldsAreExact = Expect<
+  Equal<keyof PausedProcessIo, keyof ExpectedInvocationOnlyCarrier>
+>;
+
+export type DuplexCoordinatorRegistrationVisibleFieldsAreExact = Expect<
+  Equal<keyof DuplexCoordinatorRegistration, keyof ExpectedInvocationOnlyCarrier>
+>;
+
+export type ProcessIdentityInspectionResultIsExact = Expect<
+  Equal<ProcessIdentityInspectionResult, ExpectedProcessIdentityInspectionResult>
+>;
+
+export type ProcessIoActivationResultIsExact = Expect<
+  Equal<ProcessIoActivationResult, ExpectedProcessIoActivationResult>
+>;
+
+export type ProtocolDriverIdIsExact = Expect<Equal<ProtocolDriverId, ExpectedProtocolDriverId>>;
+
+export type ProtocolDriverCreateRequestIsExact = Expect<
+  Equal<ProtocolDriverCreateRequest, ExpectedProtocolDriverCreateRequest>
+>;
+
+export type PreparedProtocolSessionIsExact = Expect<
+  Equal<PreparedProtocolSession, ExpectedPreparedProtocolSession>
+>;
+
+export type ProtocolAttachResultIsExact = Expect<
+  Equal<ProtocolAttachResult, ExpectedProtocolAttachResult>
+>;
+
+export type AttachedProtocolSessionIsExact = Expect<
+  Equal<AttachedProtocolSession, ExpectedAttachedProtocolSession>
+>;
+
+export type ProtocolObservationResultIsExact = Expect<
+  Equal<ProtocolObservationResult, ExpectedProtocolObservationResult>
+>;
+
+export type ProtocolDriverPortIsExact = Expect<
+  Equal<ProtocolDriverPort, ExpectedProtocolDriverPort>
 >;
 
 type ExpectedInvocationExecutionPorts = {
