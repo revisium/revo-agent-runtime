@@ -7,6 +7,7 @@ import type { ConsumedOutputPreparationMaterial } from './consumed-output-prepar
 import type { ConsumedRedactionMaterial } from './consumed-redaction-material.js';
 import type { OutputPreparationAttempt } from './output-preparation-attempt.js';
 import { OUTPUT_PREPARATION_BEGINNERS } from './output-preparation-beginners.js';
+import { OUTPUT_PREPARATION_INVOCATION_TOKENS } from './output-preparation-invocation-tokens.js';
 import type { OutputPreparationMutationPort } from './output-preparation-mutation-port.js';
 import type { OutputPreparationPlatformResult } from './output-preparation-platform-result.js';
 import type { OutputPreparationQuiescence } from './output-preparation-quiescence.js';
@@ -66,6 +67,7 @@ class InternalOutputPreparationAttempt implements OutputPreparationAttempt {
     OUTPUT_PREPARATION_BEGINNERS.set(this, (material, redaction) =>
       beginPreparation(state, material, redaction),
     );
+    OUTPUT_PREPARATION_INVOCATION_TOKENS.set(this, state.invocationToken);
     Object.freeze(this);
   }
 

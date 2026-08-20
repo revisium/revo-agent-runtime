@@ -68,6 +68,10 @@ export type {
 export { createRedactingBoundedOutputSink } from './redacting-output-guard/index.js';
 export type { ResultSchemaValidator } from './result-schema-validator.js';
 export type {
+  PreparedExecutionSecurity,
+  PreparedExecutionSecurityRequest,
+} from './prepared-execution-security/index.js';
+export type {
   RegisteredSecrets,
   SealedSecretRegistration,
   SecretRegistrationRequest,

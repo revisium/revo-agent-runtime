@@ -11,6 +11,7 @@ import type {
   OutputPreparationQuiescence,
   OutputPreparationResult,
 } from '../../../../src/runtime/execution/index.js';
+import { registerSecrets } from '../../../../src/runtime/execution/index.js';
 import {
   beginOutputPreparation,
   createOutputPreparationAttempt,
@@ -18,6 +19,10 @@ import {
   type PreparedInvocationResources,
   type TerminalPublicationAuthority,
 } from '../../../../src/runtime/execution/output-preparation-attempt/index.js';
+import {
+  consumeRedactionMaterial,
+  createPreparedExecutionSecurity,
+} from '../../../../src/runtime/execution/prepared-execution-security/index.js';
 import { FakeInvocationClock } from '../../../support/execution/fake-clock.js';
 import { FakeOutputClaimPort } from '../../../support/execution/fake-output-claim-port.js';
 import {
@@ -31,7 +36,6 @@ const sessionInput = () => ({
 });
 
 const material = (): ConsumedOutputPreparationMaterial => ({ ...sessionInput() });
-const redaction = (): ConsumedRedactionMaterial => ({ invocationId: 'preparation-test' });
 
 const flushPromises = async (): Promise<void> => {
   await Promise.resolve();
@@ -73,10 +77,27 @@ const createAttempt = async (port: FakeOutputPreparationPort) => {
   return { attempt, clock };
 };
 
+const redaction = (attempt: OutputPreparationAttempt): ConsumedRedactionMaterial => {
+  const registered = registerSecrets({
+    configuredSecrets: ['secret-value'],
+    invocationSecrets: [],
+  });
+  if (registered.status !== 'registered') throw new Error('Expected registered secrets.');
+  const security = createPreparedExecutionSecurity({
+    invocationId: attempt.invocationId,
+    childEnvironment: { SAFE_ENV: 'value' },
+    registeredSecrets: registered.registeredSecrets,
+  });
+  if (security === undefined) throw new Error('Expected prepared execution security.');
+  const consumed = consumeRedactionMaterial(security, attempt);
+  if (consumed === undefined) throw new Error('Expected consumed redaction material.');
+  return consumed;
+};
+
 const beginPreparation = (
   attempt: OutputPreparationAttempt,
   inputMaterial: ConsumedOutputPreparationMaterial = material(),
-  inputRedaction: ConsumedRedactionMaterial = redaction(),
+  inputRedaction: ConsumedRedactionMaterial = redaction(attempt),
 ): void => {
   beginOutputPreparation(attempt, inputMaterial, inputRedaction);
 };
@@ -227,9 +248,10 @@ test('beginOutputPreparation is one-use while the first mutation is still pendin
   port.enqueue('pending');
   const { attempt } = await createAttempt(port);
   const firstMaterial = material();
-  const firstRedaction = redaction();
+  const firstRedaction = redaction(attempt);
   const secondMaterial = { invocationId: 'second', outputDirectory: '/outputs/second' };
-  const secondRedaction = { invocationId: 'second' };
+  const secondAttempt = await createAttempt(new FakeOutputPreparationPort());
+  const secondRedaction = redaction(secondAttempt.attempt);
 
   beginPreparation(attempt, firstMaterial, firstRedaction);
   beginPreparation(attempt, secondMaterial, secondRedaction);
@@ -432,7 +454,7 @@ test('beginOutputPreparation on a forged attempt-shaped object is a silent no-op
     requestCancellation: () => undefined,
   };
 
-  expect(() => beginOutputPreparation(forged, material(), redaction())).not.toThrow();
+  expect(() => beginOutputPreparation(forged, material(), redaction(attempt))).not.toThrow();
   expect(port.requests()).toEqual([]);
 });
 
@@ -449,19 +471,13 @@ test('material and redaction bundles are passed by reference and never read by t
       return undefined;
     },
   });
-  const countedRedaction = new Proxy(redaction(), {
-    get(target, property) {
-      reads += 1;
-      if (property === 'invocationId') return target.invocationId;
-      return undefined;
-    },
-  });
+  const consumedMaterial = redaction(attempt);
 
-  beginPreparation(attempt, countedMaterial, countedRedaction);
+  beginPreparation(attempt, countedMaterial, consumedMaterial);
   await expect(attempt.settlement).resolves.toMatchObject({ status: 'prepared' });
 
   expect(port.requests()[0]?.material).toBe(countedMaterial);
-  expect(port.requests()[0]?.redaction).toBe(countedRedaction);
+  expect(port.requests()[0]?.redaction).toBe(consumedMaterial);
   expect(reads).toBe(0);
 });
 

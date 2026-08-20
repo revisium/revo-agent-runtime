@@ -10,3 +10,5 @@ export type { PreparedInvocationResources } from './prepared-invocation-resource
 export type { TerminalPublicationAuthority } from './terminal-publication-authority.js';
 export { beginOutputPreparation } from './begin-output-preparation.js';
 export { createOutputPreparationAttempt } from './create-output-preparation-attempt.js';
+export { getOutputPreparationInvocationToken } from './get-output-preparation-invocation-token.js';
+export { isConsumedRedactionMaterialBoundToToken } from './is-consumed-redaction-material-bound-to-token.js';
