@@ -1,7 +1,12 @@
 import { expect, test } from 'vitest';
 
 import { createInvocationLifecycleManager } from '../../../src/application/manager/index.js';
-import type { InvocationExecutionPorts } from '../../../src/runtime/execution/index.js';
+import type {
+  InvocationExecutionPorts,
+  InvocationInputSnapshot,
+  InvocationTerminalObservation,
+  PreparedLaunch,
+} from '../../../src/runtime/execution/index.js';
 import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
@@ -139,6 +144,44 @@ test('prepared output settlement reaches accepted start and delegates unchanged 
   expect(execution.calls()).toEqual([{ type: 'start' }]);
 });
 
+test('passes prepared invocation resources as the third execution start argument', async () => {
+  const output = new FakeInvocationOutputPort();
+  const outputPreparation = new FakeOutputPreparationPort('prepared');
+  output.enqueueTerminalResultRecording();
+  const starts: Array<
+    readonly [
+      InvocationInputSnapshot,
+      PreparedLaunch,
+      NonNullable<Parameters<InvocationExecutionPorts['execution']['start']>[2]>,
+    ]
+  > = [];
+  const execution: InvocationExecutionPorts['execution'] = {
+    start: async (snapshot, preparedLaunch, resources) => {
+      if (resources === undefined) throw new Error('Expected prepared resources.');
+      starts.push([snapshot, preparedLaunch, resources]);
+      return {
+        completion: Promise.resolve({
+          status: 'completed',
+        } satisfies InvocationTerminalObservation),
+        requestCancellation: async () => undefined,
+      };
+    },
+  };
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+    outputPreparation,
+  });
+
+  await expect(
+    manager.start(createStartInput({ invocationId: 'prepared-resources-threading' })),
+  ).resolves.toMatchObject({ status: 'accepted' });
+
+  expect(starts).toHaveLength(1);
+  expect(starts[0]?.[2].frontEnds.stdout).toBeDefined();
+  expect(starts[0]?.[2].evidenceSinks.stdout).toBeDefined();
+});
 test('uncertain output preparation quarantines the invocation id and output directory', async () => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();

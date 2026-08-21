@@ -35,6 +35,7 @@ import type {
   beginOutputClaim,
   createRedactingBoundedOutputSink,
   createRedactionChannel,
+  wrapRedactionChannelAsBoundedOutputSink,
   createOutputClaimAttempt,
   ClaimedInvocationOutput,
   inspectOutputClaimGuard,
@@ -61,6 +62,7 @@ import type {
   PreparedInvocationPayloads,
   OutputResourcePlan,
   PreparedInvocationResources,
+  takePreparedInvocationResourcesPayload,
   PreparedExecutionSecurity,
   PreparedExecutionSecurityRequest,
   PreparedLaunch,
@@ -496,6 +498,17 @@ export type CreateRedactingBoundedOutputSinkIsExact = Expect<
   >
 >;
 
+export type WrapRedactionChannelAsBoundedOutputSinkIsExact = Expect<
+  Equal<
+    typeof wrapRedactionChannelAsBoundedOutputSink,
+    (request: {
+      readonly channel: RedactionChannel;
+      readonly downstream: ProcessOutputSink;
+      readonly maxBytes: number;
+    }) => RedactingBoundedOutputSink
+  >
+>;
+
 export type ProcessSpawnRequestIsExact = Expect<
   Equal<ProcessSpawnRequest, ExpectedProcessSpawnRequest>
 >;
@@ -772,6 +785,10 @@ type ExpectedOutputPreparationPlatformResult =
         stdout: RedactionChannel;
         stderr: RedactionChannel;
         rawResponse: RedactionChannel;
+      }>;
+      evidenceSinks: Readonly<{
+        stdout: ProcessOutputSink;
+        stderr: ProcessOutputSink;
       }>;
     }>
   | Readonly<{
@@ -1080,6 +1097,7 @@ type ExpectedInvocationExecutionPorts = {
     start(
       snapshot: InvocationInputSnapshot,
       preparedLaunch: PreparedLaunch,
+      resources?: NonNullable<ReturnType<typeof takePreparedInvocationResourcesPayload>>,
     ): Promise<{
       readonly completion: Promise<InvocationTerminalObservation>;
       requestCancellation(): Promise<void>;

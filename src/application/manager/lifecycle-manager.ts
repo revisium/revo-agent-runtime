@@ -412,11 +412,19 @@ class InternalInvocationLifecycleManager {
         this.quarantinedPreparationOutputDirectories.add(plan.outputDirectory);
         return Object.freeze({ status: 'rejected', reason: 'output_prepare_uncertain' });
       }
+      if (preparationResult.status !== 'prepared')
+        return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
+      const resources = preparationResult.resources;
 
       const completion = createDeferred<NormalizedInvocationOutcome>();
       const lifecyclePorts: InvocationExecutionPorts = Object.freeze({
         ...this.ports,
-        execution: this.executionPort,
+        execution: Object.freeze({
+          start: (
+            startSnapshot: Parameters<InvocationExecutionPorts['execution']['start']>[0],
+            startPreparedLaunch: Parameters<InvocationExecutionPorts['execution']['start']>[1],
+          ) => this.executionPort.start(startSnapshot, startPreparedLaunch, resources),
+        }),
       });
       const lifecycle = new InvocationLifecycle(
         lifecyclePorts,
@@ -696,7 +704,13 @@ class InternalInvocationLifecycleManager {
       preparedInvocation: NonNullable<ReturnType<typeof createPreparedInvocation>>;
       preparedSecurity: NonNullable<ReturnType<typeof createPreparedExecutionSecurity>>;
     }>,
-  ): Promise<Readonly<{ status: 'prepared' | 'rejected' | 'uncertain' }>> {
+  ): Promise<
+    | Readonly<{
+        status: 'prepared';
+        resources: NonNullable<ReturnType<typeof takePreparedInvocationResourcesPayload>>;
+      }>
+    | Readonly<{ status: 'rejected' | 'uncertain' }>
+  > {
     const material = consumeOutputPreparationMaterial(
       preparation.preparedInvocation,
       preparation.attempt,
@@ -709,10 +723,7 @@ class InternalInvocationLifecycleManager {
     if (result.status === 'prepared') {
       const resources = takePreparedInvocationResourcesPayload(result.resources);
       if (resources === undefined) return Object.freeze({ status: 'rejected' as const });
-      resources.frontEnds.stdout.dispose();
-      resources.frontEnds.stderr.dispose();
-      resources.frontEnds.rawResponse.dispose();
-      return Object.freeze({ status: 'prepared' as const });
+      return Object.freeze({ status: 'prepared' as const, resources });
     }
     return Object.freeze({ status: result.status });
   }

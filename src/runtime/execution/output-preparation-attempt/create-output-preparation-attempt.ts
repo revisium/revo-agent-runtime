@@ -206,6 +206,7 @@ const settlePrepared = (
         ...state,
         attestations: result.attestations,
         frontEnds: result.frontEnds,
+        evidenceSinks: result.evidenceSinks,
       }),
       authority: state.authority,
     }),

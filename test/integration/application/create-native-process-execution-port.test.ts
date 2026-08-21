@@ -6,6 +6,9 @@ import {
   InvocationInputSnapshot,
   normalizeInvocationOutcome,
   PreparedLaunch,
+  type InvocationExecutionPorts,
+  type ProcessOutputSink,
+  type RedactionChannel,
   type ResultSchemaValidator,
 } from '../../../src/runtime/execution/index.js';
 
@@ -30,6 +33,32 @@ const snapshot = (invocationId = 'native-execution-unit'): InvocationInputSnapsh
   if (value === undefined) throw new Error('Expected snapshot.');
   return value;
 };
+
+const ignoredOutput = (): ProcessOutputSink =>
+  Object.freeze({
+    write: async (): Promise<void> => undefined,
+    end: async (): Promise<void> => undefined,
+  });
+
+const passThroughRedactionChannel = (): RedactionChannel =>
+  Object.freeze({
+    feed: (chunk: Uint8Array): Uint8Array => new Uint8Array(chunk),
+    flush: (): Uint8Array => new Uint8Array(),
+    dispose: (): void => undefined,
+  });
+
+const preparedResources = (): NonNullable<
+  Parameters<InvocationExecutionPorts['execution']['start']>[2]
+> =>
+  Object.freeze({
+    attestations: Object.freeze([]),
+    frontEnds: Object.freeze({
+      stdout: passThroughRedactionChannel(),
+      stderr: passThroughRedactionChannel(),
+      rawResponse: passThroughRedactionChannel(),
+    }),
+    evidenceSinks: Object.freeze({ stdout: ignoredOutput(), stderr: ignoredOutput() }),
+  });
 
 const binding = Object.freeze({
   protocolDriverId: 'native/stdio-v1' as const,
@@ -87,7 +116,7 @@ test.runIf(process.platform === 'linux')(
   async () => {
     const execution = createNativeProcessExecutionPort();
 
-    const running = await execution.start(snapshot(), preparedLaunch());
+    const running = await execution.start(snapshot(), preparedLaunch(), preparedResources());
     const observation = await running.completion;
 
     expect(observation).toMatchObject({

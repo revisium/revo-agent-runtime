@@ -14,6 +14,7 @@ import {
   settleProcessStart,
   settleProcessStartQuiescence,
   SpawnAcceptedProcess,
+  wrapRedactionChannelAsBoundedOutputSink,
   type LiveOwnedProcess,
   type ProcessExitObservation,
   type ProcessIdentity,
@@ -23,6 +24,7 @@ import {
   type ProcessOutputSink,
   type ProcessSpawnRequest,
   type ProcessStartAttempt,
+  type RedactionChannel,
 } from '../../runtime/execution/index.js';
 import { terminateProcessGroupAndReap } from './posix-process-group-termination.js';
 
@@ -329,6 +331,10 @@ export class NodePosixProcessSpawnDispatch {
       readonly secretValues: readonly string[];
       readonly maxStdoutBytes: number;
       readonly maxStderrBytes: number;
+      readonly evidenceFrontEnds: Readonly<{
+        stdout: RedactionChannel;
+        stderr: RedactionChannel;
+      }>;
       readonly protocolObserverSink?: ProcessOutputSink;
     },
   ): ProcessIoActivationResult {
@@ -352,9 +358,9 @@ export class NodePosixProcessSpawnDispatch {
     let evidenceStderr: ProcessOutputSink;
     try {
       stdin = wrapStdin(handle.child.stdin);
-      evidenceStdout = createRedactingBoundedOutputSink({
+      evidenceStdout = wrapRedactionChannelAsBoundedOutputSink({
+        channel: options.evidenceFrontEnds.stdout,
         downstream: handle.evidenceStdout,
-        secretValues: options.secretValues,
         maxBytes: options.maxStdoutBytes,
       });
       protocolStdout = createRedactingBoundedOutputSink({
@@ -362,9 +368,9 @@ export class NodePosixProcessSpawnDispatch {
         secretValues: options.secretValues,
         maxBytes: options.maxStdoutBytes,
       });
-      evidenceStderr = createRedactingBoundedOutputSink({
+      evidenceStderr = wrapRedactionChannelAsBoundedOutputSink({
+        channel: options.evidenceFrontEnds.stderr,
         downstream: handle.evidenceStderr,
-        secretValues: options.secretValues,
         maxBytes: options.maxStderrBytes,
       });
     } catch {

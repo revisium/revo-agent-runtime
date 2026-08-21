@@ -84,7 +84,10 @@ export type {
   RedactingBoundedOutputSink,
   RedactingOutputGuardRequest,
 } from './redacting-output-guard/index.js';
-export { createRedactingBoundedOutputSink } from './redacting-output-guard/index.js';
+export {
+  createRedactingBoundedOutputSink,
+  wrapRedactionChannelAsBoundedOutputSink,
+} from './redacting-output-guard/index.js';
 export type {
   ParserFailureReason,
   ResultParserEndResult,

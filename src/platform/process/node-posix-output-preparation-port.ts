@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, open, unlink, writeFile, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import {
@@ -12,6 +12,7 @@ import {
   type OutputPreparationMutationPort,
   type OutputPreparationMutationRequest,
   type OutputPreparationPlatformResult,
+  type ProcessOutputSink,
   type RedactionChannel,
 } from '../../runtime/execution/index.js';
 import { nodePosixPathAdmission } from './node-posix-path-admission.js';
@@ -75,6 +76,39 @@ const removeBestEffort = async (path: string): Promise<void> => {
   }
 };
 
+const createExclusiveFileOutputSink = (handle: FileHandle): ProcessOutputSink => {
+  let closed = false;
+  return Object.freeze({
+    write: async (chunk: Uint8Array): Promise<void> => {
+      if (closed) throw new Error('Evidence file output sink is closed.');
+      await handle.write(chunk);
+    },
+    end: async (): Promise<void> => {
+      if (closed) return;
+      closed = true;
+      await handle.close();
+    },
+  });
+};
+
+const closeBestEffort = async (handle: FileHandle | undefined): Promise<void> => {
+  if (handle === undefined) return;
+  try {
+    await handle.close();
+  } catch {
+    // Best-effort rollback must never mask the original preparation reason.
+  }
+};
+
+const closeAndRemoveEvidenceBestEffort = async (
+  handle: FileHandle | undefined,
+  path: string,
+): Promise<void> => {
+  if (handle === undefined) return;
+  await closeBestEffort(handle);
+  await removeBestEffort(path);
+};
+
 export class NodePosixOutputPreparationPort implements OutputPreparationMutationPort {
   async prepareClaimedOutput(
     request: OutputPreparationMutationRequest,
@@ -110,33 +144,72 @@ export class NodePosixOutputPreparationPort implements OutputPreparationMutation
         );
       }
 
-      const attestations: OutputPreparationFileAttestation[] = [];
-      for (let index = 0; index < files.length; index += 1) {
-        const slot = files[index];
-        if (slot === undefined) continue;
-        const path = join(scratchDirectory, slotFileName(slot.slot));
-        // oxlint-disable-next-line no-await-in-loop -- slots must be written and zero-filled in deterministic ownership order.
-        const failure = await this.writeAndAttestSlot(slot, path, attestations);
-        if (failure !== undefined) {
-          // oxlint-disable-next-line no-await-in-loop -- rollback belongs to the failing slot before later buffers are released.
-          await removeBestEffort(path);
-          disposeFrontEnds(frontEnds);
-          slot.bytes.fill(0);
-          zeroFillSlots(files, index + 1);
-          return rejected(failure);
-        }
-        slot.bytes.fill(0);
+      const slotsResult = await this.writeAllSlots(files, scratchDirectory, frontEnds);
+      if (typeof slotsResult === 'string') return rejected(slotsResult);
+      const { attestations } = slotsResult;
+
+      const evidenceSinks = await this.openEvidenceSinks(request.outputDirectory);
+      if (evidenceSinks === undefined) {
+        disposeFrontEnds(frontEnds);
+        return rejected('evidence_open_failed');
       }
 
       return Object.freeze({
         status: 'prepared',
         attestations: Object.freeze(attestations),
         frontEnds,
+        evidenceSinks,
       });
     } catch {
       disposeFrontEnds(frontEnds);
       if (files !== undefined) zeroFillSlots(files);
       return rejected('scratch_create_failed');
+    }
+  }
+
+  private async writeAllSlots(
+    files: readonly OutputPreparationFileSlot[],
+    scratchDirectory: string,
+    frontEnds: OutputPreparationFrontEnds,
+  ): Promise<Readonly<{ attestations: OutputPreparationFileAttestation[] }> | RejectionReason> {
+    const attestations: OutputPreparationFileAttestation[] = [];
+    for (let index = 0; index < files.length; index += 1) {
+      const slot = files[index];
+      if (slot === undefined) continue;
+      const path = join(scratchDirectory, slotFileName(slot.slot));
+      // oxlint-disable-next-line no-await-in-loop -- slots must be written and zero-filled in deterministic ownership order.
+      const failure = await this.writeAndAttestSlot(slot, path, attestations);
+      if (failure !== undefined) {
+        // oxlint-disable-next-line no-await-in-loop -- rollback belongs to the failing slot before later buffers are released.
+        await removeBestEffort(path);
+        disposeFrontEnds(frontEnds);
+        slot.bytes.fill(0);
+        zeroFillSlots(files, index + 1);
+        return failure;
+      }
+      slot.bytes.fill(0);
+    }
+    return Object.freeze({ attestations });
+  }
+
+  private async openEvidenceSinks(
+    outputDirectory: string,
+  ): Promise<Readonly<{ stdout: ProcessOutputSink; stderr: ProcessOutputSink }> | undefined> {
+    const stdoutPath = join(outputDirectory, 'stdout.log');
+    const stderrPath = join(outputDirectory, 'stderr.log');
+    let stdoutHandle: FileHandle | undefined;
+    let stderrHandle: FileHandle | undefined;
+    try {
+      stdoutHandle = await open(stdoutPath, 'wx', 0o600);
+      stderrHandle = await open(stderrPath, 'wx', 0o600);
+      return Object.freeze({
+        stdout: createExclusiveFileOutputSink(stdoutHandle),
+        stderr: createExclusiveFileOutputSink(stderrHandle),
+      });
+    } catch {
+      await closeAndRemoveEvidenceBestEffort(stderrHandle, stderrPath);
+      await closeAndRemoveEvidenceBestEffort(stdoutHandle, stdoutPath);
+      return undefined;
     }
   }
 

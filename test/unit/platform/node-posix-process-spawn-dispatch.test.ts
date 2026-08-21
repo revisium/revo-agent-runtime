@@ -27,6 +27,7 @@ vi.mock('node:fs/promises', () => ({
 import { NodePosixProcessSpawnDispatch } from '../../../src/platform/process/node-posix-process-spawn-dispatch.js';
 import {
   createProcessStartAttempt,
+  createRedactionChannel,
   DuplexCoordinatorRegistration,
   getProcessStartInvocationToken,
   PausedProcessIo,
@@ -35,6 +36,7 @@ import {
   type ProcessIdentity,
   type ProcessOutputSink,
   type ProcessSpawnRequest,
+  type RedactionChannel,
 } from '../../../src/runtime/execution/index.js';
 import { NativeStdioProtocolDriver } from '../../../src/strategies/protocol-driver/index.js';
 import { CodexJsonlResultParser } from '../../../src/strategies/result-parser/index.js';
@@ -89,6 +91,14 @@ const outputSink = (): ProcessOutputSink =>
   Object.freeze({
     write: async (_chunk: Uint8Array): Promise<void> => undefined,
     end: async (): Promise<void> => undefined,
+  });
+
+const evidenceRedactionChannel = (): RedactionChannel => createRedactionChannel(['secret']);
+
+const evidenceFrontEnds = () =>
+  Object.freeze({
+    stdout: evidenceRedactionChannel(),
+    stderr: evidenceRedactionChannel(),
   });
 
 const statLine = (
@@ -476,6 +486,7 @@ test('killUnactivated terminates accepted process and poisons later activation a
       secretValues: [],
       maxStdoutBytes: 1_000,
       maxStderrBytes: 1_000,
+      evidenceFrontEnds: evidenceFrontEnds(),
     }),
   ).toEqual({ status: 'rejected', reason: 'internal_invariant_violation' });
 });
@@ -506,6 +517,7 @@ test('activateIo synchronously starts ordered independent stdout fan-out and std
       secretValues: [],
       maxStdoutBytes: 1_000,
       maxStderrBytes: 1_000,
+      evidenceFrontEnds: evidenceFrontEnds(),
       protocolObserverSink: protocol,
     },
   );
@@ -553,6 +565,7 @@ test('stdout redaction uses independent evidence and protocol channels', async (
       secretValues: ['secret'],
       maxStdoutBytes: 1_000,
       maxStderrBytes: 1_000,
+      evidenceFrontEnds: evidenceFrontEnds(),
       protocolObserverSink: protocol,
     },
   );
@@ -606,6 +619,7 @@ test('activated process completion waits for delayed terminal protocol-frame del
       secretValues: [],
       maxStdoutBytes: 10_000,
       maxStderrBytes: 10_000,
+      evidenceFrontEnds: evidenceFrontEnds(),
       protocolObserverSink: delayedProtocolSink,
     },
   );
@@ -651,6 +665,7 @@ test('activateIo rejects mismatched tokens and sequential double activation sync
       secretValues: [],
       maxStdoutBytes: 1_000,
       maxStderrBytes: 1_000,
+      evidenceFrontEnds: evidenceFrontEnds(),
     },
   );
   expect(rejected).not.toBeInstanceOf(Promise);
@@ -665,6 +680,7 @@ test('activateIo rejects mismatched tokens and sequential double activation sync
       secretValues: [],
       maxStdoutBytes: 1_000,
       maxStderrBytes: 1_000,
+      evidenceFrontEnds: evidenceFrontEnds(),
     },
   );
   expect(activated.status).toBe('activated');
@@ -677,6 +693,7 @@ test('activateIo rejects mismatched tokens and sequential double activation sync
       secretValues: [],
       maxStdoutBytes: 1_000,
       maxStderrBytes: 1_000,
+      evidenceFrontEnds: evidenceFrontEnds(),
     },
   );
   expect(doubleActivation).not.toBeInstanceOf(Promise);
@@ -697,6 +714,7 @@ test('invalid activation sink options do not poison the exactly-once guard', asy
       secretValues: [],
       maxStdoutBytes: 0,
       maxStderrBytes: 1_000,
+      evidenceFrontEnds: evidenceFrontEnds(),
     },
   );
   expect(invalid).toEqual({ status: 'rejected', reason: 'internal_invariant_violation' });
@@ -710,6 +728,7 @@ test('invalid activation sink options do not poison the exactly-once guard', asy
       secretValues: [],
       maxStdoutBytes: 1_000,
       maxStderrBytes: 1_000,
+      evidenceFrontEnds: evidenceFrontEnds(),
     },
   );
   expect(valid.status).toBe('activated');
@@ -728,6 +747,7 @@ test('successful activation transfers start quiescence to coordinator and expose
       secretValues: [],
       maxStdoutBytes: 1_000,
       maxStderrBytes: 1_000,
+      evidenceFrontEnds: evidenceFrontEnds(),
     },
   );
   if (activated.status !== 'activated') throw new Error('Expected activation.');
@@ -780,6 +800,7 @@ test('stdout pump stops after the first fan-out write failure', async () => {
       secretValues: [],
       maxStdoutBytes: 1_000,
       maxStderrBytes: 1_000,
+      evidenceFrontEnds: evidenceFrontEnds(),
       protocolObserverSink: failingProtocol,
     },
   );

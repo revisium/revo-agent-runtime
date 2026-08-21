@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 
 import {
   createRedactingBoundedOutputSink,
+  wrapRedactionChannelAsBoundedOutputSink,
   type ProcessOutputSink,
   type RedactionChannel,
 } from '../../../../src/runtime/execution/index.js';
@@ -152,6 +153,26 @@ test('disposes the channel exactly once when truncation is reached', async () =>
   await guard.write(encoder.encode('overflow'));
   expect(guard.truncated()).toBe(true);
   expect(probe.disposeCount()).toBe(1);
+  guard.dispose();
+  expect(probe.disposeCount()).toBe(1);
+});
+
+test('wraps an injected redaction channel with the same byte bound and disposal semantics', async () => {
+  const probe = channelProbe();
+  const downstream = collectingSink();
+  const guard = wrapRedactionChannelAsBoundedOutputSink({
+    channel: probe.factory(),
+    downstream: downstream.sink,
+    maxBytes: 4,
+  });
+
+  await guard.write(encoder.encode('abcdef'));
+  expect(downstream.output()).toBe('abcd');
+  expect(guard.truncated()).toBe(true);
+  expect(probe.disposeCount()).toBe(1);
+
+  await guard.end();
+  expect(downstream.endCount()).toBe(1);
   guard.dispose();
   expect(probe.disposeCount()).toBe(1);
 });

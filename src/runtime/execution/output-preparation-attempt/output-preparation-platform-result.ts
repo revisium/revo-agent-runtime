@@ -1,3 +1,4 @@
+import type { ProcessOutputSink } from '../process-supervision-port/index.js';
 import type { RedactionChannel } from '../redaction/index.js';
 import type { OutputPreparationFileAttestation } from './output-preparation-file-attestation.js';
 
@@ -9,6 +10,10 @@ export type OutputPreparationPlatformResult =
         stdout: RedactionChannel;
         stderr: RedactionChannel;
         rawResponse: RedactionChannel;
+      }>;
+      evidenceSinks: Readonly<{
+        stdout: ProcessOutputSink;
+        stderr: ProcessOutputSink;
       }>;
     }>
   | Readonly<{
