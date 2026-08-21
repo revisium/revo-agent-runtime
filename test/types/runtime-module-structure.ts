@@ -72,6 +72,13 @@ import type {
   ProcessIdentityInspectionResult,
   ProcessInputSink,
   ProcessIoActivationResult,
+  ProcessStartAttempt,
+  ProcessStartQuiescence,
+  ProcessStartResult,
+  RetainedCleanupAuthority,
+  beginProcessStart,
+  createProcessStartAttempt,
+  getProcessStartInvocationToken,
   ProcessExitObservation,
   ProcessIdentity,
   ProcessOutputSink,
@@ -813,6 +820,35 @@ type ExpectedProcessIoActivationResult =
   | Readonly<{ status: 'activated'; process: LiveOwnedProcess }>
   | Readonly<{ status: 'rejected'; reason: 'internal_invariant_violation' }>;
 
+type ExpectedRetainedCleanupAuthority = {
+  readonly invocationId: string;
+};
+
+type ExpectedProcessStartResult =
+  | Readonly<{ status: 'spawn_accepted'; process: SpawnAcceptedProcess; io: PausedProcessIo }>
+  | Readonly<{
+      status: 'rejected';
+      reason:
+        | 'cancelled_before_spawn'
+        | 'manager_shutdown_before_spawn'
+        | 'spawn_failed'
+        | 'internal_invariant_violation';
+    }>;
+
+type ExpectedProcessStartQuiescence =
+  | Readonly<{
+      status: 'quiescent';
+      disposition: 'not_spawned' | 'cleanup_confirmed' | 'transferred_to_coordinator';
+    }>
+  | Readonly<{ status: 'retained'; authority: RetainedCleanupAuthority }>;
+
+type ExpectedProcessStartAttempt = {
+  readonly invocationId: string;
+  readonly settlement: Promise<ProcessStartResult>;
+  readonly quiescence: Promise<ProcessStartQuiescence>;
+  requestCancellation(reason: 'caller_cancel' | 'manager_shutdown'): void;
+};
+
 type ExpectedProtocolDriverId = AgentDefinitionContract['protocol']['driver'];
 
 type ExpectedProtocolDriverCreateRequest = {
@@ -962,6 +998,37 @@ export type ProcessIdentityInspectionResultIsExact = Expect<
 
 export type ProcessIoActivationResultIsExact = Expect<
   Equal<ProcessIoActivationResult, ExpectedProcessIoActivationResult>
+>;
+
+export type RetainedCleanupAuthorityVisibleFieldsAreExact = Expect<
+  Equal<keyof RetainedCleanupAuthority, keyof ExpectedRetainedCleanupAuthority>
+>;
+
+export type ProcessStartResultIsExact = Expect<
+  Equal<ProcessStartResult, ExpectedProcessStartResult>
+>;
+
+export type ProcessStartQuiescenceIsExact = Expect<
+  Equal<ProcessStartQuiescence, ExpectedProcessStartQuiescence>
+>;
+
+export type ProcessStartAttemptIsExact = Expect<
+  Equal<ProcessStartAttempt, ExpectedProcessStartAttempt>
+>;
+
+export type CreateProcessStartAttemptIsExact = Expect<
+  Equal<
+    typeof createProcessStartAttempt,
+    (input: { readonly invocationId: string }) => ProcessStartAttempt
+  >
+>;
+
+export type BeginProcessStartIsExact = Expect<
+  Equal<typeof beginProcessStart, (attempt: ProcessStartAttempt, dispatch: () => void) => void>
+>;
+
+export type GetProcessStartInvocationTokenIsExact = Expect<
+  Equal<typeof getProcessStartInvocationToken, (attempt: unknown) => object | undefined>
 >;
 
 export type ProtocolDriverIdIsExact = Expect<Equal<ProtocolDriverId, ExpectedProtocolDriverId>>;
