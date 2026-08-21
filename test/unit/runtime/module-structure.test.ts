@@ -160,6 +160,7 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/process-supervision-port/process-input-sink.ts',
     'execution/process-supervision-port/process-io-activation-result.ts',
     'execution/process-supervision-port/process-output-sink.ts',
+    'execution/process-supervision-port/process-spawn-request.ts',
     'execution/process-supervision-port/process-start-attempt.ts',
     'execution/process-supervision-port/process-start-beginners.ts',
     'execution/process-supervision-port/process-start-invocation-tokens.ts',

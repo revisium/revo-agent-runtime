@@ -82,6 +82,7 @@ import type {
   ProcessExitObservation,
   ProcessIdentity,
   ProcessOutputSink,
+  ProcessSpawnRequest,
   ProcessStartRequest,
   ProcessSupervisionPort,
   ProtocolAttachResult,
@@ -360,6 +361,18 @@ type ExpectedProcessStartRequest = {
   readonly stderr: ProcessOutputSink;
 };
 
+type ExpectedProcessSpawnRequest = {
+  readonly invocationId: string;
+  readonly cwd: string;
+  readonly executable: string;
+  readonly args: readonly string[];
+  readonly environment: Readonly<Record<string, string>>;
+  readonly shell: false;
+  readonly stdin: 'pipe';
+  readonly stdout: ProcessOutputSink;
+  readonly stderr: ProcessOutputSink;
+};
+
 type ExpectedProcessIdentity = {
   readonly pid: number;
   readonly processGroupId: number;
@@ -497,6 +510,10 @@ export type CreateRedactingBoundedOutputSinkIsExact = Expect<
 
 export type ProcessStartRequestIsExact = Expect<
   Equal<ProcessStartRequest, ExpectedProcessStartRequest>
+>;
+
+export type ProcessSpawnRequestIsExact = Expect<
+  Equal<ProcessSpawnRequest, ExpectedProcessSpawnRequest>
 >;
 
 export type ProcessIdentityIsExact = Expect<Equal<ProcessIdentity, ExpectedProcessIdentity>>;
@@ -979,6 +996,10 @@ export type InvocationTokenCarrierVisibleFieldsAreExact = Expect<
 >;
 
 export type ProcessInputSinkIsExact = Expect<Equal<ProcessInputSink, ExpectedProcessInputSink>>;
+
+export type ProcessSpawnRequestVisibleFieldsAreExact = Expect<
+  Equal<keyof ProcessSpawnRequest, keyof ExpectedProcessSpawnRequest>
+>;
 
 export type SpawnAcceptedProcessVisibleFieldsAreExact = Expect<
   Equal<keyof SpawnAcceptedProcess, keyof ExpectedSpawnAcceptedProcess>
