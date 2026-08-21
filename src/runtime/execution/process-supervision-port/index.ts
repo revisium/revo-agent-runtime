@@ -20,3 +20,4 @@ export { beginProcessStart } from './begin-process-start.js';
 export { createProcessStartAttempt } from './create-process-start-attempt.js';
 export { getProcessStartInvocationToken } from './get-process-start-invocation-token.js';
 export { settleProcessStart } from './settle-process-start.js';
+export { settleProcessStartQuiescence } from './settle-process-start-quiescence.js';

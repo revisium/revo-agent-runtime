@@ -1,19 +1,30 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFile, readlink, stat } from 'node:fs/promises';
+import type { Readable } from 'node:stream';
 
 import canonicalize from 'canonicalize';
 
 import {
   beginProcessStart,
+  createRedactingBoundedOutputSink,
+  DuplexCoordinatorRegistration,
+  getProcessStartInvocationToken,
+  PausedProcessIo,
   settleProcessStart,
+  settleProcessStartQuiescence,
+  SpawnAcceptedProcess,
+  type LiveOwnedProcess,
+  type ProcessExitObservation,
   type ProcessIdentity,
   type ProcessIdentityInspectionResult,
+  type ProcessInputSink,
+  type ProcessIoActivationResult,
   type ProcessOutputSink,
   type ProcessSpawnRequest,
   type ProcessStartAttempt,
-  type SpawnAcceptedProcess,
 } from '../../runtime/execution/index.js';
+import { terminateProcessGroupAndReap } from './posix-process-group-termination.js';
 
 interface LinuxProcessFingerprintRecord {
   readonly schemaVersion: 'process-fingerprint/v1';
@@ -28,11 +39,28 @@ interface LinuxProcessFingerprintRecord {
 
 interface NodePosixProcessSpawnHandle {
   readonly child: ChildProcessWithoutNullStreams;
-  readonly stdout: ProcessOutputSink;
-  readonly stderr: ProcessOutputSink;
+  readonly stdout: ChildProcessWithoutNullStreams['stdout'];
+  readonly stderr: ChildProcessWithoutNullStreams['stderr'];
+  readonly evidenceStdout: ProcessOutputSink;
+  readonly evidenceStderr: ProcessOutputSink;
+  readonly spawnedAt: number;
+  readonly attempt: ProcessStartAttempt;
+  readonly completion: Promise<ProcessExitObservation>;
 }
 
 const PROCESS_SPAWN_HANDLES = new WeakMap<object, NodePosixProcessSpawnHandle>();
+const ACTIVATED = new WeakSet<object>();
+const terminationGraceMs = 2_000;
+const postKillReapTimeoutMs = 2_000;
+const terminationPollMs = 25;
+
+const noopOutputSink: ProcessOutputSink = Object.freeze({
+  write: async (_chunk: Uint8Array): Promise<void> => undefined,
+  end: async (): Promise<void> => undefined,
+});
+
+const rejectedActivation = (): ProcessIoActivationResult =>
+  Object.freeze({ status: 'rejected', reason: 'internal_invariant_violation' as const });
 
 const failedInspection = (
   reason: Extract<ProcessIdentityInspectionResult, { status: 'failed' }>['reason'],
@@ -166,6 +194,97 @@ const assertOutputSink: (value: unknown, name: string) => asserts value is Proce
     throw new Error(`${name} output sink must provide write and end functions.`);
 };
 
+const awaitClose = (child: ChildProcessWithoutNullStreams): Promise<ProcessExitObservation> =>
+  new Promise((resolve) => {
+    child.once('close', (exitCode: number | null, signal: NodeJS.Signals | null) =>
+      resolve(Object.freeze({ exitCode, signal })),
+    );
+  });
+
+const terminateAndReap = (
+  processGroupId: number,
+  completion: Promise<ProcessExitObservation>,
+): Promise<void> =>
+  terminateProcessGroupAndReap(processGroupId, completion, {
+    terminationGraceMs,
+    postKillReapTimeoutMs,
+    terminationPollMs,
+  });
+
+const toBytes = (chunk: unknown): Uint8Array => {
+  if (typeof chunk === 'string') return Buffer.from(chunk);
+  if (chunk instanceof Uint8Array) return new Uint8Array(chunk);
+  if (ArrayBuffer.isView(chunk))
+    return new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+  throw new Error('Process stream produced a non-byte chunk.');
+};
+
+const pumpStdout = async (
+  stream: Readable,
+  evidence: ProcessOutputSink,
+  protocol: ProcessOutputSink,
+  cleanup: () => Promise<void>,
+): Promise<void> => {
+  try {
+    for await (const chunk of stream) {
+      const bytes = toBytes(chunk);
+      await evidence.write(bytes);
+      await protocol.write(bytes);
+    }
+    await evidence.end();
+    await protocol.end();
+  } catch {
+    await cleanup();
+  }
+};
+
+const pumpStderr = async (
+  stream: Readable,
+  evidence: ProcessOutputSink,
+  cleanup: () => Promise<void>,
+): Promise<void> => {
+  try {
+    for await (const chunk of stream) await evidence.write(toBytes(chunk));
+    await evidence.end();
+  } catch {
+    await cleanup();
+  }
+};
+
+const wrapStdin = (stdin: ChildProcessWithoutNullStreams['stdin']): ProcessInputSink => {
+  let closed = false;
+  const rejectIfClosed = (): Promise<never> =>
+    Promise.reject(new Error('Process stdin is closed.'));
+
+  return Object.freeze({
+    write: (chunk: Uint8Array): Promise<void> => {
+      if (closed) return rejectIfClosed();
+      return new Promise((resolve, reject) => {
+        stdin.write(chunk, (error: Error | null | undefined) => {
+          if (error === null || error === undefined) resolve();
+          else reject(error);
+        });
+      });
+    },
+    end: (): Promise<void> => {
+      if (closed) return Promise.resolve();
+      closed = true;
+      return new Promise((resolve, reject) => {
+        stdin.end((error?: Error | null) => {
+          if (error === null || error === undefined) resolve();
+          else reject(error);
+        });
+      });
+    },
+    abort: (): Promise<void> => {
+      if (closed) return Promise.resolve();
+      closed = true;
+      stdin.destroy();
+      return Promise.resolve();
+    },
+  });
+};
+
 export class NodePosixProcessSpawnDispatch {
   beginStart(attempt: ProcessStartAttempt, request: ProcessSpawnRequest): void {
     beginProcessStart(attempt, () => {
@@ -187,6 +306,82 @@ export class NodePosixProcessSpawnDispatch {
       return failedInspection('inspection_failed');
 
     return Promise.race([inspectLinuxProcess(pid), timeoutAfter(activeStateDeadline)]);
+  }
+
+  activateIo(
+    process: SpawnAcceptedProcess,
+    io: PausedProcessIo,
+    identity: ProcessIdentity,
+    coordinator: DuplexCoordinatorRegistration,
+    options: {
+      readonly secretValues: readonly string[];
+      readonly maxStdoutBytes: number;
+      readonly maxStderrBytes: number;
+      readonly protocolObserverSink?: ProcessOutputSink;
+    },
+  ): ProcessIoActivationResult {
+    const handle = PROCESS_SPAWN_HANDLES.get(process);
+    const token = handle === undefined ? undefined : getProcessStartInvocationToken(handle.attempt);
+    if (
+      handle === undefined ||
+      token === undefined ||
+      ACTIVATED.has(process) ||
+      !SpawnAcceptedProcess.isBoundToToken(process, token) ||
+      !PausedProcessIo.isBoundToToken(io, token) ||
+      !DuplexCoordinatorRegistration.isBoundToToken(coordinator, token) ||
+      identity.pid !== handle.child.pid ||
+      identity.processGroupId !== handle.child.pid
+    )
+      return rejectedActivation();
+
+    let stdin: ProcessInputSink;
+    let evidenceStdout: ProcessOutputSink;
+    let protocolStdout: ProcessOutputSink;
+    let evidenceStderr: ProcessOutputSink;
+    try {
+      stdin = wrapStdin(handle.child.stdin);
+      evidenceStdout = createRedactingBoundedOutputSink({
+        downstream: handle.evidenceStdout,
+        secretValues: options.secretValues,
+        maxBytes: options.maxStdoutBytes,
+      });
+      protocolStdout = createRedactingBoundedOutputSink({
+        downstream: options.protocolObserverSink ?? noopOutputSink,
+        secretValues: options.secretValues,
+        maxBytes: options.maxStdoutBytes,
+      });
+      evidenceStderr = createRedactingBoundedOutputSink({
+        downstream: handle.evidenceStderr,
+        secretValues: options.secretValues,
+        maxBytes: options.maxStderrBytes,
+      });
+    } catch {
+      return rejectedActivation();
+    }
+
+    ACTIVATED.add(process);
+    let cleanup: Promise<void> | undefined;
+    const cleanupProcess = (): Promise<void> => {
+      cleanup ??= terminateAndReap(identity.processGroupId, handle.completion);
+      return cleanup;
+    };
+    void pumpStdout(handle.stdout, evidenceStdout, protocolStdout, cleanupProcess).catch(
+      () => undefined,
+    );
+    void pumpStderr(handle.stderr, evidenceStderr, cleanupProcess).catch(() => undefined);
+
+    const liveOwnedProcess: LiveOwnedProcess = Object.freeze({
+      spawnedAt: handle.spawnedAt,
+      identity,
+      completion: handle.completion,
+      stdin,
+      terminateAndReap: cleanupProcess,
+    });
+    settleProcessStartQuiescence(handle.attempt, {
+      status: 'quiescent',
+      disposition: 'transferred_to_coordinator',
+    });
+    return Object.freeze({ status: 'activated', process: liveOwnedProcess });
   }
 
   private dispatch(attempt: ProcessStartAttempt, request: ProcessSpawnRequest): void {
@@ -213,10 +408,16 @@ export class NodePosixProcessSpawnDispatch {
 
     child.once('spawn', () => {
       const spawnedAt = Date.now();
+      const completion = awaitClose(child);
       const handle = Object.freeze({
         child,
-        stdout: request.stdout,
-        stderr: request.stderr,
+        stdout: child.stdout,
+        stderr: child.stderr,
+        evidenceStdout: request.stdout,
+        evidenceStderr: request.stderr,
+        spawnedAt,
+        attempt,
+        completion,
       });
       PROCESS_SPAWN_HANDLES.set(attempt, handle);
       const settled = settleProcessStart(attempt, { status: 'accepted', spawnedAt });

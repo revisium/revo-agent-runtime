@@ -32,6 +32,12 @@ const copyIdentity = (identity: ProcessIdentity): ProcessIdentity =>
     fingerprint: identity.fingerprint,
   });
 
+const fakeInputSink = Object.freeze({
+  write: async (_chunk: Uint8Array): Promise<void> => undefined,
+  end: async (): Promise<void> => undefined,
+  abort: async (): Promise<void> => undefined,
+});
+
 const copyRequest = (request: ProcessStartRequest): ProcessStartRequest =>
   Object.freeze({
     cwd: request.cwd,
@@ -63,7 +69,9 @@ export class FakeProcessSupervisionPort implements ProcessSupervisionPort {
     this.nextId += 1;
     this.pending.set(id, Object.freeze({ completion }));
     return Object.freeze({
+      spawnedAt: Date.now(),
       identity,
+      stdin: fakeInputSink,
       completion: completion.promise,
       terminateAndReap: async () => {
         const pending = this.pending.get(id);
