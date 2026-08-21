@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -154,6 +154,8 @@ test('writes byte-exact scratch files with owner-only modes and attestations', a
   await expectOwnerOnlyMode(join(outputDirectory, '.scratch'), 0o700);
   await expectOwnerOnlyMode(promptPath, 0o600);
   await expectOwnerOnlyMode(schemaPath, 0o600);
+  await result.evidenceSinks.stdout.end();
+  await result.evidenceSinks.stderr.end();
   expect(result.attestations).toEqual([
     {
       slot: 'prompt',
@@ -201,6 +203,8 @@ test('returns independent redaction fronts with non-shared carry state', async (
   );
   expect(decoder.decode(result.frontEnds.stdout.feed(encoder.encode('value')))).toBe('[REDACTED]');
   expect(decoder.decode(result.frontEnds.stderr.flush())).toBe('');
+  await result.evidenceSinks.stdout.end();
+  await result.evidenceSinks.stderr.end();
 });
 
 test('zero-fills processed and unprocessed slot buffers when a later slot conflicts', async () => {
@@ -240,4 +244,51 @@ test('rejects unauthentic consumed materials before mutation dispatch', async ()
   });
   expect(markMutationDispatched).not.toHaveBeenCalled();
   await expect(lstat(join(outputDirectory, '.scratch'))).rejects.toMatchObject({ code: 'ENOENT' });
+});
+
+test('creates exclusive stdout and stderr evidence files directly under the output directory', async () => {
+  const outputDirectory = await createTemporaryOutputDirectory();
+  const result = await new NodePosixOutputPreparationPort().prepareClaimedOutput(
+    request(outputDirectory, []),
+  );
+
+  expect(result.status).toBe('prepared');
+  if (result.status !== 'prepared') throw new Error('Expected prepared result.');
+  const stdoutPath = join(outputDirectory, 'stdout.log');
+  const stderrPath = join(outputDirectory, 'stderr.log');
+  await expectOwnerOnlyMode(stdoutPath, 0o600);
+  await expectOwnerOnlyMode(stderrPath, 0o600);
+
+  await result.evidenceSinks.stdout.write(encoder.encode('stdout bytes'));
+  await result.evidenceSinks.stderr.write(encoder.encode('stderr bytes'));
+  await result.evidenceSinks.stdout.end();
+  await result.evidenceSinks.stderr.end();
+
+  await expect(readFile(stdoutPath, 'utf8')).resolves.toBe('stdout bytes');
+  await expect(readFile(stderrPath, 'utf8')).resolves.toBe('stderr bytes');
+});
+
+test('rejects pre-existing stdout evidence without replacing it', async () => {
+  const outputDirectory = await createTemporaryOutputDirectory();
+  const stdoutPath = join(outputDirectory, 'stdout.log');
+  await writeFile(stdoutPath, 'owned-by-consumer', { mode: 0o600 });
+
+  await expect(
+    new NodePosixOutputPreparationPort().prepareClaimedOutput(request(outputDirectory, [])),
+  ).resolves.toEqual({ status: 'rejected', reason: 'evidence_open_failed' });
+  await expect(readFile(stdoutPath, 'utf8')).resolves.toBe('owned-by-consumer');
+  await expect(lstat(join(outputDirectory, 'stderr.log'))).rejects.toMatchObject({
+    code: 'ENOENT',
+  });
+});
+
+test('rolls back stdout evidence and disposes front ends when stderr evidence open fails', async () => {
+  const outputDirectory = await createTemporaryOutputDirectory();
+  await mkdir(join(outputDirectory, 'stderr.log'));
+  const stdoutPath = join(outputDirectory, 'stdout.log');
+
+  await expect(
+    new NodePosixOutputPreparationPort().prepareClaimedOutput(request(outputDirectory, [])),
+  ).resolves.toEqual({ status: 'rejected', reason: 'evidence_open_failed' });
+  await expect(lstat(stdoutPath)).rejects.toMatchObject({ code: 'ENOENT' });
 });

@@ -7,10 +7,13 @@ import {
   normalizeInvocationOutcome,
   PreparedLaunch,
   settleProcessStart,
+  type InvocationExecutionPorts,
   type LiveOwnedProcess,
   type ProcessIdentity,
   type ProcessInputSink,
+  type ProcessOutputSink,
   type ProcessStartAttempt,
+  type RedactionChannel,
   type ResultSchemaValidator,
 } from '../../../../src/runtime/execution/index.js';
 
@@ -34,6 +37,91 @@ const snapshot = (invocationId = 'native-execution-unit'): InvocationInputSnapsh
   });
   if (value === undefined) throw new Error('Expected snapshot.');
   return value;
+};
+
+const collectingOutputSink = (): { sink: ProcessOutputSink; bytes: () => Uint8Array } => {
+  const chunks: Uint8Array[] = [];
+  return {
+    sink: Object.freeze({
+      write: async (chunk: Uint8Array): Promise<void> => {
+        chunks.push(new Uint8Array(chunk));
+      },
+      end: async (): Promise<void> => undefined,
+    }),
+    bytes: () => Uint8Array.from(chunks.flatMap((chunk) => [...chunk])),
+  };
+};
+
+const spyRedactionChannel = (): {
+  channel: RedactionChannel;
+  fed: () => string;
+  disposed: () => number;
+} => {
+  const decoder = new TextDecoder();
+  const fedChunks: string[] = [];
+  let disposals = 0;
+  return {
+    channel: Object.freeze({
+      feed: (chunk: Uint8Array): Uint8Array => {
+        fedChunks.push(decoder.decode(chunk));
+        return new Uint8Array(chunk);
+      },
+      flush: (): Uint8Array => new Uint8Array(),
+      dispose: (): void => {
+        disposals += 1;
+      },
+    }),
+    fed: () => fedChunks.join(''),
+    disposed: () => disposals,
+  };
+};
+
+const preparedResources = (): NonNullable<
+  Parameters<InvocationExecutionPorts['execution']['start']>[2]
+> => {
+  const stdout = spyRedactionChannel();
+  const stderr = spyRedactionChannel();
+  const rawResponse = spyRedactionChannel();
+  return Object.freeze({
+    attestations: Object.freeze([]),
+    frontEnds: Object.freeze({
+      stdout: stdout.channel,
+      stderr: stderr.channel,
+      rawResponse: rawResponse.channel,
+    }),
+    evidenceSinks: Object.freeze({
+      stdout: collectingOutputSink().sink,
+      stderr: collectingOutputSink().sink,
+    }),
+  });
+};
+
+const preparedResourcesWithSpies = (): {
+  resources: NonNullable<Parameters<InvocationExecutionPorts['execution']['start']>[2]>;
+  stdout: ReturnType<typeof spyRedactionChannel>;
+  stderr: ReturnType<typeof spyRedactionChannel>;
+  rawResponse: ReturnType<typeof spyRedactionChannel>;
+} => {
+  const stdout = spyRedactionChannel();
+  const stderr = spyRedactionChannel();
+  const rawResponse = spyRedactionChannel();
+  return {
+    stdout,
+    stderr,
+    rawResponse,
+    resources: Object.freeze({
+      attestations: Object.freeze([]),
+      frontEnds: Object.freeze({
+        stdout: stdout.channel,
+        stderr: stderr.channel,
+        rawResponse: rawResponse.channel,
+      }),
+      evidenceSinks: Object.freeze({
+        stdout: collectingOutputSink().sink,
+        stderr: collectingOutputSink().sink,
+      }),
+    }),
+  };
 };
 
 const binding = Object.freeze({
@@ -88,11 +176,55 @@ const preparedLaunch = (
 };
 
 test.runIf(process.platform === 'linux')(
+  'routes stdout evidence through the injected prepared redaction front end',
+  async () => {
+    const execution = createNativeProcessExecutionPort();
+    const stdout = spyRedactionChannel();
+    const stderr = spyRedactionChannel();
+    const rawResponse = spyRedactionChannel();
+    const stdoutEvidence = collectingOutputSink();
+    const stderrEvidence = collectingOutputSink();
+    const resources: NonNullable<Parameters<InvocationExecutionPorts['execution']['start']>[2]> =
+      Object.freeze({
+        attestations: Object.freeze([]),
+        frontEnds: Object.freeze({
+          stdout: stdout.channel,
+          stderr: stderr.channel,
+          rawResponse: rawResponse.channel,
+        }),
+        evidenceSinks: Object.freeze({
+          stdout: stdoutEvidence.sink,
+          stderr: stderrEvidence.sink,
+        }),
+      });
+
+    const running = await execution.start(
+      snapshot('native-injected-evidence'),
+      preparedLaunch(),
+      resources,
+    );
+    await expect(running.completion).resolves.toMatchObject({ status: 'completed' });
+
+    expect(stdout.fed()).toContain('item.completed');
+    expect(new TextDecoder().decode(stdoutEvidence.bytes())).toContain('turn.completed');
+    expect(rawResponse.disposed()).toBe(1);
+  },
+);
+
+test('fails defensively and disposes resources when prepared resources are missing', async () => {
+  const execution = createNativeProcessExecutionPort();
+
+  const running = await execution.start(snapshot('native-missing-resources'), preparedLaunch());
+
+  await expect(running.completion).resolves.toEqual({ status: 'failed' });
+});
+
+test.runIf(process.platform === 'linux')(
   'drives a short-lived native stdio process to a parsed successful outcome',
   async () => {
     const execution = createNativeProcessExecutionPort();
 
-    const running = await execution.start(snapshot(), preparedLaunch());
+    const running = await execution.start(snapshot(), preparedLaunch(), preparedResources());
     const observation = await running.completion;
 
     expect(observation).toMatchObject({
@@ -122,7 +254,11 @@ test.runIf(process.platform === 'linux')(
       },
     });
 
-    const running = await execution.start(snapshot('native-parser-failure'), launch);
+    const running = await execution.start(
+      snapshot('native-parser-failure'),
+      launch,
+      preparedResources(),
+    );
 
     await expect(running.completion).resolves.toEqual({ status: 'failed' });
   },
@@ -143,7 +279,11 @@ test.runIf(process.platform === 'linux')(
       },
     });
 
-    const running = await execution.start(snapshot('native-cancellation'), launch);
+    const running = await execution.start(
+      snapshot('native-cancellation'),
+      launch,
+      preparedResources(),
+    );
     await running.requestCancellation();
 
     await expect(running.completion).resolves.toEqual({ status: 'failed' });
@@ -170,10 +310,103 @@ test('failed identity inspection kills the unactivated accepted process and fail
   const { dispatch, killUnactivated } = failedIdentityDispatch();
   const execution = createNativeProcessExecutionPort(dispatch);
 
-  const running = await execution.start(snapshot('native-identity-failed'), preparedLaunch());
+  const running = await execution.start(
+    snapshot('native-identity-failed'),
+    preparedLaunch(),
+    preparedResources(),
+  );
 
   await expect(running.completion).resolves.toEqual({ status: 'failed' });
   expect(killUnactivated).toHaveBeenCalledTimes(1);
+});
+
+test('disposes prepared resource front ends when spawn settlement fails before activation', async () => {
+  const resources = preparedResourcesWithSpies();
+  const dispatch: NonNullable<NativeDispatchParameter> = {
+    beginStart: vi.fn((attempt: ProcessStartAttempt) => {
+      settleProcessStart(attempt, { status: 'failed' });
+    }),
+    inspectIdentity: vi.fn(),
+    killUnactivated: vi.fn(),
+    activateIo: vi.fn(),
+  };
+  const execution = createNativeProcessExecutionPort(dispatch);
+
+  const running = await execution.start(
+    snapshot('native-spawn-disposes-resources'),
+    preparedLaunch(),
+    resources.resources,
+  );
+
+  await expect(running.completion).resolves.toEqual({ status: 'failed' });
+  expect(resources.stdout.disposed()).toBe(1);
+  expect(resources.stderr.disposed()).toBe(1);
+  expect(resources.rawResponse.disposed()).toBe(1);
+});
+
+test('disposes prepared resource front ends after failed identity inspection', async () => {
+  const resources = preparedResourcesWithSpies();
+  const { dispatch, killUnactivated } = failedIdentityDispatch();
+  const execution = createNativeProcessExecutionPort(dispatch);
+
+  const running = await execution.start(
+    snapshot('native-identity-disposes-resources'),
+    preparedLaunch(),
+    resources.resources,
+  );
+
+  await expect(running.completion).resolves.toEqual({ status: 'failed' });
+  expect(killUnactivated).toHaveBeenCalledTimes(1);
+  expect(resources.stdout.disposed()).toBe(1);
+  expect(resources.stderr.disposed()).toBe(1);
+  expect(resources.rawResponse.disposed()).toBe(1);
+});
+
+test('disposes prepared resource front ends after failed protocol attach', async () => {
+  const resources = preparedResourcesWithSpies();
+  const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+  const identity: ProcessIdentity = Object.freeze({
+    pid: 10,
+    processGroupId: 10,
+    fingerprint: 'sha256:test',
+  });
+  const dispatch: NonNullable<NativeDispatchParameter> = {
+    beginStart: vi.fn((attempt: ProcessStartAttempt) => {
+      settleProcessStart(attempt, { status: 'accepted', spawnedAt: 1 });
+    }),
+    inspectIdentity: vi.fn(async () => ({ status: 'identified' as const, identity })),
+    killUnactivated: vi.fn(),
+    activateIo: vi.fn(() => ({
+      status: 'activated' as const,
+      process: fakeLiveProcess(terminateAndReap),
+    })),
+  };
+  const launch = preparedLaunch({
+    binding: {
+      ...binding,
+      delivery: { prompt: 'stdin', resultSchema: 'argument', result: 'stdout' },
+    },
+    bindingToken: ExecutionBindingToken.create({
+      agentId: 'fixture-agent',
+      agentVersion: '1.0.0',
+      definitionDigest: 'digest',
+      ...binding,
+      delivery: { prompt: 'stdin', resultSchema: 'argument', result: 'stdout' },
+    }),
+  });
+  const execution = createNativeProcessExecutionPort(dispatch);
+
+  const running = await execution.start(
+    snapshot('native-attach-disposes-resources'),
+    launch,
+    resources.resources,
+  );
+
+  await expect(running.completion).resolves.toEqual({ status: 'failed' });
+  expect(terminateAndReap).toHaveBeenCalledTimes(1);
+  expect(resources.stdout.disposed()).toBe(1);
+  expect(resources.stderr.disposed()).toBe(1);
+  expect(resources.rawResponse.disposed()).toBe(1);
 });
 
 const inertInput: ProcessInputSink = Object.freeze({
@@ -224,7 +457,11 @@ test('failed protocol attach terminates the activated process and fails completi
   });
   const execution = createNativeProcessExecutionPort(dispatch);
 
-  const running = await execution.start(snapshot('native-attach-failed'), launch);
+  const running = await execution.start(
+    snapshot('native-attach-failed'),
+    launch,
+    preparedResources(),
+  );
 
   await expect(running.completion).resolves.toEqual({ status: 'failed' });
   expect(terminateAndReap).toHaveBeenCalledTimes(1);
@@ -243,7 +480,11 @@ test('rejected spawn completion fails without hanging or cancellation work', asy
   };
   const execution = createNativeProcessExecutionPort(dispatch);
 
-  const running = await execution.start(snapshot('native-spawn-rejected'), preparedLaunch());
+  const running = await execution.start(
+    snapshot('native-spawn-rejected'),
+    preparedLaunch(),
+    preparedResources(),
+  );
 
   await expect(running.completion).resolves.toEqual({ status: 'failed' });
   await expect(running.requestCancellation()).resolves.toBeUndefined();

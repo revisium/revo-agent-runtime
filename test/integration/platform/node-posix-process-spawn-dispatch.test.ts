@@ -3,12 +3,24 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { expect, test } from 'vitest';
 
 import { NodePosixProcessSpawnDispatch } from '../../../src/platform/process/node-posix-process-spawn-dispatch.js';
-import { createProcessStartAttempt } from '../../../src/runtime/execution/index.js';
+import {
+  createProcessStartAttempt,
+  createRedactionChannel,
+  type RedactionChannel,
+} from '../../../src/runtime/execution/index.js';
 
 const ignoredOutput = () =>
   Object.freeze({
     write: async (_chunk: Uint8Array): Promise<void> => undefined,
     end: async (): Promise<void> => undefined,
+  });
+
+const evidenceRedactionChannel = (): RedactionChannel => createRedactionChannel(['secret']);
+
+const evidenceFrontEnds = () =>
+  Object.freeze({
+    stdout: evidenceRedactionChannel(),
+    stderr: evidenceRedactionChannel(),
   });
 
 const expectProcessAlive = (pid: number): void => {
@@ -162,6 +174,7 @@ test.runIf(process.platform === 'linux')(
         secretValues: ['secret'],
         maxStdoutBytes: 10_000,
         maxStderrBytes: 10_000,
+        evidenceFrontEnds: evidenceFrontEnds(),
         protocolObserverSink: protocol,
       },
     );

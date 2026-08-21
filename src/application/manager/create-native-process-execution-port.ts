@@ -5,12 +5,15 @@ import {
   getProcessStartInvocationToken,
   type InvocationExecutionPorts,
   type InvocationTerminalObservation,
-  type ProcessOutputSink,
   type ProcessSpawnRequest,
   type ProcessStartAttempt,
+  type takePreparedInvocationResourcesPayload,
 } from '../../runtime/execution/index.js';
 import { InstalledBindingRegistry } from './installed-bindings.js';
 
+type PreparedInvocationResourcesPayload = NonNullable<
+  ReturnType<typeof takePreparedInvocationResourcesPayload>
+>;
 type RunningExecution = Awaited<ReturnType<InvocationExecutionPorts['execution']['start']>>;
 type NativeDispatch = Pick<
   NodePosixProcessSpawnDispatch,
@@ -19,16 +22,20 @@ type NativeDispatch = Pick<
 
 const activeStateInspectionTimeoutMs = 5_000;
 
-const noopOutputSink: ProcessOutputSink = Object.freeze({
-  write: async (_chunk: Uint8Array): Promise<void> => undefined,
-  end: async (): Promise<void> => undefined,
-});
-
 const failedExecution = (): RunningExecution =>
   Object.freeze({
     completion: Promise.resolve(Object.freeze({ status: 'failed' as const })),
     requestCancellation: async (): Promise<void> => undefined,
   });
+
+const disposeResourcesFrontEnds = (
+  resources: PreparedInvocationResourcesPayload,
+  rawResponseAlreadyDisposed = false,
+): void => {
+  resources.frontEnds.stdout.dispose();
+  resources.frontEnds.stderr.dispose();
+  if (!rawResponseAlreadyDisposed) resources.frontEnds.rawResponse.dispose();
+};
 
 const coordinatorFor = (
   attempt: ProcessStartAttempt,
@@ -45,6 +52,7 @@ const coordinatorFor = (
 const createRequest = (
   snapshot: Parameters<InvocationExecutionPorts['execution']['start']>[0],
   preparedLaunch: Parameters<InvocationExecutionPorts['execution']['start']>[1],
+  resources: PreparedInvocationResourcesPayload,
 ): ProcessSpawnRequest =>
   Object.freeze({
     invocationId: snapshot.invocationId,
@@ -54,19 +62,31 @@ const createRequest = (
     environment: preparedLaunch.childEnvironment,
     shell: false,
     stdin: 'pipe',
-    stdout: noopOutputSink,
-    stderr: noopOutputSink,
+    stdout: resources.evidenceSinks.stdout,
+    stderr: resources.evidenceSinks.stderr,
   });
 
 export const createNativeProcessExecutionPort = (
   dispatch: NativeDispatch = new NodePosixProcessSpawnDispatch(),
 ): InvocationExecutionPorts['execution'] =>
   Object.freeze({
-    start: async (snapshot, preparedLaunch): Promise<RunningExecution> => {
+    start: async (snapshot, preparedLaunch, resources): Promise<RunningExecution> => {
+      if (resources === undefined) return failedExecution();
+      let rawResponseDisposed = false;
+      const disposeRawResponse = (): void => {
+        if (rawResponseDisposed) return;
+        rawResponseDisposed = true;
+        resources.frontEnds.rawResponse.dispose();
+      };
+      const disposeAllFrontEnds = (): void =>
+        disposeResourcesFrontEnds(resources, rawResponseDisposed);
       const attempt = createProcessStartAttempt({ invocationId: snapshot.invocationId });
-      dispatch.beginStart(attempt, createRequest(snapshot, preparedLaunch));
+      dispatch.beginStart(attempt, createRequest(snapshot, preparedLaunch, resources));
       const settlement = await attempt.settlement;
-      if (settlement.status !== 'spawn_accepted') return failedExecution();
+      if (settlement.status !== 'spawn_accepted') {
+        disposeAllFrontEnds();
+        return failedExecution();
+      }
 
       const identity = await dispatch.inspectIdentity(
         settlement.process,
@@ -74,6 +94,7 @@ export const createNativeProcessExecutionPort = (
       );
       if (identity.status !== 'identified') {
         await dispatch.killUnactivated(settlement.process);
+        disposeAllFrontEnds();
         return failedExecution();
       }
 
@@ -90,6 +111,7 @@ export const createNativeProcessExecutionPort = (
             );
       if (driver === undefined || parser === undefined) {
         await dispatch.killUnactivated(settlement.process);
+        disposeAllFrontEnds();
         return failedExecution();
       }
 
@@ -105,8 +127,10 @@ export const createNativeProcessExecutionPort = (
       const coordinator = coordinatorFor(attempt);
       if (coordinator === undefined) {
         await dispatch.killUnactivated(settlement.process);
+        disposeAllFrontEnds();
         return failedExecution();
       }
+      disposeRawResponse();
       const activation = dispatch.activateIo(
         settlement.process,
         settlement.io,
@@ -116,14 +140,22 @@ export const createNativeProcessExecutionPort = (
           secretValues: preparedLaunch.secretValues,
           maxStdoutBytes: preparedLaunch.limits.maxStdoutBytes,
           maxStderrBytes: preparedLaunch.limits.maxStderrBytes,
+          evidenceFrontEnds: Object.freeze({
+            stdout: resources.frontEnds.stdout,
+            stderr: resources.frontEnds.stderr,
+          }),
           protocolObserverSink: preparedSession.protocolOutput,
         },
       );
-      if (activation.status !== 'activated') return failedExecution();
+      if (activation.status !== 'activated') {
+        disposeAllFrontEnds();
+        return failedExecution();
+      }
 
       const attachResult = await preparedSession.attach(activation.process.stdin);
       if (attachResult.status !== 'attached') {
         await activation.process.terminateAndReap();
+        disposeAllFrontEnds();
         return failedExecution();
       }
 

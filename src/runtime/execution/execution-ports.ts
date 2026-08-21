@@ -4,14 +4,20 @@ import type { InvocationClockPort } from './invocation-clock-port.js';
 import type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
 import type { OutputClaimExclusiveCreatePort } from './output-claim-attempt/index.js';
 import type { OutputPreparationMutationPort } from './output-preparation-attempt/index.js';
+import type { takePreparedInvocationResourcesPayload } from './output-preparation-attempt/index.js';
 import type { PreparedLaunch } from './prepared-launch.js';
 import type { WorkspaceAdmissionResult } from './workspace-admission-result.js';
+
+type PreparedInvocationResourcesPayload = NonNullable<
+  ReturnType<typeof takePreparedInvocationResourcesPayload>
+>;
 
 export interface InvocationExecutionPorts {
   readonly execution: {
     start(
       snapshot: InvocationInputSnapshot,
       preparedLaunch: PreparedLaunch,
+      resources?: PreparedInvocationResourcesPayload,
     ): Promise<{
       readonly completion: Promise<InvocationTerminalObservation>;
       requestCancellation(): Promise<void>;

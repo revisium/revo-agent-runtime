@@ -2,6 +2,7 @@ import type {
   OutputPreparationMutationPort,
   OutputPreparationMutationRequest,
   OutputPreparationPlatformResult,
+  ProcessOutputSink,
 } from '../../../src/runtime/execution/index.js';
 
 export type FakeOutputPreparationOperation =
@@ -41,6 +42,23 @@ const createFakeFrontEnds = () =>
     rawResponse: createFakeRedactionChannel(),
   });
 
+const createFakeEvidenceSink = (): ProcessOutputSink =>
+  Object.freeze({
+    write: async (): Promise<void> => undefined,
+    end: async (): Promise<void> => undefined,
+  });
+
+const prepared = (): OutputPreparationPlatformResult =>
+  Object.freeze({
+    status: 'prepared',
+    attestations: Object.freeze([]),
+    frontEnds: createFakeFrontEnds(),
+    evidenceSinks: Object.freeze({
+      stdout: createFakeEvidenceSink(),
+      stderr: createFakeEvidenceSink(),
+    }),
+  });
+
 const platformRejected = (
   reason: Extract<OutputPreparationPlatformResult, { status: 'rejected' }>['reason'],
 ): OutputPreparationPlatformResult => Object.freeze({ status: 'rejected', reason });
@@ -76,14 +94,7 @@ export class FakeOutputPreparationPort implements OutputPreparationMutationPort 
 
     request.markMutationDispatched();
     if (operation === 'throw-after-dispatch') throw new Error('failed after mutation dispatch');
-    if (operation === 'prepared')
-      return Promise.resolve(
-        Object.freeze({
-          status: 'prepared',
-          attestations: Object.freeze([]),
-          frontEnds: createFakeFrontEnds(),
-        }),
-      );
+    if (operation === 'prepared') return Promise.resolve(prepared());
     if (operation === 'reject') return Promise.reject(new Error('preparation failed'));
     if (operation === 'scratch-conflict')
       return Promise.resolve(platformRejected('scratch_conflict'));
@@ -106,14 +117,7 @@ export class FakeOutputPreparationPort implements OutputPreparationMutationPort 
   }
 
   settlePendingPrepared(preparationId: number): void {
-    this.settlePending(
-      preparationId,
-      Object.freeze({
-        status: 'prepared',
-        attestations: Object.freeze([]),
-        frontEnds: createFakeFrontEnds(),
-      }),
-    );
+    this.settlePending(preparationId, prepared());
   }
 
   settlePendingRejected(

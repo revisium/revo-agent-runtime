@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, open, unlink, writeFile, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import {
@@ -12,6 +12,7 @@ import {
   type OutputPreparationMutationPort,
   type OutputPreparationMutationRequest,
   type OutputPreparationPlatformResult,
+  type ProcessOutputSink,
   type RedactionChannel,
 } from '../../runtime/execution/index.js';
 import { nodePosixPathAdmission } from './node-posix-path-admission.js';
@@ -75,6 +76,39 @@ const removeBestEffort = async (path: string): Promise<void> => {
   }
 };
 
+const createExclusiveFileOutputSink = (handle: FileHandle): ProcessOutputSink => {
+  let closed = false;
+  return Object.freeze({
+    write: async (chunk: Uint8Array): Promise<void> => {
+      if (closed) throw new Error('Evidence file output sink is closed.');
+      await handle.write(chunk);
+    },
+    end: async (): Promise<void> => {
+      if (closed) return;
+      closed = true;
+      await handle.close();
+    },
+  });
+};
+
+const closeBestEffort = async (handle: FileHandle | undefined): Promise<void> => {
+  if (handle === undefined) return;
+  try {
+    await handle.close();
+  } catch {
+    // Best-effort rollback must never mask the original preparation reason.
+  }
+};
+
+const closeAndRemoveEvidenceBestEffort = async (
+  handle: FileHandle | undefined,
+  path: string,
+): Promise<void> => {
+  if (handle === undefined) return;
+  await closeBestEffort(handle);
+  await removeBestEffort(path);
+};
+
 export class NodePosixOutputPreparationPort implements OutputPreparationMutationPort {
   async prepareClaimedOutput(
     request: OutputPreparationMutationRequest,
@@ -128,10 +162,28 @@ export class NodePosixOutputPreparationPort implements OutputPreparationMutation
         slot.bytes.fill(0);
       }
 
+      const stdoutPath = join(request.outputDirectory, 'stdout.log');
+      const stderrPath = join(request.outputDirectory, 'stderr.log');
+      let stdoutHandle: FileHandle | undefined;
+      let stderrHandle: FileHandle | undefined;
+      try {
+        stdoutHandle = await open(stdoutPath, 'wx', 0o600);
+        stderrHandle = await open(stderrPath, 'wx', 0o600);
+      } catch {
+        await closeAndRemoveEvidenceBestEffort(stderrHandle, stderrPath);
+        await closeAndRemoveEvidenceBestEffort(stdoutHandle, stdoutPath);
+        disposeFrontEnds(frontEnds);
+        return rejected('evidence_open_failed');
+      }
+
       return Object.freeze({
         status: 'prepared',
         attestations: Object.freeze(attestations),
         frontEnds,
+        evidenceSinks: Object.freeze({
+          stdout: createExclusiveFileOutputSink(stdoutHandle),
+          stderr: createExclusiveFileOutputSink(stderrHandle),
+        }),
       });
     } catch {
       disposeFrontEnds(frontEnds);

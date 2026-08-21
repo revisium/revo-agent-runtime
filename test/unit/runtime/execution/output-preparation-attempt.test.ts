@@ -13,6 +13,7 @@ import type {
   OutputPreparationPlatformResult,
   OutputPreparationQuiescence,
   OutputPreparationResult,
+  ProcessOutputSink,
   RedactionChannel,
 } from '../../../../src/runtime/execution/index.js';
 import { registerSecrets } from '../../../../src/runtime/execution/index.js';
@@ -128,6 +129,12 @@ const distinctRedactionChannel = (label: string): RedactionChannel =>
     dispose: (): void => undefined,
   });
 
+const evidenceSink = (): ProcessOutputSink =>
+  Object.freeze({
+    write: async (): Promise<void> => undefined,
+    end: async (): Promise<void> => undefined,
+  });
+
 class PreparedPayloadPort implements OutputPreparationMutationPort {
   constructor(
     private readonly result: Extract<OutputPreparationPlatformResult, { status: 'prepared' }>,
@@ -172,8 +179,9 @@ test('prepared resources retain the platform attestations and redaction fronts u
     stderr: distinctRedactionChannel('stderr'),
     rawResponse: distinctRedactionChannel('raw'),
   });
+  const evidenceSinks = Object.freeze({ stdout: evidenceSink(), stderr: evidenceSink() });
   const port = new PreparedPayloadPort(
-    Object.freeze({ status: 'prepared', attestations, frontEnds }),
+    Object.freeze({ status: 'prepared', attestations, frontEnds, evidenceSinks }),
   );
   const { attempt } = await createAttempt(port);
 
@@ -187,7 +195,7 @@ test('prepared resources retain the platform attestations and redaction fronts u
   expect(AuthenticPreparedInvocationResources.isAuthentic(result.resources)).toBe(true);
   expect(AuthenticPreparedInvocationResources.isBoundToToken(result.resources, token)).toBe(true);
   const taken = AuthenticPreparedInvocationResources.take(result.resources);
-  expect(taken).toEqual({ attestations, frontEnds });
+  expect(taken).toEqual({ attestations, frontEnds, evidenceSinks });
   expect(taken?.attestations).toBe(attestations);
   expect(taken?.frontEnds.stdout).toBe(frontEnds.stdout);
   expect(taken?.frontEnds.stderr).toBe(frontEnds.stderr);
