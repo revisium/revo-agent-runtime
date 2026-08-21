@@ -162,16 +162,8 @@ export class NodePosixOutputPreparationPort implements OutputPreparationMutation
         slot.bytes.fill(0);
       }
 
-      const stdoutPath = join(request.outputDirectory, 'stdout.log');
-      const stderrPath = join(request.outputDirectory, 'stderr.log');
-      let stdoutHandle: FileHandle | undefined;
-      let stderrHandle: FileHandle | undefined;
-      try {
-        stdoutHandle = await open(stdoutPath, 'wx', 0o600);
-        stderrHandle = await open(stderrPath, 'wx', 0o600);
-      } catch {
-        await closeAndRemoveEvidenceBestEffort(stderrHandle, stderrPath);
-        await closeAndRemoveEvidenceBestEffort(stdoutHandle, stdoutPath);
+      const evidenceSinks = await this.openEvidenceSinks(request.outputDirectory);
+      if (evidenceSinks === undefined) {
         disposeFrontEnds(frontEnds);
         return rejected('evidence_open_failed');
       }
@@ -180,15 +172,33 @@ export class NodePosixOutputPreparationPort implements OutputPreparationMutation
         status: 'prepared',
         attestations: Object.freeze(attestations),
         frontEnds,
-        evidenceSinks: Object.freeze({
-          stdout: createExclusiveFileOutputSink(stdoutHandle),
-          stderr: createExclusiveFileOutputSink(stderrHandle),
-        }),
+        evidenceSinks,
       });
     } catch {
       disposeFrontEnds(frontEnds);
       if (files !== undefined) zeroFillSlots(files);
       return rejected('scratch_create_failed');
+    }
+  }
+
+  private async openEvidenceSinks(
+    outputDirectory: string,
+  ): Promise<Readonly<{ stdout: ProcessOutputSink; stderr: ProcessOutputSink }> | undefined> {
+    const stdoutPath = join(outputDirectory, 'stdout.log');
+    const stderrPath = join(outputDirectory, 'stderr.log');
+    let stdoutHandle: FileHandle | undefined;
+    let stderrHandle: FileHandle | undefined;
+    try {
+      stdoutHandle = await open(stdoutPath, 'wx', 0o600);
+      stderrHandle = await open(stderrPath, 'wx', 0o600);
+      return Object.freeze({
+        stdout: createExclusiveFileOutputSink(stdoutHandle),
+        stderr: createExclusiveFileOutputSink(stderrHandle),
+      });
+    } catch {
+      await closeAndRemoveEvidenceBestEffort(stderrHandle, stderrPath);
+      await closeAndRemoveEvidenceBestEffort(stdoutHandle, stdoutPath);
+      return undefined;
     }
   }
 
