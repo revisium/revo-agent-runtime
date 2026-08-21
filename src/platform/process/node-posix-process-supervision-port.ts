@@ -95,6 +95,13 @@ const inspectLinuxProcess = async (pid: number): Promise<ProcessIdentity> => {
   return Object.freeze({ pid, processGroupId, fingerprint: fingerprint(record) });
 };
 
+const closedInputSink = Object.freeze({
+  write: (_chunk: Uint8Array): Promise<void> =>
+    Promise.reject(new Error('Process stdin is unavailable.')),
+  end: (): Promise<void> => Promise.resolve(),
+  abort: (): Promise<void> => Promise.resolve(),
+});
+
 const awaitSpawn = async (child: ReturnType<typeof spawn>): Promise<void> =>
   new Promise((resolve, reject) => {
     child.once('spawn', resolve);
@@ -283,7 +290,9 @@ export class NodePosixProcessSupervisionPort implements ProcessSupervisionPort {
       return observation;
     });
     return Object.freeze({
+      spawnedAt: Date.now(),
       identity,
+      stdin: closedInputSink,
       completion: observedCompletion,
       terminateAndReap: cleanupProcess,
     });

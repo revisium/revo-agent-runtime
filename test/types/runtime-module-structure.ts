@@ -80,6 +80,7 @@ import type {
   createProcessStartAttempt,
   getProcessStartInvocationToken,
   settleProcessStart,
+  settleProcessStartQuiescence,
   ProcessExitObservation,
   ProcessIdentity,
   ProcessOutputSink,
@@ -381,8 +382,10 @@ type ExpectedProcessIdentity = {
 };
 
 type ExpectedLiveOwnedProcess = {
+  readonly spawnedAt: number;
   readonly completion: Promise<ProcessExitObservation>;
   readonly identity: ProcessIdentity;
+  readonly stdin: ProcessInputSink;
   terminateAndReap(): Promise<void>;
 };
 
@@ -1042,6 +1045,13 @@ export type CreateProcessStartAttemptIsExact = Expect<
   Equal<
     typeof createProcessStartAttempt,
     (input: { readonly invocationId: string }) => ProcessStartAttempt
+  >
+>;
+
+export type SettleProcessStartQuiescenceIsExact = Expect<
+  Equal<
+    typeof settleProcessStartQuiescence,
+    (attempt: object, quiescence: ProcessStartQuiescence) => void
   >
 >;
 

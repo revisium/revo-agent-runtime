@@ -2,6 +2,7 @@ import { PausedProcessIo } from './paused-process-io.js';
 import type { ProcessStartAttempt } from './process-start-attempt.js';
 import { PROCESS_START_BEGINNERS } from './process-start-beginners.js';
 import { PROCESS_START_INVOCATION_TOKENS } from './process-start-invocation-tokens.js';
+import { PROCESS_START_QUIESCENCE_SETTLERS } from './process-start-quiescence-settlers.js';
 import type { ProcessStartQuiescence } from './process-start-quiescence.js';
 import type { ProcessStartResult } from './process-start-result.js';
 import { PROCESS_START_SETTLERS } from './process-start-settlers.js';
@@ -45,6 +46,7 @@ class InternalProcessStartAttempt implements ProcessStartAttempt {
     this.quiescence = state.quiescence.promise;
     PROCESS_START_BEGINNERS.set(this, (dispatch) => beginStart(state, dispatch));
     PROCESS_START_SETTLERS.set(this, (outcome) => handleSettle(state, outcome));
+    PROCESS_START_QUIESCENCE_SETTLERS.set(this, state.quiescence.resolve);
     PROCESS_START_INVOCATION_TOKENS.set(this, state.invocationToken);
     Object.freeze(this);
   }

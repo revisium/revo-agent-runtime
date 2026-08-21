@@ -144,4 +144,5 @@ export {
   createProcessStartAttempt,
   getProcessStartInvocationToken,
   settleProcessStart,
+  settleProcessStartQuiescence,
 } from './process-supervision-port/index.js';

@@ -7,6 +7,7 @@ import {
   PausedProcessIo,
   SpawnAcceptedProcess,
   settleProcessStart,
+  settleProcessStartQuiescence,
   type ProcessStartResult,
 } from '../../../../src/runtime/execution/index.js';
 import { FakeProcessStartPort } from '../../../support/execution/fake-process-start-port.js';
@@ -190,4 +191,18 @@ test('settleProcessStart returns the accepted carrier synchronously before promi
   expect(reactionOrder).toEqual(['after-settle-returned']);
   await attempt.settlement;
   expect(reactionOrder).toEqual(['after-settle-returned', 'pre-existing-caller-reaction']);
+});
+
+test('settleProcessStartQuiescence transfers an accepted attempt to coordinator quiescence', async () => {
+  const attempt = createProcessStartAttempt({ invocationId: 'process-start-test' });
+
+  settleProcessStartQuiescence(attempt, {
+    status: 'quiescent',
+    disposition: 'transferred_to_coordinator',
+  });
+
+  await expect(attempt.quiescence).resolves.toEqual({
+    status: 'quiescent',
+    disposition: 'transferred_to_coordinator',
+  });
 });
