@@ -131,6 +131,7 @@ export type {
   ProcessExitObservation,
   ProcessOutputSink,
   ProcessIdentity,
+  ProcessSpawnRequest,
   ProcessStartRequest,
   ProcessSupervisionPort,
 } from './process-supervision-port/index.js';
