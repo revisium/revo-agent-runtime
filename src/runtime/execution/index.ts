@@ -75,6 +75,7 @@ export {
   takeOutputPreparationFileSlots,
   takePreparedInvocationResourcesPayload,
   takeRegisteredSecretsForRedaction,
+  getTerminalPublicationEventsCapability,
 } from './output-preparation-attempt/index.js';
 export { PreparedLaunch } from './prepared-launch.js';
 export type { RawResponseDiagnostic } from './raw-response-diagnostic.js';
@@ -133,9 +134,16 @@ export type {
   RetainedCleanupAuthority,
   ProcessExitObservation,
   ProcessOutputSink,
+  EventsAppendSink,
   ProcessIdentity,
   ProcessSpawnRequest,
 } from './process-supervision-port/index.js';
+export type {
+  OutputAppendResult,
+  ScratchCleanupResult,
+  TerminalPublicationPort,
+  TerminalResultPublicationResult,
+} from './terminal-publication-port/index.js';
 export {
   DuplexCoordinatorRegistration,
   InvocationTokenCarrier,

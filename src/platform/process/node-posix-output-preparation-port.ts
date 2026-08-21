@@ -12,6 +12,7 @@ import {
   type OutputPreparationMutationPort,
   type OutputPreparationMutationRequest,
   type OutputPreparationPlatformResult,
+  type EventsAppendSink,
   type ProcessOutputSink,
   type RedactionChannel,
 } from '../../runtime/execution/index.js';
@@ -91,6 +92,26 @@ const createExclusiveFileOutputSink = (handle: FileHandle): ProcessOutputSink =>
   });
 };
 
+const createEventsAppendSink = (path: string): EventsAppendSink =>
+  Object.freeze({
+    write: async (chunk: Uint8Array): Promise<void> => {
+      const handle = await open(path, 'a');
+      try {
+        await handle.write(chunk);
+      } finally {
+        await handle.close();
+      }
+    },
+    flush: async (): Promise<void> => {
+      const handle = await open(path, 'r+');
+      try {
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+    },
+  });
+
 const closeBestEffort = async (handle: FileHandle | undefined): Promise<void> => {
   if (handle === undefined) return;
   try {
@@ -148,8 +169,8 @@ export class NodePosixOutputPreparationPort implements OutputPreparationMutation
       if (typeof slotsResult === 'string') return rejected(slotsResult);
       const { attestations } = slotsResult;
 
-      const evidenceSinks = await this.openEvidenceSinks(request.outputDirectory);
-      if (evidenceSinks === undefined) {
+      const evidence = await this.openEvidenceSinks(request.outputDirectory);
+      if (evidence === undefined) {
         disposeFrontEnds(frontEnds);
         return rejected('evidence_open_failed');
       }
@@ -158,7 +179,8 @@ export class NodePosixOutputPreparationPort implements OutputPreparationMutation
         status: 'prepared',
         attestations: Object.freeze(attestations),
         frontEnds,
-        evidenceSinks,
+        evidenceSinks: Object.freeze({ stdout: evidence.stdout, stderr: evidence.stderr }),
+        eventsAppendSink: evidence.eventsAppendSink,
       });
     } catch {
       disposeFrontEnds(frontEnds);
@@ -192,21 +214,32 @@ export class NodePosixOutputPreparationPort implements OutputPreparationMutation
     return Object.freeze({ attestations });
   }
 
-  private async openEvidenceSinks(
-    outputDirectory: string,
-  ): Promise<Readonly<{ stdout: ProcessOutputSink; stderr: ProcessOutputSink }> | undefined> {
+  private async openEvidenceSinks(outputDirectory: string): Promise<
+    | Readonly<{
+        stdout: ProcessOutputSink;
+        stderr: ProcessOutputSink;
+        eventsAppendSink: EventsAppendSink;
+      }>
+    | undefined
+  > {
     const stdoutPath = join(outputDirectory, 'stdout.log');
     const stderrPath = join(outputDirectory, 'stderr.log');
+    const eventsPath = join(outputDirectory, 'events.ndjson');
     let stdoutHandle: FileHandle | undefined;
     let stderrHandle: FileHandle | undefined;
+    let eventsHandle: FileHandle | undefined;
     try {
       stdoutHandle = await open(stdoutPath, 'wx', 0o600);
       stderrHandle = await open(stderrPath, 'wx', 0o600);
+      eventsHandle = await open(eventsPath, 'wx', 0o600);
+      await eventsHandle.close();
       return Object.freeze({
         stdout: createExclusiveFileOutputSink(stdoutHandle),
         stderr: createExclusiveFileOutputSink(stderrHandle),
+        eventsAppendSink: createEventsAppendSink(eventsPath),
       });
     } catch {
+      await closeAndRemoveEvidenceBestEffort(eventsHandle, eventsPath);
       await closeAndRemoveEvidenceBestEffort(stderrHandle, stderrPath);
       await closeAndRemoveEvidenceBestEffort(stdoutHandle, stdoutPath);
       return undefined;

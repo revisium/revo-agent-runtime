@@ -14,6 +14,7 @@ import type { OutputPreparationQuiescence } from './output-preparation-quiescenc
 import type { OutputPreparationResult } from './output-preparation-result.js';
 import { PreparedInvocationResources } from './prepared-invocation-resources.js';
 import { TerminalPublicationAuthority } from './terminal-publication-authority.js';
+import { TERMINAL_PUBLICATION_EVENTS_CAPABILITIES } from './terminal-publication-events-capabilities.js';
 
 const PREPARATION_DEADLINE_MS = 10_000;
 
@@ -198,6 +199,11 @@ const settlePrepared = (
   state: PreparationState,
   result: Extract<OutputPreparationPlatformResult, { status: 'prepared' }>,
 ): void => {
+  TERMINAL_PUBLICATION_EVENTS_CAPABILITIES.set(state.authority, {
+    invocationToken: state.invocationToken,
+    eventsAppendSink: result.eventsAppendSink,
+    usage: { nonterminalBytesWritten: 0 },
+  });
   settleBoth(
     state,
     Object.freeze({

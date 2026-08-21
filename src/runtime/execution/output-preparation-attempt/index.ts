@@ -13,6 +13,7 @@ export type { TerminalPublicationAuthority } from './terminal-publication-author
 export { beginOutputPreparation } from './begin-output-preparation.js';
 export { createOutputPreparationAttempt } from './create-output-preparation-attempt.js';
 export { getOutputPreparationInvocationToken } from './get-output-preparation-invocation-token.js';
+export { getTerminalPublicationEventsCapability } from './get-terminal-publication-events-capability.js';
 export { isConsumedRedactionMaterialBoundToToken } from './is-consumed-redaction-material-bound-to-token.js';
 export { isConsumedOutputPreparationMaterialBoundToToken } from './is-consumed-output-preparation-material-bound-to-token.js';
 export { takeOutputPreparationFileSlots } from './take-output-preparation-file-slots.js';

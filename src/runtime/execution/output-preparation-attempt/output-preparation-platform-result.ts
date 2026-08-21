@@ -1,4 +1,4 @@
-import type { ProcessOutputSink } from '../process-supervision-port/index.js';
+import type { EventsAppendSink, ProcessOutputSink } from '../process-supervision-port/index.js';
 import type { RedactionChannel } from '../redaction/index.js';
 import type { OutputPreparationFileAttestation } from './output-preparation-file-attestation.js';
 
@@ -15,6 +15,7 @@ export type OutputPreparationPlatformResult =
         stdout: ProcessOutputSink;
         stderr: ProcessOutputSink;
       }>;
+      eventsAppendSink: EventsAppendSink;
     }>
   | Readonly<{
       status: 'rejected';

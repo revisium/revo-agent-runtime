@@ -86,6 +86,11 @@ import type {
   ProcessExitObservation,
   ProcessIdentity,
   ProcessOutputSink,
+  EventsAppendSink,
+  OutputAppendResult,
+  TerminalResultPublicationResult,
+  ScratchCleanupResult,
+  TerminalPublicationPort,
   ProcessSpawnRequest,
   ProtocolAttachResult,
   ProtocolDriverCreateRequest,
@@ -134,6 +139,9 @@ import type {
   AgentValidationDetails,
   AgentValidationDiagnostic,
   AgentVersionProbe,
+  AgentExecutionPin,
+  AgentEvent,
+  AgentInvocationSucceeded,
   JsonObject,
   JsonPrimitive,
   JsonSchema202012,
@@ -587,6 +595,9 @@ export type RuntimeContractSurface = readonly [
   AgentValidationDetails,
   AgentValidationDiagnostic,
   AgentVersionProbe,
+  AgentExecutionPin,
+  AgentEvent,
+  AgentInvocationSucceeded,
   JsonObject,
   JsonPrimitive,
   JsonSchema202012,
@@ -790,6 +801,7 @@ type ExpectedOutputPreparationPlatformResult =
         stdout: ProcessOutputSink;
         stderr: ProcessOutputSink;
       }>;
+      eventsAppendSink: EventsAppendSink;
     }>
   | Readonly<{
       status: 'rejected';
@@ -806,6 +818,50 @@ type ExpectedOutputPreparationMutationPort = {
   prepareClaimedOutput(
     request: OutputPreparationMutationRequest,
   ): Promise<OutputPreparationPlatformResult>;
+};
+
+type ExpectedEventsAppendSink = {
+  write(chunk: Uint8Array): Promise<void>;
+  flush(): Promise<void>;
+};
+
+type ExpectedOutputAppendResult =
+  | Readonly<{ status: 'appended' }>
+  | Readonly<{ status: 'suppressed'; reason: 'nonterminal_budget_exhausted' }>
+  | Readonly<{ status: 'failed'; reason: 'write_failed' | 'flush_failed' }>;
+
+type ExpectedTerminalResultPublicationResult =
+  | Readonly<{ status: 'published'; file: 'result.json' }>
+  | Readonly<{
+      status:
+        | 'conflict'
+        | 'write_failed'
+        | 'flush_failed'
+        | 'link_failed'
+        | 'directory_flush_failed';
+    }>;
+
+type ExpectedScratchCleanupResult =
+  | Readonly<{ status: 'cleaned' }>
+  | Readonly<{ status: 'absent' }>
+  | Readonly<{ status: 'failed'; reason: 'cleanup_failed' }>;
+
+type ExpectedTerminalPublicationPort = {
+  appendLifecycleEvent(
+    authority: TerminalPublicationAuthority,
+    event: AgentEvent,
+  ): Promise<OutputAppendResult>;
+  publishTerminalResult(
+    authority: TerminalPublicationAuthority,
+    result: AgentInvocationSucceeded,
+  ): Promise<TerminalResultPublicationResult>;
+  cleanupScratch(authority: TerminalPublicationAuthority): Promise<ScratchCleanupResult>;
+};
+
+type ExpectedAgentExecutionPin = {
+  readonly agentId: string;
+  readonly agentVersion: string;
+  readonly definitionDigest: string;
 };
 
 type ExpectedProcessInputSink = {
@@ -990,6 +1046,25 @@ export type OutputPreparationPlatformResultIsExact = Expect<
 
 export type InvocationTokenCarrierVisibleFieldsAreExact = Expect<
   Equal<keyof InvocationTokenCarrier, 'invocationId'>
+>;
+
+export type EventsAppendSinkIsExact = Expect<Equal<EventsAppendSink, ExpectedEventsAppendSink>>;
+export type OutputAppendResultIsExact = Expect<
+  Equal<OutputAppendResult, ExpectedOutputAppendResult>
+>;
+export type TerminalResultPublicationResultIsExact = Expect<
+  Equal<TerminalResultPublicationResult, ExpectedTerminalResultPublicationResult>
+>;
+export type ScratchCleanupResultIsExact = Expect<
+  Equal<ScratchCleanupResult, ExpectedScratchCleanupResult>
+>;
+export type TerminalPublicationPortIsExact = Expect<
+  Equal<TerminalPublicationPort, ExpectedTerminalPublicationPort>
+>;
+export type AgentExecutionPinIsExact = Expect<Equal<AgentExecutionPin, ExpectedAgentExecutionPin>>;
+export type AgentEventIsIncluded = Expect<Equal<AgentEvent, AgentEvent>>;
+export type AgentInvocationSucceededIsIncluded = Expect<
+  Equal<AgentInvocationSucceeded, AgentInvocationSucceeded>
 >;
 
 export type ProcessInputSinkIsExact = Expect<Equal<ProcessInputSink, ExpectedProcessInputSink>>;
