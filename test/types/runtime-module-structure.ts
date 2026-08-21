@@ -85,8 +85,6 @@ import type {
   ProcessIdentity,
   ProcessOutputSink,
   ProcessSpawnRequest,
-  ProcessStartRequest,
-  ProcessSupervisionPort,
   ProtocolAttachResult,
   ProtocolDriverCreateRequest,
   ProtocolDriverId,
@@ -353,16 +351,6 @@ type ExpectedRedactingBoundedOutputSink = ProcessOutputSink & {
   truncated(): boolean;
 };
 
-type ExpectedProcessStartRequest = {
-  readonly cwd: string;
-  readonly executable: string;
-  readonly args: readonly string[];
-  readonly environment: Readonly<Record<string, string>>;
-  readonly shell: false;
-  readonly stdout: ProcessOutputSink;
-  readonly stderr: ProcessOutputSink;
-};
-
 type ExpectedProcessSpawnRequest = {
   readonly invocationId: string;
   readonly cwd: string;
@@ -387,10 +375,6 @@ type ExpectedLiveOwnedProcess = {
   readonly identity: ProcessIdentity;
   readonly stdin: ProcessInputSink;
   terminateAndReap(): Promise<void>;
-};
-
-type ExpectedProcessSupervisionPort = {
-  start(request: ProcessStartRequest): Promise<LiveOwnedProcess>;
 };
 
 export type StrictSemVerIsExact = Expect<Equal<StrictSemVer, ExpectedStrictSemVer>>;
@@ -512,10 +496,6 @@ export type CreateRedactingBoundedOutputSinkIsExact = Expect<
   >
 >;
 
-export type ProcessStartRequestIsExact = Expect<
-  Equal<ProcessStartRequest, ExpectedProcessStartRequest>
->;
-
 export type ProcessSpawnRequestIsExact = Expect<
   Equal<ProcessSpawnRequest, ExpectedProcessSpawnRequest>
 >;
@@ -523,10 +503,6 @@ export type ProcessSpawnRequestIsExact = Expect<
 export type ProcessIdentityIsExact = Expect<Equal<ProcessIdentity, ExpectedProcessIdentity>>;
 
 export type LiveOwnedProcessIsExact = Expect<Equal<LiveOwnedProcess, ExpectedLiveOwnedProcess>>;
-
-export type ProcessSupervisionPortIsExact = Expect<
-  Equal<ProcessSupervisionPort, ExpectedProcessSupervisionPort>
->;
 
 export type ParseVersionOutputIsExact = Expect<
   Equal<

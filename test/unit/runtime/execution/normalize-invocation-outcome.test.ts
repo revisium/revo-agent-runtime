@@ -134,3 +134,26 @@ test('freezes a deep valid response iteratively without retaining its raw text',
   expect(Object.isFrozen(current)).toBe(true);
   expect(Object.hasOwn(outcome, 'rawResponse')).toBe(false);
 });
+
+test('validates an already parsed protocol response without reparsing raw bytes', () => {
+  let observed: unknown;
+  const parsed = Object.freeze({ ok: true });
+  const validator: ResultSchemaValidator = Object.freeze({
+    validate: (value: JsonObject) => {
+      observed = value;
+      return undefined;
+    },
+  });
+
+  const outcome = normalizeInvocationOutcome(
+    Object.freeze({
+      status: 'completed' as const,
+      parsedResponse: parsed,
+      rawResponse: new TextEncoder().encode('not-json'),
+    }),
+    validator,
+  );
+
+  expect(outcome).toEqual({ status: 'succeeded', value: { ok: true } });
+  expect(observed).toBe(parsed);
+});

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { Writable } from 'node:stream';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { afterEach, expect, test, vi } from 'vitest';
 
@@ -35,6 +36,8 @@ import {
   type ProcessOutputSink,
   type ProcessSpawnRequest,
 } from '../../../src/runtime/execution/index.js';
+import { NativeStdioProtocolDriver } from '../../../src/strategies/protocol-driver/index.js';
+import { CodexJsonlResultParser } from '../../../src/strategies/result-parser/index.js';
 
 class FakeReadable extends EventEmitter {
   readonly onCalls: string[] = [];
@@ -456,6 +459,27 @@ const waitFor = (predicate: () => boolean, attempts = 20): Promise<void> => {
   );
 };
 
+test('killUnactivated terminates accepted process and poisons later activation attempts', async () => {
+  const { attempt, child, dispatch, process } = await acceptedProcess();
+  const result = await attempt.settlement;
+  if (result.status !== 'spawn_accepted') throw new Error('Expected accepted spawn.');
+  child.emit('close', null, 'SIGTERM');
+
+  await dispatch.killUnactivated(process);
+
+  await expect(attempt.quiescence).resolves.toEqual({
+    status: 'quiescent',
+    disposition: 'cleanup_confirmed',
+  });
+  expect(
+    dispatch.activateIo(process, result.io, identityFor(child), coordinatorFor(attempt), {
+      secretValues: [],
+      maxStdoutBytes: 1_000,
+      maxStderrBytes: 1_000,
+    }),
+  ).toEqual({ status: 'rejected', reason: 'internal_invariant_violation' });
+});
+
 test('activateIo synchronously starts ordered independent stdout fan-out and stderr evidence pumping', async () => {
   const child = new FakeChild();
   child.stdout.chunks = [textEncoder.encode('stdout-a\n'), textEncoder.encode('stdout-b\n')];
@@ -537,6 +561,73 @@ test('stdout redaction uses independent evidence and protocol channels', async (
   await waitFor(() => events.includes('protocol-stdout:end'));
   expect(events).toContain('evidence-stdout:write:stdout-[REDACTED]');
   expect(events).toContain('protocol-stdout:write:stdout-[REDACTED]');
+});
+
+test('activated process completion waits for delayed terminal protocol-frame delivery', async () => {
+  const terminalOutput = `${JSON.stringify({
+    type: 'item.completed',
+    item: { type: 'agent_message', text: '{"ok":true}' },
+  })}\n${JSON.stringify({ type: 'turn.completed' })}\n`;
+  const child = new FakeChild();
+  child.stdout.chunks = [textEncoder.encode(terminalOutput)];
+  mocks.spawn.mockReturnValue(child);
+  const parser = new CodexJsonlResultParser(10_000);
+  const preparedSession = new NativeStdioProtocolDriver().create({
+    invocationId: 'spawn-dispatch-terminal-drain',
+    delivery: { prompt: 'argument', resultSchema: 'argument', result: 'stdout' },
+    cancellationSupported: false,
+    resultParser: parser,
+  });
+  let releaseTerminalFrame: (() => void) | undefined;
+  let terminalFrameWriteStarted = false;
+  const delayedProtocolSink: ProcessOutputSink = Object.freeze({
+    write: async (chunk: Uint8Array): Promise<void> => {
+      terminalFrameWriteStarted = true;
+      await new Promise<void>((resolve) => {
+        releaseTerminalFrame = resolve;
+      });
+      await preparedSession.protocolOutput.write(chunk);
+    },
+    end: (): Promise<void> => preparedSession.protocolOutput.end(),
+  });
+  const attempt = createProcessStartAttempt({ invocationId: 'spawn-dispatch-terminal-drain' });
+  const dispatch = new NodePosixProcessSpawnDispatch();
+
+  dispatch.beginStart(attempt, request());
+  child.emit('spawn');
+  const result = await attempt.settlement;
+  if (result.status !== 'spawn_accepted') throw new Error('Expected accepted spawn.');
+  const activation = dispatch.activateIo(
+    result.process,
+    result.io,
+    identityFor(child),
+    coordinatorFor(attempt),
+    {
+      secretValues: [],
+      maxStdoutBytes: 10_000,
+      maxStderrBytes: 10_000,
+      protocolObserverSink: delayedProtocolSink,
+    },
+  );
+  if (activation.status !== 'activated') throw new Error('Expected activation.');
+  const attachResult = await preparedSession.attach(activation.process.stdin);
+  if (attachResult.status !== 'attached') throw new Error('Expected protocol attach.');
+
+  await waitFor(() => terminalFrameWriteStarted);
+  child.emit('close', 0, null);
+  let completionSettled = false;
+  void activation.process.completion.then(() => {
+    completionSettled = true;
+  });
+  await delay(10);
+
+  expect(completionSettled).toBe(false);
+  releaseTerminalFrame?.();
+  await expect(activation.process.completion).resolves.toEqual({ exitCode: 0, signal: null });
+  await expect(attachResult.session.finishAfterProtocolOutputEnd()).resolves.toMatchObject({
+    status: 'completed',
+    response: { ok: true },
+  });
 });
 
 test('activateIo rejects mismatched tokens and sequential double activation synchronously', async () => {

@@ -46,6 +46,7 @@ import type {
   JsonValue,
 } from '../../runtime/spec/index.js';
 import { CompletedInvocations } from './completed-invocations.js';
+import { createNativeProcessExecutionPort } from './create-native-process-execution-port.js';
 import { InstalledBindingRegistry } from './installed-bindings.js';
 import { TerminalSubscriptions } from './subscriptions.js';
 
@@ -82,8 +83,11 @@ interface ActiveInvocation {
   readonly lifecycle: InvocationLifecycle;
 }
 
-type LifecycleManagerPorts = InvocationExecutionPorts &
-  Readonly<{ executableProbe?: ExecutableProbePort }>;
+type LifecycleManagerPorts = Omit<InvocationExecutionPorts, 'execution'> &
+  Readonly<{
+    execution?: InvocationExecutionPorts['execution'];
+    executableProbe?: ExecutableProbePort;
+  }>;
 
 type LifecycleStartOutcome =
   | Readonly<{ status: 'rejected'; reason: RejectionReason }>
@@ -336,6 +340,7 @@ const createHandle = (
 
 class InternalInvocationLifecycleManager {
   readonly #configuredSecretValues: readonly string[];
+  private readonly executionPort: InvocationExecutionPorts['execution'];
   private readonly active = new Map<string, ActiveInvocation>();
   private readonly pending = new Set<string>();
   // Retained until the future retained-claim reconciliation slice can inspect
@@ -356,6 +361,7 @@ class InternalInvocationLifecycleManager {
     configuredSecretValues: readonly string[],
   ) {
     this.#configuredSecretValues = configuredSecretValues;
+    this.executionPort = ports.execution ?? createNativeProcessExecutionPort();
   }
 
   async start(input: unknown, context?: unknown): Promise<LifecycleStartOutcome> {
@@ -408,8 +414,15 @@ class InternalInvocationLifecycleManager {
       }
 
       const completion = createDeferred<NormalizedInvocationOutcome>();
-      const lifecycle = new InvocationLifecycle(this.ports, snapshot, preparedLaunch, (outcome) =>
-        this.complete(snapshot.invocationId, completion, outcome),
+      const lifecyclePorts: InvocationExecutionPorts = Object.freeze({
+        ...this.ports,
+        execution: this.executionPort,
+      });
+      const lifecycle = new InvocationLifecycle(
+        lifecyclePorts,
+        snapshot,
+        preparedLaunch,
+        (outcome) => this.complete(snapshot.invocationId, completion, outcome),
       );
       this.active.set(snapshot.invocationId, Object.freeze({ completion, lifecycle }));
       this.pending.delete(snapshot.invocationId);

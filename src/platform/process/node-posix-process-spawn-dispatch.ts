@@ -296,6 +296,18 @@ export class NodePosixProcessSpawnDispatch {
     return PROCESS_SPAWN_HANDLES.get(attempt);
   }
 
+  async killUnactivated(process: SpawnAcceptedProcess): Promise<void> {
+    const handle = PROCESS_SPAWN_HANDLES.get(process);
+    const processGroupId = handle?.child.pid;
+    ACTIVATED.add(process);
+    if (handle === undefined || processGroupId === undefined) return;
+    await terminateAndReap(processGroupId, handle.completion);
+    settleProcessStartQuiescence(handle.attempt, {
+      status: 'quiescent',
+      disposition: 'cleanup_confirmed',
+    });
+  }
+
   async inspectIdentity(
     process: SpawnAcceptedProcess,
     activeStateDeadline: number,
@@ -365,15 +377,23 @@ export class NodePosixProcessSpawnDispatch {
       cleanup ??= terminateAndReap(identity.processGroupId, handle.completion);
       return cleanup;
     };
-    void pumpStdout(handle.stdout, evidenceStdout, protocolStdout, cleanupProcess).catch(
+    const stdoutPump = pumpStdout(
+      handle.stdout,
+      evidenceStdout,
+      protocolStdout,
+      cleanupProcess,
+    ).catch(() => undefined);
+    const stderrPump = pumpStderr(handle.stderr, evidenceStderr, cleanupProcess).catch(
       () => undefined,
     );
-    void pumpStderr(handle.stderr, evidenceStderr, cleanupProcess).catch(() => undefined);
+    const completion = Promise.allSettled([handle.completion, stdoutPump, stderrPump]).then(
+      async () => handle.completion,
+    );
 
     const liveOwnedProcess: LiveOwnedProcess = Object.freeze({
       spawnedAt: handle.spawnedAt,
       identity,
-      completion: handle.completion,
+      completion,
       stdin,
       terminateAndReap: cleanupProcess,
     });

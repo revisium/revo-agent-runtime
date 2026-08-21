@@ -4,11 +4,14 @@ import { ExecutionBindingToken } from '../../runtime/execution/execution-binding
 import type {
   PermissionStrategyPort,
   ProtocolDriverId,
+  ProtocolDriverPort,
   ResultParserId,
+  ResultParserPort,
 } from '../../runtime/execution/index.js';
 import { AGENT_FAULT_MESSAGES } from '../../runtime/policy/index.js';
 import type { AgentDefinitionContract, AgentFault } from '../../runtime/spec/index.js';
 import { CodexPermissionStrategy } from '../../strategies/permissions/index.js';
+import { NativeStdioProtocolDriver } from '../../strategies/protocol-driver/native-stdio/native-stdio-protocol-driver.js';
 import { CodexJsonlResultParser } from '../../strategies/result-parser/index.js';
 
 type PermissionStrategyId = AgentDefinitionContract['protocol']['permissionStrategy'];
@@ -16,7 +19,8 @@ type PromptDelivery = AgentDefinitionContract['delivery']['prompt'];
 type ResultSchemaDelivery = AgentDefinitionContract['delivery']['resultSchema'];
 type ResultDelivery = AgentDefinitionContract['delivery']['result'];
 
-type InstalledImplementation = object | ((...parameters: readonly never[]) => unknown);
+type InstalledImplementation = ProtocolDriverPort | PermissionStrategyPort | InstalledParserFactory;
+type InstalledParserFactory = new (maxBytes: number) => ResultParserPort;
 
 interface BindingKey {
   readonly protocolDriverId: ProtocolDriverId;
@@ -35,13 +39,13 @@ interface InstalledBinding extends BindingKey {
   readonly permission: PermissionStrategyPort;
 }
 
-const nativeStdioDriver = Object.freeze({ id: 'native/stdio-v1' });
+const nativeStdioDriver = new NativeStdioProtocolDriver();
 
 const installedDrivers = Object.freeze(
-  new Map<ProtocolDriverId, InstalledImplementation>([['native/stdio-v1', nativeStdioDriver]]),
+  new Map<ProtocolDriverId, ProtocolDriverPort>([['native/stdio-v1', nativeStdioDriver]]),
 );
 const installedParsers = Object.freeze(
-  new Map<ResultParserId, InstalledImplementation>([['codex-jsonl/v1', CodexJsonlResultParser]]),
+  new Map<ResultParserId, InstalledParserFactory>([['codex-jsonl/v1', CodexJsonlResultParser]]),
 );
 const installedPermissions = Object.freeze(
   new Map<PermissionStrategyId, PermissionStrategyPort>([
@@ -150,6 +154,17 @@ export class InstalledBindingRegistry {
     return new InstalledBindingRegistry(definitions);
   }
 
+  static resolveProtocolDriver(protocolDriverId: ProtocolDriverId): ProtocolDriverPort | undefined {
+    return resolveInstalledProtocolDriver(protocolDriverId);
+  }
+
+  static resolveResultParser(
+    resultParserId: ResultParserId,
+    maxBytes: number,
+  ): ResultParserPort | undefined {
+    return resolveInstalledResultParser(resultParserId, maxBytes);
+  }
+
   createBinding(target: ValidatedDefinition): Readonly<{
     readonly binding: BindingKey;
     readonly bindingToken: ExecutionBindingToken;
@@ -182,3 +197,17 @@ export class InstalledBindingRegistry {
     });
   }
 }
+
+const resolveInstalledProtocolDriver = (
+  protocolDriverId: ProtocolDriverId,
+): ProtocolDriverPort | undefined => {
+  return installedDrivers.get(protocolDriverId);
+};
+
+const resolveInstalledResultParser = (
+  resultParserId: ResultParserId,
+  maxBytes: number,
+): ResultParserPort | undefined => {
+  const Parser = installedParsers.get(resultParserId);
+  return Parser === undefined ? undefined : new Parser(maxBytes);
+};

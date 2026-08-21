@@ -132,8 +132,6 @@ export type {
   ProcessOutputSink,
   ProcessIdentity,
   ProcessSpawnRequest,
-  ProcessStartRequest,
-  ProcessSupervisionPort,
 } from './process-supervision-port/index.js';
 export {
   DuplexCoordinatorRegistration,
