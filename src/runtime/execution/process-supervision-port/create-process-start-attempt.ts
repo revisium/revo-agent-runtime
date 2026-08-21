@@ -103,29 +103,33 @@ const settleCancellationBeforeSpawn = (
   );
 };
 
-const handleSettle = (state: ProcessStartState, outcome: ProcessStartOutcome): void => {
-  if (state.phase !== 'pending') return;
+const handleSettle = (
+  state: ProcessStartState,
+  outcome: ProcessStartOutcome,
+): ProcessStartResult | undefined => {
+  if (state.phase !== 'pending') return undefined;
   state.phase = 'settled';
   if (outcome.status === 'accepted') {
-    state.settlement.resolve(
-      Object.freeze({
-        status: 'spawn_accepted',
-        process: SpawnAcceptedProcess.create({
-          invocationId: state.invocationId,
-          spawnedAt: outcome.spawnedAt,
-          invocationToken: state.invocationToken,
-        }),
-        io: PausedProcessIo.create({
-          invocationId: state.invocationId,
-          invocationToken: state.invocationToken,
-        }),
+    const result = Object.freeze({
+      status: 'spawn_accepted' as const,
+      process: SpawnAcceptedProcess.create({
+        invocationId: state.invocationId,
+        spawnedAt: outcome.spawnedAt,
+        invocationToken: state.invocationToken,
       }),
-    );
-    return;
+      io: PausedProcessIo.create({
+        invocationId: state.invocationId,
+        invocationToken: state.invocationToken,
+      }),
+    });
+    state.settlement.resolve(result);
+    return result;
   }
 
-  state.settlement.resolve(Object.freeze({ status: 'rejected', reason: 'spawn_failed' }));
+  const result = Object.freeze({ status: 'rejected' as const, reason: 'spawn_failed' as const });
+  state.settlement.resolve(result);
   state.quiescence.resolve(Object.freeze({ status: 'quiescent', disposition: 'not_spawned' }));
+  return result;
 };
 
 const settleRejectedNotSpawned = (

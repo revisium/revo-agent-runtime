@@ -52,3 +52,40 @@ test.runIf(process.platform === 'linux')(
     }
   },
 );
+
+test.runIf(process.platform === 'linux')(
+  'inspects a real accepted child identity through the dispatch registry',
+  async () => {
+    const attempt = createProcessStartAttempt({ invocationId: 'spawn-dispatch-identity' });
+    const dispatch = new NodePosixProcessSpawnDispatch();
+    dispatch.beginStart(attempt, {
+      invocationId: 'spawn-dispatch-identity',
+      cwd: process.cwd(),
+      executable: process.execPath,
+      args: ['--input-type=module', '--eval', 'setTimeout(() => {}, 5000);'],
+      environment: Object.freeze({}),
+      shell: false,
+      stdin: 'pipe',
+      stdout: ignoredOutput(),
+      stderr: ignoredOutput(),
+    });
+
+    const result = await attempt.settlement;
+    expect(result.status).toBe('spawn_accepted');
+    if (result.status !== 'spawn_accepted') throw new Error('Expected accepted spawn.');
+    const handle = dispatch.handle(attempt);
+    if (handle === undefined || handle.child.pid === undefined)
+      throw new Error('Expected a real spawned child handle.');
+
+    try {
+      const inspection = await dispatch.inspectIdentity(result.process, Date.now() + 1_000);
+      expect(inspection.status).toBe('identified');
+      if (inspection.status !== 'identified') throw new Error('Expected process identity.');
+      expect(inspection.identity.pid).toBe(handle.child.pid);
+      expect(inspection.identity.processGroupId).toBe(handle.child.pid);
+      expect(inspection.identity.fingerprint).toMatch(/^sha256:[0-9a-f]{64}$/u);
+    } finally {
+      process.kill(-handle.child.pid, 'SIGKILL');
+    }
+  },
+);

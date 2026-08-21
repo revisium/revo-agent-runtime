@@ -79,6 +79,7 @@ import type {
   beginProcessStart,
   createProcessStartAttempt,
   getProcessStartInvocationToken,
+  settleProcessStart,
   ProcessExitObservation,
   ProcessIdentity,
   ProcessOutputSink,
@@ -1046,6 +1047,16 @@ export type CreateProcessStartAttemptIsExact = Expect<
 
 export type BeginProcessStartIsExact = Expect<
   Equal<typeof beginProcessStart, (attempt: ProcessStartAttempt, dispatch: () => void) => void>
+>;
+
+export type SettleProcessStartIsExact = Expect<
+  Equal<
+    typeof settleProcessStart,
+    (
+      attempt: object,
+      outcome: Readonly<{ status: 'accepted'; spawnedAt: number }> | Readonly<{ status: 'failed' }>,
+    ) => ProcessStartResult | undefined
+  >
 >;
 
 export type GetProcessStartInvocationTokenIsExact = Expect<
