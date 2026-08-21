@@ -5,6 +5,7 @@ export type {
   AgentDescriptor,
   AgentRef,
   AgentVersionProbe,
+  AgentExecutionPin,
 } from './agent-definition/index.js';
 export type {
   AgentFault,
@@ -19,3 +20,15 @@ export type {
 } from './agent-probe/index.js';
 export type { JsonObject, JsonPrimitive, JsonSchema202012, JsonValue } from './json/index.js';
 export type { AgentManagerLimits, AgentManagerOptions } from './manager-options/index.js';
+export type { AgentEvent, AgentEventBase } from './agent-event/index.js';
+export type {
+  AgentCommittedOutputFiles,
+  AgentInvocationResult,
+  AgentInvocationResultBase,
+  AgentInvocationSucceeded,
+  AgentLaunchEvidence,
+  AgentOutputFiles,
+  AgentProcessExit,
+  AgentRawResponseDiagnostic,
+  AgentUsage,
+} from './agent-invocation-result/index.js';

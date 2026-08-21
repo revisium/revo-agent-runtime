@@ -292,3 +292,32 @@ test('rolls back stdout evidence and disposes front ends when stderr evidence op
   ).resolves.toEqual({ status: 'rejected', reason: 'evidence_open_failed' });
   await expect(lstat(stdoutPath)).rejects.toMatchObject({ code: 'ENOENT' });
 });
+
+test('creates owner-only events ndjson as a sibling capability outside process evidence sinks', async () => {
+  const outputDirectory = await createTemporaryOutputDirectory();
+  const result = await new NodePosixOutputPreparationPort().prepareClaimedOutput(
+    request(outputDirectory, []),
+  );
+
+  expect(result.status).toBe('prepared');
+  if (result.status !== 'prepared') throw new Error('Expected prepared result.');
+  expect(Object.keys(result.evidenceSinks).sort()).toEqual(['stderr', 'stdout']);
+  await expectOwnerOnlyMode(join(outputDirectory, 'events.ndjson'), 0o600);
+  await result.evidenceSinks.stdout.end();
+  await result.evidenceSinks.stderr.end();
+});
+
+test('rolls back stdout and stderr evidence when events evidence open fails', async () => {
+  const outputDirectory = await createTemporaryOutputDirectory();
+  await mkdir(join(outputDirectory, 'events.ndjson'));
+
+  await expect(
+    new NodePosixOutputPreparationPort().prepareClaimedOutput(request(outputDirectory, [])),
+  ).resolves.toEqual({ status: 'rejected', reason: 'evidence_open_failed' });
+  await expect(lstat(join(outputDirectory, 'stdout.log'))).rejects.toMatchObject({
+    code: 'ENOENT',
+  });
+  await expect(lstat(join(outputDirectory, 'stderr.log'))).rejects.toMatchObject({
+    code: 'ENOENT',
+  });
+});

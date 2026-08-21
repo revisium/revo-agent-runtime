@@ -2,6 +2,7 @@ import type {
   OutputPreparationMutationPort,
   OutputPreparationMutationRequest,
   OutputPreparationPlatformResult,
+  EventsAppendSink,
   ProcessOutputSink,
 } from '../../../src/runtime/execution/index.js';
 
@@ -48,6 +49,12 @@ const createFakeEvidenceSink = (): ProcessOutputSink =>
     end: async (): Promise<void> => undefined,
   });
 
+const createFakeEventsAppendSink = (): EventsAppendSink =>
+  Object.freeze({
+    write: async (): Promise<void> => undefined,
+    flush: async (): Promise<void> => undefined,
+  });
+
 const prepared = (): OutputPreparationPlatformResult =>
   Object.freeze({
     status: 'prepared',
@@ -57,6 +64,7 @@ const prepared = (): OutputPreparationPlatformResult =>
       stdout: createFakeEvidenceSink(),
       stderr: createFakeEvidenceSink(),
     }),
+    eventsAppendSink: createFakeEventsAppendSink(),
   });
 
 const platformRejected = (

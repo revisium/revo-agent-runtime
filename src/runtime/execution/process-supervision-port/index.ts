@@ -11,6 +11,7 @@ export type { ProcessStartAttempt } from './process-start-attempt.js';
 export type { ProcessStartQuiescence } from './process-start-quiescence.js';
 export type { ProcessStartResult } from './process-start-result.js';
 export type { RetainedCleanupAuthority } from './retained-cleanup-authority.js';
+export type { EventsAppendSink } from './events-append-sink.js';
 export type { ProcessOutputSink } from './process-output-sink.js';
 export type { ProcessIdentity } from './process-identity.js';
 export type { ProcessSpawnRequest } from './process-spawn-request.js';

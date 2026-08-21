@@ -135,6 +135,12 @@ const evidenceSink = (): ProcessOutputSink =>
     end: async (): Promise<void> => undefined,
   });
 
+const eventsAppendSink = () =>
+  Object.freeze({
+    write: async (): Promise<void> => undefined,
+    flush: async (): Promise<void> => undefined,
+  });
+
 class PreparedPayloadPort implements OutputPreparationMutationPort {
   constructor(
     private readonly result: Extract<OutputPreparationPlatformResult, { status: 'prepared' }>,
@@ -181,7 +187,13 @@ test('prepared resources retain the platform attestations and redaction fronts u
   });
   const evidenceSinks = Object.freeze({ stdout: evidenceSink(), stderr: evidenceSink() });
   const port = new PreparedPayloadPort(
-    Object.freeze({ status: 'prepared', attestations, frontEnds, evidenceSinks }),
+    Object.freeze({
+      status: 'prepared',
+      attestations,
+      frontEnds,
+      evidenceSinks,
+      eventsAppendSink: eventsAppendSink(),
+    }),
   );
   const { attempt } = await createAttempt(port);
 
