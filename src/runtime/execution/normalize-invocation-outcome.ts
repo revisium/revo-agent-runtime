@@ -32,6 +32,19 @@ const failure = (
     ...(input.rawResponse === undefined ? {} : { rawResponse: input.rawResponse }),
   });
 
+const validateParsedResponse = (
+  parsed: JsonObject,
+  validator: ResultSchemaValidator,
+): NormalizedInvocationOutcome => {
+  try {
+    const diagnostics = validator.validate(parsed);
+    if (diagnostics !== undefined) return failure('response_schema_mismatch', { diagnostics });
+  } catch {
+    return failure('response_schema_validation_failed');
+  }
+  return Object.freeze({ status: 'succeeded', value: parsed });
+};
+
 const parseObjectResponse = (
   rawResponse: Uint8Array | undefined,
   validator: ResultSchemaValidator,
@@ -77,5 +90,7 @@ export const normalizeInvocationOutcome = (
 ): NormalizedInvocationOutcome => {
   if (observation.status === 'cancelled') return Object.freeze({ status: 'cancelled' });
   if (observation.status === 'failed') return failure('execution_failed');
+  if (observation.parsedResponse !== undefined)
+    return validateParsedResponse(observation.parsedResponse, validator);
   return parseObjectResponse(observation.rawResponse, validator);
 };
