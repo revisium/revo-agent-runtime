@@ -13,6 +13,7 @@ import type {
   ProcessSupervisionPort,
 } from '../../runtime/execution/index.js';
 import { AGENT_MANAGER_LIMITS } from '../../runtime/policy/index.js';
+import { terminateProcessGroupAndReap } from './posix-process-group-termination.js';
 
 interface LinuxProcessFingerprintRecord {
   readonly schemaVersion: 'process-fingerprint/v1';
@@ -141,71 +142,15 @@ const assertOutputSink: (value: unknown, name: string) => asserts value is Proce
     throw new Error(`${name} output sink must provide write and end functions.`);
 };
 
-const processGroupExists = (processGroupId: number): boolean => {
-  try {
-    process.kill(-processGroupId, 0);
-    return true;
-  } catch (error: unknown) {
-    if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return false;
-    throw error;
-  }
-};
-
-const signalProcessGroup = (processGroupId: number, signal: NodeJS.Signals): void => {
-  try {
-    process.kill(-processGroupId, signal);
-  } catch (error: unknown) {
-    if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return;
-    throw error;
-  }
-};
-
-const waitForGroupAbsenceUntil = async (
-  processGroupId: number,
-  deadline: number,
-): Promise<boolean> => {
-  if (!processGroupExists(processGroupId)) return true;
-  if (Date.now() >= deadline) return false;
-
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, terminationPollMs);
-  });
-  return waitForGroupAbsenceUntil(processGroupId, deadline);
-};
-
-const waitForGroupAbsence = (processGroupId: number, timeoutMs: number): Promise<boolean> =>
-  waitForGroupAbsenceUntil(processGroupId, Date.now() + timeoutMs);
-
-const waitForClose = async <Value>(
-  completion: Promise<Value>,
-  timeoutMs: number,
-): Promise<boolean> => {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<false>((resolve) => {
-    timeoutId = setTimeout(() => resolve(false), timeoutMs);
-  });
-
-  try {
-    return await Promise.race([completion.then(() => true), timeout]);
-  } finally {
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
-  }
-};
-
-const terminateAndReap = async (
+const terminateAndReap = (
   processGroupId: number,
   completion: Promise<ProcessExitObservation>,
-): Promise<void> => {
-  signalProcessGroup(processGroupId, 'SIGTERM');
-  if (!(await waitForGroupAbsence(processGroupId, terminationGraceMs))) {
-    signalProcessGroup(processGroupId, 'SIGKILL');
-    if (!(await waitForGroupAbsence(processGroupId, postKillReapTimeoutMs)))
-      throw new Error('Process group did not terminate after SIGKILL.');
-  }
-
-  if (!(await waitForClose(completion, postKillReapTimeoutMs)))
-    throw new Error('Process leader did not close after its group terminated.');
-};
+): Promise<void> =>
+  terminateProcessGroupAndReap(processGroupId, completion, {
+    terminationGraceMs,
+    postKillReapTimeoutMs,
+    terminationPollMs,
+  });
 
 export class NodePosixProcessSupervisionPort implements ProcessSupervisionPort {
   private readonly inspect: ProcessIdentityInspector;
