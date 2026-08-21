@@ -144,23 +144,9 @@ export class NodePosixOutputPreparationPort implements OutputPreparationMutation
         );
       }
 
-      const attestations: OutputPreparationFileAttestation[] = [];
-      for (let index = 0; index < files.length; index += 1) {
-        const slot = files[index];
-        if (slot === undefined) continue;
-        const path = join(scratchDirectory, slotFileName(slot.slot));
-        // oxlint-disable-next-line no-await-in-loop -- slots must be written and zero-filled in deterministic ownership order.
-        const failure = await this.writeAndAttestSlot(slot, path, attestations);
-        if (failure !== undefined) {
-          // oxlint-disable-next-line no-await-in-loop -- rollback belongs to the failing slot before later buffers are released.
-          await removeBestEffort(path);
-          disposeFrontEnds(frontEnds);
-          slot.bytes.fill(0);
-          zeroFillSlots(files, index + 1);
-          return rejected(failure);
-        }
-        slot.bytes.fill(0);
-      }
+      const slotsResult = await this.writeAllSlots(files, scratchDirectory, frontEnds);
+      if (typeof slotsResult === 'string') return rejected(slotsResult);
+      const { attestations } = slotsResult;
 
       const evidenceSinks = await this.openEvidenceSinks(request.outputDirectory);
       if (evidenceSinks === undefined) {
@@ -179,6 +165,31 @@ export class NodePosixOutputPreparationPort implements OutputPreparationMutation
       if (files !== undefined) zeroFillSlots(files);
       return rejected('scratch_create_failed');
     }
+  }
+
+  private async writeAllSlots(
+    files: readonly OutputPreparationFileSlot[],
+    scratchDirectory: string,
+    frontEnds: OutputPreparationFrontEnds,
+  ): Promise<Readonly<{ attestations: OutputPreparationFileAttestation[] }> | RejectionReason> {
+    const attestations: OutputPreparationFileAttestation[] = [];
+    for (let index = 0; index < files.length; index += 1) {
+      const slot = files[index];
+      if (slot === undefined) continue;
+      const path = join(scratchDirectory, slotFileName(slot.slot));
+      // oxlint-disable-next-line no-await-in-loop -- slots must be written and zero-filled in deterministic ownership order.
+      const failure = await this.writeAndAttestSlot(slot, path, attestations);
+      if (failure !== undefined) {
+        // oxlint-disable-next-line no-await-in-loop -- rollback belongs to the failing slot before later buffers are released.
+        await removeBestEffort(path);
+        disposeFrontEnds(frontEnds);
+        slot.bytes.fill(0);
+        zeroFillSlots(files, index + 1);
+        return failure;
+      }
+      slot.bytes.fill(0);
+    }
+    return Object.freeze({ attestations });
   }
 
   private async openEvidenceSinks(
