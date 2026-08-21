@@ -6,6 +6,7 @@ import {
   getProcessStartInvocationToken,
   PausedProcessIo,
   SpawnAcceptedProcess,
+  settleProcessStart,
   type ProcessStartResult,
 } from '../../../../src/runtime/execution/index.js';
 import { FakeProcessStartPort } from '../../../support/execution/fake-process-start-port.js';
@@ -171,4 +172,22 @@ test('late cancellation after dispatch does not override a later accepted spawn'
   expect(result.process.spawnedAt).toBe(654_321);
   expect(port.attempts()).toHaveLength(1);
   expect(port.pendingStartCount()).toBe(0);
+});
+
+test('settleProcessStart returns the accepted carrier synchronously before promise reactions run', async () => {
+  const attempt = createProcessStartAttempt({ invocationId: 'process-start-test' });
+  const reactionOrder: string[] = [];
+  void attempt.settlement.then(() => {
+    reactionOrder.push('pre-existing-caller-reaction');
+  });
+
+  const settled = settleProcessStart(attempt, { status: 'accepted', spawnedAt: 987_654 });
+  reactionOrder.push('after-settle-returned');
+
+  expect(settled?.status).toBe('spawn_accepted');
+  if (settled?.status !== 'spawn_accepted') throw new Error('Expected accepted process start.');
+  expect(settled.process.spawnedAt).toBe(987_654);
+  expect(reactionOrder).toEqual(['after-settle-returned']);
+  await attempt.settlement;
+  expect(reactionOrder).toEqual(['after-settle-returned', 'pre-existing-caller-reaction']);
 });
