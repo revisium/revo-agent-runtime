@@ -43,6 +43,8 @@ interface PendingExecution {
   completionSettled: boolean;
 }
 
+const defaultSpawnedAt = 123_456;
+
 const rawResponseEvidence = (bytes: Uint8Array) =>
   BoundedRawResponseEvidence.create({
     byteLength: bytes.byteLength,
@@ -135,6 +137,7 @@ export class FakeInvocationExecutionPort
     execution.completion.resolve(
       Object.freeze({
         status: 'completed',
+        spawnedAt: defaultSpawnedAt,
         exit: Object.freeze({ exitCode: 0, signal: null }),
         ...(rawResponse === undefined ? {} : { rawResponse: rawResponseEvidence(rawResponse) }),
       }),
@@ -150,6 +153,7 @@ export class FakeInvocationExecutionPort
     execution.completion.resolve(
       Object.freeze({
         status: 'cancelled',
+        spawnedAt: defaultSpawnedAt,
         exit: Object.freeze({ exitCode: null, signal: 'SIGTERM' }),
       }),
     );
@@ -192,6 +196,7 @@ export class FakeInvocationExecutionPort
     };
     this.executions.set(executionId, execution);
     return {
+      spawnedAt: defaultSpawnedAt,
       completion: execution.completion.promise,
       requestCancellation: () => this.requestCancellation(executionId),
     };

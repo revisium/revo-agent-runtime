@@ -25,20 +25,28 @@ type NativeDispatch = Pick<
   'beginStart' | 'inspectIdentity' | 'killUnactivated' | 'activateIo'
 >;
 
-const activeStateInspectionTimeoutMs = 5_000;
+const AFTER_DEADLINE = Symbol('after-deadline');
 const syntheticNoProcessExit: ProcessExitObservation = Object.freeze({
   exitCode: null,
   signal: null,
 });
 
+const sleepUntil = (deadlineAt: number): Promise<typeof AFTER_DEADLINE> =>
+  new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(AFTER_DEADLINE), Math.max(0, deadlineAt - Date.now()));
+    timer.unref?.();
+  });
+
 const failedObservation = (
+  spawnedAt: number,
   primary: InterimDuplexPrimaryFailure = Object.freeze({ kind: 'internal' as const }),
   exit: ProcessExitObservation = syntheticNoProcessExit,
-): InvocationTerminalObservation => Object.freeze({ status: 'failed', exit, primary });
+): InvocationTerminalObservation => Object.freeze({ status: 'failed', spawnedAt, exit, primary });
 
-const failedExecution = (): RunningExecution =>
+const failedExecution = (spawnedAt: number): RunningExecution =>
   Object.freeze({
-    completion: Promise.resolve(failedObservation()),
+    spawnedAt,
+    completion: Promise.resolve(failedObservation(spawnedAt)),
     requestCancellation: async (): Promise<void> => undefined,
   });
 
@@ -82,10 +90,12 @@ const createRequest = (
 
 export const createNativeProcessExecutionPort = (
   dispatch: NativeDispatch = new NodePosixProcessSpawnDispatch(),
+  activeStateOperationTimeoutMs: number = AGENT_MANAGER_LIMITS.activeStateOperationTimeoutMs
+    .default,
 ): InvocationExecutionPorts['execution'] =>
   Object.freeze({
     start: async (snapshot, preparedLaunch, resources): Promise<RunningExecution> => {
-      if (resources === undefined) return failedExecution();
+      if (resources === undefined) return failedExecution(Date.now());
       let rawResponseDisposed = false;
       let rawResponseCapture: RawResponseCapture | undefined;
       const disposeRawResponse = (): void => {
@@ -103,17 +113,33 @@ export const createNativeProcessExecutionPort = (
       const settlement = await attempt.settlement;
       if (settlement.status !== 'spawn_accepted') {
         disposeAllFrontEnds();
-        return failedExecution();
+        return failedExecution(Date.now());
       }
+
+      const preacceptanceDeadlineAt =
+        settlement.process.spawnedAt +
+        Math.min(snapshot.wallClockTimeoutMs, snapshot.limits.idleTimeoutMs);
 
       const identity = await dispatch.inspectIdentity(
         settlement.process,
-        Date.now() + activeStateInspectionTimeoutMs,
+        Math.min(Date.now() + activeStateOperationTimeoutMs, preacceptanceDeadlineAt),
       );
       if (identity.status !== 'identified') {
         await dispatch.killUnactivated(settlement.process);
         disposeAllFrontEnds();
-        return failedExecution();
+        if (identity.reason === 'deadline')
+          return Object.freeze({
+            spawnedAt: settlement.process.spawnedAt,
+            completion: Promise.resolve(
+              Object.freeze({
+                status: 'cancelled' as const,
+                spawnedAt: settlement.process.spawnedAt,
+                exit: syntheticNoProcessExit,
+              }),
+            ),
+            requestCancellation: async (): Promise<void> => undefined,
+          });
+        return failedExecution(settlement.process.spawnedAt);
       }
 
       rawResponseCapture = createRawResponseCapture({
@@ -136,7 +162,7 @@ export const createNativeProcessExecutionPort = (
       if (driver === undefined || parser === undefined) {
         await dispatch.killUnactivated(settlement.process);
         disposeAllFrontEnds();
-        return failedExecution();
+        return failedExecution(settlement.process.spawnedAt);
       }
 
       const preparedSession = driver.create({
@@ -152,7 +178,7 @@ export const createNativeProcessExecutionPort = (
       if (coordinator === undefined) {
         await dispatch.killUnactivated(settlement.process);
         disposeAllFrontEnds();
-        return failedExecution();
+        return failedExecution(settlement.process.spawnedAt);
       }
       const activation = dispatch.activateIo(
         settlement.process,
@@ -172,16 +198,48 @@ export const createNativeProcessExecutionPort = (
       );
       if (activation.status !== 'activated') {
         disposeAllFrontEnds();
-        return failedExecution();
+        return failedExecution(settlement.process.spawnedAt);
       }
 
-      const attachResult = await preparedSession.attach(activation.process.stdin);
+      const attachOutcome = await Promise.race([
+        preparedSession.attach(activation.process.stdin).catch(() => undefined),
+        sleepUntil(preacceptanceDeadlineAt),
+      ]);
+      if (attachOutcome === AFTER_DEADLINE || attachOutcome === undefined) {
+        if (attachOutcome === AFTER_DEADLINE) void activation.process.terminateAndReap();
+        // activateIo already owns live pumps here; immediate front-end disposal would race their writes.
+        const completion: Promise<InvocationTerminalObservation> =
+          activation.process.completion.then(
+            (exit) => {
+              disposeRawResponse();
+              return Object.freeze({
+                status: 'cancelled' as const,
+                spawnedAt: settlement.process.spawnedAt,
+                exit,
+              });
+            },
+            () => {
+              disposeRawResponse();
+              return failedObservation(settlement.process.spawnedAt);
+            },
+          );
+        return Object.freeze({
+          spawnedAt: settlement.process.spawnedAt,
+          completion,
+          requestCancellation: async (): Promise<void> => undefined,
+        });
+      }
+      const attachResult = attachOutcome;
       if (attachResult.status !== 'attached') {
         await activation.process.terminateAndReap();
         disposeAllFrontEnds();
         return Object.freeze({
+          spawnedAt: settlement.process.spawnedAt,
           completion: Promise.resolve(
-            failedObservation(Object.freeze({ kind: attachResult.reason }), syntheticNoProcessExit),
+            failedObservation(
+              settlement.process.spawnedAt,
+              Object.freeze({ kind: attachResult.reason }),
+            ),
           ),
           requestCancellation: async (): Promise<void> => undefined,
         });
@@ -195,6 +253,7 @@ export const createNativeProcessExecutionPort = (
             if (exit.exitCode === 0 && exit.signal === null)
               return Object.freeze({
                 status: 'completed' as const,
+                spawnedAt: settlement.process.spawnedAt,
                 exit,
                 parsedResponse: observation.response,
                 ...(observation.usage === undefined ? {} : { usage: observation.usage }),
@@ -202,7 +261,11 @@ export const createNativeProcessExecutionPort = (
                   ? {}
                   : { rawResponse: observation.rawResponse }),
               });
-            return failedObservation(Object.freeze({ kind: 'process_failed' }), exit);
+            return failedObservation(
+              settlement.process.spawnedAt,
+              Object.freeze({ kind: 'process_failed' }),
+              exit,
+            );
           }
           const primary: InterimDuplexPrimaryFailure =
             observation.failure.kind === 'parser_failed'
@@ -210,6 +273,7 @@ export const createNativeProcessExecutionPort = (
               : Object.freeze({ kind: 'internal' as const });
           return Object.freeze({
             status: 'failed' as const,
+            spawnedAt: settlement.process.spawnedAt,
             exit,
             primary,
             ...(observation.rawResponse === undefined
@@ -219,10 +283,11 @@ export const createNativeProcessExecutionPort = (
         })
         .catch(() => {
           disposeRawResponse();
-          return failedObservation();
+          return failedObservation(settlement.process.spawnedAt);
         });
 
       return Object.freeze({
+        spawnedAt: settlement.process.spawnedAt,
         completion,
         requestCancellation: async (): Promise<void> => {
           const sent = await attachResult.session.requestCancellation();

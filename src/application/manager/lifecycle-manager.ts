@@ -361,7 +361,9 @@ class InternalInvocationLifecycleManager {
     configuredSecretValues: readonly string[],
   ) {
     this.#configuredSecretValues = configuredSecretValues;
-    this.executionPort = ports.execution ?? createNativeProcessExecutionPort();
+    this.executionPort =
+      ports.execution ??
+      createNativeProcessExecutionPort(undefined, limits.activeStateOperationTimeoutMs);
   }
 
   async start(input: unknown, context?: unknown): Promise<LifecycleStartOutcome> {

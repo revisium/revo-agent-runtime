@@ -1,4 +1,4 @@
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
 import { createNativeProcessExecutionPort } from '../../../../src/application/manager/index.js';
 import {
@@ -24,7 +24,15 @@ const resultSchema = Object.freeze({
 
 const acceptObject: ResultSchemaValidator = Object.freeze({ validate: () => undefined });
 
-const snapshot = (invocationId = 'native-execution-unit'): InvocationInputSnapshot => {
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
+const snapshot = (
+  invocationId = 'native-execution-unit',
+  limits?: Readonly<{ wallClockTimeoutMs: number; idleTimeoutMs: number }>,
+): InvocationInputSnapshot => {
   const value = InvocationInputSnapshot.create({
     invocationId,
     agent: { id: 'fixture-agent', version: '1.0.0' },
@@ -34,6 +42,7 @@ const snapshot = (invocationId = 'native-execution-unit'): InvocationInputSnapsh
     permissions: {},
     result: { schema: resultSchema },
     output: { directory: '/outputs/invocation' },
+    ...(limits === undefined ? {} : { limits }),
   });
   if (value === undefined) throw new Error('Expected snapshot.');
   return value;
@@ -122,6 +131,24 @@ const preparedResourcesWithSpies = (): {
       }),
     }),
   };
+};
+
+interface Deferred<Value> {
+  readonly promise: Promise<Value>;
+  readonly resolve: (value: Value) => void;
+  readonly reject: (reason: Error) => void;
+}
+
+const deferred = <Value>(): Deferred<Value> => {
+  let resolve: ((value: Value) => void) | undefined;
+  let reject: ((reason: Error) => void) | undefined;
+  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  if (resolve === undefined || reject === undefined)
+    throw new Error('Unable to create deferred test helper');
+  return { promise, resolve, reject };
 };
 
 const binding = Object.freeze({
@@ -261,7 +288,7 @@ test.runIf(process.platform === 'linux')(
       preparedResources(),
     );
 
-    await expect(running.completion).resolves.toEqual({
+    await expect(running.completion).resolves.toMatchObject({
       status: 'failed',
       exit: { exitCode: 7, signal: null },
       primary: { kind: 'process_failed' },
@@ -454,6 +481,12 @@ const fakeLiveProcess = (terminateAndReap: () => Promise<void>): LiveOwnedProces
     terminateAndReap,
   });
 
+const pendingInput: ProcessInputSink = Object.freeze({
+  write: async (): Promise<void> => new Promise(() => undefined),
+  end: async (): Promise<void> => undefined,
+  abort: async (): Promise<void> => undefined,
+});
+
 test('failed protocol attach terminates the activated process and fails completion', async () => {
   const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
   const identity: ProcessIdentity = Object.freeze({
@@ -518,4 +551,119 @@ test('rejected spawn completion fails without hanging or cancellation work', asy
 
   await expect(running.completion).resolves.toMatchObject({ status: 'failed' });
   await expect(running.requestCancellation()).resolves.toBeUndefined();
+});
+
+test('clamps identity inspection to the earlier preacceptance deadline and reports deadline as cancelled', async () => {
+  const now = 10_050;
+  const spawnedAt = 10_000;
+  const inspectIdentity = vi.fn(async () => ({
+    status: 'failed' as const,
+    reason: 'deadline' as const,
+  }));
+  const dispatch: NonNullable<NativeDispatchParameter> = {
+    beginStart: vi.fn((attempt: ProcessStartAttempt) => {
+      settleProcessStart(attempt, { status: 'accepted', spawnedAt });
+    }),
+    inspectIdentity,
+    killUnactivated: vi.fn(async (): Promise<void> => undefined),
+    activateIo: vi.fn(),
+  };
+  vi.spyOn(Date, 'now').mockReturnValue(now);
+  const launch = preparedLaunch();
+  const input = snapshot('native-identity-deadline', {
+    wallClockTimeoutMs: 2_000,
+    idleTimeoutMs: 1_000,
+  });
+  const execution = createNativeProcessExecutionPort(dispatch, 1_000);
+
+  const running = await execution.start(input, launch, preparedResources());
+
+  expect(inspectIdentity).toHaveBeenCalledWith(expect.anything(), spawnedAt + 1_000);
+  await expect(running.completion).resolves.toEqual({
+    status: 'cancelled',
+    spawnedAt,
+    exit: { exitCode: null, signal: null },
+  });
+  expect(running.spawnedAt).toBe(spawnedAt);
+  expect(dispatch.killUnactivated).toHaveBeenCalledTimes(1);
+});
+
+test('bounds protocol attach by preacceptance deadline without disposing live stdout and stderr front ends', async () => {
+  vi.useFakeTimers();
+  try {
+    const spawnedAt = 20_000;
+    vi.setSystemTime(spawnedAt);
+    const resources = preparedResourcesWithSpies();
+    const exit = deferred<{ readonly exitCode: 0; readonly signal: null }>();
+    const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+    const identity: ProcessIdentity = Object.freeze({
+      pid: 10,
+      processGroupId: 10,
+      fingerprint: 'sha256:test',
+    });
+    const dispatch: NonNullable<NativeDispatchParameter> = {
+      beginStart: vi.fn((attempt: ProcessStartAttempt) => {
+        settleProcessStart(attempt, { status: 'accepted', spawnedAt });
+      }),
+      inspectIdentity: vi.fn(async () => ({ status: 'identified' as const, identity })),
+      killUnactivated: vi.fn(),
+      activateIo: vi.fn(() => ({
+        status: 'activated' as const,
+        process: Object.freeze({
+          spawnedAt,
+          identity,
+          completion: exit.promise,
+          stdin: pendingInput,
+          terminateAndReap,
+        }),
+      })),
+    };
+    const launch = preparedLaunch({
+      binding: {
+        ...binding,
+        delivery: { prompt: 'stdin', resultSchema: 'argument', result: 'stdout' },
+      },
+      bindingToken: ExecutionBindingToken.create({
+        agentId: 'fixture-agent',
+        agentVersion: '1.0.0',
+        definitionDigest: 'digest',
+        ...binding,
+        delivery: { prompt: 'stdin', resultSchema: 'argument', result: 'stdout' },
+      }),
+      preparedPayloads: {
+        arguments: ['--input-type=module', '--eval', 'setTimeout(() => {}, 10_000);'],
+        stdin: new TextEncoder().encode('prompt'),
+        files: [],
+      },
+    });
+    const execution = createNativeProcessExecutionPort(dispatch, 30_000);
+
+    const start = execution.start(
+      snapshot('native-attach-deadline', {
+        wallClockTimeoutMs: 2_000,
+        idleTimeoutMs: 1_000,
+      }),
+      launch,
+      resources.resources,
+    );
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(1_000);
+    const running = await start;
+
+    expect(running.spawnedAt).toBe(spawnedAt);
+    expect(terminateAndReap).toHaveBeenCalledTimes(1);
+    expect(resources.stdout.disposed()).toBe(0);
+    expect(resources.stderr.disposed()).toBe(0);
+    expect(resources.rawResponse.disposed()).toBe(0);
+
+    exit.resolve(Object.freeze({ exitCode: 0, signal: null }));
+    await expect(running.completion).resolves.toEqual({
+      status: 'cancelled',
+      spawnedAt,
+      exit: { exitCode: 0, signal: null },
+    });
+    expect(resources.rawResponse.disposed()).toBe(1);
+  } finally {
+    vi.useRealTimers();
+  }
 });

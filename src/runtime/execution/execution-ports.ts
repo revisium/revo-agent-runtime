@@ -21,6 +21,7 @@ export interface InvocationExecutionPorts {
       preparedLaunch: PreparedLaunch,
       resources?: PreparedInvocationResourcesPayload,
     ): Promise<{
+      readonly spawnedAt: number;
       readonly completion: Promise<InvocationTerminalObservation>;
       requestCancellation(): Promise<void>;
     }>;

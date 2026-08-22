@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
 import {
   ExecutionBindingToken,
@@ -18,7 +18,14 @@ const flush = async (): Promise<void> => {
   await Promise.resolve();
 };
 
-const snapshot = (): InvocationInputSnapshot => {
+const defaultSpawnedAt = 123_456;
+
+const snapshot = (
+  limits: Readonly<{ wallClockTimeoutMs: number; idleTimeoutMs: number }> = {
+    wallClockTimeoutMs: 1_000,
+    idleTimeoutMs: 1_000,
+  },
+): InvocationInputSnapshot => {
   const value = InvocationInputSnapshot.create({
     invocationId: 'lifecycle',
     agent: { id: 'codex', version: '1.0.0' },
@@ -28,7 +35,7 @@ const snapshot = (): InvocationInputSnapshot => {
     permissions: {},
     result: { schema: resultSchema },
     output: { directory: '/outputs/invocation' },
-    limits: { wallClockTimeoutMs: 1_000, idleTimeoutMs: 1_000 },
+    limits,
   });
   if (value === undefined) throw new Error('Unable to create test snapshot');
   return value;
@@ -73,6 +80,7 @@ const preparedLaunch = (): PreparedLaunch => {
 const startLifecycle = (
   execution: FakeInvocationExecutionPort,
   clock = new FakeInvocationClock({ initialNowMs: 0 }),
+  inputSnapshot = snapshot(),
 ) => {
   const settlements: Array<{ readonly status: string }> = [];
   const output = new FakeInvocationOutputPort();
@@ -90,13 +98,17 @@ const startLifecycle = (
           Object.freeze({ status: 'admitted' as const, directory: '/workspace/project' }),
       },
     },
-    snapshot(),
+    inputSnapshot,
     prepared,
     (settlement) => settlements.push(settlement),
   );
   lifecycle.begin();
   return { lifecycle, settlements, clock, prepared };
 };
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const bindingToken = (agentId: string, definitionDigest: string): ExecutionBindingToken =>
   ExecutionBindingToken.create({
@@ -198,12 +210,89 @@ test('moves accepted through starting and running before natural completion', as
   expect(lifecycle.currentState()).toBe('starting');
   await flush();
   expect(lifecycle.currentState()).toBe('running');
-  expect(clock.pendingActionCount()).toBe(1);
+  expect(clock.pendingActionCount()).toBe(2);
   execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
   await flush();
   expect(settlements).toMatchObject([{ status: 'succeeded', value: {} }]);
   expect(lifecycle.currentState()).toBe('terminal');
   expect(clock.pendingActionCount()).toBe(0);
+});
+
+test('requests deadline cancellation when idle deadline arrives before wall deadline', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(defaultSpawnedAt);
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueStart('running');
+  const { clock } = startLifecycle(
+    execution,
+    new FakeInvocationClock({ initialNowMs: 0 }),
+    snapshot({ wallClockTimeoutMs: 2_000, idleTimeoutMs: 1_000 }),
+  );
+  await flush();
+
+  clock.advanceBy(999);
+  await flush();
+  expect(execution.calls()).toEqual([{ type: 'start' }]);
+
+  clock.advanceBy(1);
+  await flush();
+  expect(execution.calls()).toEqual([
+    { type: 'start' },
+    { type: 'request-cancellation', executionId: 1 },
+  ]);
+});
+
+test('subtracts elapsed preacceptance time from spawnedAt anchored deadlines', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(defaultSpawnedAt + 700);
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueStart('running');
+  const { clock } = startLifecycle(
+    execution,
+    new FakeInvocationClock({ initialNowMs: 0 }),
+    snapshot({ wallClockTimeoutMs: 1_000, idleTimeoutMs: 1_000 }),
+  );
+  await flush();
+
+  clock.advanceBy(299);
+  await flush();
+  expect(execution.calls()).toEqual([{ type: 'start' }]);
+
+  clock.advanceBy(1);
+  await flush();
+  expect(execution.calls()).toEqual([
+    { type: 'start' },
+    { type: 'request-cancellation', executionId: 1 },
+  ]);
+});
+
+test('disarms both wall and idle deadline schedules after natural completion', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(defaultSpawnedAt);
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueStart('running');
+  const { settlements, clock } = startLifecycle(execution);
+  await flush();
+
+  expect(clock.pendingActionCount()).toBe(2);
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
+  await flush();
+
+  expect(settlements).toMatchObject([{ status: 'succeeded', value: {} }]);
+  expect(clock.pendingActionCount()).toBe(0);
+});
+
+test('keeps caller-confirmed cancellation classified as cancelled after deadline polarity change', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueStart('running');
+  const { lifecycle, settlements } = startLifecycle(execution);
+  await flush();
+
+  const cancellation = lifecycle.requestCancellation();
+  await flush();
+  execution.settleCancellationRequest(1);
+  await expect(cancellation).resolves.toBeUndefined();
+  execution.confirmCancellation(1);
+  await flush();
+
+  expect(settlements).toMatchObject([{ status: 'cancelled' }]);
 });
 
 test('commits failed once when execution completion rejects', async () => {
