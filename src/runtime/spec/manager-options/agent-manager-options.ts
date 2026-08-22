@@ -1,6 +1,8 @@
 import type { AgentDefinitionInput } from '../agent-definition/index.js';
 
 export interface AgentManagerLimits {
+  readonly activeStateOperationTimeoutMs?: number;
+  readonly initializationTimeoutMs?: number;
   readonly wallClockTimeoutMs?: number;
   readonly idleTimeoutMs?: number;
   readonly maxEventBytes?: number;

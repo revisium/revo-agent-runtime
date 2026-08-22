@@ -312,6 +312,8 @@ test('exposes the exact frozen agent runtime limits', () => {
 
 test('exposes the exact frozen agent manager limit descriptors', () => {
   expect(AGENT_MANAGER_LIMITS).toEqual({
+    activeStateOperationTimeoutMs: { minimum: 100, default: 10_000, maximum: 30_000 },
+    initializationTimeoutMs: { minimum: 1_000, default: 120_000, maximum: 1_800_000 },
     wallClockTimeoutMs: { minimum: 1_000, default: 1_800_000, maximum: 1_800_000 },
     idleTimeoutMs: { minimum: 1_000, default: 300_000, maximum: 300_000 },
     maxEventBytes: { minimum: 1_024, default: 65_536, maximum: 65_536 },

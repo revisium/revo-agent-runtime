@@ -491,6 +491,46 @@ test('killUnactivated terminates accepted process and poisons later activation a
   ).toEqual({ status: 'rejected', reason: 'internal_invariant_violation' });
 });
 
+test('racing activation and unactivated cleanup produces exactly one teardown owner', async () => {
+  const { attempt, child, dispatch, process: accepted } = await acceptedProcess();
+  const result = await attempt.settlement;
+  if (result.status !== 'spawn_accepted') throw new Error('Expected accepted spawn.');
+  const killSignals: Array<readonly [pid: number, signal?: string | number]> = [];
+  const killSpy = vi
+    .spyOn(globalThis.process, 'kill')
+    .mockImplementation((pid: number, signal?: string | number): true => {
+      killSignals.push(signal === undefined ? [pid] : [pid, signal]);
+      return true;
+    });
+
+  try {
+    const activation = dispatch.activateIo(
+      accepted,
+      result.io,
+      identityFor(child),
+      coordinatorFor(attempt),
+      {
+        secretValues: [],
+        maxStdoutBytes: 1_000,
+        maxStderrBytes: 1_000,
+        evidenceFrontEnds: evidenceFrontEnds(),
+      },
+    );
+    const cleanup = dispatch.killUnactivated(accepted);
+
+    expect(activation.status).toBe('activated');
+    await expect(cleanup).resolves.toBeUndefined();
+    await expect(attempt.quiescence).resolves.toEqual({
+      status: 'quiescent',
+      disposition: 'transferred_to_coordinator',
+    });
+    expect(killSignals).toEqual([]);
+  } finally {
+    killSpy.mockRestore();
+    child.emit('close', 0, null);
+  }
+});
+
 test('activateIo synchronously starts ordered independent stdout fan-out and stderr evidence pumping', async () => {
   const child = new FakeChild();
   child.stdout.chunks = [textEncoder.encode('stdout-a\n'), textEncoder.encode('stdout-b\n')];
