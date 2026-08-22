@@ -27,6 +27,9 @@ import type {
   ChildEnvironmentRequest,
   ConsumedOutputPreparationMaterial,
   ConsumedRedactionMaterial,
+  duplexCompletion,
+  DuplexOperation,
+  DuplexTerminalObservation,
   PreparedInvocationMaterial,
   PreparedInvocation,
   OutputPreparationFileSlot,
@@ -41,6 +44,7 @@ import type {
   inspectOutputClaimGuard,
   InvocationExecutionPorts,
   InvocationInputSnapshot,
+  InterimDuplexPrimaryFailure,
   InvocationTerminalObservation,
   InvocationTokenCarrier,
   LiveOwnedProcess,
@@ -74,6 +78,9 @@ import type {
   DuplexCoordinatorRegistration,
   PausedProcessIo,
   PreparedProtocolSession,
+  ProcessCleanupFailure,
+  ProcessCleanupFailureCause,
+  ProcessCleanupFailureEvidence,
   ProcessIdentityInspectionResult,
   ProcessInputSink,
   ProcessIoActivationResult,
@@ -86,6 +93,7 @@ import type {
   getProcessStartInvocationToken,
   settleProcessStart,
   settleProcessStartQuiescence,
+  submitDuplexCandidate,
   ProcessExitObservation,
   ProcessIdentity,
   ProcessOutputSink,
@@ -174,6 +182,7 @@ type ExpectedAgentFaultCode =
   | 'revo.agent.protocol_failed'
   | 'revo.agent.output_write_failed'
   | 'revo.agent.process_failed'
+  | 'revo.agent.process_cleanup_failed'
   | 'revo.agent.result_missing'
   | 'revo.agent.result_too_large'
   | 'revo.agent.result_invalid_json'
@@ -912,6 +921,92 @@ type ExpectedInvocationOnlyCarrier = {
   readonly invocationId: string;
 };
 
+type ExpectedDuplexOperation =
+  | 'attach'
+  | 'stdin_write'
+  | 'stdin_end'
+  | 'stdout_write'
+  | 'stdout_end'
+  | 'stderr_write'
+  | 'stderr_end'
+  | 'protocol_write'
+  | 'protocol_end'
+  | 'parser_finish';
+
+type ExpectedProcessCleanupFailureCause =
+  | 'inspection_timeout'
+  | 'inspection_rejected'
+  | 'group_state_unknown'
+  | 'termination_rejected'
+  | 'post_kill_confirmation_rejected'
+  | 'group_still_live'
+  | 'post_kill_confirmation_timeout'
+  | 'leader_reap_timeout'
+  | 'leader_reap_rejected';
+
+type ExpectedProcessCleanupFailureEvidence = {
+  readonly trigger: 'natural_exit';
+  readonly cause: ProcessCleanupFailureCause;
+  readonly termSent: boolean;
+  readonly killSent: boolean;
+  readonly lastKnownGroupState: 'absent' | 'present' | 'unknown';
+  readonly leaderReapState: 'confirmed' | 'pending' | 'unknown';
+};
+
+type ExpectedProcessCleanupFailure = {
+  readonly kind: 'process_cleanup_failed';
+  readonly cause: ProcessCleanupFailureCause;
+  readonly evidence: ProcessCleanupFailureEvidence;
+};
+
+type ExpectedInterimDuplexPrimaryFailure =
+  | Readonly<{ kind: 'attach_failed' }>
+  | Readonly<{ kind: 'stdin_write_failed' }>
+  | Readonly<{ kind: 'stdin_end_failed' }>
+  | Readonly<{ kind: 'stdout_sink_failed' }>
+  | Readonly<{ kind: 'stderr_sink_failed' }>
+  | Readonly<{ kind: 'protocol_sink_failed' }>
+  | Readonly<{ kind: 'parser_failed'; reason: ParserFailureReason }>
+  | Readonly<{ kind: 'result_schema_failed' }>
+  | Readonly<{ kind: 'process_failed' }>
+  | Readonly<{ kind: 'duplex_operation_timeout'; operation: DuplexOperation }>
+  | ProcessCleanupFailure
+  | Readonly<{ kind: 'internal' }>;
+
+type ExpectedInvocationTerminalObservation =
+  | Readonly<{
+      status: 'completed';
+      spawnedAt: number;
+      exit: ProcessExitObservation;
+      rawResponse?: BoundedRawResponseEvidence;
+      parsedResponse?: JsonObject;
+      usage?: ResultParserUsage;
+    }>
+  | Readonly<{
+      status: 'cancelled';
+      spawnedAt: number;
+      exit: ProcessExitObservation;
+      usage?: ResultParserUsage;
+      rawResponse?: BoundedRawResponseEvidence;
+    }>
+  | Readonly<{
+      status: 'failed';
+      spawnedAt: number;
+      exit: ProcessExitObservation;
+      primary: InterimDuplexPrimaryFailure;
+      usage?: ResultParserUsage;
+      rawResponse?: BoundedRawResponseEvidence;
+    }>
+  | Readonly<{
+      status: 'cleanup_uncertain';
+      primary: Readonly<{ kind: 'cancelled' }> | InterimDuplexPrimaryFailure;
+      authority: RetainedCleanupAuthority;
+      exit?: ProcessExitObservation;
+      usage?: ResultParserUsage;
+      rawResponse?: BoundedRawResponseEvidence;
+      schemaDiagnostics?: AgentValidationDetails;
+    }>;
+
 type ExpectedProcessIdentityInspectionResult =
   | Readonly<{ status: 'identified'; identity: ProcessIdentity }>
   | Readonly<{
@@ -1119,6 +1214,38 @@ export type PausedProcessIoVisibleFieldsAreExact = Expect<
 
 export type DuplexCoordinatorRegistrationVisibleFieldsAreExact = Expect<
   Equal<keyof DuplexCoordinatorRegistration, keyof ExpectedInvocationOnlyCarrier>
+>;
+
+export type DuplexOperationIsExact = Expect<Equal<DuplexOperation, ExpectedDuplexOperation>>;
+export type ProcessCleanupFailureCauseIsExact = Expect<
+  Equal<ProcessCleanupFailureCause, ExpectedProcessCleanupFailureCause>
+>;
+export type ProcessCleanupFailureEvidenceIsExact = Expect<
+  Equal<ProcessCleanupFailureEvidence, ExpectedProcessCleanupFailureEvidence>
+>;
+export type ProcessCleanupFailureIsExact = Expect<
+  Equal<ProcessCleanupFailure, ExpectedProcessCleanupFailure>
+>;
+export type InterimDuplexPrimaryFailureIsExact = Expect<
+  Equal<InterimDuplexPrimaryFailure, ExpectedInterimDuplexPrimaryFailure>
+>;
+export type DuplexTerminalObservationIsExact = Expect<
+  Equal<DuplexTerminalObservation, ExpectedInvocationTerminalObservation>
+>;
+export type InvocationTerminalObservationIsExact = Expect<
+  Equal<InvocationTerminalObservation, ExpectedInvocationTerminalObservation>
+>;
+export type SubmitDuplexCandidateIsExact = Expect<
+  Equal<
+    typeof submitDuplexCandidate,
+    (coordinator: unknown, candidate: DuplexTerminalObservation) => boolean
+  >
+>;
+export type DuplexCompletionIsExact = Expect<
+  Equal<
+    typeof duplexCompletion,
+    (coordinator: unknown) => Promise<DuplexTerminalObservation> | undefined
+  >
 >;
 
 export type ProcessIdentityInspectionResultIsExact = Expect<

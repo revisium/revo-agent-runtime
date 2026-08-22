@@ -1,3 +1,10 @@
+export type { DuplexOperation } from './duplex-operation.js';
+export type { DuplexTerminalObservation } from './duplex-terminal-observation.js';
+export { duplexCompletion } from './duplex-completion.js';
+export type { ProcessCleanupFailureCause } from './process-cleanup-failure-cause.js';
+export type { ProcessCleanupFailureEvidence } from './process-cleanup-failure-evidence.js';
+export type { ProcessCleanupFailure } from './process-cleanup-failure.js';
+export { submitDuplexCandidate } from './submit-duplex-candidate.js';
 export type { LiveOwnedProcess } from './live-owned-process.js';
 export type { ProcessExitObservation } from './process-exit-observation.js';
 export { DuplexCoordinatorRegistration } from './duplex-coordinator-registration.js';

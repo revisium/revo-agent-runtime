@@ -3,6 +3,7 @@ import { BoundedRawResponseEvidence } from './bounded-raw-response-evidence.js';
 import { duplexPrimaryFailureCode } from './duplex-primary-failure-code.js';
 import type { InvocationTerminalObservation } from './execution-terminal-observation.js';
 import { freezeJsonValue } from './freeze-json-value.js';
+import type { InterimDuplexPrimaryFailure } from './interim-duplex-primary-failure.js';
 import type { NormalizedInvocationEvidence } from './normalized-invocation-evidence.js';
 import { type NormalizedInvocationFailure } from './normalized-invocation-failure.js';
 import type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
@@ -55,6 +56,19 @@ const validateParsedResponse = (
   return Object.freeze({ status: 'succeeded', value: parsed, evidence });
 };
 
+const normalizePrimaryFailure = (
+  primary: InterimDuplexPrimaryFailure,
+  evidence: NormalizedInvocationEvidence,
+): NormalizedInvocationOutcome => {
+  if (primary.kind === 'parser_failed') return failParser(primary.reason, evidence);
+  if (primary.kind === 'result_schema_failed')
+    return failSchema(evidence, evidence.schemaDiagnostics);
+  return failed(
+    Object.freeze({ kind: 'duplex', primary, code: duplexPrimaryFailureCode(primary) }),
+    evidence,
+  );
+};
+
 const parseObjectResponse = (
   rawResponse: BoundedRawResponseEvidence | undefined,
   validator: ResultSchemaValidator,
@@ -90,25 +104,22 @@ export const normalizeInvocationOutcome = (
   validator: ResultSchemaValidator,
 ): NormalizedInvocationOutcome => {
   const evidence: NormalizedInvocationEvidence = Object.freeze({
-    exit: observation.exit,
+    ...('exit' in observation && observation.exit !== undefined ? { exit: observation.exit } : {}),
     ...(observation.usage === undefined ? {} : { usage: observation.usage }),
     ...(observation.rawResponse === undefined ? {} : { rawResponse: observation.rawResponse }),
+    ...('schemaDiagnostics' in observation && observation.schemaDiagnostics !== undefined
+      ? { schemaDiagnostics: observation.schemaDiagnostics }
+      : {}),
   });
 
   if (observation.status === 'cancelled') return Object.freeze({ status: 'cancelled', evidence });
-  if (observation.status === 'failed') {
-    if (observation.primary.kind === 'parser_failed') {
-      return failParser(observation.primary.reason, evidence);
-    }
-    return failed(
-      Object.freeze({
-        kind: 'duplex',
-        primary: observation.primary,
-        code: duplexPrimaryFailureCode(observation.primary),
-      }),
-      evidence,
-    );
+  if (observation.status === 'cleanup_uncertain') {
+    if (observation.primary.kind === 'cancelled')
+      return Object.freeze({ status: 'cancelled', evidence });
+    return normalizePrimaryFailure(observation.primary, evidence);
   }
+  if (observation.status === 'failed')
+    return normalizePrimaryFailure(observation.primary, evidence);
   if (observation.parsedResponse !== undefined)
     return validateParsedResponse(observation.parsedResponse, validator, evidence);
   return parseObjectResponse(observation.rawResponse, validator, evidence);
