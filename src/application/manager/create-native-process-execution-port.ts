@@ -38,15 +38,15 @@ const sleepUntil = (deadlineAt: number): Promise<typeof AFTER_DEADLINE> =>
   });
 
 const failedObservation = (
+  spawnedAt: number,
   primary: InterimDuplexPrimaryFailure = Object.freeze({ kind: 'internal' as const }),
   exit: ProcessExitObservation = syntheticNoProcessExit,
-  spawnedAt: number,
 ): InvocationTerminalObservation => Object.freeze({ status: 'failed', spawnedAt, exit, primary });
 
 const failedExecution = (spawnedAt: number): RunningExecution =>
   Object.freeze({
     spawnedAt,
-    completion: Promise.resolve(failedObservation(undefined, syntheticNoProcessExit, spawnedAt)),
+    completion: Promise.resolve(failedObservation(spawnedAt)),
     requestCancellation: async (): Promise<void> => undefined,
   });
 
@@ -220,11 +220,7 @@ export const createNativeProcessExecutionPort = (
             },
             () => {
               disposeRawResponse();
-              return failedObservation(
-                undefined,
-                syntheticNoProcessExit,
-                settlement.process.spawnedAt,
-              );
+              return failedObservation(settlement.process.spawnedAt);
             },
           );
         return Object.freeze({
@@ -241,9 +237,8 @@ export const createNativeProcessExecutionPort = (
           spawnedAt: settlement.process.spawnedAt,
           completion: Promise.resolve(
             failedObservation(
-              Object.freeze({ kind: attachResult.reason }),
-              syntheticNoProcessExit,
               settlement.process.spawnedAt,
+              Object.freeze({ kind: attachResult.reason }),
             ),
           ),
           requestCancellation: async (): Promise<void> => undefined,
@@ -267,9 +262,9 @@ export const createNativeProcessExecutionPort = (
                   : { rawResponse: observation.rawResponse }),
               });
             return failedObservation(
+              settlement.process.spawnedAt,
               Object.freeze({ kind: 'process_failed' }),
               exit,
-              settlement.process.spawnedAt,
             );
           }
           const primary: InterimDuplexPrimaryFailure =
@@ -288,7 +283,7 @@ export const createNativeProcessExecutionPort = (
         })
         .catch(() => {
           disposeRawResponse();
-          return failedObservation(undefined, syntheticNoProcessExit, settlement.process.spawnedAt);
+          return failedObservation(settlement.process.spawnedAt);
         });
 
       return Object.freeze({
