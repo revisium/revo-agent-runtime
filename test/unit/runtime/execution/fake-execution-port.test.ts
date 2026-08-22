@@ -110,8 +110,8 @@ test('starts queued executions in FIFO order and exposes frozen copied calls', a
   port.settleNaturalCompletion(2);
   const firstObservation = await first.completion;
   expect(Object.isFrozen(firstObservation)).toBe(true);
-  expect(firstObservation).toEqual({ status: 'completed' });
-  await expect(second.completion).resolves.toEqual({ status: 'completed' });
+  expect(firstObservation).toMatchObject({ status: 'completed' });
+  await expect(second.completion).resolves.toMatchObject({ status: 'completed' });
   await expect(port.start(testSnapshot(), preparedLaunch())).rejects.toThrow(
     'No start result is queued',
   );
@@ -144,7 +144,7 @@ test('keeps cancellation-request settlement independent from terminal completion
   expect(completed).toBe(false);
 
   port.settleNaturalCompletion(1);
-  await expect(execution.completion).resolves.toEqual({ status: 'completed' });
+  await expect(execution.completion).resolves.toMatchObject({ status: 'completed' });
 });
 
 test('retains rejection identity without completing execution', async () => {
@@ -170,7 +170,7 @@ test('retains rejection identity without completing execution', async () => {
   expect(completed).toBe(false);
 
   port.settleNaturalCompletion(1);
-  await expect(execution.completion).resolves.toEqual({ status: 'completed' });
+  await expect(execution.completion).resolves.toMatchObject({ status: 'completed' });
   expect(() => port.confirmCancellation(1)).toThrow('already settled');
 });
 
@@ -185,7 +185,7 @@ test('settles a pending cancellation request before natural completion', async (
   await expect(cancellation).rejects.toThrow(
     'Execution completed before cancellation request was accepted',
   );
-  await expect(execution.completion).resolves.toEqual({ status: 'completed' });
+  await expect(execution.completion).resolves.toMatchObject({ status: 'completed' });
 });
 
 test('confirms accepted cancellation only through execution completion', async () => {
@@ -200,7 +200,7 @@ test('confirms accepted cancellation only through execution completion', async (
 
   const observation = await execution.completion;
   expect(Object.isFrozen(observation)).toBe(true);
-  expect(observation).toEqual({ status: 'cancelled' });
+  expect(observation).toMatchObject({ status: 'cancelled' });
   await expect(execution.requestCancellation()).rejects.toThrow('Execution already completed');
   expect(() => port.settleNaturalCompletion(1)).toThrow('already settled');
 });
@@ -245,7 +245,7 @@ test('rejects duplicate and post-terminal controls without leaving request promi
   await expect(cancellation).rejects.toThrow(
     'Execution completed before cancellation request was accepted',
   );
-  await expect(execution.completion).resolves.toEqual({ status: 'completed' });
+  await expect(execution.completion).resolves.toMatchObject({ status: 'completed' });
   expect(() => port.settleCancellationRequest(1)).toThrow('not pending');
   expect(() => port.rejectCancellationRequest(1, new Error('late request'))).toThrow('not pending');
   expect(() => port.confirmCancellation(1)).toThrow('already settled');

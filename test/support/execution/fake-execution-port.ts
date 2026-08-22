@@ -1,4 +1,5 @@
 import {
+  BoundedRawResponseEvidence,
   InvocationInputSnapshot,
   type InvocationExecutionPorts,
   type PreparedLaunch,
@@ -41,6 +42,13 @@ interface PendingExecution {
   cancellationRequestState: CancellationRequestState;
   completionSettled: boolean;
 }
+
+const rawResponseEvidence = (bytes: Uint8Array) =>
+  BoundedRawResponseEvidence.create({
+    byteLength: bytes.byteLength,
+    bytes,
+    previewBytes: bytes.byteLength,
+  });
 
 const deferred = <Value>(): Deferred<Value> => {
   let resolve: ((value: Value) => void) | undefined;
@@ -125,9 +133,11 @@ export class FakeInvocationExecutionPort
     this.rejectPendingCancellationForNaturalCompletion(execution);
     execution.completionSettled = true;
     execution.completion.resolve(
-      rawResponse === undefined
-        ? Object.freeze({ status: 'completed' })
-        : Object.freeze({ status: 'completed', rawResponse: new Uint8Array(rawResponse) }),
+      Object.freeze({
+        status: 'completed',
+        exit: Object.freeze({ exitCode: 0, signal: null }),
+        ...(rawResponse === undefined ? {} : { rawResponse: rawResponseEvidence(rawResponse) }),
+      }),
     );
   }
 
@@ -137,7 +147,12 @@ export class FakeInvocationExecutionPort
     if (execution.cancellationRequestState !== 'fulfilled')
       throw new Error(`Cancellation request for execution ${executionId} is not accepted`);
     execution.completionSettled = true;
-    execution.completion.resolve(Object.freeze({ status: 'cancelled' }));
+    execution.completion.resolve(
+      Object.freeze({
+        status: 'cancelled',
+        exit: Object.freeze({ exitCode: null, signal: 'SIGTERM' }),
+      }),
+    );
   }
 
   settleCompletionFailure(executionId: number, error: Error): void {

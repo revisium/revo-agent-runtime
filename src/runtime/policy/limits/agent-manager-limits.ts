@@ -10,6 +10,7 @@ export const AGENT_MANAGER_LIMITS = Object.freeze({
   maxRawResponseBytes: { minimum: 65_536, default: 1_048_576, maximum: 1_048_576 },
   maxCompletedInvocations: { minimum: 1, default: 1_000, maximum: 1_000 },
   maxTerminalEventBytes: 2_097_152,
+  rawResponsePreviewBytes: 1_024,
   processTerminationGraceMs: 2_000,
   processPostKillReapTimeoutMs: 500,
   maxCommandStdoutBytes: 1_048_576,

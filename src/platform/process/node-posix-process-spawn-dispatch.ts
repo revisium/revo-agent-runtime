@@ -432,7 +432,6 @@ export class NodePosixProcessSpawnDispatch {
       shell: request.shell,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
-    args.length = 0;
     clearEnvironment(environment);
 
     child.once('spawn', () => {

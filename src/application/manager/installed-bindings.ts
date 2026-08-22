@@ -7,6 +7,7 @@ import type {
   ProtocolDriverPort,
   ResultParserId,
   ResultParserPort,
+  RawResponseCapture,
 } from '../../runtime/execution/index.js';
 import { AGENT_FAULT_MESSAGES } from '../../runtime/policy/index.js';
 import type { AgentDefinitionContract, AgentFault } from '../../runtime/spec/index.js';
@@ -20,7 +21,10 @@ type ResultSchemaDelivery = AgentDefinitionContract['delivery']['resultSchema'];
 type ResultDelivery = AgentDefinitionContract['delivery']['result'];
 
 type InstalledImplementation = ProtocolDriverPort | PermissionStrategyPort | InstalledParserFactory;
-type InstalledParserFactory = new (maxBytes: number) => ResultParserPort;
+type InstalledParserFactory = new (
+  maxBytes: number,
+  rawResponseCapture?: RawResponseCapture,
+) => ResultParserPort;
 
 interface BindingKey {
   readonly protocolDriverId: ProtocolDriverId;
@@ -161,8 +165,9 @@ export class InstalledBindingRegistry {
   static resolveResultParser(
     resultParserId: ResultParserId,
     maxBytes: number,
+    rawResponseCapture?: RawResponseCapture,
   ): ResultParserPort | undefined {
-    return resolveInstalledResultParser(resultParserId, maxBytes);
+    return resolveInstalledResultParser(resultParserId, maxBytes, rawResponseCapture);
   }
 
   createBinding(target: ValidatedDefinition): Readonly<{
@@ -207,7 +212,8 @@ const resolveInstalledProtocolDriver = (
 const resolveInstalledResultParser = (
   resultParserId: ResultParserId,
   maxBytes: number,
+  rawResponseCapture?: RawResponseCapture,
 ): ResultParserPort | undefined => {
   const Parser = installedParsers.get(resultParserId);
-  return Parser === undefined ? undefined : new Parser(maxBytes);
+  return Parser === undefined ? undefined : new Parser(maxBytes, rawResponseCapture);
 };

@@ -9,6 +9,7 @@ import {
 const outcome: NormalizedInvocationOutcome = Object.freeze({
   status: 'succeeded',
   value: Object.freeze({ accepted: true }),
+  evidence: Object.freeze({}),
 });
 
 test('runs independently scripted logical output recording operations in FIFO order', async () => {

@@ -16,6 +16,13 @@ type LifecycleState =
 type CancellationCause = 'caller' | 'deadline';
 type RunningExecution = Awaited<ReturnType<InvocationExecutionPorts['execution']['start']>>;
 
+const internalFailureObservation = (): InvocationTerminalObservation =>
+  Object.freeze({
+    status: 'failed',
+    exit: Object.freeze({ exitCode: null, signal: null }),
+    primary: Object.freeze({ kind: 'internal' }),
+  });
+
 interface Deferred {
   readonly promise: Promise<void>;
   readonly resolve: () => void;
@@ -82,11 +89,11 @@ export class InvocationLifecycle {
       else if (this.state === 'cancelling') this.dispatchCancellation();
       void execution.completion.then(
         (observation) => this.beginFinalization(observation),
-        () => this.beginFinalization(Object.freeze({ status: 'failed' })),
+        () => this.beginFinalization(internalFailureObservation()),
       );
     } catch (error: unknown) {
       this.cancellation?.reject(error);
-      this.beginFinalization(Object.freeze({ status: 'failed' }));
+      this.beginFinalization(internalFailureObservation());
     }
   }
 
@@ -114,7 +121,15 @@ export class InvocationLifecycle {
       .then(() => execution.requestCancellation())
       .then(cancellation.resolve, (error: unknown) => {
         cancellation.reject(error);
-        queueMicrotask(() => this.beginFinalization(Object.freeze({ status: 'failed' })));
+        queueMicrotask(() =>
+          this.beginFinalization(
+            Object.freeze({
+              status: 'failed' as const,
+              exit: Object.freeze({ exitCode: null, signal: null }),
+              primary: Object.freeze({ kind: 'internal' as const }),
+            }),
+          ),
+        );
       });
   }
 
@@ -135,17 +150,40 @@ export class InvocationLifecycle {
                 this.cancellationCause === 'deadline'
                   ? ('timed_out' as const)
                   : ('cancelled' as const),
+              evidence: Object.freeze({
+                exit: observation.exit,
+                ...(observation.usage === undefined ? {} : { usage: observation.usage }),
+                ...(observation.rawResponse === undefined
+                  ? {}
+                  : { rawResponse: observation.rawResponse }),
+              }),
             })
           : normalizeInvocationOutcome(observation, this.preparedLaunch.resultSchemaValidator);
     } catch {
-      normalized = Object.freeze({ status: 'failed', reason: 'execution_failed' });
+      normalized = Object.freeze({
+        status: 'failed',
+        failure: Object.freeze({
+          kind: 'duplex',
+          primary: Object.freeze({ kind: 'internal' }),
+          code: 'revo.agent.internal',
+        }),
+        evidence: Object.freeze({ exit: Object.freeze({ exitCode: null, signal: null }) }),
+      });
     }
 
     let settlement: NormalizedInvocationOutcome;
     try {
       settlement = await finalizeInvocationOutcome(this.ports.output, normalized);
     } catch {
-      settlement = Object.freeze({ status: 'failed', reason: 'execution_failed' });
+      settlement = Object.freeze({
+        status: 'failed',
+        failure: Object.freeze({
+          kind: 'duplex',
+          primary: Object.freeze({ kind: 'internal' }),
+          code: 'revo.agent.internal',
+        }),
+        evidence: Object.freeze({ exit: Object.freeze({ exitCode: null, signal: null }) }),
+      });
     }
     this.settlement = settlement;
     this.state = 'terminal';

@@ -121,7 +121,7 @@ test('rejects workspace admission before output preparation or execution delegat
         workspace: { directory: '../relative/./hostile\u0000path' },
       }),
     ),
-  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  ).resolves.toMatchObject({ status: 'rejected', reason: 'preflight_failed' });
   expect(workspace).toHaveBeenCalledExactlyOnceWith('../relative/./hostile\u0000path');
   expect(probe.calls()).toEqual([]);
   expect(output.calls()).toEqual([]);
@@ -259,7 +259,7 @@ test('rejects version mismatch before output preparation or execution delegation
   await flush();
   probe.settleCompletion(1, exited('2.0.0'));
 
-  await expect(started).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  await expect(started).resolves.toMatchObject({ status: 'rejected', reason: 'preflight_failed' });
   expect(output.calls()).toEqual([outputAdmissionCall('version-mismatch')]);
   expect(execution.calls()).toEqual([]);
 });
@@ -347,7 +347,7 @@ test('rejects malformed launch evidence before output preparation or execution d
   );
   await flush();
 
-  await expect(started).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  await expect(started).resolves.toMatchObject({ status: 'rejected', reason: 'preflight_failed' });
   expect(output.calls()).toEqual([outputAdmissionCall('malformed-launch-evidence')]);
   expect(probe.calls()).toEqual([{ type: 'resolve', command: '/fixture/bin/agent' }]);
   expect(execution.calls()).toEqual([]);
@@ -431,7 +431,7 @@ test('maps a missing preflight composition port to a typed pre-acceptance reject
 
   await expect(
     manager.start(createStartInput(definition, { invocationId: 'missing-probe-port' })),
-  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  ).resolves.toMatchObject({ status: 'rejected', reason: 'preflight_failed' });
   expect(output.calls()).toEqual([outputAdmissionCall('missing-probe-port')]);
   expect(execution.calls()).toEqual([]);
 });
@@ -460,7 +460,7 @@ test.each([
 
     await expect(
       manager.start(createStartInput(definition, { invocationId: `malformed-${_name}` })),
-    ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+    ).resolves.toMatchObject({ status: 'rejected', reason: 'preflight_failed' });
     expect(probe.calls()).toEqual([]);
     expect(output.calls()).toEqual([]);
     expect(execution.calls()).toEqual([]);

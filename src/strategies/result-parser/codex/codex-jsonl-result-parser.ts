@@ -6,6 +6,8 @@ import type {
   ResultParserPort,
   ResultParserUsage,
   ResultParserWriteResult,
+  RawResponseCapture,
+  BoundedRawResponseEvidence,
 } from '../../../runtime/execution/index.js';
 import type { JsonObject } from '../../../runtime/spec/index.js';
 
@@ -51,8 +53,12 @@ export class CodexJsonlResultParser implements ResultParserPort {
   private failed: ParserFailureReason | undefined;
   private response: JsonObject | undefined;
   private usage: ResultParserUsage | undefined;
+  private raw: BoundedRawResponseEvidence | undefined;
 
-  constructor(private readonly maxRawResponseBytes: number) {}
+  constructor(
+    private readonly maxRawResponseBytes: number,
+    private readonly rawResponseCapture?: RawResponseCapture,
+  ) {}
 
   writeProtocolBytes(bytes: Uint8Array): ResultParserWriteResult {
     if (this.failed !== undefined) return this.writeFailure();
@@ -93,10 +99,12 @@ export class CodexJsonlResultParser implements ResultParserPort {
   dispose(): void {
     // Redaction material and registered secrets use zero-fill hygiene; parser input is already post-redaction.
     this.carry = new Uint8Array(0);
+    this.rawResponseCapture?.dispose();
   }
 
   private readLine(line: Uint8Array): ResultParserWriteResult {
     if (line.byteLength === 0) return observed;
+    this.rawResponseCapture?.record(line);
     const frame = this.parseFrame(line);
     if (frame.status === 'failed') return this.fail(frame.reason);
     if (this.terminal)
@@ -140,6 +148,7 @@ export class CodexJsonlResultParser implements ResultParserPort {
   }
 
   private tryReadOversizedTerminalPayload(line: Uint8Array): boolean {
+    this.rawResponseCapture?.record(line);
     try {
       const parsed: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(line));
       if (!isRecord(parsed) || parsed.type !== 'item.completed') return false;
@@ -203,11 +212,26 @@ export class CodexJsonlResultParser implements ResultParserPort {
     return this.endFailure();
   }
 
+  private takeRaw(): BoundedRawResponseEvidence | undefined {
+    this.raw ??= this.rawResponseCapture?.take();
+    return this.raw;
+  }
+
   private writeFailure(): ResultParserWriteResult {
-    return Object.freeze({ status: 'failed', reason: this.failed ?? 'frame_malformed' });
+    const raw = this.takeRaw();
+    return Object.freeze({
+      status: 'failed',
+      reason: this.failed ?? 'frame_malformed',
+      ...(raw === undefined ? {} : { raw }),
+    });
   }
 
   private endFailure(): ResultParserEndResult {
-    return Object.freeze({ status: 'failed', reason: this.failed ?? 'frame_malformed' });
+    const raw = this.takeRaw();
+    return Object.freeze({
+      status: 'failed',
+      reason: this.failed ?? 'frame_malformed',
+      ...(raw === undefined ? {} : { raw }),
+    });
   }
 }

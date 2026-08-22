@@ -109,38 +109,55 @@ const freezeJson = (root: JsonValue): void => {
   }
 };
 
-const copyDiagnostics = (
-  diagnostics: Extract<NormalizedInvocationOutcome, { status: 'failed' }>['diagnostics'],
-) => {
-  if (diagnostics === undefined) return undefined;
-  return Object.freeze({
-    diagnostics: Object.freeze(
-      diagnostics.diagnostics.map((diagnostic) => Object.freeze({ ...diagnostic })),
-    ),
-    truncated: diagnostics.truncated,
+const copyEvidence = (evidence: NormalizedInvocationOutcome['evidence']) =>
+  Object.freeze({
+    ...(evidence.exit === undefined
+      ? {}
+      : {
+          exit: Object.freeze({ exitCode: evidence.exit.exitCode, signal: evidence.exit.signal }),
+        }),
+    ...(evidence.usage === undefined ? {} : { usage: Object.freeze({ ...evidence.usage }) }),
+    ...(evidence.rawResponse === undefined ? {} : { rawResponse: evidence.rawResponse }),
+    ...(evidence.rawFinalResponseEligibility === undefined
+      ? {}
+      : { rawFinalResponseEligibility: evidence.rawFinalResponseEligibility }),
+    ...(evidence.schemaDiagnostics === undefined
+      ? {}
+      : { schemaDiagnostics: evidence.schemaDiagnostics }),
   });
+
+const copyFailure = (
+  failure: Extract<NormalizedInvocationOutcome, { status: 'failed' }>['failure'],
+) => {
+  if (failure.kind === 'duplex')
+    return Object.freeze({
+      kind: 'duplex' as const,
+      primary: Object.freeze({ ...failure.primary }),
+      code: failure.code,
+    });
+  if (failure.kind === 'parser')
+    return Object.freeze({ kind: 'parser' as const, reason: failure.reason, code: failure.code });
+  if (failure.kind === 'result_schema')
+    return Object.freeze({
+      kind: 'result_schema' as const,
+      code: failure.code,
+      ...(failure.diagnostics === undefined ? {} : { diagnostics: failure.diagnostics }),
+    });
+  return Object.freeze({ kind: 'finalization' as const, code: failure.code });
 };
 
 const copyOutcome = (outcome: NormalizedInvocationOutcome): NormalizedInvocationOutcome => {
+  const evidence = copyEvidence(outcome.evidence);
   if (outcome.status === 'succeeded') {
     const value = copyJsonValue(outcome.value);
     if (value === null || typeof value !== 'object' || !isJsonObject(value))
       throw new Error('Expected a copied JSON object.');
     freezeJson(value);
-    return Object.freeze({ status: 'succeeded', value });
+    return Object.freeze({ status: 'succeeded', value, evidence });
   }
-  if (outcome.status === 'failed') {
-    const diagnostics = copyDiagnostics(outcome.diagnostics);
-    const rawResponse =
-      outcome.rawResponse === undefined ? undefined : Object.freeze({ ...outcome.rawResponse });
-    return Object.freeze({
-      status: 'failed',
-      reason: outcome.reason,
-      ...(diagnostics === undefined ? {} : { diagnostics }),
-      ...(rawResponse === undefined ? {} : { rawResponse }),
-    });
-  }
-  return Object.freeze({ status: outcome.status });
+  if (outcome.status === 'failed')
+    return Object.freeze({ status: 'failed', failure: copyFailure(outcome.failure), evidence });
+  return Object.freeze({ status: outcome.status, evidence });
 };
 
 export class FakeInvocationOutputPort

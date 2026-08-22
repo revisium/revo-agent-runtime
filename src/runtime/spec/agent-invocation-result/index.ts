@@ -1,5 +1,8 @@
 export type { AgentInvocationResultBase } from './agent-invocation-result-base.js';
 export type { AgentInvocationResult } from './agent-invocation-result.js';
+export type { AgentInvocationCancelled } from './agent-invocation-cancelled.js';
+export type { AgentInvocationFailed } from './agent-invocation-failed.js';
+export type { AgentInvocationTimedOut } from './agent-invocation-timed-out.js';
 export type { AgentInvocationSucceeded } from './agent-invocation-succeeded.js';
 export type { AgentLaunchEvidence } from './agent-launch-evidence.js';
 export type { AgentCommittedOutputFiles, AgentOutputFiles } from './agent-output-files.js';

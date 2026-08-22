@@ -1,4 +1,10 @@
+import type { AgentInvocationCancelled } from './agent-invocation-cancelled.js';
+import type { AgentInvocationFailed } from './agent-invocation-failed.js';
 import type { AgentInvocationSucceeded } from './agent-invocation-succeeded.js';
+import type { AgentInvocationTimedOut } from './agent-invocation-timed-out.js';
 
-// Failed, cancelled, and timed-out variants are deferred pending an AgentFault widening decision.
-export type AgentInvocationResult = AgentInvocationSucceeded;
+export type AgentInvocationResult =
+  | AgentInvocationSucceeded
+  | AgentInvocationFailed
+  | AgentInvocationCancelled
+  | AgentInvocationTimedOut;

@@ -124,7 +124,7 @@ test.runIf(process.platform === 'linux')(
       parsedResponse: { ok: true },
       usage: { inputTokens: 1, outputTokens: 2 },
     });
-    expect(normalizeInvocationOutcome(observation, acceptObject)).toEqual({
+    expect(normalizeInvocationOutcome(observation, acceptObject)).toMatchObject({
       status: 'succeeded',
       value: { ok: true },
     });

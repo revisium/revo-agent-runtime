@@ -1,14 +1,19 @@
 import { NodePosixProcessSpawnDispatch } from '../../platform/process/node-posix-process-spawn-dispatch.js';
 import {
   createProcessStartAttempt,
+  createRawResponseCapture,
   DuplexCoordinatorRegistration,
   getProcessStartInvocationToken,
+  type InterimDuplexPrimaryFailure,
   type InvocationExecutionPorts,
   type InvocationTerminalObservation,
+  type ProcessExitObservation,
   type ProcessSpawnRequest,
   type ProcessStartAttempt,
+  type RawResponseCapture,
   type takePreparedInvocationResourcesPayload,
 } from '../../runtime/execution/index.js';
+import { AGENT_MANAGER_LIMITS } from '../../runtime/policy/index.js';
 import { InstalledBindingRegistry } from './installed-bindings.js';
 
 type PreparedInvocationResourcesPayload = NonNullable<
@@ -21,10 +26,19 @@ type NativeDispatch = Pick<
 >;
 
 const activeStateInspectionTimeoutMs = 5_000;
+const syntheticNoProcessExit: ProcessExitObservation = Object.freeze({
+  exitCode: null,
+  signal: null,
+});
+
+const failedObservation = (
+  primary: InterimDuplexPrimaryFailure = Object.freeze({ kind: 'internal' as const }),
+  exit: ProcessExitObservation = syntheticNoProcessExit,
+): InvocationTerminalObservation => Object.freeze({ status: 'failed', exit, primary });
 
 const failedExecution = (): RunningExecution =>
   Object.freeze({
-    completion: Promise.resolve(Object.freeze({ status: 'failed' as const })),
+    completion: Promise.resolve(failedObservation()),
     requestCancellation: async (): Promise<void> => undefined,
   });
 
@@ -73,13 +87,17 @@ export const createNativeProcessExecutionPort = (
     start: async (snapshot, preparedLaunch, resources): Promise<RunningExecution> => {
       if (resources === undefined) return failedExecution();
       let rawResponseDisposed = false;
+      let rawResponseCapture: RawResponseCapture | undefined;
       const disposeRawResponse = (): void => {
         if (rawResponseDisposed) return;
         rawResponseDisposed = true;
-        resources.frontEnds.rawResponse.dispose();
+        if (rawResponseCapture === undefined) resources.frontEnds.rawResponse.dispose();
+        else rawResponseCapture.dispose();
       };
-      const disposeAllFrontEnds = (): void =>
-        disposeResourcesFrontEnds(resources, rawResponseDisposed);
+      const disposeAllFrontEnds = (): void => {
+        disposeRawResponse();
+        disposeResourcesFrontEnds(resources, true);
+      };
       const attempt = createProcessStartAttempt({ invocationId: snapshot.invocationId });
       dispatch.beginStart(attempt, createRequest(snapshot, preparedLaunch, resources));
       const settlement = await attempt.settlement;
@@ -98,6 +116,11 @@ export const createNativeProcessExecutionPort = (
         return failedExecution();
       }
 
+      rawResponseCapture = createRawResponseCapture({
+        channel: resources.frontEnds.rawResponse,
+        maxRawResponseBytes: preparedLaunch.limits.maxRawResponseBytes,
+        previewBytes: AGENT_MANAGER_LIMITS.rawResponsePreviewBytes,
+      });
       const driver = InstalledBindingRegistry.resolveProtocolDriver(
         preparedLaunch.binding.protocolDriverId,
       );
@@ -108,6 +131,7 @@ export const createNativeProcessExecutionPort = (
           : InstalledBindingRegistry.resolveResultParser(
               parserId,
               preparedLaunch.limits.maxRawResponseBytes,
+              rawResponseCapture,
             );
       if (driver === undefined || parser === undefined) {
         await dispatch.killUnactivated(settlement.process);
@@ -130,7 +154,6 @@ export const createNativeProcessExecutionPort = (
         disposeAllFrontEnds();
         return failedExecution();
       }
-      disposeRawResponse();
       const activation = dispatch.activateIo(
         settlement.process,
         settlement.io,
@@ -156,19 +179,47 @@ export const createNativeProcessExecutionPort = (
       if (attachResult.status !== 'attached') {
         await activation.process.terminateAndReap();
         disposeAllFrontEnds();
-        return failedExecution();
+        return Object.freeze({
+          completion: Promise.resolve(
+            failedObservation(Object.freeze({ kind: attachResult.reason }), syntheticNoProcessExit),
+          ),
+          requestCancellation: async (): Promise<void> => undefined,
+        });
       }
 
       const completion: Promise<InvocationTerminalObservation> = activation.process.completion
-        .then(() => attachResult.session.finishAfterProtocolOutputEnd())
-        .then((observation) => {
-          if (observation.status === 'completed')
-            return Object.freeze({
-              status: 'completed' as const,
-              parsedResponse: observation.response,
-              ...(observation.usage === undefined ? {} : { usage: observation.usage }),
-            });
-          return Object.freeze({ status: 'failed' as const });
+        .then(async (exit) => {
+          const observation = await attachResult.session.finishAfterProtocolOutputEnd();
+          disposeRawResponse();
+          if (observation.status === 'completed') {
+            if (exit.exitCode === 0 && exit.signal === null)
+              return Object.freeze({
+                status: 'completed' as const,
+                exit,
+                parsedResponse: observation.response,
+                ...(observation.usage === undefined ? {} : { usage: observation.usage }),
+                ...(observation.rawResponse === undefined
+                  ? {}
+                  : { rawResponse: observation.rawResponse }),
+              });
+            return failedObservation(Object.freeze({ kind: 'process_failed' }), exit);
+          }
+          const primary: InterimDuplexPrimaryFailure =
+            observation.failure.kind === 'parser_failed'
+              ? Object.freeze({ kind: 'parser_failed', reason: observation.failure.reason })
+              : Object.freeze({ kind: 'internal' as const });
+          return Object.freeze({
+            status: 'failed' as const,
+            exit,
+            primary,
+            ...(observation.rawResponse === undefined
+              ? {}
+              : { rawResponse: observation.rawResponse }),
+          });
+        })
+        .catch(() => {
+          disposeRawResponse();
+          return failedObservation();
         });
 
       return Object.freeze({

@@ -1,5 +1,5 @@
 import type { JsonObject } from '../../spec/index.js';
-import type { RawResponseDiagnostic } from '../raw-response-diagnostic.js';
+import type { BoundedRawResponseEvidence } from '../bounded-raw-response-evidence.js';
 import type { ParserFailureReason } from './parser-failure-reason.js';
 import type { ResultParserUsage } from './result-parser-usage.js';
 
@@ -8,6 +8,6 @@ export type ResultParserEndResult =
       status: 'completed';
       response: JsonObject;
       usage?: ResultParserUsage;
-      raw?: RawResponseDiagnostic;
+      raw?: BoundedRawResponseEvidence;
     }>
-  | Readonly<{ status: 'failed'; reason: ParserFailureReason; raw?: RawResponseDiagnostic }>;
+  | Readonly<{ status: 'failed'; reason: ParserFailureReason; raw?: BoundedRawResponseEvidence }>;

@@ -5,6 +5,8 @@ import {
   getTerminalPublicationEventsCapability,
   type EventsAppendSink,
   type OutputAppendResult,
+  RawFinalResponseEligibility,
+  type RawResponsePublicationResult,
   type ScratchCleanupResult,
   type TerminalPublicationAuthority,
   type TerminalPublicationPort,
@@ -21,7 +23,8 @@ type Limits = Readonly<{
   maxTerminalEventBytes?: number;
 }>;
 
-type PublicationFailureStatus = Exclude<TerminalResultPublicationResult['status'], 'published'>;
+type PublicationResult = TerminalResultPublicationResult | RawResponsePublicationResult;
+type PublicationFailureStatus = Exclude<PublicationResult['status'], 'published'>;
 
 const encoder = new TextEncoder();
 const lineFeed = new Uint8Array([0x0a]);
@@ -65,11 +68,11 @@ const flushDirectory = async (path: string): Promise<PublicationFailureStatus | 
   }
 };
 
-const hardlinkPublish = async (
+const hardlinkPublishFile = async (
   outputDirectory: string,
-  finalName: 'result.json',
+  finalName: 'result.json' | 'raw-final-response.txt',
   bytes: Uint8Array,
-): Promise<TerminalResultPublicationResult> => {
+): Promise<PublicationResult> => {
   const finalPath = join(outputDirectory, finalName);
   const tmpPath = join(outputDirectory, `${finalName}.tmp`);
   let handle: FileHandle | undefined;
@@ -148,11 +151,35 @@ export class NodePosixTerminalPublicationPort implements TerminalPublicationPort
   ): Promise<TerminalResultPublicationResult> {
     if (this.#authenticate(authority) === undefined)
       return Object.freeze({ status: 'write_failed' });
-    return hardlinkPublish(
+    const published = await hardlinkPublishFile(
       authority.outputDirectory,
       'result.json',
       encoder.encode(JSON.stringify(result)),
     );
+    return published.status === 'published'
+      ? Object.freeze({ status: 'published', file: 'result.json' })
+      : published;
+  }
+
+  async publishRawResponse(
+    authority: TerminalPublicationAuthority,
+    eligibility: RawFinalResponseEligibility,
+    bytes: Uint8Array,
+  ): Promise<RawResponsePublicationResult> {
+    const capability = this.#authenticate(authority);
+    if (
+      capability === undefined ||
+      !RawFinalResponseEligibility.isBoundToToken(eligibility, capability.invocationToken)
+    )
+      return Object.freeze({ status: 'write_failed' });
+    const published = await hardlinkPublishFile(
+      authority.outputDirectory,
+      'raw-final-response.txt',
+      bytes,
+    );
+    return published.status === 'published'
+      ? Object.freeze({ status: 'published', file: 'raw-final-response.txt' })
+      : published;
   }
 
   async cleanupScratch(authority: TerminalPublicationAuthority): Promise<ScratchCleanupResult> {

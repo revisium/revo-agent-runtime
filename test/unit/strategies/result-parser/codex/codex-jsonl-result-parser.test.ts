@@ -1,6 +1,11 @@
 import { expect, test } from 'vitest';
 
-import type { ParserFailureReason } from '../../../../../src/runtime/execution/index.js';
+import {
+  BoundedRawResponseEvidence,
+  createRawResponseCapture,
+  createRedactionChannel,
+  type ParserFailureReason,
+} from '../../../../../src/runtime/execution/index.js';
 import { CodexJsonlResultParser } from '../../../../../src/strategies/result-parser/codex/codex-jsonl-result-parser.js';
 
 const encoder = new TextEncoder();
@@ -13,6 +18,15 @@ const agentMessage = (text: string): Uint8Array =>
   line({ type: 'item.completed', item: { type: 'agent_message', text } });
 const terminal = (usage?: unknown): Uint8Array =>
   line({ type: 'turn.completed', ...(usage === undefined ? {} : { usage }) });
+const concat = (...parts: readonly Uint8Array[]): Uint8Array => {
+  const output = new Uint8Array(parts.reduce((total, part) => total + part.byteLength, 0));
+  let offset = 0;
+  for (const part of parts) {
+    output.set(part, offset);
+    offset += part.byteLength;
+  }
+  return output;
+};
 
 const expectWriteFailure = (
   input: Uint8Array,
@@ -174,4 +188,58 @@ test('dispose clears the carry buffer without producing a terminal result', () =
   subject.dispose();
 
   expect(subject.endProtocolBytes()).toEqual({ status: 'failed', reason: 'missing_terminal' });
+});
+
+const parserWithCapture = (maxRawResponseBytes = 1_048_576): CodexJsonlResultParser =>
+  new CodexJsonlResultParser(
+    maxRawResponseBytes,
+    createRawResponseCapture({
+      channel: createRedactionChannel([]),
+      maxRawResponseBytes,
+      previewBytes: 1_048_576,
+    }),
+  );
+
+const takeResultRaw = (raw: BoundedRawResponseEvidence | undefined): string | undefined => {
+  const taken = BoundedRawResponseEvidence.take(raw);
+  return taken === undefined ? undefined : new TextDecoder().decode(taken);
+};
+
+test.each([
+  ['response_empty', agentMessage('')],
+  [
+    'response_too_large',
+    agentMessage(
+      '{"oversized":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}',
+    ),
+    64,
+  ],
+  ['duplicate_terminal', concat(terminal(), terminal())],
+  ['invalid_utf8', new Uint8Array([0xff, 0x0a])],
+  ['invalid_json', bytes('{bad}\n')],
+  ['response_not_object', agentMessage('[]')],
+] satisfies readonly (readonly [ParserFailureReason, Uint8Array, number?])[])(
+  'captures raw candidate bytes for %s parser failures',
+  (reason, input, maxBytes?: number) => {
+    const subject = parserWithCapture(maxBytes);
+    const result = subject.writeProtocolBytes(typeof input === 'string' ? bytes(input) : input);
+
+    expect(result).toMatchObject({ status: 'failed', reason });
+    if (result.status !== 'failed') throw new Error('Expected parser failure.');
+    expect(takeResultRaw(result.raw)).not.toBeUndefined();
+  },
+);
+
+test('captures zero-byte raw evidence for missing terminal without previous candidate', () => {
+  const subject = parserWithCapture();
+  const result = subject.endProtocolBytes();
+
+  expect(result).toMatchObject({ status: 'failed', reason: 'missing_terminal' });
+  if (result.status !== 'failed') throw new Error('Expected parser failure.');
+  expect(result.raw?.view).toEqual({
+    byteLength: 0,
+    retainedByteLength: 0,
+    truncated: false,
+    preview: '',
+  });
 });

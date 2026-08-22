@@ -329,6 +329,7 @@ test('exposes the exact frozen agent manager limit descriptors', () => {
     processPostKillReapTimeoutMs: 500,
     maxCompletedInvocations: { minimum: 1, default: 1_000, maximum: 1_000 },
     maxTerminalEventBytes: 2_097_152,
+    rawResponsePreviewBytes: 1_024,
   });
   expect(Object.isFrozen(AGENT_MANAGER_LIMITS)).toBe(true);
 });
@@ -352,6 +353,17 @@ test('exposes the exact frozen agent fault messages', () => {
     probeVersionMismatch: 'Agent executable version does not satisfy its constraint.',
     internalConstruction: 'Agent manager construction failed unexpectedly.',
     internalProbe: 'Agent probe failed unexpectedly.',
+    protocolFailed: 'Agent protocol failed.',
+    outputWriteFailed: 'Agent output write failed.',
+    processFailed: 'Agent process failed.',
+    resultMissing: 'Agent result is missing.',
+    resultTooLarge: 'Agent result exceeded its limit.',
+    resultInvalidJson: 'Agent result is not valid JSON.',
+    resultNotObject: 'Agent result is not a JSON object.',
+    resultSchemaMismatch: 'Agent result does not satisfy its schema.',
+    scratchCleanupFailed: 'Agent scratch cleanup failed.',
+    cancelled: 'Agent invocation was cancelled.',
+    timeout: 'Agent invocation timed out.',
   });
   expect(Object.isFrozen(AGENT_FAULT_MESSAGES)).toBe(true);
 });

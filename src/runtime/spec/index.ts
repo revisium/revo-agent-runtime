@@ -23,8 +23,11 @@ export type { AgentManagerLimits, AgentManagerOptions } from './manager-options/
 export type { AgentEvent, AgentEventBase } from './agent-event/index.js';
 export type {
   AgentCommittedOutputFiles,
+  AgentInvocationCancelled,
+  AgentInvocationFailed,
   AgentInvocationResult,
   AgentInvocationResultBase,
+  AgentInvocationTimedOut,
   AgentInvocationSucceeded,
   AgentLaunchEvidence,
   AgentOutputFiles,

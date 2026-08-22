@@ -4,7 +4,7 @@ import { CompletedInvocations } from '../../../../src/application/manager/comple
 import type { NormalizedInvocationOutcome } from '../../../../src/runtime/execution/index.js';
 
 const succeeded = (id: string): NormalizedInvocationOutcome =>
-  Object.freeze({ status: 'succeeded', value: Object.freeze({ id }) });
+  Object.freeze({ status: 'succeeded', value: Object.freeze({ id }), evidence: Object.freeze({}) });
 
 test('retains canonical completed outcomes in FIFO completion order', () => {
   const completed = new CompletedInvocations(1);
