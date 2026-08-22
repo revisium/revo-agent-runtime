@@ -54,6 +54,22 @@ const failedObservation = (
   exit: ProcessExitObservation = syntheticNoProcessExit,
 ): InvocationTerminalObservation => Object.freeze({ status: 'failed', spawnedAt, exit, primary });
 
+const attachRaceCandidate = (
+  attachOutcome: typeof AFTER_DEADLINE | typeof AFTER_DUPLEX_OPERATION_TIMEOUT | undefined,
+  spawnedAt: number,
+  exit: ProcessExitObservation,
+): InvocationTerminalObservation => {
+  if (attachOutcome === AFTER_DUPLEX_OPERATION_TIMEOUT)
+    return failedObservation(
+      spawnedAt,
+      Object.freeze({ kind: 'duplex_operation_timeout', operation: 'attach' as const }),
+      exit,
+    );
+  if (attachOutcome === AFTER_DEADLINE)
+    return Object.freeze({ status: 'cancelled' as const, spawnedAt, exit });
+  return failedObservation(spawnedAt, undefined, exit);
+};
+
 const failedExecution = (spawnedAt: number): RunningExecution =>
   Object.freeze({
     spawnedAt,
@@ -228,23 +244,11 @@ export const createNativeProcessExecutionPort = (
           activation.process.completion.then(
             async (exit) => {
               disposeRawResponse();
-              const candidate: InvocationTerminalObservation =
-                attachOutcome === AFTER_DUPLEX_OPERATION_TIMEOUT
-                  ? failedObservation(
-                      settlement.process.spawnedAt,
-                      Object.freeze({
-                        kind: 'duplex_operation_timeout',
-                        operation: 'attach' as const,
-                      }),
-                      exit,
-                    )
-                  : attachOutcome === AFTER_DEADLINE
-                    ? Object.freeze({
-                        status: 'cancelled' as const,
-                        spawnedAt: settlement.process.spawnedAt,
-                        exit,
-                      })
-                    : failedObservation(settlement.process.spawnedAt, undefined, exit);
+              const candidate = attachRaceCandidate(
+                attachOutcome,
+                settlement.process.spawnedAt,
+                exit,
+              );
               submitDuplexCandidate(coordinator, candidate);
               return (await duplexCompletion(coordinator)) ?? candidate;
             },
