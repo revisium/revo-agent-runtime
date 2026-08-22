@@ -67,11 +67,11 @@ export const finalizeInvocationOutcome = async (input: {
     else otherPreResultEvidenceFailed = true;
   }
 
-  const outcomeAfterPreResult = scratchCleanupFailed
-    ? downgrade(normalized, 'revo.agent.scratch_cleanup_failed')
-    : otherPreResultEvidenceFailed
-      ? downgrade(normalized, 'revo.agent.output_write_failed')
-      : normalized;
+  let outcomeAfterPreResult = normalized;
+  if (scratchCleanupFailed)
+    outcomeAfterPreResult = downgrade(normalized, 'revo.agent.scratch_cleanup_failed');
+  else if (otherPreResultEvidenceFailed)
+    outcomeAfterPreResult = downgrade(normalized, 'revo.agent.output_write_failed');
 
   const finishedAt = new Date().toISOString();
   const richBase = Object.freeze({
