@@ -60,7 +60,7 @@ const parseObjectResponse = (
   validator: ResultSchemaValidator,
   evidence: NormalizedInvocationEvidence,
 ): NormalizedInvocationOutcome => {
-  const rawBytes = BoundedRawResponseEvidence.take(rawResponse);
+  const rawBytes = BoundedRawResponseEvidence.peek(rawResponse);
   if (rawResponse === undefined || rawBytes === undefined)
     return failParser('missing_terminal', evidence);
   if (rawResponse.view.byteLength === 0) return failParser('response_empty', evidence);

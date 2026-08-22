@@ -4,6 +4,8 @@ import { finalizeInvocationOutcome } from './finalize-invocation-outcome.js';
 import { InvocationInputSnapshot } from './input-snapshot.js';
 import { normalizeInvocationOutcome } from './normalize-invocation-outcome.js';
 import type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
+import { getTerminalPublicationInvocationToken } from './output-preparation-attempt/index.js';
+import type { TerminalPublicationAuthority } from './output-preparation-attempt/index.js';
 import type { PreparedLaunch } from './prepared-launch.js';
 
 type LifecycleState =
@@ -54,6 +56,8 @@ export class InvocationLifecycle {
     private readonly ports: InvocationExecutionPorts,
     private readonly snapshot: InvocationInputSnapshot,
     private readonly preparedLaunch: PreparedLaunch,
+    private readonly authority: TerminalPublicationAuthority,
+    private readonly acceptedAt: string,
     private readonly onTerminal: (settlement: NormalizedInvocationOutcome) => void,
   ) {}
 
@@ -189,7 +193,29 @@ export class InvocationLifecycle {
 
     let settlement: NormalizedInvocationOutcome;
     try {
-      settlement = await finalizeInvocationOutcome(this.ports.output, normalized);
+      const finalized = await finalizeInvocationOutcome({
+        output: this.ports.output,
+        authority: this.authority,
+        invocationToken: getTerminalPublicationInvocationToken(this.authority),
+        base: Object.freeze({
+          schemaVersion: 'agent-invocation-result/v1' as const,
+          invocationId: this.snapshot.invocationId,
+          pin: this.preparedLaunch.pin,
+          launch: Object.freeze({
+            executable: this.preparedLaunch.executable,
+            reportedVersion: this.preparedLaunch.reportedVersion,
+          }),
+          acceptedAt: this.acceptedAt,
+          files: Object.freeze({
+            directory: this.authority.outputDirectory,
+            events: 'events.ndjson' as const,
+            stdout: 'stdout.log' as const,
+            stderr: 'stderr.log' as const,
+          }),
+        }),
+        normalized,
+      });
+      settlement = finalized.outcome;
     } catch {
       settlement = Object.freeze({
         status: 'failed',

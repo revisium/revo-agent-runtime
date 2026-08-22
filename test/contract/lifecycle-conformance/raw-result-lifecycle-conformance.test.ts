@@ -127,7 +127,7 @@ test('maps a throwing accepted-lifecycle validator to one redacted terminal fail
 
   expect(subject.terminalSettlements()).toMatchObject([{ status: 'failed' }]);
   expect(
-    subject.output.calls().filter((call) => call.type === 'record-terminal-result'),
+    subject.output.calls().filter((call) => call.type === 'publish-terminal-result'),
   ).toHaveLength(1);
   expect(JSON.stringify(subject.terminalSettlements())).not.toContain('validator secret');
 });

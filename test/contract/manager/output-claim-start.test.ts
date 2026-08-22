@@ -296,8 +296,11 @@ test('trailing-slash output admission rejects before a second claim attempt is c
         await output.admit(request);
         return await admission.admit(request);
       },
-      recordTerminalResult: (outcome) => output.recordTerminalResult(outcome),
-      recordEvent: () => output.recordEvent(),
+      appendLifecycleEvent: (authority, event) => output.appendLifecycleEvent(authority, event),
+      publishTerminalResult: (authority, result) => output.publishTerminalResult(authority, result),
+      publishRawResponse: (authority, eligibility, bytes) =>
+        output.publishRawResponse(authority, eligibility, bytes),
+      cleanupScratch: (authority) => output.cleanupScratch(authority),
     },
     outputClaim: claim,
     outputPreparation: new FakeOutputPreparationPort('prepared'),

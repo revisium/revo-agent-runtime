@@ -9,11 +9,12 @@ export type { OutputPreparationPlatformResult } from './output-preparation-platf
 export type { OutputPreparationQuiescence } from './output-preparation-quiescence.js';
 export type { OutputPreparationResult } from './output-preparation-result.js';
 export type { PreparedInvocationResources } from './prepared-invocation-resources.js';
-export type { TerminalPublicationAuthority } from './terminal-publication-authority.js';
+export { TerminalPublicationAuthority } from './terminal-publication-authority.js';
 export { beginOutputPreparation } from './begin-output-preparation.js';
 export { createOutputPreparationAttempt } from './create-output-preparation-attempt.js';
 export { getOutputPreparationInvocationToken } from './get-output-preparation-invocation-token.js';
 export { getTerminalPublicationEventsCapability } from './get-terminal-publication-events-capability.js';
+export { getTerminalPublicationInvocationToken } from './get-terminal-publication-invocation-token.js';
 export { isConsumedRedactionMaterialBoundToToken } from './is-consumed-redaction-material-bound-to-token.js';
 export { isConsumedOutputPreparationMaterialBoundToToken } from './is-consumed-output-preparation-material-bound-to-token.js';
 export { takeOutputPreparationFileSlots } from './take-output-preparation-file-slots.js';

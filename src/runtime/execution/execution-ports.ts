@@ -1,13 +1,13 @@
 import type { InvocationTerminalObservation } from './execution-terminal-observation.js';
 import type { InvocationInputSnapshot } from './input-snapshot.js';
 import type { InvocationClockPort } from './invocation-clock-port.js';
-import type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
 import type { OutputClaimExclusiveCreatePort } from './output-claim-attempt/index.js';
 import type {
   OutputPreparationMutationPort,
   takePreparedInvocationResourcesPayload,
 } from './output-preparation-attempt/index.js';
 import type { PreparedLaunch } from './prepared-launch.js';
+import type { TerminalPublicationPort } from './terminal-publication-port/index.js';
 import type { WorkspaceAdmissionResult } from './workspace-admission-result.js';
 
 type PreparedInvocationResourcesPayload = NonNullable<
@@ -61,7 +61,5 @@ export interface InvocationExecutionPorts {
             | 'inspection_failed';
         }>
     >;
-    recordTerminalResult(outcome: NormalizedInvocationOutcome): Promise<void>;
-    recordEvent(): Promise<void>;
-  };
+  } & TerminalPublicationPort;
 }

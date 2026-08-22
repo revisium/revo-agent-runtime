@@ -103,6 +103,7 @@ test('publishes a completed canonical result before synchronous terminal deliver
   expect(waiterOutcome).toBe(handleOutcome);
   expect(await manager.waitForResult('ordered')).toBe(handleOutcome);
   expect(Object.isFrozen(handleOutcome)).toBe(true);
+  expect('files' in handleOutcome).toBe(false);
   if (handleOutcome.status === 'succeeded') expect(Object.isFrozen(handleOutcome.value)).toBe(true);
 });
 

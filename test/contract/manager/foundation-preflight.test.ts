@@ -286,8 +286,11 @@ test('orders fresh executable proof after resource-bound preflight and before ou
         order.push('output-admit');
         return await output.admit(request);
       },
-      recordTerminalResult: (outcome) => output.recordTerminalResult(outcome),
-      recordEvent: () => output.recordEvent(),
+      appendLifecycleEvent: (authority, event) => output.appendLifecycleEvent(authority, event),
+      publishTerminalResult: (authority, result) => output.publishTerminalResult(authority, result),
+      publishRawResponse: (authority, eligibility, bytes) =>
+        output.publishRawResponse(authority, eligibility, bytes),
+      cleanupScratch: (authority) => output.cleanupScratch(authority),
     },
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     outputClaim: new FakeOutputClaimPort('created'),
