@@ -10,6 +10,8 @@ const messageFor = (code: AgentFault['code']): string => {
       return AGENT_FAULT_MESSAGES.outputWriteFailed;
     case 'revo.agent.process_failed':
       return AGENT_FAULT_MESSAGES.processFailed;
+    case 'revo.agent.process_cleanup_failed':
+      return AGENT_FAULT_MESSAGES.processCleanupFailed;
     case 'revo.agent.result_missing':
       return AGENT_FAULT_MESSAGES.resultMissing;
     case 'revo.agent.result_too_large':

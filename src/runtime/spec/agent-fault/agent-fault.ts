@@ -17,6 +17,7 @@ export type AgentFaultCode =
   | 'revo.agent.protocol_failed'
   | 'revo.agent.output_write_failed'
   | 'revo.agent.process_failed'
+  | 'revo.agent.process_cleanup_failed'
   | 'revo.agent.result_missing'
   | 'revo.agent.result_too_large'
   | 'revo.agent.result_invalid_json'

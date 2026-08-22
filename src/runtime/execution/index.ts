@@ -139,7 +139,12 @@ export type {
 export { registerSecrets, revealRegisteredSecrets } from './secret-registration/index.js';
 export type { WorkspaceAdmissionResult } from './workspace-admission-result.js';
 export type {
+  DuplexOperation,
+  DuplexTerminalObservation,
   LiveOwnedProcess,
+  ProcessCleanupFailure,
+  ProcessCleanupFailureCause,
+  ProcessCleanupFailureEvidence,
   ProcessIdentityInspectionResult,
   ProcessInputSink,
   ProcessIoActivationResult,
@@ -162,6 +167,7 @@ export type {
 } from './terminal-publication-port/index.js';
 export {
   DuplexCoordinatorRegistration,
+  duplexCompletion,
   InvocationTokenCarrier,
   PausedProcessIo,
   SpawnAcceptedProcess,
@@ -170,4 +176,5 @@ export {
   getProcessStartInvocationToken,
   settleProcessStart,
   settleProcessStartQuiescence,
+  submitDuplexCandidate,
 } from './process-supervision-port/index.js';

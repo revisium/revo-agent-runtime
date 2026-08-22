@@ -17,6 +17,7 @@ export const AGENT_FAULT_MESSAGES = Object.freeze({
   protocolFailed: 'Agent protocol failed.',
   outputWriteFailed: 'Agent output write failed.',
   processFailed: 'Agent process failed.',
+  processCleanupFailed: 'Agent process cleanup failed.',
   resultMissing: 'Agent result is missing.',
   resultTooLarge: 'Agent result exceeded its limit.',
   resultInvalidJson: 'Agent result is not valid JSON.',

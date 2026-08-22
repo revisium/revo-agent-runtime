@@ -90,16 +90,34 @@ export const normalizeInvocationOutcome = (
   validator: ResultSchemaValidator,
 ): NormalizedInvocationOutcome => {
   const evidence: NormalizedInvocationEvidence = Object.freeze({
-    exit: observation.exit,
+    ...('exit' in observation && observation.exit !== undefined ? { exit: observation.exit } : {}),
     ...(observation.usage === undefined ? {} : { usage: observation.usage }),
     ...(observation.rawResponse === undefined ? {} : { rawResponse: observation.rawResponse }),
+    ...('schemaDiagnostics' in observation && observation.schemaDiagnostics !== undefined
+      ? { schemaDiagnostics: observation.schemaDiagnostics }
+      : {}),
   });
 
   if (observation.status === 'cancelled') return Object.freeze({ status: 'cancelled', evidence });
+  if (observation.status === 'cleanup_uncertain') {
+    if (observation.primary.kind === 'cancelled')
+      return Object.freeze({ status: 'cancelled', evidence });
+    if (observation.primary.kind === 'result_schema_failed')
+      return failSchema(evidence, evidence.schemaDiagnostics);
+    return failed(
+      Object.freeze({
+        kind: 'duplex',
+        primary: observation.primary,
+        code: duplexPrimaryFailureCode(observation.primary),
+      }),
+      evidence,
+    );
+  }
   if (observation.status === 'failed') {
     if (observation.primary.kind === 'parser_failed') {
       return failParser(observation.primary.reason, evidence);
     }
+    if (observation.primary.kind === 'result_schema_failed') return failSchema(evidence);
     return failed(
       Object.freeze({
         kind: 'duplex',
