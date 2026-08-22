@@ -332,13 +332,26 @@ export const createNativeProcessExecutionPort = (
           return (await duplexCompletion(coordinator)) ?? candidate;
         });
 
+      let cancellationCompletion: Promise<void> | undefined;
+      const requestCancellation = (): Promise<void> => {
+        if (cancellationCompletion !== undefined) return cancellationCompletion;
+        const candidate: InvocationTerminalObservation = Object.freeze({
+          status: 'cancelled' as const,
+          spawnedAt: settlement.process.spawnedAt,
+          exit: syntheticNoProcessExit,
+        });
+        submitDuplexCandidate(coordinator, candidate);
+        cancellationCompletion = (async () => {
+          const sent = await attachResult.session.requestCancellation();
+          if (sent !== 'sent') await activation.process.terminateAndReap().catch(() => undefined);
+        })();
+        return cancellationCompletion;
+      };
+
       return Object.freeze({
         spawnedAt: settlement.process.spawnedAt,
         completion,
-        requestCancellation: async (): Promise<void> => {
-          const sent = await attachResult.session.requestCancellation();
-          if (sent !== 'sent') await activation.process.terminateAndReap();
-        },
+        requestCancellation,
       });
     },
   });

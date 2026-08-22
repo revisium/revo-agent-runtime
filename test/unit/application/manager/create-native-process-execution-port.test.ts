@@ -10,6 +10,7 @@ import {
   settleProcessStart,
   type InvocationExecutionPorts,
   type LiveOwnedProcess,
+  type ProcessExitObservation,
   type ProcessIdentity,
   type ProcessInputSink,
   type ProcessOutputSink,
@@ -345,7 +346,7 @@ test.runIf(process.platform === 'linux')(
     );
     await running.requestCancellation();
 
-    await expect(running.completion).resolves.toMatchObject({ status: 'failed' });
+    await expect(running.completion).resolves.toMatchObject({ status: 'cancelled' });
   },
 );
 
@@ -941,5 +942,141 @@ test('reports internal failure when protocol finalization rejects after a succes
     status: 'failed',
     spawnedAt: 1,
     primary: { kind: 'internal' },
+  });
+});
+
+const attachedCancellationDriver = (input: {
+  readonly requestCancellation: () => Promise<'sent' | 'unsupported' | 'failed'>;
+}): void => {
+  const protocolOutput: ProcessOutputSink = Object.freeze({
+    write: async (): Promise<void> => undefined,
+    end: async (): Promise<void> => undefined,
+  });
+  vi.spyOn(InstalledBindingRegistry, 'resolveProtocolDriver').mockReturnValue(
+    Object.freeze({
+      id: 'native/stdio-v1' as const,
+      create: () =>
+        Object.freeze({
+          protocolOutput,
+          attach: async (): Promise<ProtocolAttachResult> =>
+            Object.freeze({
+              status: 'attached' as const,
+              session: Object.freeze({
+                finishAfterProtocolOutputEnd: async () =>
+                  Object.freeze({
+                    status: 'completed' as const,
+                    response: Object.freeze({ ok: true }),
+                  }),
+                requestCancellation: input.requestCancellation,
+                closeInput: async (): Promise<void> => undefined,
+                dispose: (): void => undefined,
+              }),
+            }),
+          dispose: (): void => undefined,
+        }),
+    }),
+  );
+};
+
+const activatedAttachedExecution = (input: {
+  readonly completion: Promise<ProcessExitObservation>;
+  readonly terminateAndReap: () => Promise<void>;
+}): InvocationExecutionPorts['execution'] => {
+  const identity: ProcessIdentity = Object.freeze({
+    pid: 10,
+    processGroupId: 10,
+    fingerprint: 'sha256:test',
+  });
+  const dispatch: NonNullable<NativeDispatchParameter> = {
+    beginStart: vi.fn((attempt: ProcessStartAttempt) => {
+      settleProcessStart(attempt, { status: 'accepted', spawnedAt: 1 });
+    }),
+    inspectIdentity: vi.fn(async () => ({ status: 'identified' as const, identity })),
+    killUnactivated: vi.fn(),
+    activateIo: vi.fn(() => ({
+      status: 'activated' as const,
+      process: Object.freeze({
+        spawnedAt: 1,
+        identity,
+        completion: input.completion,
+        stdin: inertInput,
+        terminateAndReap: input.terminateAndReap,
+      }),
+    })),
+  };
+  return createNativeProcessExecutionPort(dispatch);
+};
+
+test('memoizes caller cancellation completion and only terminates once', async () => {
+  const exit = deferred<ProcessExitObservation>();
+  const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+  attachedCancellationDriver({ requestCancellation: async () => 'unsupported' });
+  const execution = activatedAttachedExecution({
+    completion: exit.promise,
+    terminateAndReap,
+  });
+
+  const running = await execution.start(
+    snapshot('native-cancellation-memoized'),
+    preparedLaunch(),
+    preparedResources(),
+  );
+  const first = running.requestCancellation();
+  const second = running.requestCancellation();
+
+  expect(second).toBe(first);
+  await expect(first).resolves.toBeUndefined();
+  expect(terminateAndReap).toHaveBeenCalledTimes(1);
+});
+
+test('keeps synchronously committed caller cancellation when natural completion follows', async () => {
+  const exit = deferred<ProcessExitObservation>();
+  const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+  attachedCancellationDriver({ requestCancellation: async () => 'unsupported' });
+  const execution = activatedAttachedExecution({
+    completion: exit.promise,
+    terminateAndReap,
+  });
+
+  const running = await execution.start(
+    snapshot('native-cancellation-wins-natural-completion'),
+    preparedLaunch(),
+    preparedResources(),
+  );
+  const cancellation = running.requestCancellation();
+  exit.resolve(Object.freeze({ exitCode: 7, signal: null }));
+
+  await expect(cancellation).resolves.toBeUndefined();
+  await expect(running.completion).resolves.toEqual({
+    status: 'cancelled',
+    spawnedAt: 1,
+    exit: { exitCode: null, signal: null },
+  });
+});
+
+test('fulfills caller cancellation even when termination cleanup rejects', async () => {
+  const exit = deferred<ProcessExitObservation>();
+  const terminateAndReap = vi.fn(async (): Promise<void> => {
+    throw new Error('cleanup rejected');
+  });
+  attachedCancellationDriver({ requestCancellation: async () => 'unsupported' });
+  const execution = activatedAttachedExecution({
+    completion: exit.promise,
+    terminateAndReap,
+  });
+
+  const running = await execution.start(
+    snapshot('native-cancellation-cleanup-rejects'),
+    preparedLaunch(),
+    preparedResources(),
+  );
+  const cancellation = running.requestCancellation();
+  exit.resolve(Object.freeze({ exitCode: 7, signal: null }));
+
+  await expect(cancellation).resolves.toBeUndefined();
+  await expect(running.completion).resolves.toEqual({
+    status: 'cancelled',
+    spawnedAt: 1,
+    exit: { exitCode: null, signal: null },
   });
 });
