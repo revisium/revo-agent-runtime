@@ -7,6 +7,7 @@ import type { ResultParserUsage } from './result-parser/index.js';
 export type InvocationTerminalObservation =
   | Readonly<{
       status: 'completed';
+      spawnedAt: number;
       exit: ProcessExitObservation;
       rawResponse?: BoundedRawResponseEvidence;
       parsedResponse?: JsonObject;
@@ -14,12 +15,14 @@ export type InvocationTerminalObservation =
     }>
   | Readonly<{
       status: 'cancelled';
+      spawnedAt: number;
       exit: ProcessExitObservation;
       usage?: ResultParserUsage;
       rawResponse?: BoundedRawResponseEvidence;
     }>
   | Readonly<{
       status: 'failed';
+      spawnedAt: number;
       exit: ProcessExitObservation;
       primary: InterimDuplexPrimaryFailure;
       usage?: ResultParserUsage;

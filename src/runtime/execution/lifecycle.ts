@@ -16,9 +16,10 @@ type LifecycleState =
 type CancellationCause = 'caller' | 'deadline';
 type RunningExecution = Awaited<ReturnType<InvocationExecutionPorts['execution']['start']>>;
 
-const internalFailureObservation = (): InvocationTerminalObservation =>
+const internalFailureObservation = (spawnedAt = Date.now()): InvocationTerminalObservation =>
   Object.freeze({
     status: 'failed',
+    spawnedAt,
     exit: Object.freeze({ exitCode: null, signal: null }),
     primary: Object.freeze({ kind: 'internal' }),
   });
@@ -79,17 +80,31 @@ export class InvocationLifecycle {
       const execution = await this.ports.execution.start(this.snapshot, this.preparedLaunch);
       if (this.state === 'terminal' || this.state === 'finalizing') return;
       this.execution = execution;
-      this.deadlineCancellation = this.ports.clock.schedule(
-        this.snapshot.wallClockTimeoutMs,
-        () => {
-          void this.requestCancellationFor('deadline').catch(() => undefined);
-        },
+      // `spawnedAt` is Date.now()-based today, while InvocationClockPort uses an arbitrary monotonic origin.
+      const now = Date.now();
+      const wallRemaining = Math.max(
+        0,
+        execution.spawnedAt + this.snapshot.wallClockTimeoutMs - now,
       );
+      const idleRemaining = Math.max(
+        0,
+        execution.spawnedAt + this.snapshot.limits.idleTimeoutMs - now,
+      );
+      const cancelWall = this.ports.clock.schedule(wallRemaining, () => {
+        void this.requestCancellationFor('deadline').catch(() => undefined);
+      });
+      const cancelIdle = this.ports.clock.schedule(idleRemaining, () => {
+        void this.requestCancellationFor('deadline').catch(() => undefined);
+      });
+      this.deadlineCancellation = () => {
+        cancelWall();
+        cancelIdle();
+      };
       if (this.state === 'starting') this.state = 'running';
       else if (this.state === 'cancelling') this.dispatchCancellation();
       void execution.completion.then(
         (observation) => this.beginFinalization(observation),
-        () => this.beginFinalization(internalFailureObservation()),
+        () => this.beginFinalization(internalFailureObservation(execution.spawnedAt)),
       );
     } catch (error: unknown) {
       this.cancellation?.reject(error);
@@ -125,6 +140,7 @@ export class InvocationLifecycle {
           this.beginFinalization(
             Object.freeze({
               status: 'failed' as const,
+              spawnedAt: execution.spawnedAt,
               exit: Object.freeze({ exitCode: null, signal: null }),
               primary: Object.freeze({ kind: 'internal' as const }),
             }),
@@ -147,7 +163,7 @@ export class InvocationLifecycle {
         observation.status === 'cancelled'
           ? Object.freeze({
               status:
-                this.cancellationCause === 'deadline'
+                this.cancellationCause !== 'caller'
                   ? ('timed_out' as const)
                   : ('cancelled' as const),
               evidence: Object.freeze({

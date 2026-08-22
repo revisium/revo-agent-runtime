@@ -1210,6 +1210,7 @@ type ExpectedInvocationExecutionPorts = {
       preparedLaunch: PreparedLaunch,
       resources?: NonNullable<ReturnType<typeof takePreparedInvocationResourcesPayload>>,
     ): Promise<{
+      readonly spawnedAt: number;
       readonly completion: Promise<InvocationTerminalObservation>;
       requestCancellation(): Promise<void>;
     }>;

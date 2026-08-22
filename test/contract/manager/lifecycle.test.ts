@@ -160,8 +160,10 @@ test('passes prepared invocation resources as the third execution start argument
       if (resources === undefined) throw new Error('Expected prepared resources.');
       starts.push([snapshot, preparedLaunch, resources]);
       return {
+        spawnedAt: 123_456,
         completion: Promise.resolve({
           status: 'completed',
+          spawnedAt: 123_456,
           exit: Object.freeze({ exitCode: 0, signal: null }),
         } satisfies InvocationTerminalObservation),
         requestCancellation: async () => undefined,

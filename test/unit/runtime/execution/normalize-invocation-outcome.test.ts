@@ -22,6 +22,7 @@ const completed = (input: {
 }) =>
   Object.freeze({
     status: 'completed' as const,
+    spawnedAt: 123_456,
     exit: cleanExit,
     ...(input.rawResponse === undefined ? {} : { rawResponse: input.rawResponse }),
     ...(input.parsedResponse === undefined ? {} : { parsedResponse: input.parsedResponse }),
