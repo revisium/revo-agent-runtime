@@ -14,10 +14,18 @@ import type {
 
 interface ParserFailureState {
   failure?: ParserFailureReason;
+  rawResponse?: import('../../../runtime/execution/index.js').BoundedRawResponseEvidence;
 }
 
-const parserFailure = (reason: ParserFailureReason): ProtocolObservationResult =>
-  Object.freeze({ status: 'failed', failure: Object.freeze({ kind: 'parser_failed', reason }) });
+const parserFailure = (
+  reason: ParserFailureReason,
+  rawResponse?: import('../../../runtime/execution/index.js').BoundedRawResponseEvidence,
+): ProtocolObservationResult =>
+  Object.freeze({
+    status: 'failed',
+    failure: Object.freeze({ kind: 'parser_failed', reason }),
+    ...(rawResponse === undefined ? {} : { rawResponse }),
+  });
 
 const completedObservation = (
   result: Extract<ReturnType<ResultParserPort['endProtocolBytes']>, { status: 'completed' }>,
@@ -47,6 +55,7 @@ const createProtocolOutput = (
       const result = resultParser.writeProtocolBytes(chunk);
       if (result.status === 'observed') return Promise.resolve();
       failureState.failure = result.reason;
+      if (result.raw !== undefined) failureState.rawResponse = result.raw;
       return Promise.reject(new Error(result.reason));
     },
     end: async (): Promise<void> => undefined,
@@ -59,7 +68,8 @@ const attachedSession = (
 ): AttachedProtocolSession =>
   Object.freeze({
     async finishAfterProtocolOutputEnd(): Promise<ProtocolObservationResult> {
-      if (failureState.failure !== undefined) return parserFailure(failureState.failure);
+      if (failureState.failure !== undefined)
+        return parserFailure(failureState.failure, failureState.rawResponse);
       const result = resultParser.endProtocolBytes();
       return result.status === 'completed'
         ? completedObservation(result)

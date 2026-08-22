@@ -44,6 +44,9 @@ import type {
   InvocationTerminalObservation,
   InvocationTokenCarrier,
   LiveOwnedProcess,
+  BoundedRawResponseEvidence,
+  NormalizedInvocationFailure,
+  NormalizedInvocationEvidence,
   NormalizedInvocationOutcome,
   OutputClaimAttempt,
   OutputClaimExclusiveCreatePort,
@@ -89,6 +92,8 @@ import type {
   EventsAppendSink,
   OutputAppendResult,
   TerminalResultPublicationResult,
+  RawFinalResponseEligibility,
+  RawResponsePublicationResult,
   ScratchCleanupResult,
   TerminalPublicationPort,
   ProcessSpawnRequest,
@@ -97,7 +102,6 @@ import type {
   ProtocolDriverId,
   ProtocolDriverPort,
   ProtocolObservationResult,
-  RawResponseDiagnostic,
   RedactingBoundedOutputSink,
   RedactingOutputGuardRequest,
   RedactionChannel,
@@ -141,6 +145,7 @@ import type {
   AgentVersionProbe,
   AgentExecutionPin,
   AgentEvent,
+  AgentInvocationResult,
   AgentInvocationSucceeded,
   JsonObject,
   JsonPrimitive,
@@ -166,6 +171,17 @@ type ExpectedAgentFaultCode =
   | 'revo.agent.probe_process_failed'
   | 'revo.agent.probe_output_invalid'
   | 'revo.agent.probe_version_mismatch'
+  | 'revo.agent.protocol_failed'
+  | 'revo.agent.output_write_failed'
+  | 'revo.agent.process_failed'
+  | 'revo.agent.result_missing'
+  | 'revo.agent.result_too_large'
+  | 'revo.agent.result_invalid_json'
+  | 'revo.agent.result_not_object'
+  | 'revo.agent.result_schema_mismatch'
+  | 'revo.agent.scratch_cleanup_failed'
+  | 'revo.agent.cancelled'
+  | 'revo.agent.timeout'
   | 'revo.agent.internal';
 
 type ExpectedValidationDiagnosticInput = {
@@ -597,6 +613,7 @@ export type RuntimeContractSurface = readonly [
   AgentVersionProbe,
   AgentExecutionPin,
   AgentEvent,
+  AgentInvocationResult,
   AgentInvocationSucceeded,
   JsonObject,
   JsonPrimitive,
@@ -841,6 +858,17 @@ type ExpectedTerminalResultPublicationResult =
         | 'directory_flush_failed';
     }>;
 
+type ExpectedRawResponsePublicationResult =
+  | Readonly<{ status: 'published'; file: 'raw-final-response.txt' }>
+  | Readonly<{
+      status:
+        | 'conflict'
+        | 'write_failed'
+        | 'flush_failed'
+        | 'link_failed'
+        | 'directory_flush_failed';
+    }>;
+
 type ExpectedScratchCleanupResult =
   | Readonly<{ status: 'cleaned' }>
   | Readonly<{ status: 'absent' }>
@@ -853,8 +881,13 @@ type ExpectedTerminalPublicationPort = {
   ): Promise<OutputAppendResult>;
   publishTerminalResult(
     authority: TerminalPublicationAuthority,
-    result: AgentInvocationSucceeded,
+    result: AgentInvocationResult,
   ): Promise<TerminalResultPublicationResult>;
+  publishRawResponse(
+    authority: TerminalPublicationAuthority,
+    eligibility: RawFinalResponseEligibility,
+    bytes: Uint8Array,
+  ): Promise<RawResponsePublicationResult>;
   cleanupScratch(authority: TerminalPublicationAuthority): Promise<ScratchCleanupResult>;
 };
 
@@ -955,14 +988,14 @@ type ExpectedProtocolObservationResult =
       status: 'completed';
       response: JsonObject;
       usage?: ResultParserUsage;
-      rawResponse?: RawResponseDiagnostic;
+      rawResponse?: BoundedRawResponseEvidence;
     }>
   | Readonly<{
       status: 'failed';
       failure:
         | Readonly<{ kind: 'protocol_sink_failed' }>
         | Readonly<{ kind: 'parser_failed'; reason: ParserFailureReason }>;
-      rawResponse?: RawResponseDiagnostic;
+      rawResponse?: BoundedRawResponseEvidence;
     }>;
 
 type ExpectedProtocolDriverPort = {
@@ -1054,6 +1087,9 @@ export type OutputAppendResultIsExact = Expect<
 >;
 export type TerminalResultPublicationResultIsExact = Expect<
   Equal<TerminalResultPublicationResult, ExpectedTerminalResultPublicationResult>
+>;
+export type RawResponsePublicationResultIsExact = Expect<
+  Equal<RawResponsePublicationResult, ExpectedRawResponsePublicationResult>
 >;
 export type ScratchCleanupResultIsExact = Expect<
   Equal<ScratchCleanupResult, ExpectedScratchCleanupResult>
@@ -1225,32 +1261,21 @@ export type InvocationExecutionPortsIsExact = Expect<
   Equal<InvocationExecutionPorts, ExpectedInvocationExecutionPorts>
 >;
 
-type ExpectedRawResponseDiagnostic = {
-  readonly byteLength: number;
-  readonly truncated: boolean;
-};
-
 type ExpectedNormalizedInvocationOutcome =
-  | { readonly status: 'succeeded'; readonly value: JsonObject }
-  | {
+  | Readonly<{
+      readonly status: 'succeeded';
+      readonly value: JsonObject;
+      readonly evidence: NormalizedInvocationEvidence;
+    }>
+  | Readonly<{
       readonly status: 'failed';
-      readonly reason:
-        | 'execution_failed'
-        | 'response_missing'
-        | 'response_empty'
-        | 'response_too_large'
-        | 'response_invalid_utf8'
-        | 'response_invalid_json'
-        | 'response_json_primitive'
-        | 'response_json_array'
-        | 'response_schema_mismatch'
-        | 'response_schema_validation_failed'
-        | 'output_write_failed';
-      readonly diagnostics?: AgentValidationDetails;
-      readonly rawResponse?: ExpectedRawResponseDiagnostic;
-    }
-  | { readonly status: 'cancelled' }
-  | { readonly status: 'timed_out' };
+      readonly failure: NormalizedInvocationFailure;
+      readonly evidence: NormalizedInvocationEvidence;
+    }>
+  | Readonly<{
+      readonly status: 'cancelled' | 'timed_out';
+      readonly evidence: NormalizedInvocationEvidence;
+    }>;
 
 export type NormalizedInvocationOutcomeIsExact = Expect<
   Equal<NormalizedInvocationOutcome, ExpectedNormalizedInvocationOutcome>

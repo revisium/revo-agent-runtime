@@ -12,6 +12,7 @@ import {
   createOutputClaimAttempt,
   createOutputPreparationAttempt,
   getTerminalPublicationEventsCapability,
+  RawFinalResponseEligibility,
   type EventsAppendSink,
   type OutputClaimExclusiveCreatePort,
   type OutputPreparationMutationRequest,
@@ -294,6 +295,28 @@ test('publishTerminalResult maps an existing temporary file to conflict before w
   await expect(readFile(join(authority.outputDirectory, 'result.json.tmp'), 'utf8')).resolves.toBe(
     'claimed',
   );
+});
+
+test('publishRawResponse rejects eligibility minted for another invocation token', async () => {
+  const authority = await makeAuthority();
+  const foreignEligibility = RawFinalResponseEligibility.create({
+    invocationToken: {},
+    partition: 'result_parsing',
+    reason: 'invalid_json',
+  });
+
+  await expect(
+    new NodePosixTerminalPublicationPort().publishRawResponse(
+      authority,
+      foreignEligibility,
+      encoder.encode('{bad}'),
+    ),
+  ).resolves.toEqual({ status: 'write_failed' });
+  await expect(
+    readFile(join(authority.outputDirectory, 'raw-final-response.txt')),
+  ).rejects.toMatchObject({
+    code: 'ENOENT',
+  });
 });
 
 test('publishTerminalResult fails closed for an unauthenticated authority without touching the filesystem', async () => {

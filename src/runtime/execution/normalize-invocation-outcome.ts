@@ -1,10 +1,12 @@
-import { AGENT_MANAGER_LIMITS } from '../policy/index.js';
 import type { AgentValidationDetails, JsonObject } from '../spec/index.js';
+import { BoundedRawResponseEvidence } from './bounded-raw-response-evidence.js';
+import { duplexPrimaryFailureCode } from './duplex-primary-failure-code.js';
 import type { InvocationTerminalObservation } from './execution-terminal-observation.js';
 import { freezeJsonValue } from './freeze-json-value.js';
-import type { NormalizedInvocationFailureReason } from './normalized-invocation-failure-reason.js';
+import type { NormalizedInvocationEvidence } from './normalized-invocation-evidence.js';
+import { type NormalizedInvocationFailure } from './normalized-invocation-failure.js';
 import type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
-import type { RawResponseDiagnostic } from './raw-response-diagnostic.js';
+import { parserFailureCode } from './parser-failure-code.js';
 import type { ResultSchemaValidator } from './result-schema-validator.js';
 
 const decoder = new TextDecoder('utf-8', { fatal: true });
@@ -12,85 +14,102 @@ const decoder = new TextDecoder('utf-8', { fatal: true });
 const isJsonObject = (value: unknown): value is JsonObject =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const rawResponseDiagnostic = (byteLength: number): RawResponseDiagnostic =>
-  Object.freeze({
-    byteLength,
-    truncated: byteLength > AGENT_MANAGER_LIMITS.maxRawResponseBytes.default,
-  });
+const failed = (
+  failure: NormalizedInvocationFailure,
+  evidence: NormalizedInvocationEvidence,
+): NormalizedInvocationOutcome => Object.freeze({ status: 'failed', failure, evidence });
 
-const failure = (
-  reason: NormalizedInvocationFailureReason,
-  input: Readonly<{
-    diagnostics?: AgentValidationDetails;
-    rawResponse?: RawResponseDiagnostic;
-  }> = Object.freeze({}),
+const failParser = (
+  reason: Parameters<typeof parserFailureCode>[0],
+  evidence: NormalizedInvocationEvidence,
 ): NormalizedInvocationOutcome =>
-  Object.freeze({
-    status: 'failed',
-    reason,
-    ...(input.diagnostics === undefined ? {} : { diagnostics: input.diagnostics }),
-    ...(input.rawResponse === undefined ? {} : { rawResponse: input.rawResponse }),
-  });
+  failed(Object.freeze({ kind: 'parser', reason, code: parserFailureCode(reason) }), evidence);
+
+const failSchema = (
+  evidence: NormalizedInvocationEvidence,
+  diagnostics?: AgentValidationDetails,
+): NormalizedInvocationOutcome =>
+  failed(
+    Object.freeze({
+      kind: 'result_schema',
+      code: 'revo.agent.result_schema_mismatch' as const,
+      ...(diagnostics === undefined ? {} : { diagnostics }),
+    }),
+    Object.freeze({
+      ...evidence,
+      ...(diagnostics === undefined ? {} : { schemaDiagnostics: diagnostics }),
+    }),
+  );
 
 const validateParsedResponse = (
   parsed: JsonObject,
   validator: ResultSchemaValidator,
+  evidence: NormalizedInvocationEvidence,
 ): NormalizedInvocationOutcome => {
   try {
     const diagnostics = validator.validate(parsed);
-    if (diagnostics !== undefined) return failure('response_schema_mismatch', { diagnostics });
+    if (diagnostics !== undefined) return failSchema(evidence, diagnostics);
   } catch {
-    return failure('response_schema_validation_failed');
+    return failSchema(evidence);
   }
-  return Object.freeze({ status: 'succeeded', value: parsed });
+  return Object.freeze({ status: 'succeeded', value: parsed, evidence });
 };
 
 const parseObjectResponse = (
-  rawResponse: Uint8Array | undefined,
+  rawResponse: BoundedRawResponseEvidence | undefined,
   validator: ResultSchemaValidator,
+  evidence: NormalizedInvocationEvidence,
 ): NormalizedInvocationOutcome => {
-  const diagnostic = rawResponseDiagnostic(rawResponse?.byteLength ?? 0);
-  if (rawResponse === undefined) return failure('response_missing', { rawResponse: diagnostic });
-  if (rawResponse.byteLength === 0) return failure('response_empty', { rawResponse: diagnostic });
-  if (diagnostic.truncated) return failure('response_too_large', { rawResponse: diagnostic });
+  const rawBytes = BoundedRawResponseEvidence.take(rawResponse);
+  if (rawResponse === undefined || rawBytes === undefined)
+    return failParser('missing_terminal', evidence);
+  if (rawResponse.view.byteLength === 0) return failParser('response_empty', evidence);
+  if (rawResponse.view.truncated) return failParser('response_too_large', evidence);
 
   let text: string;
   try {
-    text = decoder.decode(new Uint8Array(rawResponse));
+    text = decoder.decode(rawBytes);
   } catch {
-    return failure('response_invalid_utf8', { rawResponse: diagnostic });
+    return failParser('invalid_utf8', evidence);
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return failure('response_invalid_json', { rawResponse: diagnostic });
+    return failParser('invalid_json', evidence);
   }
-  if (!isJsonObject(parsed)) {
-    return failure(Array.isArray(parsed) ? 'response_json_array' : 'response_json_primitive', {
-      rawResponse: diagnostic,
-    });
-  }
+  if (!isJsonObject(parsed)) return failParser('response_not_object', evidence);
 
   freezeJsonValue(parsed);
-  try {
-    const diagnostics = validator.validate(parsed);
-    if (diagnostics !== undefined)
-      return failure('response_schema_mismatch', { diagnostics, rawResponse: diagnostic });
-  } catch {
-    return failure('response_schema_validation_failed', { rawResponse: diagnostic });
-  }
-  return Object.freeze({ status: 'succeeded', value: parsed });
+  return validateParsedResponse(parsed, validator, evidence);
 };
 
 export const normalizeInvocationOutcome = (
   observation: InvocationTerminalObservation,
   validator: ResultSchemaValidator,
 ): NormalizedInvocationOutcome => {
-  if (observation.status === 'cancelled') return Object.freeze({ status: 'cancelled' });
-  if (observation.status === 'failed') return failure('execution_failed');
+  const evidence: NormalizedInvocationEvidence = Object.freeze({
+    exit: observation.exit,
+    ...(observation.usage === undefined ? {} : { usage: observation.usage }),
+    ...(observation.rawResponse === undefined ? {} : { rawResponse: observation.rawResponse }),
+  });
+
+  if (observation.status === 'cancelled') return Object.freeze({ status: 'cancelled', evidence });
+  if (observation.status === 'failed') {
+    if (observation.primary.kind === 'parser_failed') {
+      return failParser(observation.primary.reason, evidence);
+    }
+    return failed(
+      Object.freeze({
+        kind: 'duplex',
+        primary: observation.primary,
+        code: duplexPrimaryFailureCode(observation.primary),
+      }),
+      evidence,
+    );
+  }
   if (observation.parsedResponse !== undefined)
-    return validateParsedResponse(observation.parsedResponse, validator);
-  return parseObjectResponse(observation.rawResponse, validator);
+    return validateParsedResponse(observation.parsedResponse, validator, evidence);
+  return parseObjectResponse(observation.rawResponse, validator, evidence);
 };

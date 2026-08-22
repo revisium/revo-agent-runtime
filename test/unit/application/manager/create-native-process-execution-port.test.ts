@@ -216,7 +216,7 @@ test('fails defensively and disposes resources when prepared resources are missi
 
   const running = await execution.start(snapshot('native-missing-resources'), preparedLaunch());
 
-  await expect(running.completion).resolves.toEqual({ status: 'failed' });
+  await expect(running.completion).resolves.toMatchObject({ status: 'failed' });
 });
 
 test.runIf(process.platform === 'linux')(
@@ -232,9 +232,39 @@ test.runIf(process.platform === 'linux')(
       parsedResponse: { ok: true },
       usage: { inputTokens: 1, outputTokens: 2 },
     });
-    expect(normalizeInvocationOutcome(observation, acceptObject)).toEqual({
+    expect(normalizeInvocationOutcome(observation, acceptObject)).toMatchObject({
       status: 'succeeded',
       value: { ok: true },
+      evidence: { exit: { exitCode: 0, signal: null } },
+    });
+  },
+);
+
+test.runIf(process.platform === 'linux')(
+  'maps parsed response with nonzero process exit to process_failed',
+  async () => {
+    const execution = createNativeProcessExecutionPort();
+    const launch = preparedLaunch({
+      preparedPayloads: {
+        arguments: [
+          '--input-type=module',
+          '--eval',
+          "process.stdin.resume(); process.stdin.on('end',()=>{process.stdin.resume(); setTimeout(()=>{console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'{\"ok\":true}'}})); console.log(JSON.stringify({type:'turn.completed'})); process.exitCode=7;},500);});",
+        ],
+        files: [],
+      },
+    });
+
+    const running = await execution.start(
+      snapshot('native-nonzero-after-response'),
+      launch,
+      preparedResources(),
+    );
+
+    await expect(running.completion).resolves.toEqual({
+      status: 'failed',
+      exit: { exitCode: 7, signal: null },
+      primary: { kind: 'process_failed' },
     });
   },
 );
@@ -260,7 +290,7 @@ test.runIf(process.platform === 'linux')(
       preparedResources(),
     );
 
-    await expect(running.completion).resolves.toEqual({ status: 'failed' });
+    await expect(running.completion).resolves.toMatchObject({ status: 'failed' });
   },
 );
 
@@ -286,7 +316,7 @@ test.runIf(process.platform === 'linux')(
     );
     await running.requestCancellation();
 
-    await expect(running.completion).resolves.toEqual({ status: 'failed' });
+    await expect(running.completion).resolves.toMatchObject({ status: 'failed' });
   },
 );
 
@@ -316,7 +346,7 @@ test('failed identity inspection kills the unactivated accepted process and fail
     preparedResources(),
   );
 
-  await expect(running.completion).resolves.toEqual({ status: 'failed' });
+  await expect(running.completion).resolves.toMatchObject({ status: 'failed' });
   expect(killUnactivated).toHaveBeenCalledTimes(1);
 });
 
@@ -338,7 +368,7 @@ test('disposes prepared resource front ends when spawn settlement fails before a
     resources.resources,
   );
 
-  await expect(running.completion).resolves.toEqual({ status: 'failed' });
+  await expect(running.completion).resolves.toMatchObject({ status: 'failed' });
   expect(resources.stdout.disposed()).toBe(1);
   expect(resources.stderr.disposed()).toBe(1);
   expect(resources.rawResponse.disposed()).toBe(1);
@@ -355,7 +385,7 @@ test('disposes prepared resource front ends after failed identity inspection', a
     resources.resources,
   );
 
-  await expect(running.completion).resolves.toEqual({ status: 'failed' });
+  await expect(running.completion).resolves.toMatchObject({ status: 'failed' });
   expect(killUnactivated).toHaveBeenCalledTimes(1);
   expect(resources.stdout.disposed()).toBe(1);
   expect(resources.stderr.disposed()).toBe(1);
@@ -402,7 +432,7 @@ test('disposes prepared resource front ends after failed protocol attach', async
     resources.resources,
   );
 
-  await expect(running.completion).resolves.toEqual({ status: 'failed' });
+  await expect(running.completion).resolves.toMatchObject({ status: 'failed' });
   expect(terminateAndReap).toHaveBeenCalledTimes(1);
   expect(resources.stdout.disposed()).toBe(1);
   expect(resources.stderr.disposed()).toBe(1);
@@ -463,7 +493,7 @@ test('failed protocol attach terminates the activated process and fails completi
     preparedResources(),
   );
 
-  await expect(running.completion).resolves.toEqual({ status: 'failed' });
+  await expect(running.completion).resolves.toMatchObject({ status: 'failed' });
   expect(terminateAndReap).toHaveBeenCalledTimes(1);
 });
 
@@ -486,6 +516,6 @@ test('rejected spawn completion fails without hanging or cancellation work', asy
     preparedResources(),
   );
 
-  await expect(running.completion).resolves.toEqual({ status: 'failed' });
+  await expect(running.completion).resolves.toMatchObject({ status: 'failed' });
   await expect(running.requestCancellation()).resolves.toBeUndefined();
 });

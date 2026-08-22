@@ -1,14 +1,12 @@
-import type { AgentValidationDetails, JsonObject } from '../spec/index.js';
-import type { NormalizedInvocationFailureReason } from './normalized-invocation-failure-reason.js';
-import type { RawResponseDiagnostic } from './raw-response-diagnostic.js';
+import type { JsonObject } from '../spec/index.js';
+import type { NormalizedInvocationEvidence } from './normalized-invocation-evidence.js';
+import type { NormalizedInvocationFailure } from './normalized-invocation-failure.js';
 
 export type NormalizedInvocationOutcome =
-  | Readonly<{ status: 'succeeded'; value: JsonObject }>
+  | Readonly<{ status: 'succeeded'; value: JsonObject; evidence: NormalizedInvocationEvidence }>
   | Readonly<{
       status: 'failed';
-      reason: NormalizedInvocationFailureReason;
-      diagnostics?: AgentValidationDetails;
-      rawResponse?: RawResponseDiagnostic;
+      failure: NormalizedInvocationFailure;
+      evidence: NormalizedInvocationEvidence;
     }>
-  | Readonly<{ status: 'cancelled' }>
-  | Readonly<{ status: 'timed_out' }>;
+  | Readonly<{ status: 'cancelled' | 'timed_out'; evidence: NormalizedInvocationEvidence }>;

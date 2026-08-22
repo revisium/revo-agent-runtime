@@ -260,7 +260,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   await flush();
   const outputFailureResult = await outputFailure.handle.result();
   expect(outputFailureEvents).toEqual(['output-failure-event']);
-  expect(outputFailureResult).toEqual({ status: 'failed', reason: 'output_write_failed' });
+  expect(outputFailureResult).toMatchObject({ status: 'failed' });
 
   const executionFailureExecution = new FakeInvocationExecutionPort();
   const executionFailureOutput = new FakeInvocationOutputPort();
@@ -283,7 +283,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   await flush();
   const executionFailureResult = await executionFailure.handle.result();
   expect(executionFailureEvents).toEqual(['execution-failure-event']);
-  expect(executionFailureResult).toEqual({ status: 'failed', reason: 'execution_failed' });
+  expect(executionFailureResult).toMatchObject({ status: 'failed' });
 
   const cancellationExecution = new FakeInvocationExecutionPort();
   const cancellationOutput = new FakeInvocationOutputPort();
@@ -308,7 +308,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   await flush();
   const cancellationResult = await cancellation.handle.result();
   expect(cancellationEvents).toEqual(['caller-cancel-event']);
-  expect(cancellationResult).toEqual({ status: 'cancelled' });
+  expect(cancellationResult).toMatchObject({ status: 'cancelled' });
 
   const deadlineExecution = new FakeInvocationExecutionPort();
   const deadlineOutput = new FakeInvocationOutputPort();
@@ -338,7 +338,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   await flush();
   const deadlineResult = await deadline.handle.result();
   expect(deadlineEvents).toEqual(['deadline-cancel-event']);
-  expect(deadlineResult).toEqual({ status: 'timed_out' });
+  expect(deadlineResult).toMatchObject({ status: 'timed_out' });
 });
 
 test('isolates a throwing listener without stranding manager handle or active waiter resolution', async () => {

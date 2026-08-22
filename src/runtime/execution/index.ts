@@ -29,15 +29,23 @@ export type {
 } from './child-environment/index.js';
 export { captureChildEnvironment } from './child-environment/index.js';
 export { ExecutionBindingToken } from './execution-binding-token.js';
+export { BoundedRawResponseEvidence } from './bounded-raw-response-evidence.js';
+export type { RawResponseEvidenceView } from './raw-response-evidence-view.js';
 export type { InvocationTerminalObservation } from './execution-terminal-observation.js';
+export type { InterimDuplexPrimaryFailure } from './interim-duplex-primary-failure.js';
 export { finalizeInvocationOutcome } from './finalize-invocation-outcome.js';
 export { InvocationInputSnapshot } from './input-snapshot.js';
 export { StartContextSnapshot } from './start-context-snapshot.js';
 export { InvocationLifecycle } from './lifecycle.js';
 export { freezeJsonValue } from './freeze-json-value.js';
 export { normalizeInvocationOutcome } from './normalize-invocation-outcome.js';
-export type { NormalizedInvocationFailureReason } from './normalized-invocation-failure-reason.js';
+export type { NormalizedInvocationEvidence } from './normalized-invocation-evidence.js';
+export type { NormalizedInvocationFailure } from './normalized-invocation-failure.js';
+export { duplexPrimaryFailureCode } from './duplex-primary-failure-code.js';
+export { parserFailureCode } from './parser-failure-code.js';
+export { toAgentFault } from './normalized-invocation-failure-to-agent-fault.js';
 export type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
+export { mintRawFinalResponseEligibility } from './mint-raw-final-response-eligibility.js';
 export type { OutputResourcePlan } from './output-resource-plan.js';
 export type {
   OutputClaimAttempt,
@@ -78,7 +86,11 @@ export {
   getTerminalPublicationEventsCapability,
 } from './output-preparation-attempt/index.js';
 export { PreparedLaunch } from './prepared-launch.js';
-export type { RawResponseDiagnostic } from './raw-response-diagnostic.js';
+export type { RawResponseCapture } from './raw-response-capture-port.js';
+export { createRawResponseCapture } from './raw-response-capture.js';
+export type { RawFinalResponsePartition } from './raw-final-response-partition.js';
+export type { RawFinalResponseReason } from './raw-final-response-reason.js';
+export { RawFinalResponseEligibility } from './raw-final-response-eligibility.js';
 export type { RedactionChannel } from './redaction/index.js';
 export { createRedactionChannel } from './redaction/index.js';
 export type {
@@ -143,6 +155,7 @@ export type {
   ScratchCleanupResult,
   TerminalPublicationPort,
   TerminalResultPublicationResult,
+  RawResponsePublicationResult,
 } from './terminal-publication-port/index.js';
 export {
   DuplexCoordinatorRegistration,

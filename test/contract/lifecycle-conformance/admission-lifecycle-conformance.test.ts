@@ -25,7 +25,7 @@ test('rejects invalid preflight inputs without accepting an invocation', async (
         resultSchema: { $schema: 'https://json-schema.org/draft/2020-12/schema', format: 'email' },
       }),
     ),
-  ).resolves.toEqual({ status: 'rejected', reason: 'invalid_result_schema' });
+  ).resolves.toMatchObject({ status: 'rejected', reason: 'invalid_result_schema' });
   expect(invalidSchema.output.calls()).toEqual([]);
   expect(invalidSchema.execution.calls()).toEqual([]);
   expect(invalidSchema.manager.getResult('invalid-schema')).toEqual({ state: 'unknown' });
@@ -69,7 +69,7 @@ test('accepts only one concurrent invocation and snapshots caller-owned input', 
   await waitForLifecycleConformanceQuiescence();
   if (accepted?.status !== 'accepted')
     throw new Error('Expected the concurrent invocation to be accepted.');
-  await expect(accepted.handle.result()).resolves.toEqual({ status: 'succeeded', value: {} });
+  await expect(accepted.handle.result()).resolves.toMatchObject({ status: 'succeeded', value: {} });
 });
 
 test('cancels one pending accepted invocation exactly once after start confirmation', async () => {
@@ -101,7 +101,7 @@ test('cancels one pending accepted invocation exactly once after start confirmat
   subject.execution.confirmCancellation(1);
   await waitForLifecycleConformanceQuiescence();
   const result = await accepted.handle.result();
-  expect(result).toEqual({ status: 'cancelled' });
+  expect(result).toMatchObject({ status: 'cancelled' });
   expect(subject.output.recordedTerminalResults()).toEqual([result]);
   expect(subject.execution.calls()).toEqual([
     { type: 'start' },

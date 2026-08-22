@@ -9,6 +9,7 @@ import { FakeInvocationOutputPort } from '../../../support/execution/fake-output
 const candidate: NormalizedInvocationOutcome = Object.freeze({
   status: 'succeeded',
   value: Object.freeze({ result: Object.freeze({ ok: true }) }),
+  evidence: Object.freeze({}),
 });
 
 test('records an immutable candidate once and retains it after a successful commit', async () => {
@@ -27,7 +28,11 @@ test('replaces a rejected single output attempt without retrying or leaking the 
 
   const outcome = await finalizeInvocationOutcome(output, candidate);
 
-  expect(outcome).toEqual({ status: 'failed', reason: 'output_write_failed' });
+  expect(outcome).toEqual({
+    status: 'failed',
+    failure: { kind: 'finalization', code: 'revo.agent.output_write_failed' },
+    evidence: {},
+  });
   expect(output.calls()).toHaveLength(1);
   expect(output.recordedTerminalResults()).toEqual([]);
   expect(JSON.stringify(outcome)).not.toContain('output secret');

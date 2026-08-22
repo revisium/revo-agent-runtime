@@ -1,8 +1,15 @@
 import type { InvocationExecutionPorts } from './execution-ports.js';
 import type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
 
-const outputFailure = (): NormalizedInvocationOutcome =>
-  Object.freeze({ status: 'failed', reason: 'output_write_failed' });
+const outputFailure = (outcome: NormalizedInvocationOutcome): NormalizedInvocationOutcome =>
+  Object.freeze({
+    status: 'failed',
+    failure: Object.freeze({
+      kind: 'finalization',
+      code: 'revo.agent.output_write_failed',
+    }),
+    evidence: outcome.evidence,
+  });
 
 export const finalizeInvocationOutcome = async (
   output: InvocationExecutionPorts['output'],
@@ -12,6 +19,6 @@ export const finalizeInvocationOutcome = async (
     await output.recordTerminalResult(outcome);
     return outcome;
   } catch {
-    return outputFailure();
+    return outputFailure(outcome);
   }
 };

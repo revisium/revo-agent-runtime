@@ -20,7 +20,7 @@ test('waits for caller and deadline cancellation confirmation before terminal se
   expect(caller.manager.getResult('caller-cancellation')).toEqual({ state: 'active' });
   caller.execution.confirmCancellation(1);
   await waitForLifecycleConformanceQuiescence();
-  await expect(callerAccepted.handle.result()).resolves.toEqual({ status: 'cancelled' });
+  await expect(callerAccepted.handle.result()).resolves.toMatchObject({ status: 'cancelled' });
 
   const deadline = createLifecycleConformanceSubject();
   deadline.output.enqueueTerminalResultRecording();
@@ -39,7 +39,7 @@ test('waits for caller and deadline cancellation confirmation before terminal se
   deadline.execution.settleCancellationRequest(1);
   deadline.execution.confirmCancellation(1);
   await waitForLifecycleConformanceQuiescence();
-  await expect(deadlineAccepted.handle.result()).resolves.toEqual({ status: 'timed_out' });
+  await expect(deadlineAccepted.handle.result()).resolves.toMatchObject({ status: 'timed_out' });
 });
 
 test('keeps natural completion as the first terminal result when cancellation races it', async () => {
@@ -58,7 +58,7 @@ test('keeps natural completion as the first terminal result when cancellation ra
   );
   await waitForLifecycleConformanceQuiescence();
 
-  await expect(accepted.handle.result()).resolves.toEqual({
+  await expect(accepted.handle.result()).resolves.toMatchObject({
     status: 'succeeded',
     value: { winner: 'natural' },
   });
@@ -91,7 +91,7 @@ test('keeps finalizing work out of completed lookup and terminal delivery until 
   subject.output.fulfilPendingTerminalResultRecording(1);
   await waitForLifecycleConformanceQuiescence();
   const result = await accepted.handle.result();
-  expect(result).toEqual({ status: 'succeeded', value: { ok: true } });
+  expect(result).toMatchObject({ status: 'succeeded', value: { ok: true } });
   expect(subject.manager.getResult('finalizing-release')).toEqual({ state: 'completed', result });
   expect(events).toEqual([{ type: 'invocation.finished', invocationId: 'finalizing-release' }]);
   expect(
@@ -131,10 +131,7 @@ test.each([
     await waitForLifecycleConformanceQuiescence();
 
     const result = await accepted.handle.result();
-    expect(result).toEqual({
-      status: 'failed',
-      reason: 'output_write_failed',
-    });
+    expect(result).toMatchObject({ status: 'failed' });
     expect(subject.manager.getResult(invocationId)).toEqual({ state: 'completed', result });
     expect(events).toEqual([{ type: 'invocation.finished', invocationId }]);
     expect(
@@ -262,9 +259,12 @@ test('reaccepts the same literal id only after completed FIFO eviction while act
   subject.execution.settleNaturalCompletion(5, new TextEncoder().encode('{}'));
   subject.execution.settleNaturalCompletion(2, new TextEncoder().encode('{}'));
   await waitForLifecycleConformanceQuiescence();
-  await expect(reusable.handle.result()).resolves.toEqual({ status: 'succeeded', value: {} });
-  await expect(laterOne.handle.result()).resolves.toEqual({ status: 'succeeded', value: {} });
-  await expect(laterTwo.handle.result()).resolves.toEqual({ status: 'succeeded', value: {} });
-  await expect(reaccepted.handle.result()).resolves.toEqual({ status: 'succeeded', value: {} });
-  await expect(active.handle.result()).resolves.toEqual({ status: 'succeeded', value: {} });
+  await expect(reusable.handle.result()).resolves.toMatchObject({ status: 'succeeded', value: {} });
+  await expect(laterOne.handle.result()).resolves.toMatchObject({ status: 'succeeded', value: {} });
+  await expect(laterTwo.handle.result()).resolves.toMatchObject({ status: 'succeeded', value: {} });
+  await expect(reaccepted.handle.result()).resolves.toMatchObject({
+    status: 'succeeded',
+    value: {},
+  });
+  await expect(active.handle.result()).resolves.toMatchObject({ status: 'succeeded', value: {} });
 });

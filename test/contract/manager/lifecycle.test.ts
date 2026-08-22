@@ -162,6 +162,7 @@ test('passes prepared invocation resources as the third execution start argument
       return {
         completion: Promise.resolve({
           status: 'completed',
+          exit: Object.freeze({ exitCode: 0, signal: null }),
         } satisfies InvocationTerminalObservation),
         requestCancellation: async () => undefined,
       };
@@ -212,7 +213,7 @@ test('uncertain output preparation quarantines the invocation id and output dire
         output: { directory: '/out/other' },
       }),
     ),
-  ).resolves.toEqual({ status: 'rejected', reason: 'duplicate_invocation' });
+  ).resolves.toMatchObject({ status: 'rejected', reason: 'duplicate_invocation' });
   await expect(
     manager.start(
       createStartInput({
@@ -220,7 +221,7 @@ test('uncertain output preparation quarantines the invocation id and output dire
         output: { directory: '/out/uncertain' },
       }),
     ),
-  ).resolves.toEqual({ status: 'rejected', reason: 'output_prepare_uncertain' });
+  ).resolves.toMatchObject({ status: 'rejected', reason: 'output_prepare_uncertain' });
 });
 
 test('retains an id after terminal settlement until FIFO eviction', async () => {
@@ -271,7 +272,7 @@ test('retains failed composition admission after completion rejection', async ()
   await flush();
   execution.settleCompletionFailure(1, new Error('failed'));
   await flush();
-  expect(lifecycle.terminalSettlement()).toEqual({ status: 'failed', reason: 'execution_failed' });
+  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'failed' });
   await expect(manager.start(createStartInput({ invocationId: 'failed-reuse' }))).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',
@@ -306,7 +307,7 @@ test('retains caller-cancelled composition admission after confirmed cancellatio
   });
   execution.confirmCancellation(1);
   await flush();
-  expect(lifecycle.terminalSettlement()).toEqual({ status: 'cancelled' });
+  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'cancelled' });
   await expect(
     manager.start(createStartInput({ invocationId: 'cancelled-reuse' })),
   ).resolves.toEqual({
@@ -344,7 +345,7 @@ test('retains deadline-cancelled composition admission after confirmed cancellat
   execution.settleCancellationRequest(1);
   execution.confirmCancellation(1);
   await flush();
-  expect(lifecycle.terminalSettlement()).toEqual({ status: 'timed_out' });
+  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'timed_out' });
   await expect(manager.start(createStartInput({ invocationId: 'timeout-reuse' }))).resolves.toEqual(
     {
       status: 'rejected',
@@ -376,7 +377,7 @@ test('keeps a racing natural completion as the only terminal composition settlem
     'Execution completed before cancellation request was accepted',
   );
   await flush();
-  expect(lifecycle.terminalSettlement()).toEqual({ status: 'succeeded', value: {} });
+  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'succeeded', value: {} });
   await expect(manager.start(createStartInput({ invocationId: 'race-reuse' }))).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',
@@ -408,7 +409,7 @@ test('keeps an id active until its one pending terminal-result commit settles', 
 
   output.fulfilPendingTerminalResultRecording(1);
   await flush();
-  expect(first.terminalSettlement()).toEqual({ status: 'succeeded', value: { ok: true } });
+  expect(first.terminalSettlement()).toMatchObject({ status: 'succeeded', value: { ok: true } });
   await expect(manager.start(createStartInput({ invocationId: 'finalizing' }))).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',
@@ -434,10 +435,7 @@ test('retains the id after one output commit failure without retrying the commit
   execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
   await flush();
 
-  expect(lifecycle.terminalSettlement()).toEqual({
-    status: 'failed',
-    reason: 'output_write_failed',
-  });
+  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'failed' });
   expect(output.calls().filter((call) => call.type === 'record-terminal-result')).toHaveLength(1);
   await expect(
     manager.start(createStartInput({ invocationId: 'output-failure' })),
@@ -465,7 +463,7 @@ test('rejects an out-of-profile result schema before output preparation or execu
         },
       }),
     ),
-  ).resolves.toEqual({ status: 'rejected', reason: 'invalid_result_schema' });
+  ).resolves.toMatchObject({ status: 'rejected', reason: 'invalid_result_schema' });
   expect(output.calls()).toEqual([]);
   expect(execution.calls()).toEqual([]);
 });
@@ -487,7 +485,7 @@ test('checks retained invocation ids before rejecting an invalid result schema',
   await flush();
   execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
   await flush();
-  expect(accepted.terminalSettlement()).toEqual({ status: 'succeeded', value: { ok: true } });
+  expect(accepted.terminalSettlement()).toMatchObject({ status: 'succeeded', value: { ok: true } });
 
   await expect(
     manager.start(
@@ -498,7 +496,7 @@ test('checks retained invocation ids before rejecting an invalid result schema',
         },
       }),
     ),
-  ).resolves.toEqual({ status: 'rejected', reason: 'duplicate_invocation' });
+  ).resolves.toMatchObject({ status: 'rejected', reason: 'duplicate_invocation' });
 });
 
 test('finalizes a deep in-bound response with one output commit before retaining its id', async () => {

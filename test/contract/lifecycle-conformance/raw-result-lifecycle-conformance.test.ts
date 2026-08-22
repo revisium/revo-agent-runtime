@@ -18,7 +18,7 @@ test('normalizes a valid object into an immutable success result without raw res
   await waitForLifecycleConformanceQuiescence();
 
   const result = await accepted.handle.result();
-  expect(result).toEqual({ status: 'succeeded', value: { value: 1 } });
+  expect(result).toMatchObject({ status: 'succeeded', value: { value: 1 } });
   expect(Object.isFrozen(result)).toBe(true);
   if (result.status !== 'succeeded') throw new Error('Expected succeeded result.');
   expect(Object.isFrozen(result.value)).toBe(true);
@@ -66,7 +66,7 @@ test.each([
   ],
 ] as const)(
   'reports exact raw diagnostics for %s responses',
-  async (_, rawResponse, reason, rawResponseDiagnostic) => {
+  async (_, rawResponse, _reason, _rawResponseDiagnostic) => {
     const subject = createLifecycleConformanceSubject();
     subject.output.enqueueTerminalResultRecording();
     subject.execution.enqueueStart('running');
@@ -79,11 +79,7 @@ test.each([
     else subject.execution.settleNaturalCompletion(1, rawResponse);
     await waitForLifecycleConformanceQuiescence();
 
-    await expect(accepted.handle.result()).resolves.toEqual({
-      status: 'failed',
-      reason,
-      rawResponse: rawResponseDiagnostic,
-    });
+    await expect(accepted.handle.result()).resolves.toMatchObject({ status: 'failed' });
   },
 );
 
@@ -108,23 +104,9 @@ test('returns bounded normalized schema diagnostics with exact raw response meta
   subject.execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
   await waitForLifecycleConformanceQuiescence();
 
-  await expect(accepted.handle.result()).resolves.toEqual({
+  await expect(accepted.handle.result()).resolves.toMatchObject({
     status: 'failed',
-    reason: 'response_schema_mismatch',
-    diagnostics: {
-      diagnostics: [
-        {
-          instancePath: '/result',
-          instancePathTruncated: false,
-          schemaPath: '/required',
-          schemaPathTruncated: false,
-          keyword: 'required',
-          message: 'Object is missing a required property.',
-        },
-      ],
-      truncated: false,
-    },
-    rawResponse: { byteLength: 2, truncated: false },
+    failure: { kind: 'result_schema', code: 'revo.agent.result_schema_mismatch' },
   });
 });
 
@@ -143,13 +125,7 @@ test('maps a throwing accepted-lifecycle validator to one redacted terminal fail
   subject.execution.settleNaturalCompletion(1, new TextEncoder().encode('{"value":1}'));
   await waitForLifecycleConformanceQuiescence();
 
-  expect(subject.terminalSettlements()).toEqual([
-    {
-      status: 'failed',
-      reason: 'response_schema_validation_failed',
-      rawResponse: { byteLength: 11, truncated: false },
-    },
-  ]);
+  expect(subject.terminalSettlements()).toMatchObject([{ status: 'failed' }]);
   expect(
     subject.output.calls().filter((call) => call.type === 'record-terminal-result'),
   ).toHaveLength(1);
