@@ -3,7 +3,9 @@ import {
   createProcessStartAttempt,
   createRawResponseCapture,
   DuplexCoordinatorRegistration,
+  duplexCompletion,
   getProcessStartInvocationToken,
+  submitDuplexCandidate,
   type InterimDuplexPrimaryFailure,
   type InvocationExecutionPorts,
   type InvocationTerminalObservation,
@@ -26,14 +28,23 @@ type NativeDispatch = Pick<
 >;
 
 const AFTER_DEADLINE = Symbol('after-deadline');
+// Deliberate, narrow, temporary scope limit (execution-handoff.spec.md §14/§18): this slice arms
+// the fixed 10-second duplex-operation bound only for the 'attach' DuplexOperation. The remaining
+// nine kinds (stdin_write, stdin_end, stdout_write, stdout_end, stderr_write, stderr_end,
+// protocol_write, protocol_end, parser_finish) are not yet individually bounded by this policy.
+// Owner: the §14 duplex-coordinator program. Remove this comment and widen coverage once a later
+// slice arms the same bound for the remaining DuplexOperation kinds and submits their own
+// duplex_operation_timeout candidates through this coordinator.
+const DUPLEX_OPERATION_TIMEOUT_MS = 10_000;
+const AFTER_DUPLEX_OPERATION_TIMEOUT = Symbol('after-duplex-operation-timeout');
 const syntheticNoProcessExit: ProcessExitObservation = Object.freeze({
   exitCode: null,
   signal: null,
 });
 
-const sleepUntil = (deadlineAt: number): Promise<typeof AFTER_DEADLINE> =>
+const sleepUntil = <Sentinel>(deadlineAt: number, sentinel: Sentinel): Promise<Sentinel> =>
   new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(AFTER_DEADLINE), Math.max(0, deadlineAt - Date.now()));
+    const timer = setTimeout(() => resolve(sentinel), Math.max(0, deadlineAt - Date.now()));
     timer.unref?.();
   });
 
@@ -42,6 +53,22 @@ const failedObservation = (
   primary: InterimDuplexPrimaryFailure = Object.freeze({ kind: 'internal' as const }),
   exit: ProcessExitObservation = syntheticNoProcessExit,
 ): InvocationTerminalObservation => Object.freeze({ status: 'failed', spawnedAt, exit, primary });
+
+const attachRaceCandidate = (
+  attachOutcome: typeof AFTER_DEADLINE | typeof AFTER_DUPLEX_OPERATION_TIMEOUT | undefined,
+  spawnedAt: number,
+  exit: ProcessExitObservation,
+): InvocationTerminalObservation => {
+  if (attachOutcome === AFTER_DUPLEX_OPERATION_TIMEOUT)
+    return failedObservation(
+      spawnedAt,
+      Object.freeze({ kind: 'duplex_operation_timeout', operation: 'attach' as const }),
+      exit,
+    );
+  if (attachOutcome === AFTER_DEADLINE)
+    return Object.freeze({ status: 'cancelled' as const, spawnedAt, exit });
+  return failedObservation(spawnedAt, undefined, exit);
+};
 
 const failedExecution = (spawnedAt: number): RunningExecution =>
   Object.freeze({
@@ -203,26 +230,36 @@ export const createNativeProcessExecutionPort = (
 
       const attachOutcome = await Promise.race([
         preparedSession.attach(activation.process.stdin).catch(() => undefined),
-        sleepUntil(preacceptanceDeadlineAt),
+        sleepUntil(preacceptanceDeadlineAt, AFTER_DEADLINE),
+        sleepUntil(Date.now() + DUPLEX_OPERATION_TIMEOUT_MS, AFTER_DUPLEX_OPERATION_TIMEOUT),
       ]);
-      if (attachOutcome === AFTER_DEADLINE || attachOutcome === undefined) {
-        if (attachOutcome === AFTER_DEADLINE) void activation.process.terminateAndReap();
+      if (
+        attachOutcome === AFTER_DEADLINE ||
+        attachOutcome === AFTER_DUPLEX_OPERATION_TIMEOUT ||
+        attachOutcome === undefined
+      ) {
+        const cleanup = activation.process.terminateAndReap().catch(() => undefined);
         // activateIo already owns live pumps here; immediate front-end disposal would race their writes.
-        const completion: Promise<InvocationTerminalObservation> =
+        const completion: Promise<InvocationTerminalObservation> = cleanup.then(() =>
           activation.process.completion.then(
-            (exit) => {
+            async (exit) => {
               disposeRawResponse();
-              return Object.freeze({
-                status: 'cancelled' as const,
-                spawnedAt: settlement.process.spawnedAt,
+              const candidate = attachRaceCandidate(
+                attachOutcome,
+                settlement.process.spawnedAt,
                 exit,
-              });
+              );
+              submitDuplexCandidate(coordinator, candidate);
+              return (await duplexCompletion(coordinator)) ?? candidate;
             },
-            () => {
+            async () => {
               disposeRawResponse();
-              return failedObservation(settlement.process.spawnedAt);
+              const candidate = failedObservation(settlement.process.spawnedAt);
+              submitDuplexCandidate(coordinator, candidate);
+              return (await duplexCompletion(coordinator)) ?? candidate;
             },
-          );
+          ),
+        );
         return Object.freeze({
           spawnedAt: settlement.process.spawnedAt,
           completion,
@@ -233,13 +270,15 @@ export const createNativeProcessExecutionPort = (
       if (attachResult.status !== 'attached') {
         await activation.process.terminateAndReap();
         disposeAllFrontEnds();
+        const candidate = failedObservation(
+          settlement.process.spawnedAt,
+          Object.freeze({ kind: attachResult.reason }),
+        );
+        submitDuplexCandidate(coordinator, candidate);
         return Object.freeze({
           spawnedAt: settlement.process.spawnedAt,
-          completion: Promise.resolve(
-            failedObservation(
-              settlement.process.spawnedAt,
-              Object.freeze({ kind: attachResult.reason }),
-            ),
+          completion: Promise.resolve(candidate).then(
+            async () => (await duplexCompletion(coordinator)) ?? candidate,
           ),
           requestCancellation: async (): Promise<void> => undefined,
         });
@@ -249,41 +288,48 @@ export const createNativeProcessExecutionPort = (
         .then(async (exit) => {
           const observation = await attachResult.session.finishAfterProtocolOutputEnd();
           disposeRawResponse();
+          let candidate: InvocationTerminalObservation;
           if (observation.status === 'completed') {
-            if (exit.exitCode === 0 && exit.signal === null)
-              return Object.freeze({
-                status: 'completed' as const,
-                spawnedAt: settlement.process.spawnedAt,
-                exit,
-                parsedResponse: observation.response,
-                ...(observation.usage === undefined ? {} : { usage: observation.usage }),
-                ...(observation.rawResponse === undefined
-                  ? {}
-                  : { rawResponse: observation.rawResponse }),
-              });
-            return failedObservation(
-              settlement.process.spawnedAt,
-              Object.freeze({ kind: 'process_failed' }),
+            candidate =
+              exit.exitCode === 0 && exit.signal === null
+                ? Object.freeze({
+                    status: 'completed' as const,
+                    spawnedAt: settlement.process.spawnedAt,
+                    exit,
+                    parsedResponse: observation.response,
+                    ...(observation.usage === undefined ? {} : { usage: observation.usage }),
+                    ...(observation.rawResponse === undefined
+                      ? {}
+                      : { rawResponse: observation.rawResponse }),
+                  })
+                : failedObservation(
+                    settlement.process.spawnedAt,
+                    Object.freeze({ kind: 'process_failed' }),
+                    exit,
+                  );
+          } else {
+            const primary: InterimDuplexPrimaryFailure =
+              observation.failure.kind === 'parser_failed'
+                ? Object.freeze({ kind: 'parser_failed', reason: observation.failure.reason })
+                : Object.freeze({ kind: 'internal' as const });
+            candidate = Object.freeze({
+              status: 'failed' as const,
+              spawnedAt: settlement.process.spawnedAt,
               exit,
-            );
+              primary,
+              ...(observation.rawResponse === undefined
+                ? {}
+                : { rawResponse: observation.rawResponse }),
+            });
           }
-          const primary: InterimDuplexPrimaryFailure =
-            observation.failure.kind === 'parser_failed'
-              ? Object.freeze({ kind: 'parser_failed', reason: observation.failure.reason })
-              : Object.freeze({ kind: 'internal' as const });
-          return Object.freeze({
-            status: 'failed' as const,
-            spawnedAt: settlement.process.spawnedAt,
-            exit,
-            primary,
-            ...(observation.rawResponse === undefined
-              ? {}
-              : { rawResponse: observation.rawResponse }),
-          });
+          submitDuplexCandidate(coordinator, candidate);
+          return (await duplexCompletion(coordinator)) ?? candidate;
         })
-        .catch(() => {
+        .catch(async () => {
           disposeRawResponse();
-          return failedObservation(settlement.process.spawnedAt);
+          const candidate = failedObservation(settlement.process.spawnedAt);
+          submitDuplexCandidate(coordinator, candidate);
+          return (await duplexCompletion(coordinator)) ?? candidate;
         });
 
       return Object.freeze({
