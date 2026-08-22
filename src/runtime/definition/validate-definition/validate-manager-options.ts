@@ -61,6 +61,14 @@ const boundedInteger = (minimum: number, maximum: number) =>
   z.number().int().min(minimum).max(maximum);
 
 const limitsSchema = z.strictObject({
+  activeStateOperationTimeoutMs: boundedInteger(
+    AGENT_MANAGER_LIMITS.activeStateOperationTimeoutMs.minimum,
+    AGENT_MANAGER_LIMITS.activeStateOperationTimeoutMs.maximum,
+  ).exactOptional(),
+  initializationTimeoutMs: boundedInteger(
+    AGENT_MANAGER_LIMITS.initializationTimeoutMs.minimum,
+    AGENT_MANAGER_LIMITS.initializationTimeoutMs.maximum,
+  ).exactOptional(),
   wallClockTimeoutMs: boundedInteger(
     AGENT_MANAGER_LIMITS.wallClockTimeoutMs.minimum,
     AGENT_MANAGER_LIMITS.wallClockTimeoutMs.maximum,
@@ -426,6 +434,11 @@ const assertUniqueExactRefs = (definitions: readonly IndexedDefinition[]): void 
 
 const effectiveLimits = (limits: z.infer<typeof limitsSchema> | undefined): AgentManagerLimits => {
   const result: AgentManagerLimits = {
+    activeStateOperationTimeoutMs:
+      limits?.activeStateOperationTimeoutMs ??
+      AGENT_MANAGER_LIMITS.activeStateOperationTimeoutMs.default,
+    initializationTimeoutMs:
+      limits?.initializationTimeoutMs ?? AGENT_MANAGER_LIMITS.initializationTimeoutMs.default,
     wallClockTimeoutMs:
       limits?.wallClockTimeoutMs ?? AGENT_MANAGER_LIMITS.wallClockTimeoutMs.default,
     idleTimeoutMs: limits?.idleTimeoutMs ?? AGENT_MANAGER_LIMITS.idleTimeoutMs.default,
@@ -439,6 +452,12 @@ const effectiveLimits = (limits: z.infer<typeof limitsSchema> | undefined): Agen
     maxCompletedInvocations:
       limits?.maxCompletedInvocations ?? AGENT_MANAGER_LIMITS.maxCompletedInvocations.default,
   };
+  if (result.activeStateOperationTimeoutMs! > result.initializationTimeoutMs!)
+    rejectDiagnostic(
+      'revo.agent.limit_invalid',
+      'limit_relation',
+      '/limits/activeStateOperationTimeoutMs',
+    );
   if (result.idleTimeoutMs! > result.wallClockTimeoutMs!)
     rejectDiagnostic('revo.agent.limit_invalid', 'limit_relation', '/limits/idleTimeoutMs');
   const terminalReservation =

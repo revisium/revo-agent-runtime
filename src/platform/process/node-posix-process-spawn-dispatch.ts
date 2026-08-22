@@ -299,6 +299,9 @@ export class NodePosixProcessSpawnDispatch {
   }
 
   async killUnactivated(process: SpawnAcceptedProcess): Promise<void> {
+    // This guard and activateIo's matching guard stay synchronous until ACTIVATED.add():
+    // inserting an await between the check and add would reintroduce competing teardown ownership.
+    if (ACTIVATED.has(process)) return;
     const handle = PROCESS_SPAWN_HANDLES.get(process);
     const processGroupId = handle?.child.pid;
     ACTIVATED.add(process);

@@ -184,6 +184,8 @@ test('returns frozen package-owned snapshots and effective defaults', () => {
   expect(construction.definitions[0]?.definition).toEqual(options.definitions[0]);
   expect(construction.definitions[0]?.definitionDigest).toMatch(/^[0-9a-f]{64}$/);
   expect(construction.limits).toEqual({
+    activeStateOperationTimeoutMs: 10_000,
+    initializationTimeoutMs: 120_000,
     wallClockTimeoutMs: AGENT_MANAGER_LIMITS.wallClockTimeoutMs.default,
     idleTimeoutMs: AGENT_MANAGER_LIMITS.idleTimeoutMs.default,
     maxEventBytes: 1_024,
@@ -296,6 +298,8 @@ test('accepts and bounds redaction value counts and total bytes', () => {
 });
 
 test.each([
+  ['activeStateOperationTimeoutMs', 99, 100, 30_000, 30_001],
+  ['initializationTimeoutMs', 999, 1_000, 1_800_000, 1_800_001],
   ['wallClockTimeoutMs', 999, 1_000, 1_800_000, 1_800_001],
   ['idleTimeoutMs', 999, 1_000, 300_000, 300_001],
   ['maxEventBytes', 1_023, 1_024, 65_536, 65_537],
@@ -309,7 +313,9 @@ test.each([
     const coherentMinimum =
       field === 'wallClockTimeoutMs'
         ? { wallClockTimeoutMs: minimum, idleTimeoutMs: 1_000 }
-        : { [field]: minimum };
+        : field === 'initializationTimeoutMs'
+          ? { initializationTimeoutMs: minimum, activeStateOperationTimeoutMs: 100 }
+          : { [field]: minimum };
     expect(
       validateManagerOptions(buildAgentManagerOptions({ limits: coherentMinimum })).limits,
     ).toMatchObject(coherentMinimum);
@@ -487,6 +493,33 @@ test('propagates consumer-schema profile failures before construction succeeds',
 });
 
 test('rejects incoherent effective limits and oversized redaction data', () => {
+  const activeStateLimitFault = faultFrom(() =>
+    validateManagerOptions(
+      buildAgentManagerOptions({
+        limits: { activeStateOperationTimeoutMs: 1_001, initializationTimeoutMs: 1_000 },
+      }),
+    ),
+  );
+  expect(activeStateLimitFault).toEqual({
+    code: 'revo.agent.limit_invalid',
+    message: AGENT_FAULT_MESSAGES.limitInvalid,
+    phase: 'construction',
+    retryable: false,
+    details: {
+      diagnostics: [
+        {
+          instancePath: '/limits/activeStateOperationTimeoutMs',
+          instancePathTruncated: false,
+          schemaPath: '/limit_relation',
+          schemaPathTruncated: false,
+          keyword: 'limit_relation',
+          message: 'Agent manager limits are not coherent.',
+        },
+      ],
+      truncated: false,
+    },
+  });
+
   const limitFault = faultFrom(() =>
     validateManagerOptions(
       buildAgentManagerOptions({ limits: { idleTimeoutMs: 2_000, wallClockTimeoutMs: 1_000 } }),
