@@ -1,9 +1,11 @@
 import { expect, test } from 'vitest';
 
-import { mintRawFinalResponseEligibility } from '../../../../src/runtime/execution/mint-raw-final-response-eligibility.js';
-import type { NormalizedInvocationOutcome } from '../../../../src/runtime/execution/normalized-invocation-outcome.js';
-import { RawFinalResponseEligibility } from '../../../../src/runtime/execution/raw-final-response-eligibility.js';
-import type { ParserFailureReason } from '../../../../src/runtime/execution/result-parser/index.js';
+import {
+  mintRawFinalResponseEligibility,
+  RawFinalResponseEligibility,
+  type NormalizedInvocationOutcome,
+  type ParserFailureReason,
+} from '../../../../src/runtime/execution/index.js';
 
 const token: object = Object.freeze({});
 

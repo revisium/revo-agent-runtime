@@ -1,7 +1,9 @@
 import { expect, test } from 'vitest';
 
-import { toAgentFault } from '../../../../src/runtime/execution/normalized-invocation-failure-to-agent-fault.js';
-import type { NormalizedInvocationFailure } from '../../../../src/runtime/execution/normalized-invocation-failure.js';
+import {
+  toAgentFault,
+  type NormalizedInvocationFailure,
+} from '../../../../src/runtime/execution/index.js';
 import type { AgentFaultCode } from '../../../../src/runtime/spec/index.js';
 
 const ALL_FAULT_CODES: readonly AgentFaultCode[] = [
