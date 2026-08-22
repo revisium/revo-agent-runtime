@@ -34,6 +34,7 @@ import {
   type OutputPreparationAttempt,
   type OutputResourcePlan,
   type ResultSchemaValidator,
+  type TerminalPublicationAuthority,
 } from '../../runtime/execution/index.js';
 import { AGENT_FAULT_MESSAGES, AGENT_RUNTIME_LIMITS } from '../../runtime/policy/index.js';
 import { probeExecutable } from '../../runtime/probe/index.js';
@@ -417,6 +418,8 @@ class InternalInvocationLifecycleManager {
       if (preparationResult.status !== 'prepared')
         return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
       const resources = preparationResult.resources;
+      const authority = preparationResult.authority;
+      const acceptedAt = new Date().toISOString();
 
       const completion = createDeferred<NormalizedInvocationOutcome>();
       const lifecyclePorts: InvocationExecutionPorts = Object.freeze({
@@ -432,6 +435,8 @@ class InternalInvocationLifecycleManager {
         lifecyclePorts,
         snapshot,
         preparedLaunch,
+        authority,
+        acceptedAt,
         (outcome) => this.complete(snapshot.invocationId, completion, outcome),
       );
       this.active.set(snapshot.invocationId, Object.freeze({ completion, lifecycle }));
@@ -710,6 +715,7 @@ class InternalInvocationLifecycleManager {
     | Readonly<{
         status: 'prepared';
         resources: NonNullable<ReturnType<typeof takePreparedInvocationResourcesPayload>>;
+        authority: TerminalPublicationAuthority;
       }>
     | Readonly<{ status: 'rejected' | 'uncertain' }>
   > {
@@ -725,7 +731,7 @@ class InternalInvocationLifecycleManager {
     if (result.status === 'prepared') {
       const resources = takePreparedInvocationResourcesPayload(result.resources);
       if (resources === undefined) return Object.freeze({ status: 'rejected' as const });
-      return Object.freeze({ status: 'prepared' as const, resources });
+      return Object.freeze({ status: 'prepared' as const, resources, authority: result.authority });
     }
     return Object.freeze({ status: result.status });
   }

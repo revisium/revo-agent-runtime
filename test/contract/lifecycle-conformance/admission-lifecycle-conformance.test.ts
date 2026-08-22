@@ -102,7 +102,7 @@ test('cancels one pending accepted invocation exactly once after start confirmat
   await waitForLifecycleConformanceQuiescence();
   const result = await accepted.handle.result();
   expect(result).toMatchObject({ status: 'cancelled' });
-  expect(subject.output.recordedTerminalResults()).toEqual([result]);
+  expect(subject.output.recordedTerminalResults()).toMatchObject([{ status: 'cancelled' }]);
   expect(subject.execution.calls()).toEqual([
     { type: 'start' },
     { type: 'request-cancellation', executionId: 1 },

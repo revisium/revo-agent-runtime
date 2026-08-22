@@ -1253,9 +1253,7 @@ type ExpectedInvocationExecutionPorts = {
             | 'inspection_failed';
         }>
     >;
-    recordTerminalResult(outcome: NormalizedInvocationOutcome): Promise<void>;
-    recordEvent(): Promise<void>;
-  };
+  } & TerminalPublicationPort;
 };
 
 export type InvocationExecutionPortsIsExact = Expect<

@@ -182,3 +182,26 @@ test('validates an already parsed protocol response without reparsing raw bytes'
   });
   expect(observed).toBe(parsed);
 });
+
+test.each([
+  [
+    'response_too_large',
+    BoundedRawResponseEvidence.create({ byteLength: 3, bytes: new Uint8Array(2), previewBytes: 2 }),
+  ],
+  ['invalid_utf8', rawEvidence(new Uint8Array([0xc3, 0x28]))],
+  ['invalid_json', rawEvidence(new TextEncoder().encode('{'))],
+  ['response_not_object', rawEvidence(new TextEncoder().encode('null'))],
+  ['result_schema_mismatch', rawEvidence(new TextEncoder().encode('{"ok":true}'))],
+] as const)(
+  'leaves raw response bytes consumable after normalization for %s',
+  (_reason, rawResponse) => {
+    const expected = BoundedRawResponseEvidence.peek(rawResponse);
+    const validator: ResultSchemaValidator = Object.freeze({
+      validate: () => Object.freeze({ diagnostics: Object.freeze([]), truncated: false }),
+    });
+
+    normalizeInvocationOutcome(completed({ rawResponse }), validator);
+
+    expect(BoundedRawResponseEvidence.take(rawResponse)).toEqual(expected);
+  },
+);

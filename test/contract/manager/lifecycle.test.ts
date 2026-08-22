@@ -407,7 +407,7 @@ test('keeps an id active until its one pending terminal-result commit settles', 
     status: 'rejected',
     reason: 'duplicate_invocation',
   });
-  expect(output.calls().filter((call) => call.type === 'record-terminal-result')).toHaveLength(1);
+  expect(output.calls().filter((call) => call.type === 'publish-terminal-result')).toHaveLength(1);
 
   output.fulfilPendingTerminalResultRecording(1);
   await flush();
@@ -438,7 +438,7 @@ test('retains the id after one output commit failure without retrying the commit
   await flush();
 
   expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'failed' });
-  expect(output.calls().filter((call) => call.type === 'record-terminal-result')).toHaveLength(1);
+  expect(output.calls().filter((call) => call.type === 'publish-terminal-result')).toHaveLength(1);
   await expect(
     manager.start(createStartInput({ invocationId: 'output-failure' })),
   ).resolves.toEqual({
@@ -521,7 +521,7 @@ test('finalizes a deep in-bound response with one output commit before retaining
 
   expect(response.byteLength).toBeLessThan(1_048_576);
   expect(lifecycle.currentState()).toBe('finalizing');
-  expect(output.calls().filter((call) => call.type === 'record-terminal-result')).toHaveLength(1);
+  expect(output.calls().filter((call) => call.type === 'publish-terminal-result')).toHaveLength(1);
   await expect(manager.start(createStartInput({ invocationId: 'deep-result' }))).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',

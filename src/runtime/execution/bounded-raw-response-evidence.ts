@@ -44,6 +44,12 @@ export class BoundedRawResponseEvidence {
     return taken;
   }
 
+  static peek(evidence: unknown): Uint8Array | undefined {
+    if (!BoundedRawResponseEvidence.isAuthentic(evidence)) return undefined;
+    const bytes = evidence.#bytes;
+    return bytes === undefined ? undefined : new Uint8Array(bytes);
+  }
+
   static isAuthentic(evidence: unknown): evidence is BoundedRawResponseEvidence {
     return typeof evidence === 'object' && evidence !== null && #bytes in evidence;
   }

@@ -1,8 +1,18 @@
 import type {
   InvocationExecutionPorts,
   NormalizedInvocationOutcome,
+  RawFinalResponseEligibility,
+  RawResponsePublicationResult,
+  ScratchCleanupResult,
+  TerminalPublicationAuthority,
+  TerminalResultPublicationResult,
 } from '../../../src/runtime/execution/index.js';
-import type { JsonObject, JsonValue } from '../../../src/runtime/spec/index.js';
+import type {
+  AgentEvent,
+  AgentInvocationResult,
+  JsonObject,
+  JsonValue,
+} from '../../../src/runtime/spec/index.js';
 
 type OutputAdmissionRequest = Parameters<InvocationExecutionPorts['output']['admit']>[0];
 type OutputAdmissionResult = Awaited<ReturnType<InvocationExecutionPorts['output']['admit']>>;
@@ -10,6 +20,10 @@ type OutputAdmissionResult = Awaited<ReturnType<InvocationExecutionPorts['output
 export type InvocationOutputCall =
   | { readonly type: 'admit'; readonly request: OutputAdmissionRequest }
   | { readonly type: 'record-terminal-result'; readonly outcome: NormalizedInvocationOutcome }
+  | { readonly type: 'publish-terminal-result'; readonly result: AgentInvocationResult }
+  | { readonly type: 'publish-raw-response'; readonly bytes: Uint8Array }
+  | { readonly type: 'cleanup-scratch' }
+  | { readonly type: 'append-lifecycle-event'; readonly event: AgentEvent }
   | { readonly type: 'record-event' };
 
 export interface FakeInvocationOutputControls {
@@ -20,7 +34,7 @@ export interface FakeInvocationOutputControls {
   rejectPendingTerminalResultRecording(recordingId: number, error: Error): void;
   enqueueEventRecording(result?: Error): void;
   calls(): readonly InvocationOutputCall[];
-  recordedTerminalResults(): readonly NormalizedInvocationOutcome[];
+  recordedTerminalResults(): readonly (AgentInvocationResult | NormalizedInvocationOutcome)[];
 }
 
 type InvocationOutputPort = InvocationExecutionPorts['output'];
@@ -169,7 +183,7 @@ export class FakeInvocationOutputPort
   private readonly pendingTerminalResultRecordings = new Map<number, Deferred>();
   private readonly eventRecordingQueue: (Error | undefined)[] = [];
   private readonly callLog: InvocationOutputCall[] = [];
-  private readonly terminalResults: NormalizedInvocationOutcome[] = [];
+  private readonly terminalResults: Array<AgentInvocationResult | NormalizedInvocationOutcome> = [];
   private nextPendingTerminalResultRecordingId = 1;
 
   enqueueAdmission(result: OutputAdmissionResult | (() => OutputAdmissionResult)): void {
@@ -211,20 +225,65 @@ export class FakeInvocationOutputPort
   async recordTerminalResult(outcome: NormalizedInvocationOutcome): Promise<void> {
     const copiedOutcome = copyOutcome(outcome);
     this.record(Object.freeze({ type: 'record-terminal-result', outcome: copiedOutcome }));
-    const result = this.takeTerminalResultRecording(
+    const queued = this.takeTerminalResultRecording(
       this.terminalResultRecordingQueue,
       'terminal-result recording',
     );
-    if (result === 'pending') {
+    if (queued === 'pending') {
       const recordingId = this.nextPendingTerminalResultRecordingId;
       this.nextPendingTerminalResultRecordingId += 1;
       const pending = deferred();
       this.pendingTerminalResultRecordings.set(recordingId, pending);
       await pending.promise;
     } else {
-      this.complete(result);
+      this.complete(queued);
     }
     this.terminalResults.push(copiedOutcome);
+  }
+
+  async publishTerminalResult(
+    _authority: TerminalPublicationAuthority,
+    result: AgentInvocationResult,
+  ): Promise<TerminalResultPublicationResult> {
+    this.record(Object.freeze({ type: 'publish-terminal-result', result }));
+    const queued = this.takeTerminalResultRecording(
+      this.terminalResultRecordingQueue,
+      'terminal-result recording',
+    );
+    if (queued === 'pending') {
+      const recordingId = this.nextPendingTerminalResultRecordingId;
+      this.nextPendingTerminalResultRecordingId += 1;
+      const pending = deferred();
+      this.pendingTerminalResultRecordings.set(recordingId, pending);
+      await pending.promise;
+    } else if (queued instanceof Error) {
+      return Object.freeze({ status: 'write_failed' as const });
+    }
+    this.terminalResults.push(result);
+    return Object.freeze({ status: 'published' as const, file: 'result.json' as const });
+  }
+
+  async appendLifecycleEvent(
+    _authority: TerminalPublicationAuthority,
+    event: AgentEvent,
+  ): Promise<{ readonly status: 'appended' }> {
+    this.record(Object.freeze({ type: 'append-lifecycle-event', event }));
+    this.complete(this.take(this.eventRecordingQueue, 'event recording'));
+    return Object.freeze({ status: 'appended' as const });
+  }
+
+  async publishRawResponse(
+    _authority: TerminalPublicationAuthority,
+    _eligibility: RawFinalResponseEligibility,
+    bytes: Uint8Array,
+  ): Promise<RawResponsePublicationResult> {
+    this.record(Object.freeze({ type: 'publish-raw-response', bytes: new Uint8Array(bytes) }));
+    return Object.freeze({ status: 'published' as const, file: 'raw-final-response.txt' as const });
+  }
+
+  async cleanupScratch(_authority: TerminalPublicationAuthority): Promise<ScratchCleanupResult> {
+    this.record(Object.freeze({ type: 'cleanup-scratch' as const }));
+    return Object.freeze({ status: 'absent' as const });
   }
 
   async recordEvent(): Promise<void> {
@@ -236,8 +295,8 @@ export class FakeInvocationOutputPort
     return Object.freeze(this.callLog.map((call) => copyOutcomeCall(call)));
   }
 
-  recordedTerminalResults(): readonly NormalizedInvocationOutcome[] {
-    return Object.freeze(this.terminalResults.map((outcome) => copyOutcome(outcome)));
+  recordedTerminalResults(): readonly (AgentInvocationResult | NormalizedInvocationOutcome)[] {
+    return Object.freeze([...this.terminalResults]);
   }
 
   private pendingTerminalResultRecording(recordingId: number): Deferred {
@@ -273,5 +332,11 @@ const copyOutcomeCall = (call: InvocationOutputCall): InvocationOutputCall => {
   if (call.type === 'record-terminal-result')
     return Object.freeze({ type: call.type, outcome: copyOutcome(call.outcome) });
   if (call.type === 'admit') return Object.freeze({ type: call.type, request: call.request });
+  if (call.type === 'publish-raw-response')
+    return Object.freeze({ type: call.type, bytes: new Uint8Array(call.bytes) });
+  if (call.type === 'publish-terminal-result')
+    return Object.freeze({ type: call.type, result: call.result });
+  if (call.type === 'append-lifecycle-event')
+    return Object.freeze({ type: call.type, event: call.event });
   return Object.freeze({ type: call.type });
 };

@@ -85,7 +85,7 @@ test('keeps finalizing work out of completed lookup and terminal delivery until 
     reason: 'duplicate_invocation',
   });
   expect(
-    subject.output.calls().filter((call) => call.type === 'record-terminal-result'),
+    subject.output.calls().filter((call) => call.type === 'publish-terminal-result'),
   ).toHaveLength(1);
 
   subject.output.fulfilPendingTerminalResultRecording(1);
@@ -95,7 +95,7 @@ test('keeps finalizing work out of completed lookup and terminal delivery until 
   expect(subject.manager.getResult('finalizing-release')).toEqual({ state: 'completed', result });
   expect(events).toEqual([{ type: 'invocation.finished', invocationId: 'finalizing-release' }]);
   expect(
-    subject.output.calls().filter((call) => call.type === 'record-terminal-result'),
+    subject.output.calls().filter((call) => call.type === 'publish-terminal-result'),
   ).toHaveLength(1);
 });
 
@@ -135,7 +135,7 @@ test.each([
     expect(subject.manager.getResult(invocationId)).toEqual({ state: 'completed', result });
     expect(events).toEqual([{ type: 'invocation.finished', invocationId }]);
     expect(
-      subject.output.calls().filter((call) => call.type === 'record-terminal-result'),
+      subject.output.calls().filter((call) => call.type === 'publish-terminal-result'),
     ).toHaveLength(1);
     expect(subject.output.recordedTerminalResults()).toEqual([]);
   },

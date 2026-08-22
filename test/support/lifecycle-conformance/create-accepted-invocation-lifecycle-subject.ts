@@ -10,11 +10,18 @@ import {
   type NormalizedInvocationOutcome,
   type ResultSchemaValidator,
 } from '../../../src/runtime/execution/index.js';
+import { TerminalPublicationAuthority } from '../../../src/runtime/execution/output-preparation-attempt/index.js';
 import { FakeInvocationClock } from '../execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../execution/fake-output-claim-port.js';
 import { FakeInvocationOutputPort } from '../execution/fake-output-port.js';
 import { FakeOutputPreparationPort } from '../execution/fake-output-preparation-port.js';
+
+const authority = TerminalPublicationAuthority.create({
+  invocationId: 'lifecycle',
+  outputDirectory: '/outputs/invocation',
+  invocationToken: {},
+});
 
 const bindingToken = (agentId: string, definitionDigest: string): ExecutionBindingToken =>
   ExecutionBindingToken.create({
@@ -112,6 +119,8 @@ export const createAcceptedInvocationLifecycleSubject = (
     },
     snapshot,
     preparedLaunch,
+    authority,
+    '2026-08-22T00:00:00.000Z',
     (settlement) => settlements.push(settlement),
   );
 

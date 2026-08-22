@@ -33,7 +33,9 @@ export { BoundedRawResponseEvidence } from './bounded-raw-response-evidence.js';
 export type { RawResponseEvidenceView } from './raw-response-evidence-view.js';
 export type { InvocationTerminalObservation } from './execution-terminal-observation.js';
 export type { InterimDuplexPrimaryFailure } from './interim-duplex-primary-failure.js';
+export { buildAgentInvocationResult } from './build-agent-invocation-result.js';
 export { finalizeInvocationOutcome } from './finalize-invocation-outcome.js';
+export type { FinalizedInvocationSettlement } from './finalized-invocation-settlement.js';
 export { InvocationInputSnapshot } from './input-snapshot.js';
 export { StartContextSnapshot } from './start-context-snapshot.js';
 export { InvocationLifecycle } from './lifecycle.js';
@@ -84,6 +86,7 @@ export {
   takePreparedInvocationResourcesPayload,
   takeRegisteredSecretsForRedaction,
   getTerminalPublicationEventsCapability,
+  getTerminalPublicationInvocationToken,
 } from './output-preparation-attempt/index.js';
 export { PreparedLaunch } from './prepared-launch.js';
 export type { RawResponseCapture } from './raw-response-capture-port.js';
