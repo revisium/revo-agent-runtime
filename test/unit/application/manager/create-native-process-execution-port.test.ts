@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
 import { createNativeProcessExecutionPort } from '../../../../src/application/manager/index.js';
+import { InstalledBindingRegistry } from '../../../../src/application/manager/installed-bindings.js';
 import {
   ExecutionBindingToken,
   InvocationInputSnapshot,
@@ -13,6 +14,7 @@ import {
   type ProcessInputSink,
   type ProcessOutputSink,
   type ProcessStartAttempt,
+  type ProtocolAttachResult,
   type RedactionChannel,
   type ResultSchemaValidator,
 } from '../../../../src/runtime/execution/index.js';
@@ -666,4 +668,138 @@ test('bounds protocol attach by preacceptance deadline without disposing live st
   } finally {
     vi.useRealTimers();
   }
+});
+
+test('bounds protocol attach by fixed duplex-operation timeout before a longer preacceptance deadline', async () => {
+  vi.useFakeTimers();
+  try {
+    const spawnedAt = 30_000;
+    vi.setSystemTime(spawnedAt);
+    const exit = deferred<{ readonly exitCode: 0; readonly signal: null }>();
+    const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+    const identity: ProcessIdentity = Object.freeze({
+      pid: 10,
+      processGroupId: 10,
+      fingerprint: 'sha256:test',
+    });
+    const dispatch: NonNullable<NativeDispatchParameter> = {
+      beginStart: vi.fn((attempt: ProcessStartAttempt) => {
+        settleProcessStart(attempt, { status: 'accepted', spawnedAt });
+      }),
+      inspectIdentity: vi.fn(async () => ({ status: 'identified' as const, identity })),
+      killUnactivated: vi.fn(),
+      activateIo: vi.fn(() => ({
+        status: 'activated' as const,
+        process: Object.freeze({
+          spawnedAt,
+          identity,
+          completion: exit.promise,
+          stdin: pendingInput,
+          terminateAndReap,
+        }),
+      })),
+    };
+    const launch = preparedLaunch({
+      binding: {
+        ...binding,
+        delivery: { prompt: 'stdin', resultSchema: 'argument', result: 'stdout' },
+      },
+      bindingToken: ExecutionBindingToken.create({
+        agentId: 'fixture-agent',
+        agentVersion: '1.0.0',
+        definitionDigest: 'digest',
+        ...binding,
+        delivery: { prompt: 'stdin', resultSchema: 'argument', result: 'stdout' },
+      }),
+      preparedPayloads: {
+        arguments: ['--input-type=module', '--eval', 'setTimeout(() => {}, 30_000);'],
+        stdin: new TextEncoder().encode('prompt'),
+        files: [],
+      },
+    });
+    const execution = createNativeProcessExecutionPort(dispatch, 30_000);
+
+    const start = execution.start(
+      snapshot('native-attach-duplex-timeout', {
+        wallClockTimeoutMs: 20_000,
+        idleTimeoutMs: 20_000,
+      }),
+      launch,
+      preparedResources(),
+    );
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(10_000);
+    const running = await start;
+
+    expect(terminateAndReap).toHaveBeenCalledTimes(1);
+    exit.resolve(Object.freeze({ exitCode: 0, signal: null }));
+    await expect(running.completion).resolves.toEqual({
+      status: 'failed',
+      spawnedAt,
+      exit: { exitCode: 0, signal: null },
+      primary: { kind: 'duplex_operation_timeout', operation: 'attach' },
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('terminates and reports internal failure when protocol attach unexpectedly rejects', async () => {
+  const exit = deferred<{ readonly exitCode: 0; readonly signal: null }>();
+  const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+  const identity: ProcessIdentity = Object.freeze({
+    pid: 10,
+    processGroupId: 10,
+    fingerprint: 'sha256:test',
+  });
+  const protocolOutput: ProcessOutputSink = Object.freeze({
+    write: async (): Promise<void> => undefined,
+    end: async (): Promise<void> => undefined,
+  });
+  const dispatch: NonNullable<NativeDispatchParameter> = {
+    beginStart: vi.fn((attempt: ProcessStartAttempt) => {
+      settleProcessStart(attempt, { status: 'accepted', spawnedAt: 1 });
+    }),
+    inspectIdentity: vi.fn(async () => ({ status: 'identified' as const, identity })),
+    killUnactivated: vi.fn(),
+    activateIo: vi.fn(() => ({
+      status: 'activated' as const,
+      process: Object.freeze({
+        spawnedAt: 1,
+        identity,
+        completion: exit.promise,
+        stdin: inertInput,
+        terminateAndReap,
+      }),
+    })),
+  };
+  const driverSpy = vi.spyOn(InstalledBindingRegistry, 'resolveProtocolDriver').mockReturnValue(
+    Object.freeze({
+      id: 'native/stdio-v1' as const,
+      create: () =>
+        Object.freeze({
+          protocolOutput,
+          attach: async (): Promise<ProtocolAttachResult> => {
+            throw new Error('unexpected attach rejection');
+          },
+          dispose: (): void => undefined,
+        }),
+    }),
+  );
+  const execution = createNativeProcessExecutionPort(dispatch);
+
+  const running = await execution.start(
+    snapshot('native-attach-rejected-promise'),
+    preparedLaunch(),
+    preparedResources(),
+  );
+
+  expect(driverSpy).toHaveBeenCalled();
+  expect(terminateAndReap).toHaveBeenCalledTimes(1);
+  exit.resolve(Object.freeze({ exitCode: 0, signal: null }));
+  await expect(running.completion).resolves.toMatchObject({
+    status: 'failed',
+    spawnedAt: 1,
+    primary: { kind: 'internal' },
+  });
 });
