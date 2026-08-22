@@ -217,7 +217,11 @@ export class CodexJsonlResultParser implements ResultParserPort {
     return this.raw;
   }
 
-  private writeFailure(): ResultParserWriteResult {
+  private failureResult(): Readonly<{
+    status: 'failed';
+    reason: ParserFailureReason;
+    raw?: BoundedRawResponseEvidence;
+  }> {
     const raw = this.takeRaw();
     return Object.freeze({
       status: 'failed',
@@ -226,12 +230,11 @@ export class CodexJsonlResultParser implements ResultParserPort {
     });
   }
 
+  private writeFailure(): ResultParserWriteResult {
+    return this.failureResult();
+  }
+
   private endFailure(): ResultParserEndResult {
-    const raw = this.takeRaw();
-    return Object.freeze({
-      status: 'failed',
-      reason: this.failed ?? 'frame_malformed',
-      ...(raw === undefined ? {} : { raw }),
-    });
+    return this.failureResult();
   }
 }
