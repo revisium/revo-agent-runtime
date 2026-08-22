@@ -803,3 +803,143 @@ test('terminates and reports internal failure when protocol attach unexpectedly 
     primary: { kind: 'internal' },
   });
 });
+
+test('reports internal failure when process completion rejects after a timeout-shaped attach outcome', async () => {
+  vi.useFakeTimers();
+  try {
+    const spawnedAt = 30_000;
+    vi.setSystemTime(spawnedAt);
+    const exit = deferred<{ readonly exitCode: 0; readonly signal: null }>();
+    const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+    const identity: ProcessIdentity = Object.freeze({
+      pid: 10,
+      processGroupId: 10,
+      fingerprint: 'sha256:test',
+    });
+    const dispatch: NonNullable<NativeDispatchParameter> = {
+      beginStart: vi.fn((attempt: ProcessStartAttempt) => {
+        settleProcessStart(attempt, { status: 'accepted', spawnedAt });
+      }),
+      inspectIdentity: vi.fn(async () => ({ status: 'identified' as const, identity })),
+      killUnactivated: vi.fn(),
+      activateIo: vi.fn(() => ({
+        status: 'activated' as const,
+        process: Object.freeze({
+          spawnedAt,
+          identity,
+          completion: exit.promise,
+          stdin: pendingInput,
+          terminateAndReap,
+        }),
+      })),
+    };
+    const launch = preparedLaunch({
+      binding: {
+        ...binding,
+        delivery: { prompt: 'stdin', resultSchema: 'argument', result: 'stdout' },
+      },
+      bindingToken: ExecutionBindingToken.create({
+        agentId: 'fixture-agent',
+        agentVersion: '1.0.0',
+        definitionDigest: 'digest',
+        ...binding,
+        delivery: { prompt: 'stdin', resultSchema: 'argument', result: 'stdout' },
+      }),
+      preparedPayloads: {
+        arguments: ['--input-type=module', '--eval', 'setTimeout(() => {}, 30_000);'],
+        stdin: new TextEncoder().encode('prompt'),
+        files: [],
+      },
+    });
+    const execution = createNativeProcessExecutionPort(dispatch, 30_000);
+
+    const start = execution.start(
+      snapshot('native-attach-duplex-timeout-completion-rejects', {
+        wallClockTimeoutMs: 20_000,
+        idleTimeoutMs: 20_000,
+      }),
+      launch,
+      preparedResources(),
+    );
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(10_000);
+    const running = await start;
+
+    expect(terminateAndReap).toHaveBeenCalledTimes(1);
+    exit.reject(new Error('process completion rejected'));
+    await expect(running.completion).resolves.toMatchObject({
+      status: 'failed',
+      spawnedAt,
+      primary: { kind: 'internal' },
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('reports internal failure when protocol finalization rejects after a successful attach', async () => {
+  const exit = deferred<{ readonly exitCode: 0; readonly signal: null }>();
+  const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+  const identity: ProcessIdentity = Object.freeze({
+    pid: 10,
+    processGroupId: 10,
+    fingerprint: 'sha256:test',
+  });
+  const protocolOutput: ProcessOutputSink = Object.freeze({
+    write: async (): Promise<void> => undefined,
+    end: async (): Promise<void> => undefined,
+  });
+  const dispatch: NonNullable<NativeDispatchParameter> = {
+    beginStart: vi.fn((attempt: ProcessStartAttempt) => {
+      settleProcessStart(attempt, { status: 'accepted', spawnedAt: 1 });
+    }),
+    inspectIdentity: vi.fn(async () => ({ status: 'identified' as const, identity })),
+    killUnactivated: vi.fn(),
+    activateIo: vi.fn(() => ({
+      status: 'activated' as const,
+      process: Object.freeze({
+        spawnedAt: 1,
+        identity,
+        completion: exit.promise,
+        stdin: inertInput,
+        terminateAndReap,
+      }),
+    })),
+  };
+  vi.spyOn(InstalledBindingRegistry, 'resolveProtocolDriver').mockReturnValue(
+    Object.freeze({
+      id: 'native/stdio-v1' as const,
+      create: () =>
+        Object.freeze({
+          protocolOutput,
+          attach: async (): Promise<ProtocolAttachResult> =>
+            Object.freeze({
+              status: 'attached' as const,
+              session: Object.freeze({
+                finishAfterProtocolOutputEnd: async () => {
+                  throw new Error('unexpected protocol finalization rejection');
+                },
+                requestCancellation: async () => 'unsupported' as const,
+                closeInput: async (): Promise<void> => undefined,
+                dispose: (): void => undefined,
+              }),
+            }),
+          dispose: (): void => undefined,
+        }),
+    }),
+  );
+  const execution = createNativeProcessExecutionPort(dispatch);
+
+  const running = await execution.start(
+    snapshot('native-protocol-finalization-rejected'),
+    preparedLaunch(),
+    preparedResources(),
+  );
+
+  exit.resolve(Object.freeze({ exitCode: 0, signal: null }));
+  await expect(running.completion).resolves.toMatchObject({
+    status: 'failed',
+    spawnedAt: 1,
+    primary: { kind: 'internal' },
+  });
+});
