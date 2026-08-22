@@ -47,7 +47,7 @@ test('bounds retained raw response bytes, decodes invalid UTF-8 lossily, and zer
     byteLength: 6,
     retainedByteLength: 4,
     truncated: true,
-    preview: '��ab',
+    preview: '\uFFFD\uFFFDab',
   });
   const first = BoundedRawResponseEvidence.take(evidence);
   expect(first).toEqual(new Uint8Array([0xff, 0xfe, 0x61, 0x62]));
