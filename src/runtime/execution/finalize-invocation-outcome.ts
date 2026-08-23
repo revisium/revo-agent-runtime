@@ -5,6 +5,7 @@ import type {
 } from '../spec/index.js';
 import { BoundedRawResponseEvidence } from './bounded-raw-response-evidence.js';
 import { buildAgentInvocationResult } from './build-agent-invocation-result.js';
+import { createIsoTimestamp } from './create-iso-timestamp.js';
 import type { FinalizedInvocationSettlement } from './finalized-invocation-settlement.js';
 import { mintRawFinalResponseEligibility } from './mint-raw-final-response-eligibility.js';
 import type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
@@ -73,7 +74,7 @@ export const finalizeInvocationOutcome = async (input: {
   else if (otherPreResultEvidenceFailed)
     outcomeAfterPreResult = downgrade(normalized, 'revo.agent.output_write_failed');
 
-  const finishedAt = new Date().toISOString();
+  const finishedAt = createIsoTimestamp();
   const richBase = Object.freeze({
     ...base,
     finishedAt,

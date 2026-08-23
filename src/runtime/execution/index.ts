@@ -39,6 +39,7 @@ export type { FinalizedInvocationSettlement } from './finalized-invocation-settl
 export { InvocationInputSnapshot } from './input-snapshot.js';
 export { StartContextSnapshot } from './start-context-snapshot.js';
 export type { CancellationCommitOutcome } from './cancellation-commit-outcome.js';
+export { createIsoTimestamp } from './create-iso-timestamp.js';
 export { InvocationLifecycle } from './lifecycle.js';
 export { freezeJsonValue } from './freeze-json-value.js';
 export { normalizeInvocationOutcome } from './normalize-invocation-outcome.js';

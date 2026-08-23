@@ -1,4 +1,6 @@
+import type { JsonObject } from '../spec/index.js';
 import type { CancellationCommitOutcome } from './cancellation-commit-outcome.js';
+import { createIsoTimestamp } from './create-iso-timestamp.js';
 import type { InvocationExecutionPorts } from './execution-ports.js';
 import type { InvocationTerminalObservation } from './execution-terminal-observation.js';
 import { finalizeInvocationOutcome } from './finalize-invocation-outcome.js';
@@ -18,6 +20,7 @@ type LifecycleState =
   | 'terminal';
 type CancellationCause = 'caller' | 'deadline';
 type RunningExecution = Awaited<ReturnType<InvocationExecutionPorts['execution']['start']>>;
+type ActiveInvocationStatus = 'accepted' | 'starting' | 'running' | 'cancelling';
 
 const internalFailureObservation = (spawnedAt = Date.now()): InvocationTerminalObservation =>
   Object.freeze({
@@ -51,7 +54,10 @@ export class InvocationLifecycle {
   private deadlineCancellation: (() => void) | undefined;
   private execution: RunningExecution | undefined;
   private settlement: NormalizedInvocationOutcome | undefined;
+  private startedAtIso: string | undefined;
+  private terminalFinishedAtIso: string | undefined;
   private state: LifecycleState = 'accepted';
+  private lastActiveStatus: ActiveInvocationStatus = 'accepted';
 
   constructor(
     private readonly ports: InvocationExecutionPorts,
@@ -65,6 +71,7 @@ export class InvocationLifecycle {
   begin(): void {
     if (this.state !== 'accepted') return;
     this.state = 'starting';
+    this.lastActiveStatus = 'starting';
     void this.startExecution();
   }
 
@@ -80,11 +87,36 @@ export class InvocationLifecycle {
     return this.settlement;
   }
 
+  terminalFinishedAt(): string | undefined {
+    return this.terminalFinishedAtIso;
+  }
+
+  startedAt(): string | undefined {
+    return this.startedAtIso;
+  }
+
+  activeStatus(): ActiveInvocationStatus {
+    return this.lastActiveStatus;
+  }
+
+  pin(): PreparedLaunch['pin'] {
+    return this.preparedLaunch.pin;
+  }
+
+  outputDirectory(): string {
+    return this.authority.outputDirectory;
+  }
+
+  metadata(): JsonObject | undefined {
+    return this.snapshot.metadata;
+  }
+
   private async startExecution(): Promise<void> {
     try {
       const execution = await this.ports.execution.start(this.snapshot, this.preparedLaunch);
       if (this.state === 'terminal' || this.state === 'finalizing') return;
       this.execution = execution;
+      this.startedAtIso = createIsoTimestamp();
       // `spawnedAt` is Date.now()-based today, while InvocationClockPort uses an arbitrary monotonic origin.
       const now = Date.now();
       const wallRemaining = Math.max(
@@ -107,8 +139,10 @@ export class InvocationLifecycle {
         cancelWall();
         cancelIdle();
       };
-      if (this.state === 'starting') this.state = 'running';
-      else if (this.state === 'cancelling') this.dispatchCancellation();
+      if (this.state === 'starting') {
+        this.state = 'running';
+        this.lastActiveStatus = 'running';
+      } else if (this.state === 'cancelling') this.dispatchCancellation();
       void execution.completion.then(
         (observation) => this.beginFinalization(observation),
         () => this.beginFinalization(internalFailureObservation(execution.spawnedAt)),
@@ -130,6 +164,7 @@ export class InvocationLifecycle {
     this.cancellationCause = cause;
     this.cancellation = deferred();
     this.state = 'cancelling';
+    this.lastActiveStatus = 'cancelling';
     if (this.execution !== undefined) this.dispatchCancellation();
     return Object.freeze({ status: 'committed' as const, completion: this.cancellation.promise });
   }
@@ -213,6 +248,8 @@ export class InvocationLifecycle {
             executable: this.preparedLaunch.executable,
             reportedVersion: this.preparedLaunch.reportedVersion,
           }),
+          ...(this.snapshot.metadata === undefined ? {} : { metadata: this.snapshot.metadata }),
+          ...(this.startedAtIso === undefined ? {} : { startedAt: this.startedAtIso }),
           acceptedAt: this.acceptedAt,
           files: Object.freeze({
             directory: this.authority.outputDirectory,
@@ -223,6 +260,7 @@ export class InvocationLifecycle {
         }),
         normalized,
       });
+      this.terminalFinishedAtIso = finalized.delivered.finishedAt;
       settlement = finalized.outcome;
     } catch {
       settlement = Object.freeze({

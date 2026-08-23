@@ -153,6 +153,9 @@ import type {
   AgentVersionProbe,
   AgentExecutionPin,
   AgentEvent,
+  AgentInvocationFilter,
+  AgentInvocationSnapshot,
+  AgentInvocationStatus,
   AgentInvocationResult,
   AgentInvocationSucceeded,
   JsonObject,
@@ -622,6 +625,9 @@ export type RuntimeContractSurface = readonly [
   AgentVersionProbe,
   AgentExecutionPin,
   AgentEvent,
+  AgentInvocationFilter,
+  AgentInvocationSnapshot,
+  AgentInvocationStatus,
   AgentInvocationResult,
   AgentInvocationSucceeded,
   JsonObject,
@@ -1193,6 +1199,43 @@ export type TerminalPublicationPortIsExact = Expect<
   Equal<TerminalPublicationPort, ExpectedTerminalPublicationPort>
 >;
 export type AgentExecutionPinIsExact = Expect<Equal<AgentExecutionPin, ExpectedAgentExecutionPin>>;
+
+type ExpectedAgentInvocationStatus =
+  | 'accepted'
+  | 'starting'
+  | 'running'
+  | 'cancelling'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
+  | 'timed_out';
+
+type ExpectedAgentInvocationSnapshot = {
+  readonly invocationId: string;
+  readonly pin: AgentExecutionPin;
+  readonly status: AgentInvocationStatus;
+  readonly metadata?: JsonObject;
+  readonly acceptedAt: string;
+  readonly startedAt?: string;
+  readonly finishedAt?: string;
+  readonly outputDirectory: string;
+};
+
+type ExpectedAgentInvocationFilter = {
+  readonly invocationId?: string;
+  readonly agent?: AgentRef;
+  readonly statuses?: readonly AgentInvocationStatus[];
+};
+
+export type AgentInvocationStatusIsExact = Expect<
+  Equal<AgentInvocationStatus, ExpectedAgentInvocationStatus>
+>;
+export type AgentInvocationSnapshotIsExact = Expect<
+  Equal<AgentInvocationSnapshot, ExpectedAgentInvocationSnapshot>
+>;
+export type AgentInvocationFilterIsExact = Expect<
+  Equal<AgentInvocationFilter, ExpectedAgentInvocationFilter>
+>;
 export type AgentEventIsIncluded = Expect<Equal<AgentEvent, AgentEvent>>;
 export type AgentInvocationSucceededIsIncluded = Expect<
   Equal<AgentInvocationSucceeded, AgentInvocationSucceeded>
