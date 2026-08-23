@@ -112,18 +112,19 @@ interface Deferred<Value> {
 const resultSchemaPath = '/resultSchema';
 const resultValuePath = '/result';
 
+const compareStrings = (left: string, right: string): number => {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+};
+
 const compareInvocationSnapshots = (
   left: AgentInvocationSnapshot,
   right: AgentInvocationSnapshot,
 ): number => {
-  const acceptedAtOrder =
-    left.acceptedAt < right.acceptedAt ? -1 : left.acceptedAt > right.acceptedAt ? 1 : 0;
+  const acceptedAtOrder = compareStrings(left.acceptedAt, right.acceptedAt);
   return acceptedAtOrder === 0
-    ? left.invocationId < right.invocationId
-      ? -1
-      : left.invocationId > right.invocationId
-        ? 1
-        : 0
+    ? compareStrings(left.invocationId, right.invocationId)
     : acceptedAtOrder;
 };
 
