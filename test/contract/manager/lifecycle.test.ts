@@ -15,6 +15,16 @@ import { FakeInvocationOutputPort } from '../../support/execution/fake-output-po
 import { FakeOutputPreparationPort } from '../../support/execution/fake-output-preparation-port.js';
 import { FreshAvailableExecutableProbePort } from '../../support/probe/fresh-available-executable-probe-port.js';
 
+const cancellationCompletion = (
+  outcome:
+    | Readonly<{ status: 'committed'; completion: Promise<void> }>
+    | Readonly<{ status: 'too_late' }>,
+): Promise<void> => {
+  expect(outcome.status).toBe('committed');
+  if (outcome.status !== 'committed') throw new Error('Expected committed cancellation.');
+  return outcome.completion;
+};
+
 const definition = buildAgentDefinition();
 const agent = Object.freeze({ id: definition.id, version: definition.version });
 const lifecycleOptions = Object.freeze({ definitions: Object.freeze([definition]) });
@@ -300,7 +310,7 @@ test('retains caller-cancelled composition admission after confirmed cancellatio
   const cancellation = lifecycle.requestCancellation();
   await flush();
   execution.settleCancellationRequest(1);
-  await cancellation;
+  await cancellationCompletion(cancellation);
   await expect(
     manager.start(createStartInput({ invocationId: 'cancelled-reuse' })),
   ).resolves.toEqual({
@@ -375,7 +385,7 @@ test('keeps a racing natural completion as the only terminal composition settlem
   const cancellation = lifecycle.requestCancellation();
   await flush();
   execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
-  await expect(cancellation).rejects.toThrow(
+  await expect(cancellationCompletion(cancellation)).rejects.toThrow(
     'Execution completed before cancellation request was accepted',
   );
   await flush();

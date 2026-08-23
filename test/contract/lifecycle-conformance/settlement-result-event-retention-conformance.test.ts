@@ -3,6 +3,16 @@ import { expect, test } from 'vitest';
 import { createLifecycleConformanceSubject } from '../../support/lifecycle-conformance/create-lifecycle-conformance-subject.js';
 import { waitForLifecycleConformanceQuiescence } from '../../support/lifecycle-conformance/wait-for-lifecycle-conformance-quiescence.js';
 
+const cancellationCompletion = (
+  outcome:
+    | Readonly<{ status: 'committed'; completion: Promise<void> }>
+    | Readonly<{ status: 'too_late' }>,
+): Promise<void> => {
+  expect(outcome.status).toBe('committed');
+  if (outcome.status !== 'committed') throw new Error('Expected committed cancellation.');
+  return outcome.completion;
+};
+
 test('waits for caller and deadline cancellation confirmation before terminal settlement', async () => {
   const caller = createLifecycleConformanceSubject();
   caller.output.enqueueTerminalResultRecording();
@@ -15,7 +25,7 @@ test('waits for caller and deadline cancellation confirmation before terminal se
   const callerCancellation = callerAccepted.lifecycle.requestCancellation();
   await waitForLifecycleConformanceQuiescence();
   caller.execution.settleCancellationRequest(1);
-  await expect(callerCancellation).resolves.toBeUndefined();
+  await expect(cancellationCompletion(callerCancellation)).resolves.toBeUndefined();
   expect(callerAccepted.lifecycle.currentState()).toBe('cancelling');
   expect(caller.manager.getResult('caller-cancellation')).toEqual({ state: 'active' });
   caller.execution.confirmCancellation(1);
@@ -53,7 +63,7 @@ test('keeps natural completion as the first terminal result when cancellation ra
   const cancellation = accepted.lifecycle.requestCancellation();
   await waitForLifecycleConformanceQuiescence();
   subject.execution.settleNaturalCompletion(1, new TextEncoder().encode('{"winner":"natural"}'));
-  await expect(cancellation).rejects.toThrow(
+  await expect(cancellationCompletion(cancellation)).rejects.toThrow(
     'Execution completed before cancellation request was accepted',
   );
   await waitForLifecycleConformanceQuiescence();
