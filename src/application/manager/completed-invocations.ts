@@ -1,24 +1,28 @@
-import type { NormalizedInvocationOutcome } from '../../runtime/execution/index.js';
+import type { RetainedInvocationRecord } from './retained-invocation-record.js';
 
 export class CompletedInvocations {
-  private readonly outcomes = new Map<string, NormalizedInvocationOutcome>();
+  private readonly records = new Map<string, RetainedInvocationRecord>();
 
   constructor(private readonly capacity: number) {}
 
   has(invocationId: string): boolean {
-    return this.outcomes.has(invocationId);
+    return this.records.has(invocationId);
   }
 
-  get(invocationId: string): NormalizedInvocationOutcome | undefined {
-    return this.outcomes.get(invocationId);
+  get(invocationId: string): RetainedInvocationRecord | undefined {
+    return this.records.get(invocationId);
   }
 
-  commit(invocationId: string, outcome: NormalizedInvocationOutcome): void {
-    this.outcomes.set(invocationId, outcome);
-    while (this.outcomes.size > this.capacity) {
-      const oldestInvocationId = this.outcomes.keys().next().value;
+  entries(): readonly (readonly [string, RetainedInvocationRecord])[] {
+    return Object.freeze([...this.records.entries()].map((entry) => Object.freeze(entry)));
+  }
+
+  commit(invocationId: string, record: RetainedInvocationRecord): void {
+    this.records.set(invocationId, record);
+    while (this.records.size > this.capacity) {
+      const oldestInvocationId = this.records.keys().next().value;
       if (oldestInvocationId === undefined) return;
-      this.outcomes.delete(oldestInvocationId);
+      this.records.delete(oldestInvocationId);
     }
   }
 }

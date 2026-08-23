@@ -16,6 +16,7 @@ import {
   createPreparedExecutionSecurity,
   createPreparedInvocation,
   InvocationInputSnapshot,
+  createIsoTimestamp,
   InvocationLifecycle,
   interpretArgumentTemplate,
   PreparedLaunch,
@@ -42,6 +43,9 @@ import type { ExecutableProbePort } from '../../runtime/probe/index.js';
 import { SealedAgentRegistry } from '../../runtime/registry/index.js';
 import type {
   AgentDefinitionContract,
+  AgentInvocationFilter,
+  AgentInvocationSnapshot,
+  AgentInvocationStatus,
   AgentManagerLimits,
   JsonObject,
   JsonValue,
@@ -49,6 +53,7 @@ import type {
 import { CompletedInvocations } from './completed-invocations.js';
 import { createNativeProcessExecutionPort } from './create-native-process-execution-port.js';
 import { InstalledBindingRegistry } from './installed-bindings.js';
+import type { RetainedInvocationRecord } from './retained-invocation-record.js';
 import { TerminalSubscriptions } from './subscriptions.js';
 
 type RejectionReason =
@@ -84,6 +89,7 @@ interface LifecycleHandle {
 }
 
 interface ActiveInvocation {
+  readonly acceptedAt: string;
   readonly completion: Deferred<NormalizedInvocationOutcome>;
   readonly lifecycle: InvocationLifecycle;
 }
@@ -105,6 +111,76 @@ interface Deferred<Value> {
 
 const resultSchemaPath = '/resultSchema';
 const resultValuePath = '/result';
+
+const compareInvocationSnapshots = (
+  left: AgentInvocationSnapshot,
+  right: AgentInvocationSnapshot,
+): number => {
+  const acceptedAtOrder =
+    left.acceptedAt < right.acceptedAt ? -1 : left.acceptedAt > right.acceptedAt ? 1 : 0;
+  return acceptedAtOrder === 0
+    ? left.invocationId < right.invocationId
+      ? -1
+      : left.invocationId > right.invocationId
+        ? 1
+        : 0
+    : acceptedAtOrder;
+};
+
+const matchesFilter = (
+  snapshot: AgentInvocationSnapshot,
+  filter: AgentInvocationFilter | undefined,
+): boolean => {
+  if (filter === undefined) return true;
+  if (filter.invocationId !== undefined && snapshot.invocationId !== filter.invocationId)
+    return false;
+  if (
+    filter.agent !== undefined &&
+    (snapshot.pin.agentId !== filter.agent.id || snapshot.pin.agentVersion !== filter.agent.version)
+  )
+    return false;
+  return filter.statuses === undefined || filter.statuses.includes(snapshot.status);
+};
+
+const activeSnapshot = (
+  invocationId: string,
+  active: ActiveInvocation,
+): AgentInvocationSnapshot => {
+  const lifecycle = active.lifecycle;
+  const terminalSettlement = lifecycle.terminalSettlement();
+  const status: AgentInvocationStatus =
+    lifecycle.currentState() === 'terminal' && terminalSettlement !== undefined
+      ? terminalSettlement.status
+      : lifecycle.activeStatus();
+  const metadata = lifecycle.metadata();
+  const startedAt = lifecycle.startedAt();
+  const finishedAt = lifecycle.terminalFinishedAt();
+  return Object.freeze({
+    invocationId,
+    pin: lifecycle.pin(),
+    status,
+    ...(metadata === undefined ? {} : { metadata }),
+    acceptedAt: active.acceptedAt,
+    ...(startedAt === undefined ? {} : { startedAt }),
+    ...(finishedAt === undefined ? {} : { finishedAt }),
+    outputDirectory: lifecycle.outputDirectory(),
+  });
+};
+
+const retainedSnapshot = (
+  invocationId: string,
+  record: RetainedInvocationRecord,
+): AgentInvocationSnapshot =>
+  Object.freeze({
+    invocationId,
+    pin: record.pin,
+    status: record.outcome.status,
+    ...(record.metadata === undefined ? {} : { metadata: record.metadata }),
+    acceptedAt: record.acceptedAt,
+    ...(record.startedAt === undefined ? {} : { startedAt: record.startedAt }),
+    ...(record.finishedAt === undefined ? {} : { finishedAt: record.finishedAt }),
+    outputDirectory: record.outputDirectory,
+  });
 
 const parametersSchemaPath = '/definition/parameters/schema';
 const permissionsSchemaPath = '/definition/permissions/schema';
@@ -423,7 +499,7 @@ class InternalInvocationLifecycleManager {
         return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
       const resources = preparationResult.resources;
       const authority = preparationResult.authority;
-      const acceptedAt = new Date().toISOString();
+      const acceptedAt = createIsoTimestamp();
 
       const completion = createDeferred<NormalizedInvocationOutcome>();
       const lifecyclePorts: InvocationExecutionPorts = Object.freeze({
@@ -435,15 +511,16 @@ class InternalInvocationLifecycleManager {
           ) => this.executionPort.start(startSnapshot, startPreparedLaunch, resources),
         }),
       });
-      const lifecycle = new InvocationLifecycle(
+      let lifecycle: InvocationLifecycle;
+      lifecycle = new InvocationLifecycle(
         lifecyclePorts,
         snapshot,
         preparedLaunch,
         authority,
         acceptedAt,
-        (outcome) => this.complete(snapshot.invocationId, completion, outcome),
+        (outcome) => this.complete(snapshot.invocationId, completion, lifecycle, outcome),
       );
-      this.active.set(snapshot.invocationId, Object.freeze({ completion, lifecycle }));
+      this.active.set(snapshot.invocationId, Object.freeze({ acceptedAt, completion, lifecycle }));
       this.pending.delete(snapshot.invocationId);
       const handle = createHandle(snapshot.invocationId, completion);
       lifecycle.begin();
@@ -457,18 +534,18 @@ class InternalInvocationLifecycleManager {
   getResult(invocationId: string): LifecycleResultLookup {
     if (this.active.has(invocationId)) return Object.freeze({ state: 'active' });
 
-    const result = this.completed.get(invocationId);
-    return result === undefined
+    const record = this.completed.get(invocationId);
+    return record === undefined
       ? Object.freeze({ state: 'unknown' })
-      : Object.freeze({ state: 'completed', result });
+      : Object.freeze({ state: 'completed', result: record.outcome });
   }
 
   waitForResult(invocationId: string): Promise<LifecycleWaitResult> {
     const active = this.active.get(invocationId);
     if (active !== undefined) return active.completion.promise;
 
-    const result = this.completed.get(invocationId);
-    return Promise.resolve(result ?? Object.freeze({ state: 'unknown' } as const));
+    const record = this.completed.get(invocationId);
+    return Promise.resolve(record?.outcome ?? Object.freeze({ state: 'unknown' } as const));
   }
 
   cancel(invocationId: string): Promise<CancelOutcome> {
@@ -483,10 +560,35 @@ class InternalInvocationLifecycleManager {
         Object.freeze({ state: 'already_completed' as const, result }),
       );
     }
-    const result = this.completed.get(invocationId);
-    if (result !== undefined)
-      return Promise.resolve(Object.freeze({ state: 'already_completed' as const, result }));
+    const record = this.completed.get(invocationId);
+    if (record !== undefined)
+      return Promise.resolve(
+        Object.freeze({ state: 'already_completed' as const, result: record.outcome }),
+      );
     return Promise.resolve(Object.freeze({ state: 'unknown' as const }));
+  }
+
+  getInvocation(invocationId: string): AgentInvocationSnapshot | undefined {
+    const active = this.active.get(invocationId);
+    if (active !== undefined) return activeSnapshot(invocationId, active);
+    const record = this.completed.get(invocationId);
+    return record === undefined ? undefined : retainedSnapshot(invocationId, record);
+  }
+
+  listInvocations(filter?: AgentInvocationFilter): readonly AgentInvocationSnapshot[] {
+    const snapshots = [
+      ...[...this.active.entries()].map(([invocationId, active]) =>
+        activeSnapshot(invocationId, active),
+      ),
+      ...this.completed
+        .entries()
+        .map(([invocationId, record]) => retainedSnapshot(invocationId, record)),
+    ];
+    return Object.freeze(
+      snapshots
+        .filter((snapshot) => matchesFilter(snapshot, filter))
+        .toSorted(compareInvocationSnapshots),
+    );
   }
 
   subscribe(filter: unknown, listener: TerminalEventListener): TerminalSubscriptionAdmission {
@@ -496,9 +598,24 @@ class InternalInvocationLifecycleManager {
   private complete(
     invocationId: string,
     completion: Deferred<NormalizedInvocationOutcome>,
+    lifecycle: InvocationLifecycle,
     outcome: NormalizedInvocationOutcome,
   ): void {
-    this.completed.commit(invocationId, outcome);
+    const active = this.active.get(invocationId);
+    if (active === undefined) throw new Error('Completed invocation is not active.');
+    const acceptedAt = active.acceptedAt;
+    this.completed.commit(
+      invocationId,
+      Object.freeze({
+        outcome,
+        pin: lifecycle.pin(),
+        acceptedAt,
+        startedAt: lifecycle.startedAt(),
+        finishedAt: lifecycle.terminalFinishedAt(),
+        metadata: lifecycle.metadata(),
+        outputDirectory: lifecycle.outputDirectory(),
+      }),
+    );
     this.active.delete(invocationId);
     const event: TerminalInvocationEvent = Object.freeze({
       type: 'invocation.finished',
@@ -780,7 +897,9 @@ export const createInvocationLifecycleManager = (
   ports: LifecycleManagerPorts,
 ): Readonly<{
   cancel(invocationId: string): Promise<CancelOutcome>;
+  getInvocation(invocationId: string): AgentInvocationSnapshot | undefined;
   getResult(invocationId: string): LifecycleResultLookup;
+  listInvocations(filter?: AgentInvocationFilter): readonly AgentInvocationSnapshot[];
   start(input: unknown, context?: unknown): Promise<LifecycleStartOutcome>;
   subscribe(filter: unknown, listener: TerminalEventListener): TerminalSubscriptionAdmission;
   waitForResult(invocationId: string): Promise<LifecycleWaitResult>;

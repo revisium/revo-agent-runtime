@@ -20,6 +20,11 @@ export type {
 } from './agent-probe/index.js';
 export type { JsonObject, JsonPrimitive, JsonSchema202012, JsonValue } from './json/index.js';
 export type { AgentManagerLimits, AgentManagerOptions } from './manager-options/index.js';
+export type {
+  AgentInvocationFilter,
+  AgentInvocationSnapshot,
+  AgentInvocationStatus,
+} from './agent-invocation/index.js';
 export type { AgentEvent, AgentEventBase } from './agent-event/index.js';
 export type {
   AgentCommittedOutputFiles,

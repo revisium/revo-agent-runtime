@@ -106,11 +106,16 @@ test.runIf(process.platform === 'linux')(
     const accepted = await manager.start(createStartInput('published-success', outputDirectory));
     if (accepted.status !== 'accepted') throw new Error('Expected accepted invocation.');
     await expect(accepted.handle.result()).resolves.toMatchObject({ status: 'succeeded' });
+    const snapshot = manager.getInvocation('published-success');
+    expect(snapshot?.startedAt).toEqual(expect.any(String));
+    expect(snapshot?.finishedAt).toEqual(expect.any(String));
 
     await expect(parseJsonFile(join(outputDirectory, 'result.json'))).resolves.toMatchObject({
       status: 'succeeded',
       value: { ok: true },
       files: { result: 'result.json' },
+      startedAt: snapshot?.startedAt,
+      finishedAt: snapshot?.finishedAt,
     });
   },
 );
