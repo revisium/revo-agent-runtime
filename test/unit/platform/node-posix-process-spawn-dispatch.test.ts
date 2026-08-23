@@ -491,6 +491,25 @@ test('killUnactivated terminates accepted process and poisons later activation a
   ).toEqual({ status: 'rejected', reason: 'internal_invariant_violation' });
 });
 
+test('killUnactivated retains process start quiescence when cleanup is not confirmed', async () => {
+  const { attempt, dispatch, process: accepted } = await acceptedProcess();
+  const killSpy = vi
+    .spyOn(globalThis.process, 'kill')
+    .mockImplementation((_pid: number, _signal?: string | number): true => {
+      throw Object.assign(new Error('probe rejected'), { code: 'EINVAL' });
+    });
+
+  try {
+    await expect(dispatch.killUnactivated(accepted)).resolves.toBeUndefined();
+    await expect(attempt.quiescence).resolves.toEqual({
+      status: 'retained',
+      authority: { invocationId: 'spawn-dispatch-test' },
+    });
+  } finally {
+    killSpy.mockRestore();
+  }
+});
+
 test('racing activation and unactivated cleanup produces exactly one teardown owner', async () => {
   const { attempt, child, dispatch, process: accepted } = await acceptedProcess();
   const result = await attempt.settlement;

@@ -238,7 +238,7 @@ export const createNativeProcessExecutionPort = (
         attachOutcome === AFTER_DUPLEX_OPERATION_TIMEOUT ||
         attachOutcome === undefined
       ) {
-        const cleanup = activation.process.terminateAndReap().catch(() => undefined);
+        const cleanup = activation.process.terminateAndReap();
         // activateIo already owns live pumps here; immediate front-end disposal would race their writes.
         const completion: Promise<InvocationTerminalObservation> = cleanup.then(() =>
           activation.process.completion.then(
@@ -343,7 +343,7 @@ export const createNativeProcessExecutionPort = (
         submitDuplexCandidate(coordinator, candidate);
         cancellationCompletion = (async () => {
           const sent = await attachResult.session.requestCancellation();
-          if (sent !== 'sent') await activation.process.terminateAndReap().catch(() => undefined);
+          if (sent !== 'sent') await activation.process.terminateAndReap();
         })();
         return cancellationCompletion;
       };

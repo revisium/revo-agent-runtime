@@ -1054,11 +1054,9 @@ test('keeps synchronously committed caller cancellation when natural completion 
   });
 });
 
-test('fulfills caller cancellation even when termination cleanup rejects', async () => {
+test('fulfills caller cancellation after fallback termination cleanup', async () => {
   const exit = deferred<ProcessExitObservation>();
-  const terminateAndReap = vi.fn(async (): Promise<void> => {
-    throw new Error('cleanup rejected');
-  });
+  const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
   attachedCancellationDriver({ requestCancellation: async () => 'unsupported' });
   const execution = activatedAttachedExecution({
     completion: exit.promise,
