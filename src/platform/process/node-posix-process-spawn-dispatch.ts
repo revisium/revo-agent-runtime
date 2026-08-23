@@ -27,6 +27,7 @@ import {
   type RedactionChannel,
 } from '../../runtime/execution/index.js';
 import { terminateProcessGroupAndReap } from './posix-process-group-termination.js';
+import type { ProcessCleanupOutcome } from './process-cleanup-outcome.js';
 
 interface LinuxProcessFingerprintRecord {
   readonly schemaVersion: 'process-fingerprint/v1';
@@ -52,8 +53,10 @@ interface NodePosixProcessSpawnHandle {
 
 const PROCESS_SPAWN_HANDLES = new WeakMap<object, NodePosixProcessSpawnHandle>();
 const ACTIVATED = new WeakSet<object>();
+const reconcileTimeoutMs = 500;
 const terminationGraceMs = 2_000;
-const postKillReapTimeoutMs = 2_000;
+const postKillTimeoutMs = 500;
+const postTermReapTimeoutMs = 2_000;
 const terminationPollMs = 25;
 
 const noopOutputSink: ProcessOutputSink = Object.freeze({
@@ -206,10 +209,12 @@ const awaitClose = (child: ChildProcessWithoutNullStreams): Promise<ProcessExitO
 const terminateAndReap = (
   processGroupId: number,
   completion: Promise<ProcessExitObservation>,
-): Promise<void> =>
+): Promise<ProcessCleanupOutcome | undefined> =>
   terminateProcessGroupAndReap(processGroupId, completion, {
+    reconcileTimeoutMs,
     terminationGraceMs,
-    postKillReapTimeoutMs,
+    postKillTimeoutMs,
+    postTermReapTimeoutMs,
     terminationPollMs,
   });
 
@@ -306,11 +311,19 @@ export class NodePosixProcessSpawnDispatch {
     const processGroupId = handle?.child.pid;
     ACTIVATED.add(process);
     if (handle === undefined || processGroupId === undefined) return;
-    await terminateAndReap(processGroupId, handle.completion);
-    settleProcessStartQuiescence(handle.attempt, {
-      status: 'quiescent',
-      disposition: 'cleanup_confirmed',
-    });
+    const outcome = await terminateAndReap(processGroupId, handle.completion);
+    settleProcessStartQuiescence(
+      handle.attempt,
+      outcome === undefined
+        ? Object.freeze({
+            status: 'quiescent' as const,
+            disposition: 'cleanup_confirmed' as const,
+          })
+        : Object.freeze({
+            status: 'retained' as const,
+            authority: Object.freeze({ invocationId: handle.attempt.invocationId }),
+          }),
+    );
   }
 
   async inspectIdentity(
@@ -383,7 +396,9 @@ export class NodePosixProcessSpawnDispatch {
     ACTIVATED.add(process);
     let cleanup: Promise<void> | undefined;
     const cleanupProcess = (): Promise<void> => {
-      cleanup ??= terminateAndReap(identity.processGroupId, handle.completion);
+      cleanup ??= terminateAndReap(identity.processGroupId, handle.completion).then(
+        () => undefined,
+      );
       return cleanup;
     };
     const stdoutPump = pumpStdout(
