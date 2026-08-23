@@ -27,6 +27,14 @@ const flush = async (): Promise<void> => {
 
 const defaultSpawnedAt = 123_456;
 
+const committedCompletion = (
+  outcome: ReturnType<InvocationLifecycle['requestCancellation']>,
+): Promise<void> => {
+  expect(outcome.status).toBe('committed');
+  if (outcome.status !== 'committed') throw new Error('Expected committed cancellation.');
+  return outcome.completion;
+};
+
 const snapshot = (
   limits: Readonly<{ wallClockTimeoutMs: number; idleTimeoutMs: number }> = {
     wallClockTimeoutMs: 1_000,
@@ -155,7 +163,11 @@ test('queues cancellation during a deferred start and cancels exactly once after
   const second = lifecycle.requestCancellation();
 
   expect(lifecycle.currentState()).toBe('cancelling');
-  expect(first).toBe(second);
+  expect(first.status).toBe('committed');
+  expect(second.status).toBe('committed');
+  if (first.status !== 'committed' || second.status !== 'committed')
+    throw new Error('Expected committed cancellation.');
+  expect(second.completion).toBe(first.completion);
   execution.fulfilPendingStart(1);
   await flush();
   expect(execution.calls()).toEqual([
@@ -163,7 +175,7 @@ test('queues cancellation during a deferred start and cancels exactly once after
     { type: 'request-cancellation', executionId: 1 },
   ]);
   execution.settleCancellationRequest(1);
-  await expect(first).resolves.toBeUndefined();
+  await expect(committedCompletion(first)).resolves.toBeUndefined();
   execution.confirmCancellation(1);
   await flush();
   expect(settlements).toMatchObject([{ status: 'cancelled' }]);
@@ -175,7 +187,7 @@ test('settles a deferred start rejection once after queued cancellation', async 
   const { lifecycle, settlements } = startLifecycle(execution);
   const cancellation = lifecycle.requestCancellation();
   execution.rejectPendingStart(1, new Error('start failed'));
-  await expect(cancellation).rejects.toThrow('start failed');
+  await expect(committedCompletion(cancellation)).rejects.toThrow('start failed');
   await flush();
   expect(settlements).toMatchObject([{ status: 'failed' }]);
 });
@@ -203,7 +215,7 @@ test('lets same-turn natural completion win over a rejected pending cancellation
   const cancellation = lifecycle.requestCancellation();
   await flush();
   execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
-  await expect(cancellation).rejects.toThrow(
+  await expect(committedCompletion(cancellation)).rejects.toThrow(
     'Execution completed before cancellation request was accepted',
   );
   await flush();
@@ -297,7 +309,7 @@ test('keeps caller-confirmed cancellation classified as cancelled after deadline
   const cancellation = lifecycle.requestCancellation();
   await flush();
   execution.settleCancellationRequest(1);
-  await expect(cancellation).resolves.toBeUndefined();
+  await expect(committedCompletion(cancellation)).resolves.toBeUndefined();
   execution.confirmCancellation(1);
   await flush();
 
@@ -324,7 +336,7 @@ test('keeps fulfilled caller cancellation nonterminal until execution confirms i
   const cancellation = lifecycle.requestCancellation();
   await flush();
   execution.settleCancellationRequest(1);
-  await expect(cancellation).resolves.toBeUndefined();
+  await expect(committedCompletion(cancellation)).resolves.toBeUndefined();
   expect(settlements).toEqual([]);
   expect(lifecycle.currentState()).toBe('cancelling');
   execution.confirmCancellation(1);
@@ -355,7 +367,7 @@ test('lets completion failure win while caller cancellation is pending', async (
   const cancellation = lifecycle.requestCancellation();
   await flush();
   execution.settleCompletionFailure(1, new Error('completion failure'));
-  await expect(cancellation).rejects.toThrow('completion failure');
+  await expect(committedCompletion(cancellation)).rejects.toThrow('completion failure');
   await flush();
 
   expect(settlements).toMatchObject([{ status: 'failed' }]);
@@ -370,7 +382,7 @@ test('settles a standalone rejected cancellation request as failed after microta
   const cancellation = lifecycle.requestCancellation();
   await flush();
   execution.rejectCancellationRequest(1, new Error('cancellation rejected'));
-  await expect(cancellation).rejects.toThrow('cancellation rejected');
+  await expect(committedCompletion(cancellation)).rejects.toThrow('cancellation rejected');
   await flush();
 
   expect(settlements).toMatchObject([{ status: 'failed' }]);

@@ -38,6 +38,7 @@ export { finalizeInvocationOutcome } from './finalize-invocation-outcome.js';
 export type { FinalizedInvocationSettlement } from './finalized-invocation-settlement.js';
 export { InvocationInputSnapshot } from './input-snapshot.js';
 export { StartContextSnapshot } from './start-context-snapshot.js';
+export type { CancellationCommitOutcome } from './cancellation-commit-outcome.js';
 export { InvocationLifecycle } from './lifecycle.js';
 export { freezeJsonValue } from './freeze-json-value.js';
 export { normalizeInvocationOutcome } from './normalize-invocation-outcome.js';

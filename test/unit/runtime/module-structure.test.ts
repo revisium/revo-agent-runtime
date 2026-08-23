@@ -71,6 +71,7 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/bounded-command-port/running-bounded-command.ts',
     'execution/bounded-raw-response-evidence.ts',
     'execution/build-agent-invocation-result.ts',
+    'execution/cancellation-commit-outcome.ts',
     'execution/duplex-primary-failure-code.ts',
     'execution/canonical-effective-inputs.ts',
     'execution/canonical-json-record.ts',

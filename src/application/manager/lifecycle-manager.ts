@@ -67,6 +67,10 @@ type LifecycleResultLookup =
   | Readonly<{ state: 'completed'; result: NormalizedInvocationOutcome }>
   | Readonly<{ state: 'unknown' }>;
 type LifecycleWaitResult = NormalizedInvocationOutcome | Readonly<{ state: 'unknown' }>;
+type CancelOutcome =
+  | Readonly<{ state: 'requested' }>
+  | Readonly<{ state: 'already_completed'; result: NormalizedInvocationOutcome }>
+  | Readonly<{ state: 'unknown' }>;
 type TerminalInvocationEvent = Readonly<{
   type: 'invocation.finished';
   invocationId: string;
@@ -467,6 +471,24 @@ class InternalInvocationLifecycleManager {
     return Promise.resolve(result ?? Object.freeze({ state: 'unknown' } as const));
   }
 
+  cancel(invocationId: string): Promise<CancelOutcome> {
+    const active = this.active.get(invocationId);
+    if (active !== undefined) {
+      const outcome = active.lifecycle.requestCancellation();
+      if (outcome.status === 'committed') {
+        void outcome.completion.catch(() => undefined);
+        return Promise.resolve(Object.freeze({ state: 'requested' as const }));
+      }
+      return active.completion.promise.then((result) =>
+        Object.freeze({ state: 'already_completed' as const, result }),
+      );
+    }
+    const result = this.completed.get(invocationId);
+    if (result !== undefined)
+      return Promise.resolve(Object.freeze({ state: 'already_completed' as const, result }));
+    return Promise.resolve(Object.freeze({ state: 'unknown' as const }));
+  }
+
   subscribe(filter: unknown, listener: TerminalEventListener): TerminalSubscriptionAdmission {
     return this.subscriptions.subscribe(filter, listener);
   }
@@ -757,6 +779,7 @@ export const createInvocationLifecycleManager = (
   options: unknown,
   ports: LifecycleManagerPorts,
 ): Readonly<{
+  cancel(invocationId: string): Promise<CancelOutcome>;
   getResult(invocationId: string): LifecycleResultLookup;
   start(input: unknown, context?: unknown): Promise<LifecycleStartOutcome>;
   subscribe(filter: unknown, listener: TerminalEventListener): TerminalSubscriptionAdmission;

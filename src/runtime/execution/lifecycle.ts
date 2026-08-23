@@ -1,3 +1,4 @@
+import type { CancellationCommitOutcome } from './cancellation-commit-outcome.js';
 import type { InvocationExecutionPorts } from './execution-ports.js';
 import type { InvocationTerminalObservation } from './execution-terminal-observation.js';
 import { finalizeInvocationOutcome } from './finalize-invocation-outcome.js';
@@ -67,7 +68,7 @@ export class InvocationLifecycle {
     void this.startExecution();
   }
 
-  requestCancellation(): Promise<void> {
+  requestCancellation(): CancellationCommitOutcome {
     return this.requestCancellationFor('caller');
   }
 
@@ -95,10 +96,12 @@ export class InvocationLifecycle {
         execution.spawnedAt + this.snapshot.limits.idleTimeoutMs - now,
       );
       const cancelWall = this.ports.clock.schedule(wallRemaining, () => {
-        void this.requestCancellationFor('deadline').catch(() => undefined);
+        const outcome = this.requestCancellationFor('deadline');
+        if (outcome.status === 'committed') void outcome.completion.catch(() => undefined);
       });
       const cancelIdle = this.ports.clock.schedule(idleRemaining, () => {
-        void this.requestCancellationFor('deadline').catch(() => undefined);
+        const outcome = this.requestCancellationFor('deadline');
+        if (outcome.status === 'committed') void outcome.completion.catch(() => undefined);
       });
       this.deadlineCancellation = () => {
         cancelWall();
@@ -116,14 +119,19 @@ export class InvocationLifecycle {
     }
   }
 
-  private requestCancellationFor(cause: CancellationCause): Promise<void> {
-    if (this.state === 'terminal' || this.state === 'finalizing') return Promise.resolve();
-    if (this.cancellation !== undefined) return this.cancellation.promise;
+  private requestCancellationFor(cause: CancellationCause): CancellationCommitOutcome {
+    if (this.state === 'terminal' || this.state === 'finalizing')
+      return Object.freeze({ status: 'too_late' as const });
+    if (this.cancellation !== undefined)
+      return Object.freeze({
+        status: 'committed' as const,
+        completion: this.cancellation.promise,
+      });
     this.cancellationCause = cause;
     this.cancellation = deferred();
     this.state = 'cancelling';
     if (this.execution !== undefined) this.dispatchCancellation();
-    return this.cancellation.promise;
+    return Object.freeze({ status: 'committed' as const, completion: this.cancellation.promise });
   }
 
   private dispatchCancellation(): void {

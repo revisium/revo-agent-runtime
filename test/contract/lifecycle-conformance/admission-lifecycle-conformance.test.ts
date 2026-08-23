@@ -3,6 +3,16 @@ import { expect, test } from 'vitest';
 import { createLifecycleConformanceSubject } from '../../support/lifecycle-conformance/create-lifecycle-conformance-subject.js';
 import { waitForLifecycleConformanceQuiescence } from '../../support/lifecycle-conformance/wait-for-lifecycle-conformance-quiescence.js';
 
+const cancellationCompletion = (
+  outcome:
+    | Readonly<{ status: 'committed'; completion: Promise<void> }>
+    | Readonly<{ status: 'too_late' }>,
+): Promise<void> => {
+  expect(outcome.status).toBe('committed');
+  if (outcome.status !== 'committed') throw new Error('Expected committed cancellation.');
+  return outcome.completion;
+};
+
 test('rejects invalid preflight inputs without accepting an invocation', async () => {
   const invalidRequest = createLifecycleConformanceSubject();
   const invalidRequestEvents: unknown[] = [];
@@ -91,7 +101,7 @@ test('cancels one pending accepted invocation exactly once after start confirmat
     { type: 'request-cancellation', executionId: 1 },
   ]);
   subject.execution.settleCancellationRequest(1);
-  await expect(cancellation).resolves.toBeUndefined();
+  await expect(cancellationCompletion(cancellation)).resolves.toBeUndefined();
   expect(subject.manager.getResult('pending-cancellation')).toEqual({ state: 'active' });
   await expect(subject.start(subject.createInput('pending-cancellation'))).resolves.toEqual({
     status: 'rejected',

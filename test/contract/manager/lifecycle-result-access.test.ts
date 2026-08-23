@@ -10,6 +10,16 @@ import { FakeInvocationOutputPort } from '../../support/execution/fake-output-po
 import { FakeOutputPreparationPort } from '../../support/execution/fake-output-preparation-port.js';
 import { FreshAvailableExecutableProbePort } from '../../support/probe/fresh-available-executable-probe-port.js';
 
+const cancellationCompletion = (
+  outcome:
+    | Readonly<{ status: 'committed'; completion: Promise<void> }>
+    | Readonly<{ status: 'too_late' }>,
+): Promise<void> => {
+  expect(outcome.status).toBe('committed');
+  if (outcome.status !== 'committed') throw new Error('Expected committed cancellation.');
+  return outcome.completion;
+};
+
 const definition = buildAgentDefinition();
 const agent = Object.freeze({ id: definition.id, version: definition.version });
 const lifecycleOptions = Object.freeze({ definitions: Object.freeze([definition]) });
@@ -304,7 +314,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   const cancellationRequest = cancellation.lifecycle.requestCancellation();
   await flush();
   cancellationExecution.settleCancellationRequest(1);
-  await cancellationRequest;
+  await cancellationCompletion(cancellationRequest);
   cancellationExecution.confirmCancellation(1);
   await flush();
   const cancellationResult = await cancellation.handle.result();
@@ -443,4 +453,152 @@ test('admits subscriptions independently from completed result retention', async
   expect(received).toEqual(['subscription-capacity']);
   expect(refusedCalls).toEqual(['subscription-capacity']);
   expect(await manager.waitForResult('subscription-capacity')).toBe(result);
+});
+
+test('cancel reports requested, already_completed, and unknown states', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+
+  const accepted = expectAcceptedInvocation(
+    await manager.start(createStartInput({ invocationId: 'cancel-happy-paths' })),
+  );
+  await flush();
+  await expect(manager.cancel('cancel-happy-paths')).resolves.toEqual({ state: 'requested' });
+  await flush();
+  execution.settleCancellationRequest(1);
+  execution.confirmCancellation(1);
+  await flush();
+  const completed = await accepted.handle.result();
+
+  await expect(manager.cancel('cancel-happy-paths')).resolves.toEqual({
+    state: 'already_completed',
+    result: completed,
+  });
+  await expect(manager.cancel('missing-cancel-target')).resolves.toEqual({ state: 'unknown' });
+});
+
+test('cancel memoizes an in-flight cancellation request dispatch', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+
+  expectAcceptedInvocation(
+    await manager.start(createStartInput({ invocationId: 'cancel-memoized' })),
+  );
+  await flush();
+  await expect(manager.cancel('cancel-memoized')).resolves.toEqual({ state: 'requested' });
+  await expect(manager.cancel('cancel-memoized')).resolves.toEqual({ state: 'requested' });
+  await flush();
+
+  expect(execution.calls()).toEqual([
+    { type: 'start' },
+    { type: 'request-cancellation', executionId: 1 },
+  ]);
+});
+
+test('cancel during finalization waits for and reports the real completed result', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueuePendingTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+  const accepted = expectAcceptedInvocation(
+    await manager.start(createStartInput({ invocationId: 'cancel-finalizing' })),
+  );
+  await flush();
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
+  await flush();
+  expect(accepted.lifecycle.currentState()).toBe('finalizing');
+  expect(manager.getResult('cancel-finalizing')).toEqual({ state: 'active' });
+  let cancelSettled = false;
+  const cancellation = manager.cancel('cancel-finalizing').then((outcome) => {
+    cancelSettled = true;
+    return outcome;
+  });
+  await flush();
+  expect(cancelSettled).toBe(false);
+
+  output.fulfilPendingTerminalResultRecording(1);
+  await flush();
+  const result = await accepted.handle.result();
+  await expect(cancellation).resolves.toEqual({ state: 'already_completed', result });
+});
+
+test('cancel requested does not force cancelled when natural completion wins', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+
+  expectAcceptedInvocation(
+    await manager.start(createStartInput({ invocationId: 'cancel-natural-wins' })),
+  );
+  await flush();
+  await expect(manager.cancel('cancel-natural-wins')).resolves.toEqual({ state: 'requested' });
+  await flush();
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{"winner":"natural"}'));
+  await flush();
+
+  const lookup = manager.getResult('cancel-natural-wins');
+  expect(lookup.state).toBe('completed');
+  if (lookup.state !== 'completed') throw new Error('Expected completed lookup.');
+  expect(lookup.result).toMatchObject({
+    status: 'succeeded',
+    value: { winner: 'natural' },
+  });
+});
+
+test('cancel during pending admission returns unknown', async () => {
+  let admitWorkspace:
+    | ((value: { readonly status: 'admitted'; readonly directory: string }) => void)
+    | undefined;
+  const workspaceAdmission = new Promise<{
+    readonly status: 'admitted';
+    readonly directory: string;
+  }>((resolve) => {
+    admitWorkspace = resolve;
+  });
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+    workspace: { admit: async () => workspaceAdmission },
+  });
+
+  const start = manager.start(createStartInput({ invocationId: 'cancel-pending' }));
+  await Promise.resolve();
+  await expect(manager.cancel('cancel-pending')).resolves.toEqual({ state: 'unknown' });
+  if (admitWorkspace === undefined) throw new Error('Expected workspace admission resolver.');
+  admitWorkspace({ status: 'admitted', directory: '/workspace/project' });
+  const accepted = expectAcceptedInvocation(await start);
+  await flush();
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
+  await flush();
+  await expect(accepted.handle.result()).resolves.toMatchObject({ status: 'succeeded' });
 });
