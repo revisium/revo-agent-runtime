@@ -13,6 +13,9 @@ export type InvocationExecutionCall =
   | { readonly type: 'request-cancellation'; readonly executionId: number };
 
 export interface FakeInvocationExecutionControls {
+  enqueueRecoveryResult(result: RecoveryResult): void;
+  enqueueRecoveryRejection(error: Error): void;
+  recoveryCalls(): readonly RecoveryCall[];
   enqueueStart(result: 'running' | Error): void;
   enqueuePendingStart(): void;
   fulfilPendingStart(startId: number): void;
@@ -32,6 +35,14 @@ export interface FakeInvocationExecutionControls {
 }
 
 type InvocationExecutionPort = InvocationExecutionPorts['execution'];
+export type RecoveryResult = Awaited<
+  ReturnType<InvocationExecutionPort['inspectAndReconcileRecoveredProcess']>
+>;
+export type RecoveryCall = Readonly<{
+  pid: number;
+  fingerprint: string;
+  inspectionDeadlineAt: number;
+}>;
 type CompletionObservation = Awaited<RunningExecution['completion']>;
 type CancellationRequestState = 'unrequested' | 'pending' | 'fulfilled' | 'rejected';
 type StartResult = 'running' | 'pending' | Error;
@@ -73,13 +84,9 @@ const deferred = <Value>(): Deferred<Value> => {
 export class FakeInvocationExecutionPort
   implements InvocationExecutionPort, FakeInvocationExecutionControls
 {
-  inspectAndReconcileRecoveredProcess(): Promise<{
-    readonly status: 'inconclusive';
-  }> {
-    return Promise.resolve(Object.freeze({ status: 'inconclusive' as const }));
-  }
-
   private readonly executions = new Map<number, PendingExecution>();
+  private readonly recoveryResults: Array<RecoveryResult | Error> = [];
+  private readonly recoveryCallLog: RecoveryCall[] = [];
   private readonly callLog: InvocationExecutionCall[] = [];
   private readonly pendingStarts = new Map<number, Deferred<SpawnAndIdentifyResult>>();
   private readonly preparedLaunches: PreparedLaunch[] = [];
@@ -87,6 +94,29 @@ export class FakeInvocationExecutionPort
   private readonly startQueue: StartResult[] = [];
   private nextExecutionId = 1;
   private nextStartId = 1;
+
+  enqueueRecoveryResult(result: RecoveryResult): void {
+    this.recoveryResults.push(result);
+  }
+
+  enqueueRecoveryRejection(error: Error): void {
+    this.recoveryResults.push(error);
+  }
+
+  recoveryCalls(): readonly RecoveryCall[] {
+    return this.recoveryCallLog;
+  }
+
+  inspectAndReconcileRecoveredProcess(
+    pid: number,
+    fingerprint: string,
+    inspectionDeadlineAt: number,
+  ): Promise<RecoveryResult> {
+    this.recoveryCallLog.push(Object.freeze({ pid, fingerprint, inspectionDeadlineAt }));
+    const result =
+      this.recoveryResults.shift() ?? Object.freeze({ status: 'inconclusive' as const });
+    return result instanceof Error ? Promise.reject(result) : Promise.resolve(result);
+  }
 
   enqueueStart(result: 'running' | Error): void {
     this.startQueue.push(result);

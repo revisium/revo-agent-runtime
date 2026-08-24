@@ -1,11 +1,14 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 
 import { createInvocationLifecycleManager } from '../../../src/application/manager/index.js';
+import { validateManagerOptions } from '../../../src/runtime/definition/index.js';
 import { AgentManagerError } from '../../../src/runtime/errors/index.js';
+import type { InvocationExecutionPorts } from '../../../src/runtime/execution/index.js';
 import { AGENT_FAULT_MESSAGES } from '../../../src/runtime/policy/index.js';
 import type { ActiveInvocationSnapshot } from '../../../src/runtime/spec/index.js';
 import {
   buildAgentDefinition,
+  createRecordingActiveStateSink,
   createTestActiveStateSink,
 } from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
@@ -17,14 +20,28 @@ import { FreshAvailableExecutableProbePort } from '../../support/probe/fresh-ava
 
 const definition = buildAgentDefinition();
 
-const createManager = () =>
+const validatedDefinition = validateManagerOptions({
+  activeStateSink: createTestActiveStateSink(),
+  definitions: [definition],
+}).definitions[0];
+if (validatedDefinition === undefined) throw new Error('Expected validated definition');
+
+const createManager = (
+  execution: InvocationExecutionPorts['execution'] = new FakeInvocationExecutionPort(),
+  activeStateSink = createTestActiveStateSink(),
+  limits?: Readonly<{
+    initializationTimeoutMs?: number;
+    activeStateOperationTimeoutMs?: number;
+  }>,
+) =>
   createInvocationLifecycleManager(
     Object.freeze({
-      activeStateSink: createTestActiveStateSink(),
+      activeStateSink,
       definitions: Object.freeze([definition]),
+      ...(limits === undefined ? {} : { limits }),
     }),
     {
-      execution: new FakeInvocationExecutionPort(),
+      execution,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       output: new FakeInvocationOutputPort(),
       outputClaim: new FakeOutputClaimPort('created'),
@@ -36,12 +53,16 @@ const createManager = () =>
     },
   );
 
-const snapshot = (invocationId = 'recovered-invocation'): ActiveInvocationSnapshot => ({
+const snapshot = (
+  invocationId = 'recovered-invocation',
+  overrides: Partial<ActiveInvocationSnapshot['pin']> = {},
+): ActiveInvocationSnapshot => ({
   invocationId,
   pin: {
     agentId: definition.id,
     agentVersion: definition.version,
-    definitionDigest: 'sha256:definition',
+    definitionDigest: validatedDefinition.definitionDigest,
+    ...overrides,
   },
   state: 'running',
   process: {
@@ -140,7 +161,11 @@ test('rejects hostile outer snapshot containers before recovery work', async () 
 });
 
 test('accepts a transparent snapshot proxy through structural validation', async () => {
-  const operation = createManager().initialize(asSnapshots(new Proxy([snapshot()], {})));
+  const operation = createManager().initialize(
+    asSnapshots(
+      new Proxy([snapshot('recovered-invocation', { definitionDigest: 'sha256:definition' })], {}),
+    ),
+  );
 
   await expect(operation).rejects.toMatchObject({
     fault: {
@@ -148,9 +173,243 @@ test('accepts a transparent snapshot proxy through structural validation', async
       message: AGENT_FAULT_MESSAGES.recoveryFailed,
       phase: 'initializing',
       retryable: false,
-      details: { invocationIds: ['recovered-invocation'] },
+      details: {
+        failures: [{ invocationId: 'recovered-invocation', category: 'pin_digest_mismatch' }],
+      },
     },
   });
+});
+
+test('removes rows reported absent and terminated', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueRecoveryResult({ status: 'absent' });
+  execution.enqueueRecoveryResult({ status: 'terminated' });
+  const sink = createRecordingActiveStateSink();
+  const manager = createManager(execution, sink);
+
+  await manager.initialize(asSnapshots([snapshot('b'), snapshot('a')]));
+
+  expect(sink.calls).toEqual(['a', 'b']);
+  expect(execution.recoveryCalls().map((call) => call.pid)).toEqual([123, 123]);
+});
+
+test('preserves identity mismatches without removing them', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueRecoveryResult({ status: 'identity_mismatch' });
+  const sink = createRecordingActiveStateSink();
+  const manager = createManager(execution, sink);
+
+  await expect(manager.initialize(asSnapshots([snapshot()]))).rejects.toMatchObject({
+    fault: { details: { failures: [{ category: 'identity_conflict' }] } },
+  });
+  expect(sink.calls).toEqual([]);
+});
+
+test('reports unknown pins without inspecting the process', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const manager = createManager(execution);
+
+  await expect(
+    manager.initialize(asSnapshots([snapshot('unknown-pin', { agentId: 'missing-agent' })])),
+  ).rejects.toMatchObject({
+    fault: { details: { failures: [{ category: 'pin_unknown' }] } },
+  });
+  expect(execution.recoveryCalls()).toEqual([]);
+});
+
+test('reports digest mismatches without inspecting the process', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const manager = createManager(execution);
+
+  await expect(
+    manager.initialize(
+      asSnapshots([snapshot('wrong-digest', { definitionDigest: 'sha256:wrong' })]),
+    ),
+  ).rejects.toMatchObject({
+    fault: { details: { failures: [{ category: 'pin_digest_mismatch' }] } },
+  });
+  expect(execution.recoveryCalls()).toEqual([]);
+});
+
+test('marks rows deadline_exceeded before dispatching a later port call', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  try {
+    const execution = new FakeInvocationExecutionPort();
+    execution.enqueueRecoveryResult({ status: 'inconclusive' });
+    const manager = createManager(execution, createTestActiveStateSink(), {
+      initializationTimeoutMs: 1_000,
+      activeStateOperationTimeoutMs: 1_000,
+    });
+    const original = execution.inspectAndReconcileRecoveredProcess.bind(execution);
+    execution.inspectAndReconcileRecoveredProcess = async (...args) => {
+      const result = await original(...args);
+      vi.setSystemTime(2_000);
+      return result;
+    };
+
+    await expect(
+      manager.initialize(asSnapshots([snapshot('a'), snapshot('b')])),
+    ).rejects.toMatchObject({
+      fault: {
+        details: {
+          failures: [
+            { invocationId: 'a', category: 'inspection_inconclusive' },
+            { invocationId: 'b', category: 'deadline_exceeded' },
+          ],
+        },
+      },
+    });
+    expect(execution.recoveryCalls()).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('does not dispatch remove after the port consumes the initialization deadline', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  try {
+    const execution = new FakeInvocationExecutionPort();
+    execution.enqueueRecoveryResult({ status: 'absent' });
+    const sink = createRecordingActiveStateSink();
+    const manager = createManager(execution, sink, {
+      initializationTimeoutMs: 1_000,
+      activeStateOperationTimeoutMs: 1_000,
+    });
+    const original = execution.inspectAndReconcileRecoveredProcess.bind(execution);
+    execution.inspectAndReconcileRecoveredProcess = async (...args) => {
+      const result = await original(...args);
+      vi.setSystemTime(2_000);
+      return result;
+    };
+
+    await expect(manager.initialize(asSnapshots([snapshot()]))).rejects.toMatchObject({
+      fault: { details: { failures: [{ category: 'deadline_exceeded' }] } },
+    });
+    expect(sink.calls).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('marks remaining rows manager_closing when shutdown starts mid-batch', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueRecoveryResult({ status: 'absent' });
+  execution.enqueueRecoveryResult({ status: 'absent' });
+  const sink = createRecordingActiveStateSink();
+  let manager: ReturnType<typeof createManager>;
+  manager = createManager(execution, sink);
+  const original = execution.inspectAndReconcileRecoveredProcess.bind(execution);
+  let first = true;
+  execution.inspectAndReconcileRecoveredProcess = async (...args) => {
+    const result = await original(...args);
+    if (first) {
+      first = false;
+      void manager.shutdown();
+    }
+    return result;
+  };
+
+  await expect(
+    manager.initialize(asSnapshots([snapshot('a'), snapshot('b')])),
+  ).rejects.toMatchObject({
+    fault: {
+      details: {
+        failures: [{ invocationId: 'b', category: 'manager_closing' }],
+      },
+    },
+  });
+  expect(execution.recoveryCalls()).toHaveLength(1);
+  expect(sink.calls).toEqual(['a']);
+  await expect(manager.shutdown()).resolves.toBeUndefined();
+});
+
+test('continues mixed recovery in invocation order and preserves ordered failures', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueRecoveryResult({ status: 'absent' });
+  execution.enqueueRecoveryResult({ status: 'identity_mismatch' });
+  execution.enqueueRecoveryResult({ status: 'terminated' });
+  const sink = createRecordingActiveStateSink();
+  const manager = createManager(execution, sink);
+
+  await expect(
+    manager.initialize(asSnapshots([snapshot('c'), snapshot('a'), snapshot('b')])),
+  ).rejects.toMatchObject({
+    fault: {
+      details: {
+        failures: [{ invocationId: 'b', category: 'identity_conflict' }],
+      },
+    },
+  });
+  expect(execution.recoveryCalls().map((call) => call.pid)).toEqual([123, 123, 123]);
+  expect(sink.calls).toEqual(['a', 'c']);
+});
+
+test('preserves every row without inspection or sink mutation on unsupported platforms', async () => {
+  const platform = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+  try {
+    const execution = new FakeInvocationExecutionPort();
+    const sink = createRecordingActiveStateSink();
+    const manager = createManager(execution, sink);
+
+    await expect(
+      manager.initialize(asSnapshots([snapshot('b'), snapshot('a')])),
+    ).rejects.toMatchObject({
+      fault: {
+        details: {
+          failures: [
+            { invocationId: 'a', category: 'platform_unsupported' },
+            { invocationId: 'b', category: 'platform_unsupported' },
+          ],
+        },
+      },
+    });
+    expect(execution.recoveryCalls()).toEqual([]);
+    expect(sink.calls).toEqual([]);
+  } finally {
+    platform.mockRestore();
+  }
+});
+
+test('shutdown resolves after an ordinary rejected initialization', async () => {
+  const manager = createManager();
+  await expect(manager.initialize(asSnapshots({}))).rejects.toMatchObject({
+    fault: { code: 'revo.agent.recovery_invalid' },
+  });
+
+  await expect(manager.shutdown()).resolves.toBeUndefined();
+});
+
+test('shutdown reports recovery incomplete when the current recovery operation hangs', async () => {
+  let inspectionStarted: (() => void) | undefined;
+  const inspectionStartedPromise = new Promise<void>((resolve) => {
+    inspectionStarted = resolve;
+  });
+  const execution: InvocationExecutionPorts['execution'] = {
+    inspectAndReconcileRecoveredProcess: async () => {
+      inspectionStarted?.();
+      return await new Promise(() => undefined);
+    },
+    spawnAndIdentify: async () => ({ status: 'failed', reason: 'spawn_failed' as const }),
+  };
+  const manager = createManager(execution, createTestActiveStateSink(), {
+    initializationTimeoutMs: 1_000,
+    activeStateOperationTimeoutMs: 1_000,
+  });
+  const initialization = manager.initialize(asSnapshots([snapshot()]));
+  await inspectionStartedPromise;
+  const shutdown = manager.shutdown();
+
+  await expect(shutdown).rejects.toMatchObject({
+    fault: {
+      code: 'revo.agent.shutdown_failed',
+      details: { failureCount: 1 },
+    },
+  });
+  expect(
+    await Promise.race([initialization.then(() => 'settled'), Promise.resolve('pending')]),
+  ).toBe('pending');
 });
 
 test('validates every row before reporting malformed recovery input', async () => {
