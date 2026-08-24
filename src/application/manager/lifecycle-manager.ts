@@ -674,21 +674,27 @@ class InternalInvocationLifecycleManager {
         this.#initialized = 'ready';
         this.#initializationDeferred?.resolve(undefined);
       },
-      (fault: unknown) => {
+      (error_: unknown) => {
         this.#initialized = 'failed';
-        this.#initializationDeferred?.reject(fault);
+        this.#initializationDeferred?.reject(error_);
       },
     );
     return this.#initializationDeferred.promise;
   }
 
-  async start(input: unknown, context?: unknown): Promise<LifecycleStartOutcome> {
+  #startReadinessRejection(): LifecycleStartOutcome | undefined {
     if (this.#closing) return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
     if (this.#initialized !== 'ready')
       return Object.freeze({
         status: 'rejected',
         reason: this.#initialized === 'failed' ? 'manager_closed' : 'manager_not_initialized',
       });
+    return undefined;
+  }
+
+  async start(input: unknown, context?: unknown): Promise<LifecycleStartOutcome> {
+    const notReady = this.#startReadinessRejection();
+    if (notReady !== undefined) return notReady;
     const snapshot = InvocationInputSnapshot.create(input, this.limits);
     const startContext = StartContextSnapshot.create(context);
     if (snapshot === undefined || startContext === undefined)
