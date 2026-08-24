@@ -5,6 +5,8 @@ export const AGENT_FAULT_MESSAGES = Object.freeze({
   strategyUnsupported: 'Agent strategy is unsupported.',
   limitInvalid: 'Agent manager limit is invalid.',
   agentUnknown: 'Agent reference is unknown.',
+  managerClosed: 'Agent manager is closed.',
+  shutdownFailed: 'Agent manager shutdown failed.',
   platformUnsupported: 'Agent invocation platform is unsupported.',
   probePlatformUnsupported: 'Agent platform is unsupported.',
   probeExecutableUnavailable: 'Agent executable is unavailable.',

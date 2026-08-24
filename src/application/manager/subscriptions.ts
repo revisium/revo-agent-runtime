@@ -73,4 +73,8 @@ export class TerminalSubscriptions {
       }
     }
   }
+
+  clear(): void {
+    this.subscriptions.clear();
+  }
 }

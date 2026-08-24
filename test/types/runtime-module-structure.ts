@@ -48,6 +48,7 @@ import type {
   InvocationTerminalObservation,
   InvocationTokenCarrier,
   LiveOwnedProcess,
+  ProcessCleanupAttemptOutcome,
   BoundedRawResponseEvidence,
   NormalizedInvocationFailure,
   NormalizedInvocationEvidence,
@@ -174,6 +175,8 @@ type ExpectedAgentFaultCode =
   | 'revo.agent.strategy_unsupported'
   | 'revo.agent.limit_invalid'
   | 'revo.agent.agent_unknown'
+  | 'revo.agent.manager_closed'
+  | 'revo.agent.shutdown_failed'
   | 'revo.agent.platform_unsupported'
   | 'revo.agent.probe_platform_unsupported'
   | 'revo.agent.probe_spawn_failed'
@@ -412,7 +415,7 @@ type ExpectedLiveOwnedProcess = {
   readonly completion: Promise<ProcessExitObservation>;
   readonly identity: ProcessIdentity;
   readonly stdin: ProcessInputSink;
-  terminateAndReap(): Promise<void>;
+  terminateAndReap(): Promise<ProcessCleanupAttemptOutcome | undefined>;
 };
 
 export type StrictSemVerIsExact = Expect<Equal<StrictSemVer, ExpectedStrictSemVer>>;
@@ -950,13 +953,16 @@ type ExpectedProcessCleanupFailureCause =
   | 'leader_reap_timeout'
   | 'leader_reap_rejected';
 
-type ExpectedProcessCleanupFailureEvidence = {
-  readonly trigger: 'natural_exit';
+type ExpectedProcessCleanupAttemptOutcome = {
   readonly cause: ProcessCleanupFailureCause;
   readonly termSent: boolean;
   readonly killSent: boolean;
   readonly lastKnownGroupState: 'absent' | 'present' | 'unknown';
   readonly leaderReapState: 'confirmed' | 'pending' | 'unknown';
+};
+
+type ExpectedProcessCleanupFailureEvidence = ExpectedProcessCleanupAttemptOutcome & {
+  readonly trigger: 'natural_exit';
 };
 
 type ExpectedProcessCleanupFailure = {
@@ -1263,6 +1269,9 @@ export type DuplexOperationIsExact = Expect<Equal<DuplexOperation, ExpectedDuple
 export type ProcessCleanupFailureCauseIsExact = Expect<
   Equal<ProcessCleanupFailureCause, ExpectedProcessCleanupFailureCause>
 >;
+export type ProcessCleanupAttemptOutcomeIsExact = Expect<
+  Equal<ProcessCleanupAttemptOutcome, ExpectedProcessCleanupAttemptOutcome>
+>;
 export type ProcessCleanupFailureEvidenceIsExact = Expect<
   Equal<ProcessCleanupFailureEvidence, ExpectedProcessCleanupFailureEvidence>
 >;
@@ -1382,7 +1391,7 @@ type ExpectedInvocationExecutionPorts = {
     ): Promise<{
       readonly spawnedAt: number;
       readonly completion: Promise<InvocationTerminalObservation>;
-      requestCancellation(): Promise<void>;
+      requestCancellation(): Promise<ProcessCleanupAttemptOutcome | undefined>;
     }>;
   };
   readonly workspace: {

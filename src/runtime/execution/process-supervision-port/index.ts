@@ -1,6 +1,7 @@
 export type { DuplexOperation } from './duplex-operation.js';
 export type { DuplexTerminalObservation } from './duplex-terminal-observation.js';
 export { duplexCompletion } from './duplex-completion.js';
+export type { ProcessCleanupAttemptOutcome } from './process-cleanup-attempt-outcome.js';
 export type { ProcessCleanupFailureCause } from './process-cleanup-failure-cause.js';
 export type { ProcessCleanupFailureEvidence } from './process-cleanup-failure-evidence.js';
 export type { ProcessCleanupFailure } from './process-cleanup-failure.js';

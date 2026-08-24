@@ -44,7 +44,7 @@ const createExecution = (bytes: Uint8Array): InvocationExecutionPorts['execution
             rawResponse: rawEvidence(bytes),
           }),
         ),
-        requestCancellation: async (): Promise<void> => undefined,
+        requestCancellation: async () => undefined,
       });
     },
   });

@@ -29,7 +29,7 @@ const defaultSpawnedAt = 123_456;
 
 const committedCompletion = (
   outcome: ReturnType<InvocationLifecycle['requestCancellation']>,
-): Promise<void> => {
+): Promise<unknown> => {
   expect(outcome.status).toBe('committed');
   if (outcome.status !== 'committed') throw new Error('Expected committed cancellation.');
   return outcome.completion;

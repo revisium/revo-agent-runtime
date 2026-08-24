@@ -1,6 +1,7 @@
 import {
   BoundedRawResponseEvidence,
   InvocationInputSnapshot,
+  type ProcessCleanupAttemptOutcome,
   type InvocationExecutionPorts,
   type PreparedLaunch,
 } from '../../../src/runtime/execution/index.js';
@@ -14,7 +15,7 @@ export interface FakeInvocationExecutionControls {
   enqueuePendingStart(): void;
   fulfilPendingStart(startId: number): void;
   rejectPendingStart(startId: number, error: Error): void;
-  settleCancellationRequest(executionId: number): void;
+  settleCancellationRequest(executionId: number, outcome?: ProcessCleanupAttemptOutcome): void;
   rejectCancellationRequest(executionId: number, error: Error): void;
   settleNaturalCompletion(executionId: number, rawResponse?: Uint8Array): void;
   confirmCancellation(executionId: number): void;
@@ -38,7 +39,7 @@ interface Deferred<Value> {
 
 interface PendingExecution {
   readonly completion: Deferred<CompletionObservation>;
-  cancellationRequest: Deferred<void> | undefined;
+  cancellationRequest: Deferred<ProcessCleanupAttemptOutcome | undefined> | undefined;
   cancellationRequestState: CancellationRequestState;
   completionSettled: boolean;
 }
@@ -115,11 +116,11 @@ export class FakeInvocationExecutionPort
     pending.reject(error);
   }
 
-  settleCancellationRequest(executionId: number): void {
+  settleCancellationRequest(executionId: number, outcome?: ProcessCleanupAttemptOutcome): void {
     const execution = this.execution(executionId);
     this.requirePendingCancellationRequest(executionId, execution);
     execution.cancellationRequestState = 'fulfilled';
-    execution.cancellationRequest?.resolve(undefined);
+    execution.cancellationRequest?.resolve(outcome);
   }
 
   rejectCancellationRequest(executionId: number, error: Error): void {
@@ -202,14 +203,16 @@ export class FakeInvocationExecutionPort
     };
   }
 
-  private requestCancellation(executionId: number): Promise<void> {
+  private requestCancellation(
+    executionId: number,
+  ): Promise<ProcessCleanupAttemptOutcome | undefined> {
     const execution = this.execution(executionId);
     this.record(Object.freeze({ type: 'request-cancellation', executionId }));
     if (execution.completionSettled)
       return Promise.reject(new Error('Execution already completed'));
     if (execution.cancellationRequestState !== 'unrequested')
       throw new Error(`Cancellation request for execution ${executionId} is already requested`);
-    const cancellationRequest = deferred<void>();
+    const cancellationRequest = deferred<ProcessCleanupAttemptOutcome | undefined>();
     execution.cancellationRequest = cancellationRequest;
     execution.cancellationRequestState = 'pending';
     return cancellationRequest.promise;

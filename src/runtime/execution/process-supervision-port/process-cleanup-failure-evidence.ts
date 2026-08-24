@@ -1,10 +1,5 @@
-import type { ProcessCleanupFailureCause } from './process-cleanup-failure-cause.js';
+import type { ProcessCleanupAttemptOutcome } from './process-cleanup-attempt-outcome.js';
 
-export interface ProcessCleanupFailureEvidence {
+export interface ProcessCleanupFailureEvidence extends ProcessCleanupAttemptOutcome {
   readonly trigger: 'natural_exit';
-  readonly cause: ProcessCleanupFailureCause;
-  readonly termSent: boolean;
-  readonly killSent: boolean;
-  readonly lastKnownGroupState: 'absent' | 'present' | 'unknown';
-  readonly leaderReapState: 'confirmed' | 'pending' | 'unknown';
 }

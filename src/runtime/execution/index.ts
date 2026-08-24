@@ -144,6 +144,7 @@ export type {
   DuplexOperation,
   DuplexTerminalObservation,
   LiveOwnedProcess,
+  ProcessCleanupAttemptOutcome,
   ProcessCleanupFailure,
   ProcessCleanupFailureCause,
   ProcessCleanupFailureEvidence,
