@@ -20,7 +20,10 @@ import { validateManagerOptions } from '../../../../src/runtime/definition/index
 import type { ValidatedDefinition } from '../../../../src/runtime/definition/index.js';
 import { AgentManagerError } from '../../../../src/runtime/errors/index.js';
 import { AGENT_FAULT_MESSAGES } from '../../../../src/runtime/policy/index.js';
-import { buildAgentDefinition } from '../../../support/definition/build-agent-definition.js';
+import {
+  buildAgentDefinition,
+  createTestActiveStateSink,
+} from '../../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../../support/execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../../../support/execution/fake-output-claim-port.js';
@@ -65,7 +68,10 @@ test('reuses compiled effective input validators across starts for the same defi
       defaults: { network: false },
     },
   });
-  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  const [validatedDefinition] = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions: [definition],
+  }).definitions;
   if (validatedDefinition === undefined) throw new Error('Expected validated definition');
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
@@ -81,7 +87,7 @@ test('reuses compiled effective input validators across starts for the same defi
   execution.enqueueStart('running');
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       execution,
       output,
@@ -142,7 +148,7 @@ test('rejects effective parameters before workspace, output, and execution when 
     directory: '/workspace/project',
   }));
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       execution,
       output,
@@ -194,7 +200,7 @@ test('rejects effective permissions before workspace, output, and execution when
     directory: '/workspace/project',
   }));
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       execution,
       output,
@@ -266,7 +272,10 @@ test('retains package-owned canonical effective parameter and permission copies 
       defaults: { grants: { write: true }, flags: ['default'] },
     },
   });
-  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  const [validatedDefinition] = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions: [definition],
+  }).definitions;
   if (validatedDefinition === undefined) throw new Error('Expected validated definition');
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
@@ -279,7 +288,7 @@ test('retains package-owned canonical effective parameter and permission copies 
   });
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       execution,
       output,
@@ -330,7 +339,10 @@ test('plans output resources after workspace admission and before executable pro
       versionProbe: { args: ['--version'], stream: 'stdout', prefix: 'agent ', timeoutMs: 1_000 },
     },
   });
-  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  const [validatedDefinition] = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions: [definition],
+  }).definitions;
   if (validatedDefinition === undefined) throw new Error('Expected validated definition');
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
@@ -363,7 +375,7 @@ test('plans output resources after workspace admission and before executable pro
   });
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       execution,
       output,
@@ -429,7 +441,7 @@ test('rejects output admission failures before executable probe, output prepare,
   }));
   output.enqueueAdmission({ status: 'rejected', reason: 'leaf_exists' });
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       execution,
       output,
@@ -472,12 +484,15 @@ test('rejects output admission failures before executable probe, output prepare,
 
 test('rejects mismatched or incomplete available probe evidence after output admission and before prepare and execution', async () => {
   const definition = buildAgentDefinition();
-  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  const [validatedDefinition] = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions: [definition],
+  }).definitions;
   if (validatedDefinition === undefined) throw new Error('Expected validated definition');
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       execution,
       output,
@@ -569,7 +584,7 @@ test('preclaim binding disagreement rejects before workspace admission', async (
       });
     });
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       execution: new FakeInvocationExecutionPort(),
       output: new FakeInvocationOutputPort(),
@@ -622,7 +637,7 @@ test('rejects coherent but uninstalled package bindings during manager construct
   for (const definition of [claudeDefinition, acpDefinition]) {
     expect(() =>
       createInvocationLifecycleManager(
-        { definitions: [definition] },
+        { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
         {
           execution: new FakeInvocationExecutionPort(),
           output: new FakeInvocationOutputPort(),
@@ -638,7 +653,7 @@ test('rejects coherent but uninstalled package bindings during manager construct
     ).toThrowError(AgentManagerError);
     try {
       createInvocationLifecycleManager(
-        { definitions: [definition] },
+        { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
         {
           execution: new FakeInvocationExecutionPort(),
           output: new FakeInvocationOutputPort(),
@@ -667,7 +682,10 @@ test('rejects coherent but uninstalled package bindings during manager construct
 
 test('preclaim binding defense fails internal when the sealed target disagrees with construction', () => {
   const definition = buildAgentDefinition();
-  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  const [validatedDefinition] = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions: [definition],
+  }).definitions;
   if (validatedDefinition === undefined) throw new Error('Expected validated definition');
   const registry = InstalledBindingRegistry.create([validatedDefinition]);
   const disagreedTarget: ValidatedDefinition = Object.freeze({
@@ -700,7 +718,10 @@ test('preclaim binding defense fails internal when the sealed target disagrees w
 test('captures named child environment from start context before workspace, output, and execution', async () => {
   vi.stubEnv('REVO_VISIBLE_ENV', 'host-value');
   const definition = buildAgentDefinition();
-  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  const [validatedDefinition] = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions: [definition],
+  }).definitions;
   if (validatedDefinition === undefined) throw new Error('Expected validated definition');
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
@@ -713,7 +734,11 @@ test('captures named child environment from start context before workspace, outp
   });
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition], redaction: { secrets: ['configured-secret'] } },
+    {
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [definition],
+      redaction: { secrets: ['configured-secret'] },
+    },
     {
       execution,
       output,
@@ -765,7 +790,10 @@ test('captures named child environment from start context before workspace, outp
 test('keeps registered secrets out of enumerable launch views', async () => {
   vi.stubEnv('REVO_VISIBLE_ENV', 'host-value');
   const definition = buildAgentDefinition();
-  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  const [validatedDefinition] = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions: [definition],
+  }).definitions;
   if (validatedDefinition === undefined) throw new Error('Expected validated definition');
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
@@ -778,7 +806,11 @@ test('keeps registered secrets out of enumerable launch views', async () => {
   });
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition], redaction: { secrets: ['configured-secret'] } },
+    {
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [definition],
+      redaction: { secrets: ['configured-secret'] },
+    },
     {
       execution,
       output,
@@ -836,7 +868,11 @@ test('keeps registered secrets out of enumerable launch views', async () => {
 test('keeps configured redaction secrets out of enumerable manager views', () => {
   const definition = buildAgentDefinition();
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition], redaction: { secrets: ['configured-secret'] } },
+    {
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [definition],
+      redaction: { secrets: ['configured-secret'] },
+    },
     {
       execution: new FakeInvocationExecutionPort(),
       output: new FakeInvocationOutputPort(),
@@ -871,7 +907,11 @@ test('rejects registered secret failures before workspace, output, and execution
     directory: '/workspace/project',
   }));
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition], redaction: { secrets: [''] } },
+    {
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [definition],
+      redaction: { secrets: [''] },
+    },
     {
       execution,
       output,
@@ -913,7 +953,7 @@ test('rejects missing inherited child environment names before workspace, output
     directory: '/workspace/project',
   }));
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       execution,
       output,
@@ -950,7 +990,7 @@ test('rejects missing inherited child environment names before workspace, output
 test('rejects malformed start context before reserving invocation ids', async () => {
   const definition = buildAgentDefinition();
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       execution: new FakeInvocationExecutionPort(),
       output: new FakeInvocationOutputPort(),
@@ -1037,7 +1077,10 @@ test('interprets launch template in definition order and maps each permission it
       },
     },
   });
-  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  const [validatedDefinition] = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions: [definition],
+  }).definitions;
   if (validatedDefinition === undefined) throw new Error('Expected validated definition');
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
@@ -1070,7 +1113,7 @@ test('interprets launch template in definition order and maps each permission it
   });
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       execution,
       output,
@@ -1139,7 +1182,7 @@ test('rejects permission mapping failures before executable probe, output prepar
     directory: '/workspace/project',
   }));
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       execution,
       output,
@@ -1189,7 +1232,10 @@ test('retains resolved prompt stdin and canonical result-schema file payloads be
       versionProbe: { args: ['--version'], stream: 'stdout', prefix: 'agent ', timeoutMs: 1_000 },
     },
   });
-  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  const [validatedDefinition] = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions: [definition],
+  }).definitions;
   if (validatedDefinition === undefined) throw new Error('Expected validated definition');
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
@@ -1202,7 +1248,7 @@ test('retains resolved prompt stdin and canonical result-schema file payloads be
   });
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       execution,
       output,
@@ -1254,7 +1300,10 @@ test('rejects prospective argv total bytes including the resolved executable bef
     },
     delivery: { prompt: 'argument', resultSchema: 'file', result: 'stdout' },
   });
-  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  const [validatedDefinition] = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions: [definition],
+  }).definitions;
   if (validatedDefinition === undefined) throw new Error('Expected validated definition');
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
@@ -1282,7 +1331,7 @@ test('rejects prospective argv total bytes including the resolved executable bef
     };
   });
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       execution,
       output,
@@ -1334,7 +1383,10 @@ test('rejects registered secret byte substrings in prospective argv with environ
     },
     delivery: { prompt: 'stdin', resultSchema: 'file', result: 'stdout' },
   });
-  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  const [validatedDefinition] = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions: [definition],
+  }).definitions;
   if (validatedDefinition === undefined) throw new Error('Expected validated definition');
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
@@ -1346,7 +1398,11 @@ test('rejects registered secret byte substrings in prospective argv with environ
     reportedVersion: '1.0.0',
   });
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition], redaction: { secrets: ['secret-value'] } },
+    {
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [definition],
+      redaction: { secrets: ['secret-value'] },
+    },
     {
       execution,
       output,
@@ -1394,7 +1450,10 @@ test('rejects registered secret byte substrings in prospective scratch payloads 
     },
     delivery: { prompt: 'file', resultSchema: 'argument', result: 'stdout' },
   });
-  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  const [validatedDefinition] = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions: [definition],
+  }).definitions;
   if (validatedDefinition === undefined) throw new Error('Expected validated definition');
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
@@ -1406,7 +1465,11 @@ test('rejects registered secret byte substrings in prospective scratch payloads 
     reportedVersion: '1.0.0',
   });
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition], redaction: { secrets: ['secret-value'] } },
+    {
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [definition],
+      redaction: { secrets: ['secret-value'] },
+    },
     {
       execution,
       output,

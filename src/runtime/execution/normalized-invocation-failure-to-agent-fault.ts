@@ -4,12 +4,16 @@ import type { NormalizedInvocationFailure } from './normalized-invocation-failur
 
 const messageFor = (code: AgentFault['code']): string => {
   switch (code) {
+    case 'revo.agent.active_state_failed':
+      return AGENT_FAULT_MESSAGES.activeStateFailed;
     case 'revo.agent.protocol_failed':
       return AGENT_FAULT_MESSAGES.protocolFailed;
     case 'revo.agent.output_write_failed':
       return AGENT_FAULT_MESSAGES.outputWriteFailed;
     case 'revo.agent.process_failed':
       return AGENT_FAULT_MESSAGES.processFailed;
+    case 'revo.agent.process_identity_failed':
+      return AGENT_FAULT_MESSAGES.processIdentityFailed;
     case 'revo.agent.process_cleanup_failed':
       return AGENT_FAULT_MESSAGES.processCleanupFailed;
     case 'revo.agent.result_missing':

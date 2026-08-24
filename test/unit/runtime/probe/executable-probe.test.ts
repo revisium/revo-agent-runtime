@@ -8,7 +8,10 @@ import {
 } from '../../../../src/runtime/policy/index.js';
 import { probeExecutable } from '../../../../src/runtime/probe/index.js';
 import type { ProbeTarget, VersionProbeObservation } from '../../../../src/runtime/probe/index.js';
-import { buildAgentDefinition } from '../../../support/definition/build-agent-definition.js';
+import {
+  buildAgentDefinition,
+  createTestActiveStateSink,
+} from '../../../support/definition/build-agent-definition.js';
 import { FakeExecutableProbePort } from '../../../support/probe/fake-executable-probe-port.js';
 
 const encoder = new TextEncoder();
@@ -23,7 +26,10 @@ const target = (input: Parameters<typeof buildAgentDefinition>[0] = {}): ProbeTa
     constraints: { platforms: ['linux'], executableVersion: '>=1.0.0 <2.0.0' },
     ...input,
   });
-  const validated = validateManagerOptions({ definitions: [definition] }).definitions[0];
+  const validated = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions: [definition],
+  }).definitions[0];
   if (validated === undefined) throw new Error('Expected one validated definition.');
 
   return { definition: validated.definition, definitionDigest: validated.definitionDigest };

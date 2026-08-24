@@ -1,6 +1,9 @@
 import { createInvocationLifecycleManager } from '../../../src/application/manager/index.js';
 import type { InvocationExecutionPorts } from '../../../src/runtime/execution/index.js';
-import { buildAgentDefinition } from '../definition/build-agent-definition.js';
+import {
+  buildAgentDefinition,
+  createTestActiveStateSink,
+} from '../definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../execution/fake-output-claim-port.js';
@@ -70,6 +73,7 @@ export const createLifecycleConformanceSubject = (
   const output = new FakeInvocationOutputPort();
   const outputPreparation = new FakeOutputPreparationPort('prepared');
   const managerOptions = Object.freeze({
+    activeStateSink: createTestActiveStateSink(),
     definitions: Object.freeze([definition]),
     ...(options.maxCompletedInvocations === undefined
       ? {}

@@ -10,6 +10,10 @@ import {
   NodePosixOutputClaimPort,
   NodePosixOutputPreparationPort,
 } from '../../../src/platform/process/index.js';
+import type {
+  ActiveInvocationSnapshot,
+  ActiveStateOperationContext,
+} from '../../../src/runtime/spec/index.js';
 import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FreshAvailableExecutableProbePort } from '../../support/probe/fresh-available-executable-probe-port.js';
@@ -85,8 +89,30 @@ setInterval(() => undefined, 1000);
         },
       },
     });
+    const activeStateEvents: string[] = [];
+    let processExistedDuringRemove: boolean | undefined;
     const manager = createInvocationLifecycleManager(
-      { definitions: [definition] },
+      {
+        activeStateSink: Object.freeze({
+          save: async (
+            snapshot: ActiveInvocationSnapshot,
+            _context: ActiveStateOperationContext,
+          ): Promise<void> => {
+            activeStateEvents.push(`save:${snapshot.state}`);
+            expect(processExists(snapshot.process.pid)).toBe(true);
+          },
+          remove: async (
+            invocationId: string,
+            _context: ActiveStateOperationContext,
+          ): Promise<void> => {
+            activeStateEvents.push(`remove:${invocationId}`);
+            const pidText = await readIfExists(pidFile);
+            processExistedDuringRemove =
+              pidText === undefined ? undefined : processExists(Number(pidText));
+          },
+        }),
+        definitions: [definition],
+      },
       {
         clock: new FakeInvocationClock({ initialNowMs: 0 }),
         executableProbe: new FreshAvailableExecutableProbePort(process.execPath, '1.0.0'),
@@ -111,6 +137,8 @@ setInterval(() => undefined, 1000);
     });
     expect(start.status).toBe('accepted');
     if (start.status !== 'accepted') throw new Error('Expected accepted invocation.');
+    activeStateEvents.push('accepted');
+    expect(activeStateEvents).toEqual(['save:running', 'accepted']);
     await waitUntil(async () => (await readIfExists(pidFile)) !== undefined);
     const pidText = await readFile(pidFile, 'utf8');
     const pid = Number(pidText);
@@ -122,8 +150,17 @@ setInterval(() => undefined, 1000);
     const elapsedMs = Date.now() - startedAt;
 
     await expect(start.handle.result()).resolves.toMatchObject({ status: 'cancelled' });
+    activeStateEvents.push('result');
     await expect(readFile(signalFile, 'utf8')).resolves.toContain('SIGTERM');
     expect(processExists(pid)).toBe(false);
+    expect(processExistedDuringRemove).toBe(false);
+    expect(activeStateEvents).toEqual([
+      'save:running',
+      'accepted',
+      'save:cancelling',
+      'remove:real-shutdown',
+      'result',
+    ]);
     expect(elapsedMs).toBeGreaterThanOrEqual(1_900);
   },
 );

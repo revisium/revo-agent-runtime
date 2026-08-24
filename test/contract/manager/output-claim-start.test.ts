@@ -15,7 +15,10 @@ import type {
   OutputPreparationMutationRequest,
   OutputPreparationPlatformResult,
 } from '../../../src/runtime/execution/index.js';
-import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
+import {
+  buildAgentDefinition,
+  createTestActiveStateSink,
+} from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../../support/execution/fake-output-claim-port.js';
@@ -128,7 +131,10 @@ const createSubject = (
   return Object.freeze({
     clock,
     execution,
-    manager: createInvocationLifecycleManager({ definitions: [definition] }, ports),
+    manager: createInvocationLifecycleManager(
+      { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
+      ports,
+    ),
     output,
     outputPreparation,
     ports,
@@ -158,7 +164,10 @@ test('claims output before preparing the admitted output plan', async () => {
         Object.freeze({ status: 'admitted' as const, directory: '/workspace/project' }),
     },
   };
-  const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+  const manager = createInvocationLifecycleManager(
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
+    ports,
+  );
 
   await expect(manager.start(createStartInput({ invocationId: 'created' }))).resolves.toMatchObject(
     { status: 'accepted' },
@@ -310,7 +319,10 @@ test('trailing-slash output admission rejects before a second claim attempt is c
         Object.freeze({ status: 'admitted' as const, directory: '/workspace/project' }),
     },
   };
-  const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+  const manager = createInvocationLifecycleManager(
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
+    ports,
+  );
 
   const first = manager.start(
     createStartInput({ invocationId: 'slash-owner', output: { directory: outputDirectory } }),

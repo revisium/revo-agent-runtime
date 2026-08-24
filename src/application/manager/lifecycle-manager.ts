@@ -44,6 +44,9 @@ import { probeExecutable } from '../../runtime/probe/index.js';
 import type { ExecutableProbePort } from '../../runtime/probe/index.js';
 import { SealedAgentRegistry } from '../../runtime/registry/index.js';
 import type {
+  ActiveInvocationSnapshot,
+  ActiveInvocationStateSink,
+  ActiveProcessIdentity,
   AgentDefinitionContract,
   AgentInvocationFilter,
   AgentInvocationSnapshot,
@@ -52,6 +55,7 @@ import type {
   JsonObject,
   JsonValue,
 } from '../../runtime/spec/index.js';
+import { ActiveStateLane } from './active-state-lane.js';
 import { CompletedInvocations } from './completed-invocations.js';
 import { createNativeProcessExecutionPort } from './create-native-process-execution-port.js';
 import { InstalledBindingRegistry } from './installed-bindings.js';
@@ -68,6 +72,8 @@ type RejectionReason =
   | 'output_prepare_uncertain'
   | 'environment_invalid'
   | 'manager_closed'
+  | 'process_identity_failed'
+  | 'active_state_failed'
   | 'preflight_failed';
 
 type LifecycleResultLookup =
@@ -95,6 +101,13 @@ interface ActiveInvocation {
   readonly acceptedAt: string;
   readonly completion: Deferred<NormalizedInvocationOutcome>;
   readonly lifecycle: InvocationLifecycle;
+}
+
+interface RetainedActiveStateGuard {
+  readonly activeStateLane: ActiveStateLane;
+  readonly killAndReap: () => Promise<ProcessCleanupAttemptOutcome | undefined>;
+  readonly outputDirectory: string;
+  cleanupConfirmed: boolean;
 }
 
 type LifecycleManagerPorts = Omit<InvocationExecutionPorts, 'execution'> &
@@ -480,6 +493,7 @@ const createHandle = (
 
 class InternalInvocationLifecycleManager {
   readonly #configuredSecretValues: readonly string[];
+  readonly #activeStateOperationTimeoutMs: number;
   #closing = false;
   #shutdownDeferred: Deferred<void> | undefined;
   #firstShutdownReason: string | undefined;
@@ -495,6 +509,9 @@ class InternalInvocationLifecycleManager {
   private readonly pendingClaimAttempts = new Map<string, OutputClaimAttempt>();
   private readonly pendingPreparationAttempts = new Map<string, OutputPreparationAttempt>();
   private readonly inFlightStarts = new Map<string, Deferred<void>>();
+  // Retained until consumer-backed active-state reconciliation can inspect uncertain rows.
+  private readonly retainedActiveStateGuards = new Map<string, RetainedActiveStateGuard>();
+  private readonly retainedActiveStateOutputDirectories = new Set<string>();
   constructor(
     private readonly ports: LifecycleManagerPorts,
     private readonly completed: CompletedInvocations,
@@ -503,12 +520,16 @@ class InternalInvocationLifecycleManager {
     private readonly installedBindings: InstalledBindingRegistry,
     private readonly effectiveInputValidators: ReadonlyMap<string, EffectiveInputValidators>,
     private readonly limits: Readonly<AgentManagerLimits>,
+    private readonly activeStateSink: ActiveInvocationStateSink,
     configuredSecretValues: readonly string[],
   ) {
     this.#configuredSecretValues = configuredSecretValues;
+    const activeStateOperationTimeoutMs = limits.activeStateOperationTimeoutMs;
+    if (activeStateOperationTimeoutMs === undefined)
+      throw new Error('Validated active-state operation timeout is required.');
+    this.#activeStateOperationTimeoutMs = activeStateOperationTimeoutMs;
     this.executionPort =
-      ports.execution ??
-      createNativeProcessExecutionPort(undefined, limits.activeStateOperationTimeoutMs);
+      ports.execution ?? createNativeProcessExecutionPort(undefined, activeStateOperationTimeoutMs);
   }
 
   async start(input: unknown, context?: unknown): Promise<LifecycleStartOutcome> {
@@ -537,6 +558,8 @@ class InternalInvocationLifecycleManager {
         return Object.freeze({ status: 'rejected', reason: 'output_claim_failed' });
       if (this.quarantinedPreparationOutputDirectories.has(plan.outputDirectory))
         return Object.freeze({ status: 'rejected', reason: 'output_prepare_uncertain' });
+      if (this.retainedActiveStateOutputDirectories.has(plan.outputDirectory))
+        return Object.freeze({ status: 'rejected', reason: 'active_state_failed' });
       const claimOutcome = await this.resolveClaimedSession(snapshot.invocationId, plan);
       if (claimOutcome.status === 'rejected')
         return Object.freeze({ status: 'rejected', reason: claimOutcome.reason });
@@ -570,28 +593,137 @@ class InternalInvocationLifecycleManager {
       }
       const resources = preparationResult.resources;
       const authority = preparationResult.authority;
+      const spawn = await this.executionPort.spawnAndIdentify(snapshot, preparedLaunch, resources);
+      if (spawn.status === 'failed') {
+        if (spawn.cleanupOutcome !== undefined) {
+          this.retainActiveStateGuard(snapshot.invocationId, {
+            activeStateLane: new ActiveStateLane(
+              this.activeStateSink,
+              this.#activeStateOperationTimeoutMs,
+            ),
+            killAndReap: async () => spawn.cleanupOutcome,
+            outputDirectory: plan.outputDirectory,
+            cleanupConfirmed: false,
+          });
+        }
+        return Object.freeze({
+          status: 'rejected',
+          reason:
+            spawn.reason === 'identity_failed' ? 'process_identity_failed' : 'preflight_failed',
+        });
+      }
+
+      const activeStateLane = new ActiveStateLane(
+        this.activeStateSink,
+        this.#activeStateOperationTimeoutMs,
+      );
+      const activeProcessIdentity: ActiveProcessIdentity = Object.freeze({
+        pid: spawn.identity.pid,
+        processGroupId: spawn.identity.processGroupId,
+        fingerprint: spawn.identity.fingerprint,
+        startedAt: spawn.startedAt,
+      });
+      const runningActiveState = this.createActiveStateSnapshot(
+        snapshot.invocationId,
+        preparedLaunch,
+        'running',
+        activeProcessIdentity,
+      );
+      const retainedGuard: RetainedActiveStateGuard = {
+        activeStateLane,
+        killAndReap: spawn.killAndReap,
+        outputDirectory: plan.outputDirectory,
+        cleanupConfirmed: false,
+      };
+
+      if (this.#closing) {
+        const cleanupOutcome = await spawn.killAndReap();
+        if (cleanupOutcome !== undefined)
+          this.retainActiveStateGuard(snapshot.invocationId, retainedGuard);
+        return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
+      }
+
+      this.retainActiveStateGuard(snapshot.invocationId, retainedGuard);
+      const preacceptanceDeadlineAt =
+        spawn.spawnedAt + Math.min(snapshot.wallClockTimeoutMs, snapshot.limits.idleTimeoutMs);
+      const setupDeadlineAt = Math.min(
+        spawn.spawnedAt + this.#activeStateOperationTimeoutMs,
+        preacceptanceDeadlineAt,
+      );
+      const runningSave = await activeStateLane.save(runningActiveState, setupDeadlineAt);
+      if (runningSave.status !== 'fulfilled') {
+        const cleanupOutcome = await spawn.killAndReap();
+        retainedGuard.cleanupConfirmed = cleanupOutcome === undefined;
+        if (runningSave.status === 'timed_out' && cleanupOutcome === undefined) {
+          const removed = await activeStateLane.remove(
+            snapshot.invocationId,
+            Date.now() + this.#activeStateOperationTimeoutMs,
+          );
+          if (removed) this.releaseActiveStateGuard(snapshot.invocationId);
+        }
+        return Object.freeze({ status: 'rejected', reason: 'active_state_failed' });
+      }
+
+      if (this.#closing) {
+        const cleanupOutcome = await spawn.killAndReap();
+        retainedGuard.cleanupConfirmed = cleanupOutcome === undefined;
+        if (cleanupOutcome === undefined) {
+          const removed = await activeStateLane.remove(
+            snapshot.invocationId,
+            Date.now() + this.#activeStateOperationTimeoutMs,
+          );
+          if (removed) this.releaseActiveStateGuard(snapshot.invocationId);
+        }
+        return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
+      }
+
+      this.releaseActiveStateGuard(snapshot.invocationId);
       const acceptedAt = createIsoTimestamp();
 
       const completion = createDeferred<NormalizedInvocationOutcome>();
-      const lifecyclePorts: InvocationExecutionPorts = Object.freeze({
-        ...this.ports,
-        execution: Object.freeze({
-          start: (
-            startSnapshot: Parameters<InvocationExecutionPorts['execution']['start']>[0],
-            startPreparedLaunch: Parameters<InvocationExecutionPorts['execution']['start']>[1],
-          ) => this.executionPort.start(startSnapshot, startPreparedLaunch, resources),
-        }),
-      });
       let lifecycle: InvocationLifecycle;
       lifecycle = new InvocationLifecycle(
-        lifecyclePorts,
+        Object.freeze({ ...this.ports, execution: this.executionPort }),
         snapshot,
         preparedLaunch,
+        spawn.activate,
         authority,
         acceptedAt,
+        spawn.startedAt,
+        () => {
+          void activeStateLane.save(
+            this.createActiveStateSnapshot(
+              snapshot.invocationId,
+              preparedLaunch,
+              'cancelling',
+              activeProcessIdentity,
+            ),
+            Date.now() + this.#activeStateOperationTimeoutMs,
+          );
+        },
+        async (invocationId) => {
+          const removed = await activeStateLane.remove(
+            invocationId,
+            Date.now() + this.#activeStateOperationTimeoutMs,
+          );
+          if (!removed)
+            this.retainActiveStateGuard(invocationId, {
+              activeStateLane,
+              killAndReap: async () => undefined,
+              outputDirectory: plan.outputDirectory,
+              cleanupConfirmed: true,
+            });
+        },
         (outcome) => this.complete(snapshot.invocationId, completion, lifecycle, outcome),
       );
-      this.active.set(snapshot.invocationId, Object.freeze({ acceptedAt, completion, lifecycle }));
+      this.active.set(
+        snapshot.invocationId,
+        Object.freeze({
+          acceptedAt,
+          completion,
+          lifecycle,
+        }),
+      );
       this.pending.delete(snapshot.invocationId);
       const handle = createHandle(snapshot.invocationId, completion);
       lifecycle.begin();
@@ -694,10 +826,31 @@ class InternalInvocationLifecycleManager {
 
     await Promise.all([...claimDrains, ...preparationDrains]);
     await Promise.all(startDrains);
-    const results = await Promise.all(activeDrains);
+    const retainedActiveStateDrains = [...this.retainedActiveStateGuards.entries()].map(
+      ([invocationId, guard]) => this.drainRetainedActiveStateGuard(invocationId, guard),
+    );
+    const results = await Promise.all([...activeDrains, ...retainedActiveStateDrains]);
     const failures = results.filter((result) => result.kind === 'cleanup_failed');
     if (failures.length > 0) throw shutdownFailedError(failures, this.#firstShutdownReason);
     this.subscriptions.clear();
+  }
+
+  private async drainRetainedActiveStateGuard(
+    invocationId: string,
+    guard: RetainedActiveStateGuard,
+  ): Promise<ShutdownDrainResult> {
+    if (!guard.cleanupConfirmed) {
+      const outcome = await guard.killAndReap();
+      if (outcome !== undefined)
+        return Object.freeze({ invocationId, kind: 'cleanup_failed' as const, outcome });
+      guard.cleanupConfirmed = true;
+    }
+    const removed = await guard.activeStateLane.remove(
+      invocationId,
+      Date.now() + this.#activeStateOperationTimeoutMs,
+    );
+    if (removed) this.releaseActiveStateGuard(invocationId);
+    return Object.freeze({ invocationId, kind: 'terminal' as const });
   }
 
   private async drainActiveInvocation(
@@ -915,11 +1068,42 @@ class InternalInvocationLifecycleManager {
       this.active.has(invocationId) ||
       this.completed.has(invocationId) ||
       this.quarantinedInvocationIds.has(invocationId) ||
-      this.quarantinedPreparationInvocationIds.has(invocationId)
+      this.quarantinedPreparationInvocationIds.has(invocationId) ||
+      this.retainedActiveStateGuards.has(invocationId)
     )
       return false;
     this.pending.add(invocationId);
     return true;
+  }
+
+  private createActiveStateSnapshot(
+    invocationId: string,
+    preparedLaunch: PreparedLaunch,
+    state: ActiveInvocationSnapshot['state'],
+    process: ActiveProcessIdentity,
+  ): ActiveInvocationSnapshot {
+    return Object.freeze({
+      invocationId,
+      pin: Object.freeze({ ...preparedLaunch.pin }),
+      state,
+      process: Object.freeze({ ...process }),
+    });
+  }
+
+  private retainActiveStateGuard(invocationId: string, guard: RetainedActiveStateGuard): void {
+    this.retainedActiveStateGuards.set(invocationId, guard);
+    this.retainedActiveStateOutputDirectories.add(guard.outputDirectory);
+  }
+
+  private releaseActiveStateGuard(invocationId: string): void {
+    const guard = this.retainedActiveStateGuards.get(invocationId);
+    if (guard === undefined) return;
+    this.retainedActiveStateGuards.delete(invocationId);
+    const outputStillRetained = [...this.retainedActiveStateGuards.values()].some(
+      (candidate) => candidate.outputDirectory === guard.outputDirectory,
+    );
+    if (!outputStillRetained)
+      this.retainedActiveStateOutputDirectories.delete(guard.outputDirectory);
   }
 
   private createOutputPreparation(
@@ -1077,6 +1261,7 @@ export const createInvocationLifecycleManager = (
       installedBindings,
       effectiveInputValidators,
       validated.limits,
+      validated.activeStateSink,
       validated.redaction.secrets,
     ),
   );

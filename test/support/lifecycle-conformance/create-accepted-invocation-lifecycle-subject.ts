@@ -119,8 +119,12 @@ export const createAcceptedInvocationLifecycleSubject = (
     },
     snapshot,
     preparedLaunch,
+    () => execution.activateQueued(snapshot, preparedLaunch),
     authority,
     '2026-08-22T00:00:00.000Z',
+    '2026-08-22T00:00:01.000Z',
+    () => undefined,
+    async () => undefined,
     (settlement) => settlements.push(settlement),
   );
 

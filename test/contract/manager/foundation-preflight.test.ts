@@ -9,7 +9,10 @@ import type {
 } from '../../../src/runtime/execution/index.js';
 import { AGENT_FAULT_MESSAGES } from '../../../src/runtime/policy/index.js';
 import type { ExecutableProbePort } from '../../../src/runtime/probe/index.js';
-import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
+import {
+  buildAgentDefinition,
+  createTestActiveStateSink,
+} from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../../support/execution/fake-output-claim-port.js';
@@ -112,7 +115,10 @@ test('rejects workspace admission before output preparation or execution delegat
     reason: 'invalid_path',
   });
   const definition = buildAgentDefinition();
-  const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+  const manager = createInvocationLifecycleManager(
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
+    ports,
+  );
 
   await expect(
     manager.start(
@@ -134,7 +140,10 @@ test('admits a normalized absolute workspace before output preparation and execu
     directory: '/approved/workspace',
   });
   const definition = buildAgentDefinition();
-  const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+  const manager = createInvocationLifecycleManager(
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
+    ports,
+  );
   probe.enqueueResolution({ status: 'resolved', executable: '/resolved/workspace-agent' });
   probe.enqueueVersionStart('running');
   output.enqueueTerminalResultRecording();
@@ -158,9 +167,15 @@ test('admits a normalized absolute workspace before output preparation and execu
 test('freshly probes every invocation before output preparation and execution delegation', async () => {
   const { execution, output, probe, ports } = createPorts('linux');
   const definition = buildAgentDefinition();
-  const [validatedDefinition] = validateManagerOptions({ definitions: [definition] }).definitions;
+  const [validatedDefinition] = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions: [definition],
+  }).definitions;
   if (validatedDefinition === undefined) throw new Error('Expected validated definition');
-  const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+  const manager = createInvocationLifecycleManager(
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
+    ports,
+  );
 
   for (const executable of ['/resolved/first', '/resolved/second']) {
     probe.enqueueResolution({ status: 'resolved', executable });
@@ -251,7 +266,10 @@ test('freshly probes every invocation before output preparation and execution de
 test('rejects version mismatch before output preparation or execution delegation', async () => {
   const { execution, output, probe, ports } = createPorts('linux');
   const definition = buildAgentDefinition();
-  const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+  const manager = createInvocationLifecycleManager(
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
+    ports,
+  );
   probe.enqueueResolution({ status: 'resolved', executable: '/resolved/version-mismatch-agent' });
   probe.enqueueVersionStart('running');
 
@@ -276,9 +294,9 @@ test('orders fresh executable proof after resource-bound preflight and before ou
   execution.enqueueStart('running');
   const ports: InvocationExecutionPorts & Readonly<{ executableProbe: ExecutableProbePort }> = {
     execution: {
-      start: async (snapshot, preparedLaunch) => {
+      spawnAndIdentify: async (snapshot, preparedLaunch, resources) => {
         order.push('execution-start');
-        return await execution.start(snapshot, preparedLaunch);
+        return await execution.spawnAndIdentify(snapshot, preparedLaunch, resources);
       },
     },
     output: {
@@ -318,7 +336,10 @@ test('orders fresh executable proof after resource-bound preflight and before ou
       },
     },
   };
-  const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+  const manager = createInvocationLifecycleManager(
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
+    ports,
+  );
 
   const started = manager.start(createStartInput(definition, { invocationId: 'ordered-proof' }));
   await flush();
@@ -341,7 +362,10 @@ test('orders fresh executable proof after resource-bound preflight and before ou
 test('rejects malformed launch evidence before output preparation or execution delegation', async () => {
   const { execution, output, probe, ports } = createPorts('linux');
   const definition = buildAgentDefinition();
-  const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+  const manager = createInvocationLifecycleManager(
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
+    ports,
+  );
   probe.enqueueResolution({ status: 'resolved', executable: '' });
   probe.enqueueVersionStart('running');
 
@@ -359,7 +383,10 @@ test('rejects malformed launch evidence before output preparation or execution d
 test('fails target-platform preflight before output preparation or execution delegation', async () => {
   const { execution, output, probe, ports } = createPorts('darwin');
   const definition = buildAgentDefinition();
-  const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+  const manager = createInvocationLifecycleManager(
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
+    ports,
+  );
 
   try {
     await manager.start(createStartInput(definition, { invocationId: 'unsupported' }));
@@ -383,7 +410,10 @@ test('fails target-platform preflight before output preparation or execution del
 test('reserves an invocation id before probing and retains that reservation after completion', async () => {
   const { execution, output, probe, ports } = createPorts('linux');
   const definition = buildAgentDefinition();
-  const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+  const manager = createInvocationLifecycleManager(
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
+    ports,
+  );
   probe.enqueueResolution({ status: 'resolved', executable: '/resolved/duplicate' });
   probe.enqueueVersionStart('running');
   output.enqueueTerminalResultRecording();
@@ -418,7 +448,7 @@ test('maps a missing preflight composition port to a typed pre-acceptance reject
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       execution,
       output,
@@ -458,8 +488,11 @@ test.each([
       executableProbe: probe,
       ...malformedWorkspacePort,
     };
-    // @ts-expect-error Deliberately exercises unsafe JavaScript composition.
-    const manager = createInvocationLifecycleManager({ definitions: [definition] }, ports);
+    const manager = createInvocationLifecycleManager(
+      { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
+      // @ts-expect-error Deliberately exercises unsafe JavaScript composition.
+      ports,
+    );
 
     await expect(
       manager.start(createStartInput(definition, { invocationId: `malformed-${_name}` })),

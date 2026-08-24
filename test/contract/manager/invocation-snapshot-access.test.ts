@@ -3,7 +3,10 @@ import { expect, test, vi } from 'vitest';
 import { createInvocationLifecycleManager } from '../../../src/application/manager/index.js';
 import type { InvocationExecutionPorts } from '../../../src/runtime/execution/index.js';
 import type { AgentInvocationStatus } from '../../../src/runtime/spec/index.js';
-import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
+import {
+  buildAgentDefinition,
+  createTestActiveStateSink,
+} from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../../support/execution/fake-output-claim-port.js';
@@ -16,6 +19,7 @@ const agent = Object.freeze({ id: definition.id, version: definition.version });
 const otherDefinition = buildAgentDefinition({ id: 'other.agent', version: '2.0.0' });
 const otherAgent = Object.freeze({ id: otherDefinition.id, version: otherDefinition.version });
 const lifecycleOptions = Object.freeze({
+  activeStateSink: createTestActiveStateSink(),
   definitions: Object.freeze([definition, otherDefinition]),
 });
 
@@ -59,9 +63,7 @@ const createStartInput = (
 };
 
 const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
 };
 
 const expectAcceptedInvocation = (
@@ -101,32 +103,30 @@ test('projects active and terminal invocation snapshots with canonical timestamp
       output,
     });
 
-    const accepted = expectAcceptedInvocation(
-      await manager.start(
-        createStartInput({
-          invocationId: 'snap',
-          metadata: Object.freeze({ ticket: 'T-1' }),
-        }),
-      ),
+    const start = manager.start(
+      createStartInput({
+        invocationId: 'snap',
+        metadata: Object.freeze({ ticket: 'T-1' }),
+      }),
     );
-    const starting = expectSnapshot(manager, 'snap', 'starting');
-    expect(starting.acceptedAt).toBe('2026-08-24T00:00:00.000Z');
-    expect(starting.startedAt).toBeUndefined();
-    expect(starting.finishedAt).toBeUndefined();
-    expect(starting.metadata).toEqual({ ticket: 'T-1' });
-    expect(manager.listInvocations()).toEqual([starting]);
+    await flush();
+    expect(manager.getInvocation('snap')).toBeUndefined();
+    expect(manager.listInvocations()).toEqual([]);
 
     vi.setSystemTime(new Date('2026-08-24T00:00:01.000Z'));
     execution.fulfilPendingStart(1);
-    await flush();
+    const accepted = expectAcceptedInvocation(await start);
     const running = expectSnapshot(manager, 'snap', 'running');
+    expect(running.acceptedAt).toBe('2026-08-24T00:00:01.000Z');
     expect(running.startedAt).toBe('2026-08-24T00:00:01.000Z');
+    expect(running.finishedAt).toBeUndefined();
+    expect(running.metadata).toEqual({ ticket: 'T-1' });
 
     vi.setSystemTime(new Date('2026-08-24T00:00:02.000Z'));
     execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
     await flush();
     const completed = expectSnapshot(manager, 'snap', 'succeeded');
-    expect(completed.acceptedAt).toBe(starting.acceptedAt);
+    expect(completed.acceptedAt).toBe(running.acceptedAt);
     expect(completed.startedAt).toBe(running.startedAt);
     expect(completed.finishedAt).toBe('2026-08-24T00:00:02.000Z');
     expect(completed.metadata).toEqual({ ticket: 'T-1' });
@@ -297,7 +297,7 @@ test('keeps finalizing snapshots visible with the last active status and publish
   expect(synchronousSnapshotSeen).toBe(true);
 });
 
-test('keeps starting status and undefined finishedAt when finalize itself throws on start failure', async () => {
+test('keeps preacceptance spawn failure out of invocation snapshots', async () => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
   Object.defineProperty(output, 'cleanupScratch', {
@@ -311,14 +311,11 @@ test('keeps starting status and undefined finishedAt when finalize itself throws
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output,
   });
-  const accepted = expectAcceptedInvocation(
-    await manager.start(createStartInput({ invocationId: 'start-failure-finalize' })),
-  );
-  await flush();
-  expect(accepted.lifecycle.currentState()).toBe('terminal');
-  const snapshot = expectSnapshot(manager, 'start-failure-finalize', 'failed');
-  expect(snapshot.startedAt).toBeUndefined();
-  expect(snapshot.finishedAt).toBeUndefined();
+  await expect(
+    manager.start(createStartInput({ invocationId: 'start-failure-finalize' })),
+  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  expect(manager.getInvocation('start-failure-finalize')).toBeUndefined();
+  expect(output.calls().filter((call) => call.type === 'publish-terminal-result')).toEqual([]);
 });
 
 test('uses invocationId as tie-breaker when acceptedAt timestamps are equal', async () => {
@@ -348,7 +345,7 @@ test('uses invocationId as tie-breaker when acceptedAt timestamps are equal', as
   }
 });
 
-test('keeps starting as the finalizing-window active status after execution start throws', async () => {
+test('does not publish a terminal result for preacceptance spawn failure', async () => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
   output.enqueuePendingTerminalResultRecording();
@@ -359,16 +356,11 @@ test('keeps starting as the finalizing-window active status after execution star
     output,
   });
 
-  const accepted = expectAcceptedInvocation(
-    await manager.start(createStartInput({ invocationId: 'start-failure-finalizing' })),
-  );
-  await flush();
-
-  expect(accepted.lifecycle.currentState()).toBe('finalizing');
-  expectSnapshot(manager, 'start-failure-finalizing', 'starting');
-  output.fulfilPendingTerminalResultRecording(1);
-  await flush();
-  expectSnapshot(manager, 'start-failure-finalizing', 'failed');
+  await expect(
+    manager.start(createStartInput({ invocationId: 'start-failure-finalizing' })),
+  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  expect(manager.getInvocation('start-failure-finalizing')).toBeUndefined();
+  expect(output.calls().filter((call) => call.type === 'publish-terminal-result')).toEqual([]);
 });
 
 test('keeps pending admission out of invocation snapshots until active admission commits', async () => {

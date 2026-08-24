@@ -2,7 +2,10 @@ import { expect, test } from 'vitest';
 
 import { createInvocationLifecycleManager } from '../../../src/application/manager/index.js';
 import type { InvocationExecutionPorts } from '../../../src/runtime/execution/index.js';
-import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
+import {
+  buildAgentDefinition,
+  createTestActiveStateSink,
+} from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../../support/execution/fake-output-claim-port.js';
@@ -22,7 +25,10 @@ const cancellationCompletion = (
 
 const definition = buildAgentDefinition();
 const agent = Object.freeze({ id: definition.id, version: definition.version });
-const lifecycleOptions = Object.freeze({ definitions: Object.freeze([definition]) });
+const lifecycleOptions = Object.freeze({
+  activeStateSink: createTestActiveStateSink(),
+  definitions: Object.freeze([definition]),
+});
 type LifecycleManagerPortsInput = Omit<
   InvocationExecutionPorts,
   'workspace' | 'outputClaim' | 'outputPreparation'
@@ -58,9 +64,7 @@ const createStartInput = (
   });
 
 const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
 };
 const expectAcceptedInvocation = (
   outcome: Awaited<ReturnType<ReturnType<typeof createInvocationLifecycleManager>['start']>>,
@@ -126,7 +130,11 @@ test('keeps an active waiter and handle result after later FIFO eviction while f
   execution.enqueueStart('running');
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition], limits: { maxCompletedInvocations: 1 } },
+    {
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [definition],
+      limits: { maxCompletedInvocations: 1 },
+    },
     {
       execution,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -217,14 +225,22 @@ test('uses validated default capacity and rejects invalid capacity through lifec
   const invalidMinimum = createPorts();
   expect(() =>
     createInvocationLifecycleManager(
-      { definitions: [definition], limits: { maxCompletedInvocations: 0 } },
+      {
+        activeStateSink: createTestActiveStateSink(),
+        definitions: [definition],
+        limits: { maxCompletedInvocations: 0 },
+      },
       invalidMinimum,
     ),
   ).toThrow('Agent manager limit is invalid.');
   const invalidMaximum = createPorts();
   expect(() =>
     createInvocationLifecycleManager(
-      { definitions: [definition], limits: { maxCompletedInvocations: 1_001 } },
+      {
+        activeStateSink: createTestActiveStateSink(),
+        definitions: [definition],
+        limits: { maxCompletedInvocations: 1_001 },
+      },
       invalidMaximum,
     ),
   ).toThrow('Agent manager limit is invalid.');
@@ -424,7 +440,11 @@ test('admits subscriptions independently from completed result retention', async
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
-    { definitions: [definition], limits: { maxCompletedInvocations: 1 } },
+    {
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [definition],
+      limits: { maxCompletedInvocations: 1 },
+    },
     {
       execution,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),

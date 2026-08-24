@@ -98,6 +98,8 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/normalized-invocation-failure-to-agent-fault.ts',
     'execution/normalized-invocation-failure.ts',
     'execution/normalized-invocation-outcome.ts',
+    'execution/running-execution.ts',
+    'execution/spawn-and-identify-result.ts',
     'execution/output-claim-attempt/begin-output-claim.ts',
     'execution/output-claim-attempt/claimed-invocation-output.ts',
     'execution/output-claim-attempt/create-output-claim-attempt.ts',
@@ -303,6 +305,7 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'spec/json/json-primitive.ts',
     'spec/json/json-schema-2020-12.ts',
     'spec/json/json-value.ts',
+    'spec/manager-options/active-invocation-state-sink.ts',
     'spec/manager-options/agent-manager-options.ts',
     'spec/manager-options/index.ts',
   ].toSorted();

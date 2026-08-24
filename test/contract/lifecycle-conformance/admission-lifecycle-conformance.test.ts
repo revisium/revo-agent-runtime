@@ -82,19 +82,21 @@ test('accepts only one concurrent invocation and snapshots caller-owned input', 
   await expect(accepted.handle.result()).resolves.toMatchObject({ status: 'succeeded', value: {} });
 });
 
-test('cancels one pending accepted invocation exactly once after start confirmation', async () => {
+test('cancels one accepted invocation exactly once after spawn confirmation', async () => {
   const subject = createLifecycleConformanceSubject();
   subject.output.enqueueTerminalResultRecording();
   subject.execution.enqueuePendingStart();
 
-  const accepted = await subject.start(subject.createInput('pending-cancellation'));
+  const start = subject.start(subject.createInput('pending-cancellation'));
+  await waitForLifecycleConformanceQuiescence();
+  subject.execution.fulfilPendingStart(1);
+  const accepted = await start;
   if (accepted.status !== 'accepted') throw new Error('Expected pending invocation acceptance.');
   const cancellation = accepted.lifecycle.requestCancellation();
   expect(accepted.lifecycle.currentState()).toBe('cancelling');
   expect(subject.manager.getResult('pending-cancellation')).toEqual({ state: 'active' });
   expect(subject.output.recordedTerminalResults()).toEqual([]);
 
-  subject.execution.fulfilPendingStart(1);
   await waitForLifecycleConformanceQuiescence();
   expect(subject.execution.calls()).toEqual([
     { type: 'start' },

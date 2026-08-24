@@ -1,4 +1,3 @@
-import type { InvocationTerminalObservation } from './execution-terminal-observation.js';
 import type { InvocationInputSnapshot } from './input-snapshot.js';
 import type { InvocationClockPort } from './invocation-clock-port.js';
 import type { OutputClaimExclusiveCreatePort } from './output-claim-attempt/index.js';
@@ -7,7 +6,7 @@ import type {
   takePreparedInvocationResourcesPayload,
 } from './output-preparation-attempt/index.js';
 import type { PreparedLaunch } from './prepared-launch.js';
-import type { ProcessCleanupAttemptOutcome } from './process-supervision-port/index.js';
+import type { SpawnAndIdentifyResult } from './spawn-and-identify-result.js';
 import type { TerminalPublicationPort } from './terminal-publication-port/index.js';
 import type { WorkspaceAdmissionResult } from './workspace-admission-result.js';
 
@@ -17,15 +16,11 @@ type PreparedInvocationResourcesPayload = NonNullable<
 
 export interface InvocationExecutionPorts {
   readonly execution: {
-    start(
+    spawnAndIdentify(
       snapshot: InvocationInputSnapshot,
       preparedLaunch: PreparedLaunch,
       resources?: PreparedInvocationResourcesPayload,
-    ): Promise<{
-      readonly spawnedAt: number;
-      readonly completion: Promise<InvocationTerminalObservation>;
-      requestCancellation(): Promise<ProcessCleanupAttemptOutcome | undefined>;
-    }>;
+    ): Promise<SpawnAndIdentifyResult>;
   };
   readonly workspace: {
     admit(path: string): Promise<WorkspaceAdmissionResult>;

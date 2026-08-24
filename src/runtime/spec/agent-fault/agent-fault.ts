@@ -18,6 +18,8 @@ export type AgentFaultCode =
   | 'revo.agent.probe_version_mismatch'
   | 'revo.agent.protocol_failed'
   | 'revo.agent.output_write_failed'
+  | 'revo.agent.active_state_failed'
+  | 'revo.agent.process_identity_failed'
   | 'revo.agent.process_failed'
   | 'revo.agent.process_cleanup_failed'
   | 'revo.agent.result_missing'

@@ -4,6 +4,8 @@ import {
   type ProcessCleanupAttemptOutcome,
   type InvocationExecutionPorts,
   type PreparedLaunch,
+  type RunningExecution,
+  type SpawnAndIdentifyResult,
 } from '../../../src/runtime/execution/index.js';
 
 export type InvocationExecutionCall =
@@ -23,10 +25,13 @@ export interface FakeInvocationExecutionControls {
   calls(): readonly InvocationExecutionCall[];
   startedPreparedLaunches(): readonly PreparedLaunch[];
   startedSnapshots(): readonly InvocationInputSnapshot[];
+  activateQueued(
+    snapshot: InvocationInputSnapshot,
+    preparedLaunch: PreparedLaunch,
+  ): RunningExecution;
 }
 
 type InvocationExecutionPort = InvocationExecutionPorts['execution'];
-type RunningExecution = Awaited<ReturnType<InvocationExecutionPorts['execution']['start']>>;
 type CompletionObservation = Awaited<RunningExecution['completion']>;
 type CancellationRequestState = 'unrequested' | 'pending' | 'fulfilled' | 'rejected';
 type StartResult = 'running' | 'pending' | Error;
@@ -70,7 +75,7 @@ export class FakeInvocationExecutionPort
 {
   private readonly executions = new Map<number, PendingExecution>();
   private readonly callLog: InvocationExecutionCall[] = [];
-  private readonly pendingStarts = new Map<number, Deferred<RunningExecution>>();
+  private readonly pendingStarts = new Map<number, Deferred<SpawnAndIdentifyResult>>();
   private readonly preparedLaunches: PreparedLaunch[] = [];
   private readonly snapshots: InvocationInputSnapshot[] = [];
   private readonly startQueue: StartResult[] = [];
@@ -85,29 +90,54 @@ export class FakeInvocationExecutionPort
     this.startQueue.push('pending');
   }
 
-  async start(
+  async spawnAndIdentify(
     snapshot: InvocationInputSnapshot,
     preparedLaunch: PreparedLaunch,
-  ): Promise<RunningExecution> {
-    this.record(Object.freeze({ type: 'start' }));
-    this.snapshots.push(snapshot);
-    this.preparedLaunches.push(preparedLaunch);
+    _resources?: Parameters<InvocationExecutionPort['spawnAndIdentify']>[2],
+  ): Promise<SpawnAndIdentifyResult> {
+    this.recordStart(snapshot, preparedLaunch);
     const result = this.takeStart();
-    if (result instanceof Error) throw result;
+    if (result instanceof Error)
+      return Object.freeze({ status: 'failed', reason: 'spawn_failed' as const });
     if (result === 'pending') {
       const startId = this.nextStartId;
       this.nextStartId += 1;
-      const pending = deferred<RunningExecution>();
+      const pending = deferred<SpawnAndIdentifyResult>();
       this.pendingStarts.set(startId, pending);
       return pending.promise;
     }
-    return this.createExecution();
+    return this.createIdentifiedExecution();
+  }
+
+  activateQueued(
+    snapshot: InvocationInputSnapshot,
+    preparedLaunch: PreparedLaunch,
+  ): RunningExecution {
+    this.recordStart(snapshot, preparedLaunch);
+    const result = this.takeStart();
+    if (result instanceof Error) throw result;
+    if (result === 'running') return this.createExecution();
+
+    const startId = this.nextStartId;
+    this.nextStartId += 1;
+    const pending = deferred<SpawnAndIdentifyResult>();
+    this.pendingStarts.set(startId, pending);
+    const running = pending.promise.then((identified) => {
+      if (identified.status !== 'identified')
+        throw new Error('Pending execution did not identify.');
+      return identified.activate();
+    });
+    return Object.freeze({
+      spawnedAt: defaultSpawnedAt,
+      completion: running.then((execution) => execution.completion),
+      requestCancellation: async () => (await running).requestCancellation(),
+    });
   }
 
   fulfilPendingStart(startId: number): void {
     const pending = this.pendingStart(startId);
     this.pendingStarts.delete(startId);
-    pending.resolve(this.createExecution());
+    pending.resolve(this.createIdentifiedExecution());
   }
 
   rejectPendingStart(startId: number, error: Error): void {
@@ -203,6 +233,21 @@ export class FakeInvocationExecutionPort
     };
   }
 
+  private createIdentifiedExecution(): SpawnAndIdentifyResult {
+    return Object.freeze({
+      status: 'identified',
+      spawnedAt: defaultSpawnedAt,
+      startedAt: new Date(Date.now()).toISOString(),
+      identity: Object.freeze({
+        pid: this.nextExecutionId,
+        processGroupId: this.nextExecutionId,
+        fingerprint: `sha256:fake-${this.nextExecutionId}`,
+      }),
+      activate: () => this.createExecution(),
+      killAndReap: async (): Promise<ProcessCleanupAttemptOutcome | undefined> => undefined,
+    });
+  }
+
   private requestCancellation(
     executionId: number,
   ): Promise<ProcessCleanupAttemptOutcome | undefined> {
@@ -224,7 +269,7 @@ export class FakeInvocationExecutionPort
     return result;
   }
 
-  private pendingStart(startId: number): Deferred<RunningExecution> {
+  private pendingStart(startId: number): Deferred<SpawnAndIdentifyResult> {
     const pending = this.pendingStarts.get(startId);
     if (pending === undefined) throw new Error(`Unknown pending start id ${startId}`);
     return pending;
@@ -264,5 +309,11 @@ export class FakeInvocationExecutionPort
 
   private record(call: InvocationExecutionCall): void {
     this.callLog.push(call);
+  }
+
+  private recordStart(snapshot: InvocationInputSnapshot, preparedLaunch: PreparedLaunch): void {
+    this.record(Object.freeze({ type: 'start' }));
+    this.snapshots.push(snapshot);
+    this.preparedLaunches.push(preparedLaunch);
   }
 }

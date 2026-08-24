@@ -317,14 +317,16 @@ export class NodePosixProcessSpawnDispatch {
     return PROCESS_SPAWN_HANDLES.get(attempt);
   }
 
-  async killUnactivated(process: SpawnAcceptedProcess): Promise<void> {
+  async killUnactivated(
+    process: SpawnAcceptedProcess,
+  ): Promise<ProcessCleanupAttemptOutcome | undefined> {
     // This guard and activateIo's matching guard stay synchronous until ACTIVATED.add():
     // inserting an await between the check and add would reintroduce competing teardown ownership.
-    if (ACTIVATED.has(process)) return;
+    if (ACTIVATED.has(process)) return undefined;
     const handle = PROCESS_SPAWN_HANDLES.get(process);
     const processGroupId = handle?.child.pid;
     ACTIVATED.add(process);
-    if (handle === undefined || processGroupId === undefined) return;
+    if (handle === undefined || processGroupId === undefined) return undefined;
     const outcome = await terminateAndReap(processGroupId, handle.completion);
     settleProcessStartQuiescence(
       handle.attempt,
@@ -338,6 +340,7 @@ export class NodePosixProcessSpawnDispatch {
             authority: Object.freeze({ invocationId: handle.attempt.invocationId }),
           }),
     );
+    return outcome === undefined ? undefined : toCleanupAttemptOutcome(outcome);
   }
 
   async inspectIdentity(

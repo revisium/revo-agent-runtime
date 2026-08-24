@@ -336,6 +336,7 @@ test('exposes the exact frozen agent manager limit descriptors', () => {
 
 test('exposes the exact frozen agent fault messages', () => {
   expect(AGENT_FAULT_MESSAGES).toEqual({
+    activeStateFailed: 'Agent active state could not be saved.',
     definitionInvalid: 'Agent definition is invalid.',
     invalidUnicode: 'Agent definition contains invalid Unicode.',
     definitionDuplicate: 'Agent definition reference is duplicated.',
@@ -358,6 +359,7 @@ test('exposes the exact frozen agent fault messages', () => {
     protocolFailed: 'Agent protocol failed.',
     outputWriteFailed: 'Agent output write failed.',
     processFailed: 'Agent process failed.',
+    processIdentityFailed: 'Agent process identity could not be captured.',
     processCleanupFailed: 'Agent process cleanup failed.',
     resultMissing: 'Agent result is missing.',
     resultTooLarge: 'Agent result exceeded its limit.',
