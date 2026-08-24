@@ -500,7 +500,13 @@ test('killUnactivated retains process start quiescence when cleanup is not confi
     });
 
   try {
-    await expect(dispatch.killUnactivated(accepted)).resolves.toBeUndefined();
+    await expect(dispatch.killUnactivated(accepted)).resolves.toEqual({
+      cause: 'inspection_rejected',
+      killSent: false,
+      lastKnownGroupState: 'unknown',
+      leaderReapState: 'unknown',
+      termSent: false,
+    });
     await expect(attempt.quiescence).resolves.toEqual({
       status: 'retained',
       authority: { invocationId: 'spawn-dispatch-test' },

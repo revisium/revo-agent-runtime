@@ -2,10 +2,12 @@ import { NodePosixProcessSpawnDispatch } from '../../platform/process/node-posix
 import {
   createProcessStartAttempt,
   createRawResponseCapture,
+  createIsoTimestamp,
   DuplexCoordinatorRegistration,
   duplexCompletion,
   getProcessStartInvocationToken,
   submitDuplexCandidate,
+  type AttachedProtocolSession,
   type InterimDuplexPrimaryFailure,
   type InvocationExecutionPorts,
   type InvocationTerminalObservation,
@@ -14,6 +16,8 @@ import {
   type ProcessSpawnRequest,
   type ProcessStartAttempt,
   type RawResponseCapture,
+  type RunningExecution,
+  type SpawnAndIdentifyResult,
   type takePreparedInvocationResourcesPayload,
 } from '../../runtime/execution/index.js';
 import { AGENT_MANAGER_LIMITS } from '../../runtime/policy/index.js';
@@ -22,7 +26,6 @@ import { InstalledBindingRegistry } from './installed-bindings.js';
 type PreparedInvocationResourcesPayload = NonNullable<
   ReturnType<typeof takePreparedInvocationResourcesPayload>
 >;
-type RunningExecution = Awaited<ReturnType<InvocationExecutionPorts['execution']['start']>>;
 type NativeDispatch = Pick<
   NodePosixProcessSpawnDispatch,
   'beginStart' | 'inspectIdentity' | 'killUnactivated' | 'activateIo'
@@ -71,6 +74,39 @@ const attachRaceCandidate = (
   return failedObservation(spawnedAt, undefined, exit);
 };
 
+const buildAttachRaceCompletion = (
+  coordinator: DuplexCoordinatorRegistration,
+  spawnedAt: number,
+  attachOutcome: typeof AFTER_DEADLINE | typeof AFTER_DUPLEX_OPERATION_TIMEOUT | undefined,
+  cleanupAttempt: Promise<ProcessCleanupAttemptOutcome | undefined>,
+  processCompletion: Promise<ProcessExitObservation>,
+  disposeRawResponse: () => void,
+): Promise<InvocationTerminalObservation> =>
+  cleanupAttempt.then(() =>
+    processCompletion.then(
+      async (exit) => {
+        disposeRawResponse();
+        const candidate = attachRaceCandidate(attachOutcome, spawnedAt, exit);
+        submitDuplexCandidate(coordinator, candidate);
+        return (await duplexCompletion(coordinator)) ?? candidate;
+      },
+      async () => {
+        disposeRawResponse();
+        const candidate = failedObservation(spawnedAt);
+        submitDuplexCandidate(coordinator, candidate);
+        return (await duplexCompletion(coordinator)) ?? candidate;
+      },
+    ),
+  );
+
+const dispatchDuplexCancellation = async (
+  session: Pick<AttachedProtocolSession, 'requestCancellation'>,
+  terminateAndReap: () => Promise<ProcessCleanupAttemptOutcome | undefined>,
+): Promise<ProcessCleanupAttemptOutcome | undefined> => {
+  const sent = await session.requestCancellation();
+  return sent === 'sent' ? undefined : terminateAndReap();
+};
+
 const failedExecution = (spawnedAt: number): RunningExecution =>
   Object.freeze({
     spawnedAt,
@@ -100,8 +136,8 @@ const coordinatorFor = (
 };
 
 const createRequest = (
-  snapshot: Parameters<InvocationExecutionPorts['execution']['start']>[0],
-  preparedLaunch: Parameters<InvocationExecutionPorts['execution']['start']>[1],
+  snapshot: Parameters<InvocationExecutionPorts['execution']['spawnAndIdentify']>[0],
+  preparedLaunch: Parameters<InvocationExecutionPorts['execution']['spawnAndIdentify']>[1],
   resources: PreparedInvocationResourcesPayload,
 ): ProcessSpawnRequest =>
   Object.freeze({
@@ -122,8 +158,13 @@ export const createNativeProcessExecutionPort = (
     .default,
 ): InvocationExecutionPorts['execution'] =>
   Object.freeze({
-    start: async (snapshot, preparedLaunch, resources): Promise<RunningExecution> => {
-      if (resources === undefined) return failedExecution(Date.now());
+    spawnAndIdentify: async (
+      snapshot,
+      preparedLaunch,
+      resources,
+    ): Promise<SpawnAndIdentifyResult> => {
+      if (resources === undefined)
+        return Object.freeze({ status: 'failed', reason: 'spawn_failed' });
       let rawResponseDisposed = false;
       let rawResponseCapture: RawResponseCapture | undefined;
       const disposeRawResponse = (): void => {
@@ -141,35 +182,36 @@ export const createNativeProcessExecutionPort = (
       const settlement = await attempt.settlement;
       if (settlement.status !== 'spawn_accepted') {
         disposeAllFrontEnds();
-        return failedExecution(Date.now());
+        return Object.freeze({ status: 'failed', reason: 'spawn_failed' });
       }
+
+      let cleanup: Promise<ProcessCleanupAttemptOutcome | undefined> | undefined;
+      const killAndReap = (): Promise<ProcessCleanupAttemptOutcome | undefined> => {
+        cleanup ??= dispatch.killUnactivated(settlement.process).then((outcome) => {
+          disposeAllFrontEnds();
+          return outcome;
+        });
+        return cleanup;
+      };
 
       const preacceptanceDeadlineAt =
         settlement.process.spawnedAt +
         Math.min(snapshot.wallClockTimeoutMs, snapshot.limits.idleTimeoutMs);
-
-      const identity = await dispatch.inspectIdentity(
-        settlement.process,
-        Math.min(Date.now() + activeStateOperationTimeoutMs, preacceptanceDeadlineAt),
+      const setupDeadlineAt = Math.min(
+        settlement.process.spawnedAt + activeStateOperationTimeoutMs,
+        preacceptanceDeadlineAt,
       );
+
+      const identity = await dispatch.inspectIdentity(settlement.process, setupDeadlineAt);
       if (identity.status !== 'identified') {
-        await dispatch.killUnactivated(settlement.process);
-        disposeAllFrontEnds();
-        if (identity.reason === 'deadline')
-          return Object.freeze({
-            spawnedAt: settlement.process.spawnedAt,
-            completion: Promise.resolve(
-              Object.freeze({
-                status: 'cancelled' as const,
-                spawnedAt: settlement.process.spawnedAt,
-                exit: syntheticNoProcessExit,
-              }),
-            ),
-            requestCancellation: async (): Promise<ProcessCleanupAttemptOutcome | undefined> =>
-              undefined,
-          });
-        return failedExecution(settlement.process.spawnedAt);
+        const cleanupOutcome = await killAndReap();
+        return Object.freeze({
+          status: 'failed',
+          reason: 'identity_failed',
+          ...(cleanupOutcome === undefined ? {} : { cleanupOutcome }),
+        });
       }
+      const startedAt = createIsoTimestamp();
 
       rawResponseCapture = createRawResponseCapture({
         channel: resources.frontEnds.rawResponse,
@@ -189,9 +231,12 @@ export const createNativeProcessExecutionPort = (
               rawResponseCapture,
             );
       if (driver === undefined || parser === undefined) {
-        await dispatch.killUnactivated(settlement.process);
-        disposeAllFrontEnds();
-        return failedExecution(settlement.process.spawnedAt);
+        const cleanupOutcome = await killAndReap();
+        return Object.freeze({
+          status: 'failed',
+          reason: 'spawn_failed',
+          ...(cleanupOutcome === undefined ? {} : { cleanupOutcome }),
+        });
       }
 
       const preparedSession = driver.create({
@@ -205,157 +250,173 @@ export const createNativeProcessExecutionPort = (
       });
       const coordinator = coordinatorFor(attempt);
       if (coordinator === undefined) {
-        await dispatch.killUnactivated(settlement.process);
-        disposeAllFrontEnds();
-        return failedExecution(settlement.process.spawnedAt);
+        const cleanupOutcome = await killAndReap();
+        return Object.freeze({
+          status: 'failed',
+          reason: 'spawn_failed',
+          ...(cleanupOutcome === undefined ? {} : { cleanupOutcome }),
+        });
       }
-      const activation = dispatch.activateIo(
-        settlement.process,
-        settlement.io,
-        identity.identity,
-        coordinator,
-        {
-          secretValues: preparedLaunch.secretValues,
-          maxStdoutBytes: preparedLaunch.limits.maxStdoutBytes,
-          maxStderrBytes: preparedLaunch.limits.maxStderrBytes,
-          evidenceFrontEnds: Object.freeze({
-            stdout: resources.frontEnds.stdout,
-            stderr: resources.frontEnds.stderr,
-          }),
-          protocolObserverSink: preparedSession.protocolOutput,
-        },
-      );
-      if (activation.status !== 'activated') {
-        disposeAllFrontEnds();
-        return failedExecution(settlement.process.spawnedAt);
-      }
+      const activate = (): RunningExecution => {
+        const activation = dispatch.activateIo(
+          settlement.process,
+          settlement.io,
+          identity.identity,
+          coordinator,
+          {
+            secretValues: preparedLaunch.secretValues,
+            maxStdoutBytes: preparedLaunch.limits.maxStdoutBytes,
+            maxStderrBytes: preparedLaunch.limits.maxStderrBytes,
+            evidenceFrontEnds: Object.freeze({
+              stdout: resources.frontEnds.stdout,
+              stderr: resources.frontEnds.stderr,
+            }),
+            protocolObserverSink: preparedSession.protocolOutput,
+          },
+        );
+        if (activation.status !== 'activated') {
+          disposeAllFrontEnds();
+          return failedExecution(settlement.process.spawnedAt);
+        }
 
-      const attachOutcome = await Promise.race([
-        preparedSession.attach(activation.process.stdin).catch(() => undefined),
-        sleepUntil(preacceptanceDeadlineAt, AFTER_DEADLINE),
-        sleepUntil(Date.now() + DUPLEX_OPERATION_TIMEOUT_MS, AFTER_DUPLEX_OPERATION_TIMEOUT),
-      ]);
-      if (
-        attachOutcome === AFTER_DEADLINE ||
-        attachOutcome === AFTER_DUPLEX_OPERATION_TIMEOUT ||
-        attachOutcome === undefined
-      ) {
-        const cleanup = activation.process.terminateAndReap();
-        // activateIo already owns live pumps here; immediate front-end disposal would race their writes.
-        const completion: Promise<InvocationTerminalObservation> = cleanup.then(() =>
-          activation.process.completion.then(
-            async (exit) => {
+        const activatedExecution = (async (): Promise<RunningExecution> => {
+          const attachOutcome = await Promise.race([
+            preparedSession.attach(activation.process.stdin).catch(() => undefined),
+            sleepUntil(preacceptanceDeadlineAt, AFTER_DEADLINE),
+            sleepUntil(Date.now() + DUPLEX_OPERATION_TIMEOUT_MS, AFTER_DUPLEX_OPERATION_TIMEOUT),
+          ]);
+          if (
+            attachOutcome === AFTER_DEADLINE ||
+            attachOutcome === AFTER_DUPLEX_OPERATION_TIMEOUT ||
+            attachOutcome === undefined
+          ) {
+            const cleanupAttempt = activation.process.terminateAndReap();
+            // activateIo already owns live pumps here; immediate front-end disposal would race their writes.
+            const completion = buildAttachRaceCompletion(
+              coordinator,
+              settlement.process.spawnedAt,
+              attachOutcome,
+              cleanupAttempt,
+              activation.process.completion,
+              disposeRawResponse,
+            );
+            return Object.freeze({
+              spawnedAt: settlement.process.spawnedAt,
+              completion,
+              requestCancellation: async (): Promise<ProcessCleanupAttemptOutcome | undefined> =>
+                cleanupAttempt,
+            });
+          }
+          const attachResult = attachOutcome;
+          if (attachResult.status !== 'attached') {
+            await activation.process.terminateAndReap();
+            disposeAllFrontEnds();
+            const candidate = failedObservation(
+              settlement.process.spawnedAt,
+              Object.freeze({ kind: attachResult.reason }),
+            );
+            submitDuplexCandidate(coordinator, candidate);
+            return Object.freeze({
+              spawnedAt: settlement.process.spawnedAt,
+              completion: Promise.resolve(candidate).then(
+                async () => (await duplexCompletion(coordinator)) ?? candidate,
+              ),
+              requestCancellation: async (): Promise<ProcessCleanupAttemptOutcome | undefined> =>
+                undefined,
+            });
+          }
+
+          const completion: Promise<InvocationTerminalObservation> = activation.process.completion
+            .then(async (exit) => {
+              const observation = await attachResult.session.finishAfterProtocolOutputEnd();
               disposeRawResponse();
-              const candidate = attachRaceCandidate(
-                attachOutcome,
-                settlement.process.spawnedAt,
-                exit,
-              );
+              let candidate: InvocationTerminalObservation;
+              if (observation.status === 'completed') {
+                candidate =
+                  exit.exitCode === 0 && exit.signal === null
+                    ? Object.freeze({
+                        status: 'completed' as const,
+                        spawnedAt: settlement.process.spawnedAt,
+                        exit,
+                        parsedResponse: observation.response,
+                        ...(observation.usage === undefined ? {} : { usage: observation.usage }),
+                        ...(observation.rawResponse === undefined
+                          ? {}
+                          : { rawResponse: observation.rawResponse }),
+                      })
+                    : failedObservation(
+                        settlement.process.spawnedAt,
+                        Object.freeze({ kind: 'process_failed' }),
+                        exit,
+                      );
+              } else {
+                const primary: InterimDuplexPrimaryFailure =
+                  observation.failure.kind === 'parser_failed'
+                    ? Object.freeze({ kind: 'parser_failed', reason: observation.failure.reason })
+                    : Object.freeze({ kind: 'internal' as const });
+                candidate = Object.freeze({
+                  status: 'failed' as const,
+                  spawnedAt: settlement.process.spawnedAt,
+                  exit,
+                  primary,
+                  ...(observation.rawResponse === undefined
+                    ? {}
+                    : { rawResponse: observation.rawResponse }),
+                });
+              }
               submitDuplexCandidate(coordinator, candidate);
               return (await duplexCompletion(coordinator)) ?? candidate;
-            },
-            async () => {
+            })
+            .catch(async () => {
               disposeRawResponse();
               const candidate = failedObservation(settlement.process.spawnedAt);
               submitDuplexCandidate(coordinator, candidate);
               return (await duplexCompletion(coordinator)) ?? candidate;
-            },
-          ),
-        );
-        return Object.freeze({
-          spawnedAt: settlement.process.spawnedAt,
-          completion,
-          requestCancellation: async (): Promise<ProcessCleanupAttemptOutcome | undefined> =>
-            cleanup,
-        });
-      }
-      const attachResult = attachOutcome;
-      if (attachResult.status !== 'attached') {
-        await activation.process.terminateAndReap();
-        disposeAllFrontEnds();
-        const candidate = failedObservation(
-          settlement.process.spawnedAt,
-          Object.freeze({ kind: attachResult.reason }),
-        );
-        submitDuplexCandidate(coordinator, candidate);
-        return Object.freeze({
-          spawnedAt: settlement.process.spawnedAt,
-          completion: Promise.resolve(candidate).then(
-            async () => (await duplexCompletion(coordinator)) ?? candidate,
-          ),
-          requestCancellation: async (): Promise<ProcessCleanupAttemptOutcome | undefined> =>
-            undefined,
-        });
-      }
-
-      const completion: Promise<InvocationTerminalObservation> = activation.process.completion
-        .then(async (exit) => {
-          const observation = await attachResult.session.finishAfterProtocolOutputEnd();
-          disposeRawResponse();
-          let candidate: InvocationTerminalObservation;
-          if (observation.status === 'completed') {
-            candidate =
-              exit.exitCode === 0 && exit.signal === null
-                ? Object.freeze({
-                    status: 'completed' as const,
-                    spawnedAt: settlement.process.spawnedAt,
-                    exit,
-                    parsedResponse: observation.response,
-                    ...(observation.usage === undefined ? {} : { usage: observation.usage }),
-                    ...(observation.rawResponse === undefined
-                      ? {}
-                      : { rawResponse: observation.rawResponse }),
-                  })
-                : failedObservation(
-                    settlement.process.spawnedAt,
-                    Object.freeze({ kind: 'process_failed' }),
-                    exit,
-                  );
-          } else {
-            const primary: InterimDuplexPrimaryFailure =
-              observation.failure.kind === 'parser_failed'
-                ? Object.freeze({ kind: 'parser_failed', reason: observation.failure.reason })
-                : Object.freeze({ kind: 'internal' as const });
-            candidate = Object.freeze({
-              status: 'failed' as const,
-              spawnedAt: settlement.process.spawnedAt,
-              exit,
-              primary,
-              ...(observation.rawResponse === undefined
-                ? {}
-                : { rawResponse: observation.rawResponse }),
             });
-          }
-          submitDuplexCandidate(coordinator, candidate);
-          return (await duplexCompletion(coordinator)) ?? candidate;
-        })
-        .catch(async () => {
-          disposeRawResponse();
-          const candidate = failedObservation(settlement.process.spawnedAt);
-          submitDuplexCandidate(coordinator, candidate);
-          return (await duplexCompletion(coordinator)) ?? candidate;
-        });
 
-      let cancellationCompletion: Promise<ProcessCleanupAttemptOutcome | undefined> | undefined;
-      const requestCancellation = (): Promise<ProcessCleanupAttemptOutcome | undefined> => {
-        if (cancellationCompletion !== undefined) return cancellationCompletion;
-        const candidate: InvocationTerminalObservation = Object.freeze({
-          status: 'cancelled' as const,
-          spawnedAt: settlement.process.spawnedAt,
-          exit: syntheticNoProcessExit,
-        });
-        submitDuplexCandidate(coordinator, candidate);
-        cancellationCompletion = (async () => {
-          const sent = await attachResult.session.requestCancellation();
-          return sent === 'sent' ? undefined : activation.process.terminateAndReap();
+          let cancellationCompletion: Promise<ProcessCleanupAttemptOutcome | undefined> | undefined;
+          const requestCancellation = (): Promise<ProcessCleanupAttemptOutcome | undefined> => {
+            if (cancellationCompletion !== undefined) return cancellationCompletion;
+            const candidate: InvocationTerminalObservation = Object.freeze({
+              status: 'cancelled' as const,
+              spawnedAt: settlement.process.spawnedAt,
+              exit: syntheticNoProcessExit,
+            });
+            submitDuplexCandidate(coordinator, candidate);
+            cancellationCompletion = dispatchDuplexCancellation(
+              attachResult.session,
+              activation.process.terminateAndReap.bind(activation.process),
+            );
+            return cancellationCompletion;
+          };
+
+          return Object.freeze({
+            spawnedAt: settlement.process.spawnedAt,
+            completion,
+            requestCancellation,
+          });
         })();
-        return cancellationCompletion;
+
+        let cancellation: Promise<ProcessCleanupAttemptOutcome | undefined> | undefined;
+        return Object.freeze({
+          spawnedAt: settlement.process.spawnedAt,
+          completion: activatedExecution.then((execution) => execution.completion),
+          requestCancellation: (): Promise<ProcessCleanupAttemptOutcome | undefined> => {
+            cancellation ??= activatedExecution.then((execution) =>
+              execution.requestCancellation(),
+            );
+            return cancellation;
+          },
+        });
       };
 
       return Object.freeze({
+        status: 'identified',
         spawnedAt: settlement.process.spawnedAt,
-        completion,
-        requestCancellation,
+        startedAt,
+        identity: identity.identity,
+        activate,
+        killAndReap,
       });
     },
   });

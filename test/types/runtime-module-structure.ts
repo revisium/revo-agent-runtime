@@ -49,6 +49,8 @@ import type {
   InvocationTokenCarrier,
   LiveOwnedProcess,
   ProcessCleanupAttemptOutcome,
+  RunningExecution,
+  SpawnAndIdentifyResult,
   BoundedRawResponseEvidence,
   NormalizedInvocationFailure,
   NormalizedInvocationEvidence,
@@ -137,6 +139,10 @@ import type {
   VersionOutputResult,
 } from '../../src/runtime/probe/index.js';
 import type {
+  ActiveInvocationSnapshot,
+  ActiveInvocationStateSink,
+  ActiveProcessIdentity,
+  ActiveStateOperationContext,
   AgentArgumentTemplate,
   AgentDefinitionContract,
   AgentDefinitionInput,
@@ -187,6 +193,8 @@ type ExpectedAgentFaultCode =
   | 'revo.agent.probe_version_mismatch'
   | 'revo.agent.protocol_failed'
   | 'revo.agent.output_write_failed'
+  | 'revo.agent.active_state_failed'
+  | 'revo.agent.process_identity_failed'
   | 'revo.agent.process_failed'
   | 'revo.agent.process_cleanup_failed'
   | 'revo.agent.result_missing'
@@ -578,6 +586,7 @@ type ExpectedValidatedDefinition = {
 };
 
 type ExpectedValidatedManagerConstruction = {
+  readonly activeStateSink: ActiveInvocationStateSink;
   readonly definitions: readonly ValidatedDefinition[];
   readonly limits: Readonly<AgentManagerLimits>;
   readonly redaction: Readonly<{ readonly secrets: readonly string[] }>;
@@ -1384,15 +1393,11 @@ export type ProtocolDriverPortIsExact = Expect<
 
 type ExpectedInvocationExecutionPorts = {
   readonly execution: {
-    start(
+    spawnAndIdentify(
       snapshot: InvocationInputSnapshot,
       preparedLaunch: PreparedLaunch,
       resources?: NonNullable<ReturnType<typeof takePreparedInvocationResourcesPayload>>,
-    ): Promise<{
-      readonly spawnedAt: number;
-      readonly completion: Promise<InvocationTerminalObservation>;
-      requestCancellation(): Promise<ProcessCleanupAttemptOutcome | undefined>;
-    }>;
+    ): Promise<SpawnAndIdentifyResult>;
   };
   readonly workspace: {
     admit(path: string): Promise<WorkspaceAdmissionResult>;
@@ -1437,6 +1442,49 @@ type ExpectedInvocationExecutionPorts = {
 
 export type InvocationExecutionPortsIsExact = Expect<
   Equal<InvocationExecutionPorts, ExpectedInvocationExecutionPorts>
+>;
+
+type ExpectedActiveProcessIdentity = Readonly<{
+  pid: number;
+  processGroupId: number;
+  fingerprint: string;
+  startedAt: string;
+}>;
+
+type ExpectedActiveInvocationSnapshot = Readonly<{
+  invocationId: string;
+  pin: AgentExecutionPin;
+  state: 'running' | 'cancelling';
+  process: ActiveProcessIdentity;
+}>;
+
+export type ActiveProcessIdentityIsExact = Expect<
+  Equal<ActiveProcessIdentity, ExpectedActiveProcessIdentity>
+>;
+export type ActiveInvocationSnapshotIsExact = Expect<
+  Equal<ActiveInvocationSnapshot, ExpectedActiveInvocationSnapshot>
+>;
+export type ActiveStateOperationContextIsExact = Expect<
+  Equal<ActiveStateOperationContext, Readonly<{ signal: AbortSignal }>>
+>;
+export type ActiveInvocationStateSinkIsExact = Expect<
+  Equal<
+    ActiveInvocationStateSink,
+    {
+      save(snapshot: ActiveInvocationSnapshot, context: ActiveStateOperationContext): Promise<void>;
+      remove(invocationId: string, context: ActiveStateOperationContext): Promise<void>;
+    }
+  >
+>;
+export type RunningExecutionIsExact = Expect<
+  Equal<
+    RunningExecution,
+    Readonly<{
+      spawnedAt: number;
+      completion: Promise<InvocationTerminalObservation>;
+      requestCancellation(): Promise<ProcessCleanupAttemptOutcome | undefined>;
+    }>
+  >
 >;
 
 type ExpectedNormalizedInvocationOutcome =

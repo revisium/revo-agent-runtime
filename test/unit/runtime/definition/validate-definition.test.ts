@@ -41,6 +41,7 @@ import type {
 import {
   buildAgentDefinition,
   buildAgentManagerOptions,
+  createTestActiveStateSink,
   p1ObjectSchema,
 } from '../../../support/definition/build-agent-definition.js';
 
@@ -208,6 +209,54 @@ test('returns frozen package-owned snapshots and effective defaults', () => {
   expect(construction.redaction.secrets).toEqual(['secret']);
 });
 
+test('requires an active-state sink and binds its methods to the supplied receiver', async () => {
+  expect(
+    faultFrom(() => validateManagerOptions({ definitions: [buildAgentDefinition()] })),
+  ).toEqual(
+    definitionInvalidFault(
+      'manager_options_shape',
+      '/activeStateSink',
+      'Value does not satisfy the agent manager options DTO.',
+    ),
+  );
+
+  const calls: string[] = [];
+  const sink = Object.freeze({
+    marker: 'receiver',
+    save(this: { readonly marker: string }): Promise<void> {
+      calls.push(`save:${this.marker}`);
+      return Promise.resolve();
+    },
+    remove(this: { readonly marker: string }): Promise<void> {
+      calls.push(`remove:${this.marker}`);
+      return Promise.resolve();
+    },
+  });
+  const construction = validateManagerOptions({
+    definitions: [buildAgentDefinition()],
+    activeStateSink: sink,
+  });
+
+  await construction.activeStateSink.save(
+    {
+      invocationId: 'validation-sink',
+      pin: { agentId: 'fixture-agent', agentVersion: '1.0.0', definitionDigest: 'digest' },
+      state: 'running',
+      process: {
+        pid: 1,
+        processGroupId: 1,
+        fingerprint: 'fingerprint',
+        startedAt: '2026-08-24T00:00:00.000Z',
+      },
+    },
+    { signal: new AbortController().signal },
+  );
+  await construction.activeStateSink.remove('validation-sink', {
+    signal: new AbortController().signal,
+  });
+  expect(calls).toEqual(['save:receiver', 'remove:receiver']);
+});
+
 test.each([
   [
     'native definition without a result parser',
@@ -241,7 +290,14 @@ test.each([
     '/definitions/0/launch/args',
   ],
 ] as const)('rejects incoherent known strategy fields: %s', (_name, definition, instancePath) => {
-  expect(faultFrom(() => validateManagerOptions({ definitions: [definition] }))).toEqual(
+  expect(
+    faultFrom(() =>
+      validateManagerOptions({
+        activeStateSink: createTestActiveStateSink(),
+        definitions: [definition],
+      }),
+    ),
+  ).toEqual(
     instancePath === '/definitions/0/launch/args'
       ? coherenceFault(instancePath)
       : strategyUnsupportedFault,
@@ -253,10 +309,14 @@ test('accepts one thousand unique definitions and rejects one thousand one', () 
     nativeDefinition({ id: `agent-${index}` }),
   );
 
-  expect(validateManagerOptions({ definitions: thousand }).definitions).toHaveLength(1_000);
+  expect(
+    validateManagerOptions({ activeStateSink: createTestActiveStateSink(), definitions: thousand })
+      .definitions,
+  ).toHaveLength(1_000);
   expect(
     faultFrom(() =>
       validateManagerOptions({
+        activeStateSink: createTestActiveStateSink(),
         definitions: [...thousand, nativeDefinition({ id: 'agent-1000' })],
       }),
     ),
@@ -413,7 +473,12 @@ test('accepts an exactly one MiB canonical definition', () => {
   });
 
   expect(new TextEncoder().encode(JSON.stringify(definition)).byteLength).toBe(1_048_576);
-  expect(validateManagerOptions({ definitions: [definition] }).definitions).toHaveLength(1);
+  expect(
+    validateManagerOptions({
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [definition],
+    }).definitions,
+  ).toHaveLength(1);
 });
 
 test('keeps snapshots, limits, and caller-owned nested objects isolated', () => {
@@ -425,7 +490,11 @@ test('keeps snapshots, limits, and caller-owned nested objects isolated', () => 
   const definition = nativeDefinition({ launch });
   const limits = { maxEventBytes: 1_024 };
   const construction = validateManagerOptions(
-    buildAgentManagerOptions({ definitions: [definition], limits }),
+    buildAgentManagerOptions({
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [definition],
+      limits,
+    }),
   );
 
   launch.command = '/changed';
@@ -453,7 +522,14 @@ test('rejects canonical definitions above the configured byte bound', () => {
     },
   });
 
-  expect(faultFrom(() => validateManagerOptions({ definitions: [definition] }))).toEqual(
+  expect(
+    faultFrom(() =>
+      validateManagerOptions({
+        activeStateSink: createTestActiveStateSink(),
+        definitions: [definition],
+      }),
+    ),
+  ).toEqual(
     definitionInvalidFault(
       'definition_bytes',
       '/definitions/0',
@@ -464,7 +540,14 @@ test('rejects canonical definitions above the configured byte bound', () => {
 
 test('rejects duplicate exact references and allows another version of the same agent', () => {
   const duplicate = buildAgentDefinition();
-  expect(faultFrom(() => validateManagerOptions({ definitions: [duplicate, duplicate] }))).toEqual({
+  expect(
+    faultFrom(() =>
+      validateManagerOptions({
+        activeStateSink: createTestActiveStateSink(),
+        definitions: [duplicate, duplicate],
+      }),
+    ),
+  ).toEqual({
     code: 'revo.agent.definition_duplicate',
     message: AGENT_FAULT_MESSAGES.definitionDuplicate,
     phase: 'construction',
@@ -474,6 +557,7 @@ test('rejects duplicate exact references and allows another version of the same 
 
   expect(
     validateManagerOptions({
+      activeStateSink: createTestActiveStateSink(),
       definitions: [duplicate, buildAgentDefinition({ version: '2.0.0' })],
     }).definitions,
   ).toHaveLength(2);
@@ -483,7 +567,14 @@ test('propagates consumer-schema profile failures before construction succeeds',
   const definition = buildAgentDefinition({
     parameters: { schema: { ...p1ObjectSchema, patternProperties: {} }, defaults: {} },
   });
-  expect(faultFrom(() => validateManagerOptions({ definitions: [definition] }))).toEqual(
+  expect(
+    faultFrom(() =>
+      validateManagerOptions({
+        activeStateSink: createTestActiveStateSink(),
+        definitions: [definition],
+      }),
+    ),
+  ).toEqual(
     definitionInvalidFault(
       'keyword_allowlist',
       '/definitions/0/parameters/schema/patternProperties',
@@ -562,7 +653,16 @@ test('rejects incoherent effective limits and oversized redaction data', () => {
 test.each([
   [
     'plain-data accessors before DTO parsing',
-    Object.defineProperty({}, 'definitions', { enumerable: true, get: () => [] }),
+    Object.defineProperties(
+      {},
+      {
+        activeStateSink: {
+          enumerable: true,
+          value: createTestActiveStateSink(),
+        },
+        definitions: { enumerable: true, get: () => [] },
+      },
+    ),
     definitionInvalidFault(
       'json_property_data',
       '/definitions',
@@ -571,7 +671,11 @@ test.each([
   ],
   [
     'an unknown top-level DTO key',
-    { definitions: [nativeDefinition()], unexpected: true },
+    {
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [nativeDefinition()],
+      unexpected: true,
+    },
     definitionInvalidFault(
       'manager_options_shape',
       '/',
@@ -580,12 +684,17 @@ test.each([
   ],
   [
     'an unknown nested limits key',
-    { definitions: [nativeDefinition()], limits: { unexpected: true } },
+    {
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [nativeDefinition()],
+      limits: { unexpected: true },
+    },
     limitShapeFault('/limits'),
   ],
   [
     'an oversized definition list',
     {
+      activeStateSink: createTestActiveStateSink(),
       definitions: Array.from({ length: 1_001 }, (_, index) =>
         nativeDefinition({ id: `agent-${index}` }),
       ),
@@ -605,6 +714,7 @@ test.each([
 test('classifies an unsupported strategy before coherence validation', () => {
   const fault = faultFrom(() =>
     validateManagerOptions({
+      activeStateSink: createTestActiveStateSink(),
       definitions: [
         nativeDefinition({
           protocol: { driver: 'future/v1', permissionStrategy: 'codex-cli/v1' },
@@ -682,9 +792,14 @@ test.each([
     }),
   ],
 ] as const)('rejects each template-coherence rule: %s', (_name, definition) => {
-  expect(faultFrom(() => validateManagerOptions({ definitions: [definition] }))).toEqual(
-    coherenceFault('/definitions/0/launch/args'),
-  );
+  expect(
+    faultFrom(() =>
+      validateManagerOptions({
+        activeStateSink: createTestActiveStateSink(),
+        definitions: [definition],
+      }),
+    ),
+  ).toEqual(coherenceFault('/definitions/0/launch/args'));
 });
 
 test.each([
@@ -761,9 +876,14 @@ test.each([
 ] as const)(
   'rejects each native or ACP coherence violation: %s',
   (_name, definition, _instancePath) => {
-    expect(faultFrom(() => validateManagerOptions({ definitions: [definition] }))).toEqual(
-      strategyUnsupportedFault,
-    );
+    expect(
+      faultFrom(() =>
+        validateManagerOptions({
+          activeStateSink: createTestActiveStateSink(),
+          definitions: [definition],
+        }),
+      ),
+    ).toEqual(strategyUnsupportedFault);
   },
 );
 
@@ -778,7 +898,12 @@ test.each([
   }),
   acpDefinition(),
 ])('accepts each coherent protocol/parser/permission family', (definition) => {
-  expect(validateManagerOptions({ definitions: [definition] }).definitions).toHaveLength(1);
+  expect(
+    validateManagerOptions({
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [definition],
+    }).definitions,
+  ).toHaveLength(1);
 });
 
 test.each([
@@ -807,7 +932,12 @@ test.each([
     },
   }),
 ])('accepts coherent native delivery and template variants', (definition) => {
-  expect(validateManagerOptions({ definitions: [definition] }).definitions).toHaveLength(1);
+  expect(
+    validateManagerOptions({
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [definition],
+    }).definitions,
+  ).toHaveLength(1);
 });
 
 test('propagates compiled consumer-schema defaults mismatches', () => {
@@ -824,7 +954,12 @@ test('propagates compiled consumer-schema defaults mismatches', () => {
       '/definitions/0/permissions/defaults/name',
     ],
   ] as const) {
-    const fault = faultFrom(() => validateManagerOptions({ definitions: [definition] }));
+    const fault = faultFrom(() =>
+      validateManagerOptions({
+        activeStateSink: createTestActiveStateSink(),
+        definitions: [definition],
+      }),
+    );
     expect(fault).toEqual(
       definitionInvalidFault(
         'type',
@@ -852,7 +987,10 @@ test('returns the snapshot parsed from canonical bytes with its independent dige
   );
   const expectedSnapshot = jsonObject(parsed);
   const expectedDigest = createHash('sha256').update(canonicalBytes).digest('hex');
-  const validated = validateManagerOptions({ definitions: [definition] }).definitions[0]!;
+  const validated = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions: [definition],
+  }).definitions[0]!;
 
   expect(validated.definition).toEqual(expectedSnapshot);
   expect(validated.definitionDigest).toBe(expectedDigest);
@@ -875,7 +1013,10 @@ test('reuses successful compiled schemas by admitted content within one construc
   ];
 
   compileConsumerSchemaSpy.mockClear();
-  expect(validateManagerOptions({ definitions }).definitions).toHaveLength(2);
+  expect(
+    validateManagerOptions({ activeStateSink: createTestActiveStateSink(), definitions })
+      .definitions,
+  ).toHaveLength(2);
   expect(compileConsumerSchemaSpy).toHaveBeenCalledTimes(1);
 });
 
@@ -891,11 +1032,17 @@ test('compiles distinct admitted schema contents separately and resets the cache
 
   compileConsumerSchemaSpy.mockClear();
   expect(
-    validateManagerOptions({ definitions: [definition('cache-agent-one')] }).definitions,
+    validateManagerOptions({
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [definition('cache-agent-one')],
+    }).definitions,
   ).toHaveLength(1);
   expect(compileConsumerSchemaSpy).toHaveBeenCalledTimes(2);
   expect(
-    validateManagerOptions({ definitions: [definition('cache-agent-two')] }).definitions,
+    validateManagerOptions({
+      activeStateSink: createTestActiveStateSink(),
+      definitions: [definition('cache-agent-two')],
+    }).definitions,
   ).toHaveLength(1);
   expect(compileConsumerSchemaSpy).toHaveBeenCalledTimes(4);
 });
@@ -908,7 +1055,14 @@ test('retains occurrence-specific defaults diagnostics when reusing a compiled s
   });
 
   compileConsumerSchemaSpy.mockClear();
-  expect(faultFrom(() => validateManagerOptions({ definitions: [definition] }))).toEqual(
+  expect(
+    faultFrom(() =>
+      validateManagerOptions({
+        activeStateSink: createTestActiveStateSink(),
+        definitions: [definition],
+      }),
+    ),
+  ).toEqual(
     definitionInvalidFault(
       'type',
       '/definitions/0/permissions/defaults/name',
@@ -945,7 +1099,12 @@ test.each([
 ] as const)(
   'rejects probe and constraint contracts: %s',
   (_name, definition, keyword, instancePath) => {
-    const fault = faultFrom(() => validateManagerOptions({ definitions: [definition] }));
+    const fault = faultFrom(() =>
+      validateManagerOptions({
+        activeStateSink: createTestActiveStateSink(),
+        definitions: [definition],
+      }),
+    );
     expect(fault).toEqual(
       definitionInvalidFault(
         keyword,

@@ -1,5 +1,7 @@
 export type { ExecutionBinding } from './execution-binding.js';
 export type { InvocationExecutionPorts } from './execution-ports.js';
+export type { RunningExecution } from './running-execution.js';
+export type { SpawnAndIdentifyResult } from './spawn-and-identify-result.js';
 export { prepareInvocationPayloads } from './payload-preparation/index.js';
 export type { PreparedInvocationPayloads } from './payload-preparation/index.js';
 export type {

@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 
 import { createInvocationLifecycleManager } from '../../../src/application/manager/index.js';
 import type {
@@ -9,6 +9,11 @@ import type {
   ProcessCleanupAttemptOutcome,
 } from '../../../src/runtime/execution/index.js';
 import type { ExecutableProbePort } from '../../../src/runtime/probe/index.js';
+import type {
+  ActiveInvocationSnapshot,
+  ActiveInvocationStateSink,
+  ActiveStateOperationContext,
+} from '../../../src/runtime/spec/index.js';
 import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
@@ -30,7 +35,10 @@ const cancellationCompletion = (
 
 const definition = buildAgentDefinition();
 const agent = Object.freeze({ id: definition.id, version: definition.version });
-const lifecycleOptions = Object.freeze({ definitions: Object.freeze([definition]) });
+const defaultActiveStateSink = Object.freeze({
+  save: async (): Promise<void> => undefined,
+  remove: async (): Promise<void> => undefined,
+});
 
 type LifecycleManagerPortsInput = Omit<
   InvocationExecutionPorts,
@@ -40,18 +48,31 @@ type LifecycleManagerPortsInput = Omit<
 type LifecycleManagerInput = LifecycleManagerPortsInput &
   Readonly<{ executableProbe?: ExecutableProbePort }>;
 
-const createLifecycleManager = (ports: LifecycleManagerInput) =>
-  createInvocationLifecycleManager(lifecycleOptions, {
-    ...ports,
-    executableProbe:
-      ports.executableProbe ??
-      new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
-    outputClaim: ports.outputClaim ?? new FakeOutputClaimPort('created'),
-    outputPreparation: ports.outputPreparation ?? new FakeOutputPreparationPort('prepared'),
-    workspace: ports.workspace ?? {
-      admit: async () => ({ status: 'admitted', directory: '/workspace/project' }),
+const createLifecycleManager = (
+  ports: LifecycleManagerInput,
+  activeStateSink: ActiveInvocationStateSink = defaultActiveStateSink,
+  activeStateOperationTimeoutMs?: number,
+) =>
+  createInvocationLifecycleManager(
+    Object.freeze({
+      definitions: Object.freeze([definition]),
+      activeStateSink,
+      ...(activeStateOperationTimeoutMs === undefined
+        ? {}
+        : { limits: Object.freeze({ activeStateOperationTimeoutMs }) }),
+    }),
+    {
+      ...ports,
+      executableProbe:
+        ports.executableProbe ??
+        new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
+      outputClaim: ports.outputClaim ?? new FakeOutputClaimPort('created'),
+      outputPreparation: ports.outputPreparation ?? new FakeOutputPreparationPort('prepared'),
+      workspace: ports.workspace ?? {
+        admit: async () => ({ status: 'admitted', directory: '/workspace/project' }),
+      },
     },
-  });
+  );
 
 const resultSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -136,9 +157,7 @@ const createStartInput = (
   });
 
 const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
 };
 
 interface TestDeferred<Value> {
@@ -169,7 +188,7 @@ const availableProbeExit = () =>
     overflow: 'none' as const,
   });
 
-const waitUntil = async (predicate: () => boolean, remaining = 20): Promise<void> => {
+const waitUntil = async (predicate: () => boolean, remaining = 100): Promise<void> => {
   if (predicate()) return;
   if (remaining > 0) {
     await Promise.resolve();
@@ -178,6 +197,285 @@ const waitUntil = async (predicate: () => boolean, remaining = 20): Promise<void
   }
   expect(predicate()).toBe(true);
 };
+
+test('saves running active state before acceptance and activates only after save fulfils', async () => {
+  const calls: string[] = [];
+  const save = testDeferred<void>();
+  const completion = testDeferred<InvocationTerminalObservation>();
+  const output = new FakeInvocationOutputPort();
+  const execution: InvocationExecutionPorts['execution'] = {
+    spawnAndIdentify: async () => {
+      calls.push('spawn-and-identify');
+      return Object.freeze({
+        status: 'identified' as const,
+        spawnedAt: Date.now(),
+        startedAt: '2026-08-24T10:00:00.000Z',
+        identity: Object.freeze({
+          pid: 123,
+          processGroupId: 123,
+          fingerprint: 'sha256:fixture',
+        }),
+        activate: () => {
+          calls.push('activate');
+          return Object.freeze({
+            spawnedAt: Date.now(),
+            completion: completion.promise,
+            requestCancellation: async () => undefined,
+          });
+        },
+        killAndReap: async () => undefined,
+      });
+    },
+  };
+  const activeStateSink = Object.freeze({
+    save: async (snapshot: unknown): Promise<void> => {
+      calls.push('save-running');
+      expect(snapshot).toMatchObject({
+        invocationId: 'save-before-acceptance',
+        state: 'running',
+        process: {
+          pid: 123,
+          processGroupId: 123,
+          fingerprint: 'sha256:fixture',
+          startedAt: '2026-08-24T10:00:00.000Z',
+        },
+      });
+      await save.promise;
+    },
+    remove: async (): Promise<void> => undefined,
+  });
+  const manager = createLifecycleManager(
+    {
+      execution,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      output,
+    },
+    activeStateSink,
+  );
+
+  const start = manager.start(createStartInput({ invocationId: 'save-before-acceptance' }));
+  await waitUntil(() => calls.includes('save-running'));
+
+  expect(calls).toEqual(['spawn-and-identify', 'save-running']);
+  expect(manager.getInvocation('save-before-acceptance')).toBeUndefined();
+  save.resolve(undefined);
+
+  await expect(start).resolves.toMatchObject({ status: 'accepted' });
+  expect(calls).toEqual(['spawn-and-identify', 'save-running', 'activate']);
+});
+
+test('kills without saving when shutdown closes the manager during spawn and identity', async () => {
+  const identified = testDeferred<void>();
+  const calls: string[] = [];
+  const execution: InvocationExecutionPorts['execution'] = {
+    spawnAndIdentify: async () => {
+      calls.push('spawn-and-identify');
+      await identified.promise;
+      return Object.freeze({
+        status: 'identified' as const,
+        spawnedAt: Date.now(),
+        startedAt: '2026-08-24T10:00:00.000Z',
+        identity: Object.freeze({ pid: 201, processGroupId: 201, fingerprint: 'sha256:201' }),
+        activate: () => {
+          throw new Error('Closing manager must not activate.');
+        },
+        killAndReap: async () => {
+          calls.push('kill-and-reap');
+          return undefined;
+        },
+      });
+    },
+  };
+  const sink: ActiveInvocationStateSink = Object.freeze({
+    save: async () => {
+      calls.push('save');
+    },
+    remove: async () => {
+      calls.push('remove');
+    },
+  });
+  const manager = createLifecycleManager(
+    {
+      execution,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      output: new FakeInvocationOutputPort(),
+    },
+    sink,
+  );
+
+  const start = manager.start(createStartInput({ invocationId: 'closing-during-spawn' }));
+  await waitUntil(() => calls.includes('spawn-and-identify'));
+  const shutdown = manager.shutdown();
+  identified.resolve(undefined);
+
+  await expect(start).resolves.toEqual({ status: 'rejected', reason: 'manager_closed' });
+  await expect(shutdown).resolves.toBeUndefined();
+  expect(calls).toEqual(['spawn-and-identify', 'kill-and-reap']);
+});
+
+test('kills and removes the saved row when shutdown closes the manager during save', async () => {
+  const save = testDeferred<void>();
+  const calls: string[] = [];
+  const execution: InvocationExecutionPorts['execution'] = {
+    spawnAndIdentify: async () => ({
+      status: 'identified' as const,
+      spawnedAt: Date.now(),
+      startedAt: '2026-08-24T10:00:00.000Z',
+      identity: Object.freeze({ pid: 202, processGroupId: 202, fingerprint: 'sha256:202' }),
+      activate: () => {
+        throw new Error('Closing manager must not activate.');
+      },
+      killAndReap: async () => {
+        calls.push('kill-and-reap');
+        return undefined;
+      },
+    }),
+  };
+  const sink: ActiveInvocationStateSink = Object.freeze({
+    save: async () => {
+      calls.push('save');
+      await save.promise;
+    },
+    remove: async () => {
+      calls.push('remove');
+    },
+  });
+  const manager = createLifecycleManager(
+    {
+      execution,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      output: new FakeInvocationOutputPort(),
+    },
+    sink,
+  );
+
+  const start = manager.start(createStartInput({ invocationId: 'closing-during-save' }));
+  await waitUntil(() => calls.includes('save'));
+  const shutdown = manager.shutdown();
+  save.resolve(undefined);
+
+  await expect(start).resolves.toEqual({ status: 'rejected', reason: 'manager_closed' });
+  await expect(shutdown).resolves.toBeUndefined();
+  expect(calls).toEqual(['save', 'kill-and-reap', 'remove']);
+});
+
+test('retains invocation and output-directory guards after a rejected running save', async () => {
+  const remove = vi.fn(async (): Promise<void> => undefined);
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueStart('running');
+  const manager = createLifecycleManager(
+    {
+      execution,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      output: new FakeInvocationOutputPort(),
+    },
+    Object.freeze({
+      save: async (): Promise<void> => {
+        throw new Error('save rejected');
+      },
+      remove,
+    }),
+  );
+
+  await expect(
+    manager.start(createStartInput({ invocationId: 'retained-active-row' })),
+  ).resolves.toEqual({
+    status: 'rejected',
+    reason: 'active_state_failed',
+  });
+  await expect(
+    manager.start(createStartInput({ invocationId: 'retained-active-row' })),
+  ).resolves.toEqual({
+    status: 'rejected',
+    reason: 'duplicate_invocation',
+  });
+  await expect(
+    manager.start(
+      createStartInput({
+        invocationId: 'different-id-same-output',
+        output: Object.freeze({ directory: '/outputs/invocation' }),
+      }),
+    ),
+  ).resolves.toEqual({ status: 'rejected', reason: 'active_state_failed' });
+  expect(remove).not.toHaveBeenCalled();
+});
+
+test('quarantines the output directory when terminal active-state removal rejects', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueStart('running');
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
+  const manager = createLifecycleManager(
+    {
+      execution,
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      output,
+    },
+    Object.freeze({
+      save: async (): Promise<void> => undefined,
+      remove: async (): Promise<void> => {
+        throw new Error('remove rejected');
+      },
+    }),
+  );
+
+  const accepted = await manager.start(createStartInput({ invocationId: 'remove-rejected' }));
+  expect(accepted.status).toBe('accepted');
+  if (accepted.status !== 'accepted') throw new Error('Expected accepted invocation.');
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
+  await flush();
+  await expect(accepted.handle.result()).resolves.toMatchObject({ status: 'succeeded' });
+
+  await expect(
+    manager.start(
+      createStartInput({
+        invocationId: 'same-output-after-remove-rejection',
+        output: Object.freeze({ directory: '/outputs/invocation' }),
+      }),
+    ),
+  ).resolves.toEqual({ status: 'rejected', reason: 'active_state_failed' });
+});
+
+test('clamps running-save timeout to the earlier preacceptance deadline', async () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(123_456);
+    let saveSignal: AbortSignal | undefined;
+    const execution = new FakeInvocationExecutionPort();
+    execution.enqueueStart('running');
+    const manager = createLifecycleManager(
+      {
+        execution,
+        clock: new FakeInvocationClock({ initialNowMs: 123_456 }),
+        output: new FakeInvocationOutputPort(),
+      },
+      Object.freeze({
+        save: (_snapshot: ActiveInvocationSnapshot, context: ActiveStateOperationContext) => {
+          saveSignal = context.signal;
+          return new Promise<void>(() => undefined);
+        },
+        remove: async (): Promise<void> => undefined,
+      }),
+      30_000,
+    );
+
+    const start = manager.start(
+      createStartInput({
+        invocationId: 'save-deadline-clamp',
+        limits: Object.freeze({ wallClockTimeoutMs: 1_000, idleTimeoutMs: 1_000 }),
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(999);
+    expect(saveSignal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(saveSignal?.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    await expect(start).resolves.toEqual({ status: 'rejected', reason: 'active_state_failed' });
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 test('prepared output settlement reaches accepted start and delegates unchanged prepared launch to execution', async () => {
   const execution = new FakeInvocationExecutionPort();
@@ -209,21 +507,28 @@ test('passes prepared invocation resources as the third execution start argument
     readonly [
       InvocationInputSnapshot,
       PreparedLaunch,
-      NonNullable<Parameters<InvocationExecutionPorts['execution']['start']>[2]>,
+      NonNullable<Parameters<InvocationExecutionPorts['execution']['spawnAndIdentify']>[2]>,
     ]
   > = [];
   const execution: InvocationExecutionPorts['execution'] = {
-    start: async (snapshot, preparedLaunch, resources) => {
+    spawnAndIdentify: async (snapshot, preparedLaunch, resources) => {
       if (resources === undefined) throw new Error('Expected prepared resources.');
       starts.push([snapshot, preparedLaunch, resources]);
       return {
+        status: 'identified',
         spawnedAt: 123_456,
-        completion: Promise.resolve({
-          status: 'completed',
+        startedAt: '1970-01-01T00:02:03.456Z',
+        identity: Object.freeze({ pid: 1, processGroupId: 1, fingerprint: 'sha256:fixture' }),
+        activate: () => ({
           spawnedAt: 123_456,
-          exit: Object.freeze({ exitCode: 0, signal: null }),
-        } satisfies InvocationTerminalObservation),
-        requestCancellation: async () => undefined,
+          completion: Promise.resolve({
+            status: 'completed',
+            spawnedAt: 123_456,
+            exit: Object.freeze({ exitCode: 0, signal: null }),
+          } satisfies InvocationTerminalObservation),
+          requestCancellation: async () => undefined,
+        }),
+        killAndReap: async () => undefined,
       };
     },
   };

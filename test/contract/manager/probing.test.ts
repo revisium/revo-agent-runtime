@@ -8,7 +8,10 @@ import {
 import { AgentManagerError } from '../../../src/runtime/errors/index.js';
 import { AGENT_FAULT_MESSAGES } from '../../../src/runtime/policy/index.js';
 import type { AgentDefinitionInput, AgentRef } from '../../../src/runtime/spec/index.js';
-import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
+import {
+  buildAgentDefinition,
+  createTestActiveStateSink,
+} from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../../support/execution/fake-output-claim-port.js';
@@ -43,7 +46,13 @@ const withVersionProbe = (id: string, version = '1.0.0'): AgentDefinitionInput =
 
 const discoveryWithDefinitions = (definitions: readonly AgentDefinitionInput[]) => {
   const port = new FakeExecutableProbePort({ platform: 'linux' });
-  return { discovery: createProbeableAgentDiscovery({ definitions }, port), port };
+  return {
+    discovery: createProbeableAgentDiscovery(
+      { activeStateSink: createTestActiveStateSink(), definitions },
+      port,
+    ),
+    port,
+  };
 };
 
 const exited = () => ({
@@ -381,7 +390,7 @@ test('shares one FIFO cap across private discovery APIs and yields before a late
 test('documents current shutdown gap: discovery probes still work after lifecycle manager closing', async () => {
   const definition = withVersionProbe('gap-probe-after-close');
   const lifecycleManager = createInvocationLifecycleManager(
-    { definitions: [definition] },
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     {
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       execution: new FakeInvocationExecutionPort(),
@@ -393,7 +402,10 @@ test('documents current shutdown gap: discovery probes still work after lifecycl
     },
   );
   const discoveryPort = new FakeExecutableProbePort({ platform: 'linux' });
-  const discovery = createProbeableAgentDiscovery({ definitions: [definition] }, discoveryPort);
+  const discovery = createProbeableAgentDiscovery(
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
+    discoveryPort,
+  );
 
   await expect(lifecycleManager.shutdown('closing lifecycle only')).resolves.toBeUndefined();
   for (let index = 0; index < 2; index += 1) {

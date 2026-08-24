@@ -1,4 +1,5 @@
 import type { AgentDefinitionInput } from '../agent-definition/index.js';
+import type { ActiveInvocationStateSink } from './active-invocation-state-sink.js';
 
 export interface AgentManagerLimits {
   readonly activeStateOperationTimeoutMs?: number;
@@ -15,6 +16,7 @@ export interface AgentManagerLimits {
 
 export interface AgentManagerOptions {
   readonly definitions: readonly AgentDefinitionInput[];
+  readonly activeStateSink: ActiveInvocationStateSink;
   readonly limits?: AgentManagerLimits;
   readonly redaction?: { readonly secrets: readonly string[] };
 }

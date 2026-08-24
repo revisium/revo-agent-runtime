@@ -10,6 +10,7 @@ import {
   type ProcessOutputSink,
   type RedactionChannel,
   type ResultSchemaValidator,
+  type RunningExecution,
 } from '../../../src/runtime/execution/index.js';
 
 const resultSchema = Object.freeze({
@@ -48,7 +49,7 @@ const passThroughRedactionChannel = (): RedactionChannel =>
   });
 
 const preparedResources = (): NonNullable<
-  Parameters<InvocationExecutionPorts['execution']['start']>[2]
+  Parameters<InvocationExecutionPorts['execution']['spawnAndIdentify']>[2]
 > =>
   Object.freeze({
     attestations: Object.freeze([]),
@@ -111,12 +112,27 @@ const preparedLaunch = (
   return value;
 };
 
+const startExecution = async (
+  execution: InvocationExecutionPorts['execution'],
+  ...parameters: Parameters<InvocationExecutionPorts['execution']['spawnAndIdentify']>
+): Promise<RunningExecution> => {
+  const result = await execution.spawnAndIdentify(...parameters);
+  if (result.status !== 'identified')
+    throw new Error(`Execution did not identify: ${result.reason}`);
+  return result.activate();
+};
+
 test.runIf(process.platform === 'linux')(
   'drives a short-lived native stdio process to a parsed successful outcome',
   async () => {
     const execution = createNativeProcessExecutionPort();
 
-    const running = await execution.start(snapshot(), preparedLaunch(), preparedResources());
+    const running = await startExecution(
+      execution,
+      snapshot(),
+      preparedLaunch(),
+      preparedResources(),
+    );
     const observation = await running.completion;
 
     expect(observation).toMatchObject({

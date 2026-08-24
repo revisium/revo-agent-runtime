@@ -28,23 +28,37 @@ const rawEvidence = (bytes: Uint8Array) =>
 
 const createExecution = (bytes: Uint8Array): InvocationExecutionPorts['execution'] =>
   Object.freeze({
-    start: async (_snapshot, _preparedLaunch, resources) => {
+    spawnAndIdentify: async (_snapshot, _preparedLaunch, resources) => {
       if (resources === undefined) throw new Error('Expected prepared resources.');
-      await resources.evidenceSinks.stdout.end();
-      await resources.evidenceSinks.stderr.end();
-      resources.frontEnds.stdout.dispose();
-      resources.frontEnds.stderr.dispose();
+      const spawnedAt = Date.now();
       return Object.freeze({
-        spawnedAt: Date.now(),
-        completion: Promise.resolve(
+        status: 'identified' as const,
+        spawnedAt,
+        startedAt: new Date(spawnedAt).toISOString(),
+        identity: Object.freeze({
+          pid: 1,
+          processGroupId: 1,
+          fingerprint: 'sha256:integration-fixture',
+        }),
+        activate: () =>
           Object.freeze({
-            status: 'completed' as const,
-            spawnedAt: Date.now(),
-            exit: Object.freeze({ exitCode: 0, signal: null }),
-            rawResponse: rawEvidence(bytes),
+            spawnedAt,
+            completion: Promise.all([
+              resources.evidenceSinks.stdout.end(),
+              resources.evidenceSinks.stderr.end(),
+            ]).then(() => {
+              resources.frontEnds.stdout.dispose();
+              resources.frontEnds.stderr.dispose();
+              return Object.freeze({
+                status: 'completed' as const,
+                spawnedAt,
+                exit: Object.freeze({ exitCode: 0, signal: null }),
+                rawResponse: rawEvidence(bytes),
+              });
+            }),
+            requestCancellation: async () => undefined,
           }),
-        ),
-        requestCancellation: async () => undefined,
+        killAndReap: async () => undefined,
       });
     },
   });
@@ -68,7 +82,13 @@ const createStartInput = (invocationId: string, outputDirectory: string) =>
 
 const createManager = (execution: InvocationExecutionPorts['execution']) =>
   createInvocationLifecycleManager(
-    { definitions: [definition] },
+    {
+      definitions: [definition],
+      activeStateSink: {
+        save: async () => undefined,
+        remove: async () => undefined,
+      },
+    },
     {
       execution,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),

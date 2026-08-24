@@ -3,7 +3,10 @@ import { expect, test } from 'vitest';
 import { validateManagerOptions } from '../../../../src/runtime/definition/index.js';
 import { SealedAgentRegistry } from '../../../../src/runtime/registry/index.js';
 import type { AgentDefinitionInput, AgentDescriptor } from '../../../../src/runtime/spec/index.js';
-import { buildAgentDefinition } from '../../../support/definition/build-agent-definition.js';
+import {
+  buildAgentDefinition,
+  createTestActiveStateSink,
+} from '../../../support/definition/build-agent-definition.js';
 
 const definition = (
   id: string,
@@ -19,7 +22,10 @@ const definition = (
   });
 
 const createRegistry = (definitions: readonly AgentDefinitionInput[]) => {
-  const construction = validateManagerOptions({ definitions });
+  const construction = validateManagerOptions({
+    activeStateSink: createTestActiveStateSink(),
+    definitions,
+  });
 
   return {
     construction,

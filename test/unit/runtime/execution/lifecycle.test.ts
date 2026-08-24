@@ -20,9 +20,7 @@ const authority = TerminalPublicationAuthority.create({
 });
 
 const flush = async (): Promise<void> => {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
 };
 
 const defaultSpawnedAt = 123_456;
@@ -96,6 +94,10 @@ const startLifecycle = (
   execution: FakeInvocationExecutionPort,
   clock = new FakeInvocationClock({ initialNowMs: 0 }),
   inputSnapshot = snapshot(),
+  hooks: Readonly<{
+    removeActiveState?: (invocationId: string) => Promise<void>;
+    saveCancellingState?: () => void;
+  }> = {},
 ) => {
   const settlements: Array<{ readonly status: string }> = [];
   const output = new FakeInvocationOutputPort();
@@ -115,8 +117,12 @@ const startLifecycle = (
     },
     inputSnapshot,
     prepared,
+    () => execution.activateQueued(inputSnapshot, prepared),
     authority,
     '2026-08-22T00:00:00.000Z',
+    '2026-08-22T00:00:01.000Z',
+    hooks.saveCancellingState ?? (() => undefined),
+    hooks.removeActiveState ?? (async () => undefined),
     (settlement) => settlements.push(settlement),
   );
   lifecycle.begin();
@@ -228,8 +234,6 @@ test('moves accepted through starting and running before natural completion', as
   execution.enqueueStart('running');
   const { lifecycle, settlements, clock } = startLifecycle(execution);
 
-  expect(lifecycle.currentState()).toBe('starting');
-  await flush();
   expect(lifecycle.currentState()).toBe('running');
   expect(clock.pendingActionCount()).toBe(2);
   execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
@@ -342,6 +346,85 @@ test('keeps fulfilled caller cancellation nonterminal until execution confirms i
   execution.confirmCancellation(1);
   await flush();
   expect(settlements).toMatchObject([{ status: 'cancelled' }]);
+});
+
+test('removes active state before terminal result publication', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueStart('running');
+  let releaseRemove: (() => void) | undefined;
+  const remove = new Promise<void>((resolve) => {
+    releaseRemove = resolve;
+  });
+  const { lifecycle, settlements } = startLifecycle(
+    execution,
+    new FakeInvocationClock({ initialNowMs: 0 }),
+    snapshot(),
+    { removeActiveState: async () => remove },
+  );
+
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
+  await flush();
+  expect(lifecycle.currentState()).toBe('finalizing');
+  expect(settlements).toEqual([]);
+
+  releaseRemove?.();
+  await flush();
+  expect(settlements).toMatchObject([{ status: 'succeeded' }]);
+});
+
+test.each([
+  ['confirmed cleanup', undefined, 1],
+  [
+    'failed cleanup',
+    Object.freeze({
+      cause: 'termination_rejected' as const,
+      termSent: false,
+      killSent: false,
+      lastKnownGroupState: 'unknown' as const,
+      leaderReapState: 'unknown' as const,
+    }),
+    0,
+  ],
+] as const)('gates active-state removal on %s', async (_name, cleanupOutcome, expectedRemoves) => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueStart('running');
+  const removeActiveState = vi.fn(async (): Promise<void> => undefined);
+  const { lifecycle } = startLifecycle(
+    execution,
+    new FakeInvocationClock({ initialNowMs: 0 }),
+    snapshot(),
+    { removeActiveState },
+  );
+
+  lifecycle.requestCancellation();
+  await flush();
+  execution.settleCancellationRequest(1, cleanupOutcome);
+  execution.confirmCancellation(1);
+  await flush();
+
+  expect(removeActiveState).toHaveBeenCalledTimes(expectedRemoves);
+});
+
+test('attempts cancelling-state save before cleanup without waiting for it', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueStart('running');
+  const calls: string[] = [];
+  const { lifecycle } = startLifecycle(
+    execution,
+    new FakeInvocationClock({ initialNowMs: 0 }),
+    snapshot(),
+    {
+      saveCancellingState: () => {
+        calls.push('save-cancelling');
+      },
+    },
+  );
+
+  lifecycle.requestCancellation();
+  await flush();
+
+  expect(calls).toEqual(['save-cancelling']);
+  expect(execution.calls()).toContainEqual({ type: 'request-cancellation', executionId: 1 });
 });
 
 test('preserves the first terminal settlement when late controls arrive', async () => {

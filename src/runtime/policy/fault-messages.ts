@@ -18,6 +18,8 @@ export const AGENT_FAULT_MESSAGES = Object.freeze({
   probeVersionMismatch: 'Agent executable version does not satisfy its constraint.',
   protocolFailed: 'Agent protocol failed.',
   outputWriteFailed: 'Agent output write failed.',
+  activeStateFailed: 'Agent active state could not be saved.',
+  processIdentityFailed: 'Agent process identity could not be captured.',
   processFailed: 'Agent process failed.',
   processCleanupFailed: 'Agent process cleanup failed.',
   resultMissing: 'Agent result is missing.',

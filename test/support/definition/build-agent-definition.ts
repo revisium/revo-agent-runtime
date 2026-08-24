@@ -1,8 +1,15 @@
 import type {
+  ActiveInvocationStateSink,
   AgentDefinitionInput,
   AgentManagerOptions,
   JsonSchema202012,
 } from '../../../src/runtime/spec/index.js';
+
+export const createTestActiveStateSink = (): ActiveInvocationStateSink =>
+  Object.freeze({
+    save: async (): Promise<void> => undefined,
+    remove: async (): Promise<void> => undefined,
+  });
 
 export const p1ObjectSchema: JsonSchema202012 = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -38,6 +45,7 @@ export const buildAgentDefinition = (
 export const buildAgentManagerOptions = (
   overrides: Partial<AgentManagerOptions> = {},
 ): AgentManagerOptions => ({
+  activeStateSink: createTestActiveStateSink(),
   definitions: [buildAgentDefinition()],
   ...overrides,
 });

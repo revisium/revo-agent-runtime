@@ -19,7 +19,14 @@ export type {
   AgentProbeUnavailable,
 } from './agent-probe/index.js';
 export type { JsonObject, JsonPrimitive, JsonSchema202012, JsonValue } from './json/index.js';
-export type { AgentManagerLimits, AgentManagerOptions } from './manager-options/index.js';
+export type {
+  ActiveInvocationSnapshot,
+  ActiveInvocationStateSink,
+  ActiveProcessIdentity,
+  ActiveStateOperationContext,
+  AgentManagerLimits,
+  AgentManagerOptions,
+} from './manager-options/index.js';
 export type {
   AgentInvocationFilter,
   AgentInvocationSnapshot,

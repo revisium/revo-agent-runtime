@@ -7,6 +7,7 @@ import {
   AGENT_RUNTIME_LIMITS,
 } from '../../policy/index.js';
 import type {
+  ActiveInvocationStateSink,
   AgentDefinitionContract,
   AgentFault,
   AgentManagerLimits,
@@ -100,7 +101,22 @@ const limitsSchema = z.strictObject({
   ).exactOptional(),
 });
 
+const isActiveStateSink = (value: unknown): value is ActiveInvocationStateSink => {
+  if (value === null || typeof value !== 'object') return false;
+  const save = Object.getOwnPropertyDescriptor(value, 'save');
+  const remove = Object.getOwnPropertyDescriptor(value, 'remove');
+  return (
+    save !== undefined &&
+    'value' in save &&
+    typeof save.value === 'function' &&
+    remove !== undefined &&
+    'value' in remove &&
+    typeof remove.value === 'function'
+  );
+};
+
 const managerOptionsSchema = z.strictObject({
+  activeStateSink: z.custom<ActiveInvocationStateSink>(isActiveStateSink),
   definitions: z.array(z.unknown()).max(AGENT_RUNTIME_LIMITS.definitions),
   limits: limitsSchema.exactOptional(),
   redaction: z
@@ -196,6 +212,7 @@ const isAgentValidationDetails = (value: unknown): value is AgentValidationDetai
   typeof Reflect.get(value, 'truncated') === 'boolean';
 
 const remapPreflightPath = (path: string): string =>
+  path === '/activeStateSink' ||
   path === '/definitions' ||
   path.startsWith('/definitions/') ||
   path === '/limits' ||
@@ -207,7 +224,29 @@ const remapPreflightPath = (path: string): string =>
 
 const inspectManagerOptionsGraph = (value: unknown): unknown => {
   try {
-    inspectPlainJson(value, '');
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      inspectPlainJson(value, '');
+      return value;
+    }
+    const activeStateSink = Object.getOwnPropertyDescriptor(value, 'activeStateSink');
+    if (
+      activeStateSink === undefined ||
+      !('value' in activeStateSink) ||
+      !isActiveStateSink(activeStateSink.value)
+    )
+      return rejectDiagnostic(
+        'revo.agent.definition_invalid',
+        'manager_options_shape',
+        '/activeStateSink',
+      );
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    delete descriptors.activeStateSink;
+    const prototype: unknown = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null)
+      return rejectDiagnostic('revo.agent.definition_invalid', 'manager_options_shape', '/');
+    const plainOptions: Record<string, unknown> = {};
+    Object.defineProperties(plainOptions, descriptors);
+    inspectPlainJson(plainOptions, '');
     return value;
   } catch (error: unknown) {
     if (!(error instanceof AgentManagerError) || !isAgentValidationDetails(error.fault.details))
@@ -504,7 +543,17 @@ const freezeValidatedConstruction = (
   const redaction = effectiveRedaction(options.redaction);
   const validatedDefinitions = Object.freeze(definitions.map(createValidatedDefinition));
 
-  return Object.freeze({ definitions: validatedDefinitions, limits, redaction });
+  const activeStateSink = Object.freeze({
+    save: options.activeStateSink.save.bind(options.activeStateSink),
+    remove: options.activeStateSink.remove.bind(options.activeStateSink),
+  });
+
+  return Object.freeze({
+    activeStateSink,
+    definitions: validatedDefinitions,
+    limits,
+    redaction,
+  });
 };
 
 export const validateManagerOptions = (value: unknown): ValidatedManagerConstruction => {
