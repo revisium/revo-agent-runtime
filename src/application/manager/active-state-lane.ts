@@ -44,6 +44,21 @@ export class ActiveStateLane {
     private readonly operationTimeoutMs: number,
   ) {}
 
+  /**
+   * Creates a remove-only lane for a row written by a previous host process.
+   * A fresh lane must not require its own save before removing that external row.
+   * Do not call save() on this lane; recovery retry requires a fresh lane rather
+   * than reusing this lane or retaining it as an active-state guard.
+   */
+  static forExternallyAppliedRow(
+    sink: ActiveInvocationStateSink,
+    operationTimeoutMs: number,
+  ): ActiveStateLane {
+    const lane = new ActiveStateLane(sink, operationTimeoutMs);
+    lane.appliedTail = Promise.resolve(true);
+    return lane;
+  }
+
   save(snapshot: ActiveInvocationSnapshot, deadlineAt: number): Promise<ActiveStateSaveResult> {
     const copied = copySnapshot(snapshot);
     const operation = this.appliedTail.then(async (wasApplied) =>
