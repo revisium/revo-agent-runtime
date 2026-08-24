@@ -37,15 +37,12 @@ const settleOperation = (operation: Promise<void>): Promise<OperationSettlement>
   );
 
 export class ActiveStateLane {
-  private appliedTail: Promise<boolean>;
+  private appliedTail: Promise<boolean> = Promise.resolve(false);
 
   constructor(
     private readonly sink: ActiveInvocationStateSink,
     private readonly operationTimeoutMs: number,
-    initiallyApplied = false,
-  ) {
-    this.appliedTail = Promise.resolve(initiallyApplied);
-  }
+  ) {}
 
   /**
    * Creates a remove-only lane for a row written by a previous host process.
@@ -57,7 +54,9 @@ export class ActiveStateLane {
     sink: ActiveInvocationStateSink,
     operationTimeoutMs: number,
   ): ActiveStateLane {
-    return new ActiveStateLane(sink, operationTimeoutMs, true);
+    const lane = new ActiveStateLane(sink, operationTimeoutMs);
+    lane.appliedTail = Promise.resolve(true);
+    return lane;
   }
 
   save(snapshot: ActiveInvocationSnapshot, deadlineAt: number): Promise<ActiveStateSaveResult> {
