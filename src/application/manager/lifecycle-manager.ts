@@ -37,6 +37,7 @@ import {
   type ProcessCleanupAttemptOutcome,
   type OutputResourcePlan,
   type ResultSchemaValidator,
+  type RunningExecution,
   type TerminalPublicationAuthority,
 } from '../../runtime/execution/index.js';
 import { AGENT_FAULT_MESSAGES, AGENT_RUNTIME_LIMITS } from '../../runtime/policy/index.js';
@@ -593,91 +594,15 @@ class InternalInvocationLifecycleManager {
       }
       const resources = preparationResult.resources;
       const authority = preparationResult.authority;
-      const spawn = await this.executionPort.spawnAndIdentify(snapshot, preparedLaunch, resources);
-      if (spawn.status === 'failed') {
-        if (spawn.cleanupOutcome !== undefined) {
-          this.retainActiveStateGuard(snapshot.invocationId, {
-            activeStateLane: new ActiveStateLane(
-              this.activeStateSink,
-              this.#activeStateOperationTimeoutMs,
-            ),
-            killAndReap: async () => spawn.cleanupOutcome,
-            outputDirectory: plan.outputDirectory,
-            cleanupConfirmed: false,
-          });
-        }
-        return Object.freeze({
-          status: 'rejected',
-          reason:
-            spawn.reason === 'identity_failed' ? 'process_identity_failed' : 'preflight_failed',
-        });
-      }
-
-      const activeStateLane = new ActiveStateLane(
-        this.activeStateSink,
-        this.#activeStateOperationTimeoutMs,
-      );
-      const activeProcessIdentity: ActiveProcessIdentity = Object.freeze({
-        pid: spawn.identity.pid,
-        processGroupId: spawn.identity.processGroupId,
-        fingerprint: spawn.identity.fingerprint,
-        startedAt: spawn.startedAt,
-      });
-      const runningActiveState = this.createActiveStateSnapshot(
-        snapshot.invocationId,
+      const admission = await this.admitProcessAndSaveActiveState(
+        snapshot,
         preparedLaunch,
-        'running',
-        activeProcessIdentity,
+        plan,
+        resources,
       );
-      const retainedGuard: RetainedActiveStateGuard = {
-        activeStateLane,
-        killAndReap: spawn.killAndReap,
-        outputDirectory: plan.outputDirectory,
-        cleanupConfirmed: false,
-      };
-
-      if (this.#closing) {
-        const cleanupOutcome = await spawn.killAndReap();
-        if (cleanupOutcome !== undefined)
-          this.retainActiveStateGuard(snapshot.invocationId, retainedGuard);
-        return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
-      }
-
-      this.retainActiveStateGuard(snapshot.invocationId, retainedGuard);
-      const preacceptanceDeadlineAt =
-        spawn.spawnedAt + Math.min(snapshot.wallClockTimeoutMs, snapshot.limits.idleTimeoutMs);
-      const setupDeadlineAt = Math.min(
-        spawn.spawnedAt + this.#activeStateOperationTimeoutMs,
-        preacceptanceDeadlineAt,
-      );
-      const runningSave = await activeStateLane.save(runningActiveState, setupDeadlineAt);
-      if (runningSave.status !== 'fulfilled') {
-        const cleanupOutcome = await spawn.killAndReap();
-        retainedGuard.cleanupConfirmed = cleanupOutcome === undefined;
-        if (runningSave.status === 'timed_out' && cleanupOutcome === undefined) {
-          const removed = await activeStateLane.remove(
-            snapshot.invocationId,
-            Date.now() + this.#activeStateOperationTimeoutMs,
-          );
-          if (removed) this.releaseActiveStateGuard(snapshot.invocationId);
-        }
-        return Object.freeze({ status: 'rejected', reason: 'active_state_failed' });
-      }
-
-      if (this.#closing) {
-        const cleanupOutcome = await spawn.killAndReap();
-        retainedGuard.cleanupConfirmed = cleanupOutcome === undefined;
-        if (cleanupOutcome === undefined) {
-          const removed = await activeStateLane.remove(
-            snapshot.invocationId,
-            Date.now() + this.#activeStateOperationTimeoutMs,
-          );
-          if (removed) this.releaseActiveStateGuard(snapshot.invocationId);
-        }
-        return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
-      }
-
-      this.releaseActiveStateGuard(snapshot.invocationId);
+      if (admission.status === 'rejected')
+        return Object.freeze({ status: 'rejected', reason: admission.reason });
+      const { activate, startedAt, activeStateLane, activeProcessIdentity } = admission;
       const acceptedAt = createIsoTimestamp();
 
       const completion = createDeferred<NormalizedInvocationOutcome>();
@@ -686,10 +611,10 @@ class InternalInvocationLifecycleManager {
         Object.freeze({ ...this.ports, execution: this.executionPort }),
         snapshot,
         preparedLaunch,
-        spawn.activate,
+        activate,
         authority,
         acceptedAt,
-        spawn.startedAt,
+        startedAt,
         () => {
           void activeStateLane.save(
             this.createActiveStateSnapshot(
@@ -734,6 +659,114 @@ class InternalInvocationLifecycleManager {
       this.inFlightStarts.delete(snapshot.invocationId);
       startCompletion.resolve(undefined);
     }
+  }
+
+  private async admitProcessAndSaveActiveState(
+    snapshot: InvocationInputSnapshot,
+    preparedLaunch: PreparedLaunch,
+    plan: OutputResourcePlan,
+    resources: NonNullable<ReturnType<typeof takePreparedInvocationResourcesPayload>>,
+  ): Promise<
+    | Readonly<{
+        status: 'accepted';
+        activate: () => RunningExecution;
+        startedAt: string;
+        activeStateLane: ActiveStateLane;
+        activeProcessIdentity: ActiveProcessIdentity;
+      }>
+    | Readonly<{ status: 'rejected'; reason: RejectionReason }>
+  > {
+    const spawn = await this.executionPort.spawnAndIdentify(snapshot, preparedLaunch, resources);
+    if (spawn.status === 'failed') {
+      if (spawn.cleanupOutcome !== undefined) {
+        this.retainActiveStateGuard(snapshot.invocationId, {
+          activeStateLane: new ActiveStateLane(
+            this.activeStateSink,
+            this.#activeStateOperationTimeoutMs,
+          ),
+          killAndReap: async () => spawn.cleanupOutcome,
+          outputDirectory: plan.outputDirectory,
+          cleanupConfirmed: false,
+        });
+      }
+      return Object.freeze({
+        status: 'rejected',
+        reason: spawn.reason === 'identity_failed' ? 'process_identity_failed' : 'preflight_failed',
+      });
+    }
+
+    const activeStateLane = new ActiveStateLane(
+      this.activeStateSink,
+      this.#activeStateOperationTimeoutMs,
+    );
+    const activeProcessIdentity: ActiveProcessIdentity = Object.freeze({
+      pid: spawn.identity.pid,
+      processGroupId: spawn.identity.processGroupId,
+      fingerprint: spawn.identity.fingerprint,
+      startedAt: spawn.startedAt,
+    });
+    const runningActiveState = this.createActiveStateSnapshot(
+      snapshot.invocationId,
+      preparedLaunch,
+      'running',
+      activeProcessIdentity,
+    );
+    const retainedGuard: RetainedActiveStateGuard = {
+      activeStateLane,
+      killAndReap: spawn.killAndReap,
+      outputDirectory: plan.outputDirectory,
+      cleanupConfirmed: false,
+    };
+
+    if (this.#closing) {
+      const cleanupOutcome = await spawn.killAndReap();
+      if (cleanupOutcome !== undefined)
+        this.retainActiveStateGuard(snapshot.invocationId, retainedGuard);
+      return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
+    }
+
+    this.retainActiveStateGuard(snapshot.invocationId, retainedGuard);
+    const preacceptanceDeadlineAt =
+      spawn.spawnedAt + Math.min(snapshot.wallClockTimeoutMs, snapshot.limits.idleTimeoutMs);
+    const setupDeadlineAt = Math.min(
+      spawn.spawnedAt + this.#activeStateOperationTimeoutMs,
+      preacceptanceDeadlineAt,
+    );
+    const runningSave = await activeStateLane.save(runningActiveState, setupDeadlineAt);
+    if (runningSave.status !== 'fulfilled') {
+      const cleanupOutcome = await spawn.killAndReap();
+      retainedGuard.cleanupConfirmed = cleanupOutcome === undefined;
+      if (runningSave.status === 'timed_out' && cleanupOutcome === undefined) {
+        const removed = await activeStateLane.remove(
+          snapshot.invocationId,
+          Date.now() + this.#activeStateOperationTimeoutMs,
+        );
+        if (removed) this.releaseActiveStateGuard(snapshot.invocationId);
+      }
+      return Object.freeze({ status: 'rejected', reason: 'active_state_failed' });
+    }
+
+    if (this.#closing) {
+      const cleanupOutcome = await spawn.killAndReap();
+      retainedGuard.cleanupConfirmed = cleanupOutcome === undefined;
+      if (cleanupOutcome === undefined) {
+        const removed = await activeStateLane.remove(
+          snapshot.invocationId,
+          Date.now() + this.#activeStateOperationTimeoutMs,
+        );
+        if (removed) this.releaseActiveStateGuard(snapshot.invocationId);
+      }
+      return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
+    }
+
+    this.releaseActiveStateGuard(snapshot.invocationId);
+    return Object.freeze({
+      status: 'accepted' as const,
+      activate: spawn.activate,
+      startedAt: spawn.startedAt,
+      activeStateLane,
+      activeProcessIdentity,
+    });
   }
 
   getResult(invocationId: string): LifecycleResultLookup {

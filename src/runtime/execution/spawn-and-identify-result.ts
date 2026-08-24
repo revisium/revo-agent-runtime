@@ -1,5 +1,7 @@
-import type { ProcessCleanupAttemptOutcome } from './process-supervision-port/index.js';
-import type { ProcessIdentity } from './process-supervision-port/index.js';
+import type {
+  ProcessCleanupAttemptOutcome,
+  ProcessIdentity,
+} from './process-supervision-port/index.js';
 import type { RunningExecution } from './running-execution.js';
 
 export type SpawnAndIdentifyResult =

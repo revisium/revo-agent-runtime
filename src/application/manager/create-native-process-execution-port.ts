@@ -7,6 +7,7 @@ import {
   duplexCompletion,
   getProcessStartInvocationToken,
   submitDuplexCandidate,
+  type AttachedProtocolSession,
   type InterimDuplexPrimaryFailure,
   type InvocationExecutionPorts,
   type InvocationTerminalObservation,
@@ -71,6 +72,39 @@ const attachRaceCandidate = (
   if (attachOutcome === AFTER_DEADLINE)
     return Object.freeze({ status: 'cancelled' as const, spawnedAt, exit });
   return failedObservation(spawnedAt, undefined, exit);
+};
+
+const buildAttachRaceCompletion = (
+  coordinator: DuplexCoordinatorRegistration,
+  spawnedAt: number,
+  attachOutcome: typeof AFTER_DEADLINE | typeof AFTER_DUPLEX_OPERATION_TIMEOUT | undefined,
+  cleanupAttempt: Promise<ProcessCleanupAttemptOutcome | undefined>,
+  processCompletion: Promise<ProcessExitObservation>,
+  disposeRawResponse: () => void,
+): Promise<InvocationTerminalObservation> =>
+  cleanupAttempt.then(() =>
+    processCompletion.then(
+      async (exit) => {
+        disposeRawResponse();
+        const candidate = attachRaceCandidate(attachOutcome, spawnedAt, exit);
+        submitDuplexCandidate(coordinator, candidate);
+        return (await duplexCompletion(coordinator)) ?? candidate;
+      },
+      async () => {
+        disposeRawResponse();
+        const candidate = failedObservation(spawnedAt);
+        submitDuplexCandidate(coordinator, candidate);
+        return (await duplexCompletion(coordinator)) ?? candidate;
+      },
+    ),
+  );
+
+const dispatchDuplexCancellation = async (
+  session: Pick<AttachedProtocolSession, 'requestCancellation'>,
+  terminateAndReap: () => Promise<ProcessCleanupAttemptOutcome | undefined>,
+): Promise<ProcessCleanupAttemptOutcome | undefined> => {
+  const sent = await session.requestCancellation();
+  return sent === 'sent' ? undefined : terminateAndReap();
 };
 
 const failedExecution = (spawnedAt: number): RunningExecution =>
@@ -258,25 +292,13 @@ export const createNativeProcessExecutionPort = (
           ) {
             const cleanupAttempt = activation.process.terminateAndReap();
             // activateIo already owns live pumps here; immediate front-end disposal would race their writes.
-            const completion: Promise<InvocationTerminalObservation> = cleanupAttempt.then(() =>
-              activation.process.completion.then(
-                async (exit) => {
-                  disposeRawResponse();
-                  const candidate = attachRaceCandidate(
-                    attachOutcome,
-                    settlement.process.spawnedAt,
-                    exit,
-                  );
-                  submitDuplexCandidate(coordinator, candidate);
-                  return (await duplexCompletion(coordinator)) ?? candidate;
-                },
-                async () => {
-                  disposeRawResponse();
-                  const candidate = failedObservation(settlement.process.spawnedAt);
-                  submitDuplexCandidate(coordinator, candidate);
-                  return (await duplexCompletion(coordinator)) ?? candidate;
-                },
-              ),
+            const completion = buildAttachRaceCompletion(
+              coordinator,
+              settlement.process.spawnedAt,
+              attachOutcome,
+              cleanupAttempt,
+              activation.process.completion,
+              disposeRawResponse,
             );
             return Object.freeze({
               spawnedAt: settlement.process.spawnedAt,
@@ -361,10 +383,9 @@ export const createNativeProcessExecutionPort = (
               exit: syntheticNoProcessExit,
             });
             submitDuplexCandidate(coordinator, candidate);
-            cancellationCompletion = (async () => {
-              const sent = await attachResult.session.requestCancellation();
-              return sent === 'sent' ? undefined : activation.process.terminateAndReap();
-            })();
+            cancellationCompletion = dispatchDuplexCancellation(attachResult.session, () =>
+              activation.process.terminateAndReap(),
+            );
             return cancellationCompletion;
           };
 
