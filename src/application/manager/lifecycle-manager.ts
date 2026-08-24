@@ -564,36 +564,15 @@ class InternalInvocationLifecycleManager {
       const claimOutcome = await this.resolveClaimedSession(snapshot.invocationId, plan);
       if (claimOutcome.status === 'rejected')
         return Object.freeze({ status: 'rejected', reason: claimOutcome.reason });
-      const preparation = this.createOutputPreparation(
+      const preparation = await this.prepareOutput(
         snapshot,
         preparedLaunch,
         plan,
         claimOutcome.session,
       );
-      if (preparation === undefined)
-        return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
-      this.pendingPreparationAttempts.set(snapshot.invocationId, preparation.attempt);
-      const preparationResult = await this.consumeAndBeginOutputPreparation(preparation);
-      this.pendingPreparationAttempts.delete(snapshot.invocationId);
-      if (preparationResult.status === 'rejected') {
-        this.quarantinedPreparationInvocationIds.add(snapshot.invocationId);
-        this.quarantinedPreparationOutputDirectories.add(plan.outputDirectory);
-        return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
-      }
-      if (preparationResult.status === 'uncertain') {
-        this.quarantinedPreparationInvocationIds.add(snapshot.invocationId);
-        this.quarantinedPreparationOutputDirectories.add(plan.outputDirectory);
-        return Object.freeze({ status: 'rejected', reason: 'output_prepare_uncertain' });
-      }
-      if (preparationResult.status !== 'prepared')
-        return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
-      if (this.#closing) {
-        this.quarantinedPreparationInvocationIds.add(snapshot.invocationId);
-        this.quarantinedPreparationOutputDirectories.add(plan.outputDirectory);
-        return Object.freeze({ status: 'rejected', reason: 'output_prepare_uncertain' });
-      }
-      const resources = preparationResult.resources;
-      const authority = preparationResult.authority;
+      if (preparation.status === 'rejected')
+        return Object.freeze({ status: 'rejected', reason: preparation.reason });
+      const { resources, authority } = preparation;
       const admission = await this.admitProcessAndSaveActiveState(
         snapshot,
         preparedLaunch,
@@ -659,6 +638,49 @@ class InternalInvocationLifecycleManager {
       this.inFlightStarts.delete(snapshot.invocationId);
       startCompletion.resolve(undefined);
     }
+  }
+
+  private async prepareOutput(
+    snapshot: InvocationInputSnapshot,
+    preparedLaunch: PreparedLaunch,
+    plan: OutputResourcePlan,
+    session: Extract<OutputClaimResult, { status: 'claimed' }>['session'],
+  ): Promise<
+    | Readonly<{
+        status: 'accepted';
+        resources: NonNullable<ReturnType<typeof takePreparedInvocationResourcesPayload>>;
+        authority: TerminalPublicationAuthority;
+      }>
+    | Readonly<{ status: 'rejected'; reason: RejectionReason }>
+  > {
+    const preparation = this.createOutputPreparation(snapshot, preparedLaunch, plan, session);
+    if (preparation === undefined)
+      return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
+    this.pendingPreparationAttempts.set(snapshot.invocationId, preparation.attempt);
+    const preparationResult = await this.consumeAndBeginOutputPreparation(preparation);
+    this.pendingPreparationAttempts.delete(snapshot.invocationId);
+    if (preparationResult.status === 'rejected') {
+      this.quarantinedPreparationInvocationIds.add(snapshot.invocationId);
+      this.quarantinedPreparationOutputDirectories.add(plan.outputDirectory);
+      return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
+    }
+    if (preparationResult.status === 'uncertain') {
+      this.quarantinedPreparationInvocationIds.add(snapshot.invocationId);
+      this.quarantinedPreparationOutputDirectories.add(plan.outputDirectory);
+      return Object.freeze({ status: 'rejected', reason: 'output_prepare_uncertain' });
+    }
+    if (preparationResult.status !== 'prepared')
+      return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
+    if (this.#closing) {
+      this.quarantinedPreparationInvocationIds.add(snapshot.invocationId);
+      this.quarantinedPreparationOutputDirectories.add(plan.outputDirectory);
+      return Object.freeze({ status: 'rejected', reason: 'output_prepare_uncertain' });
+    }
+    return Object.freeze({
+      status: 'accepted' as const,
+      resources: preparationResult.resources,
+      authority: preparationResult.authority,
+    });
   }
 
   private async admitProcessAndSaveActiveState(
@@ -734,28 +756,22 @@ class InternalInvocationLifecycleManager {
     );
     const runningSave = await activeStateLane.save(runningActiveState, setupDeadlineAt);
     if (runningSave.status !== 'fulfilled') {
-      const cleanupOutcome = await spawn.killAndReap();
-      retainedGuard.cleanupConfirmed = cleanupOutcome === undefined;
-      if (runningSave.status === 'timed_out' && cleanupOutcome === undefined) {
-        const removed = await activeStateLane.remove(
-          snapshot.invocationId,
-          Date.now() + this.#activeStateOperationTimeoutMs,
-        );
-        if (removed) this.releaseActiveStateGuard(snapshot.invocationId);
-      }
+      await this.killReapAndMaybeCompensate(
+        snapshot.invocationId,
+        retainedGuard,
+        activeStateLane,
+        runningSave.status === 'timed_out',
+      );
       return Object.freeze({ status: 'rejected', reason: 'active_state_failed' });
     }
 
     if (this.#closing) {
-      const cleanupOutcome = await spawn.killAndReap();
-      retainedGuard.cleanupConfirmed = cleanupOutcome === undefined;
-      if (cleanupOutcome === undefined) {
-        const removed = await activeStateLane.remove(
-          snapshot.invocationId,
-          Date.now() + this.#activeStateOperationTimeoutMs,
-        );
-        if (removed) this.releaseActiveStateGuard(snapshot.invocationId);
-      }
+      await this.killReapAndMaybeCompensate(
+        snapshot.invocationId,
+        retainedGuard,
+        activeStateLane,
+        true,
+      );
       return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
     }
 
@@ -767,6 +783,22 @@ class InternalInvocationLifecycleManager {
       activeStateLane,
       activeProcessIdentity,
     });
+  }
+
+  private async killReapAndMaybeCompensate(
+    invocationId: string,
+    retainedGuard: RetainedActiveStateGuard,
+    activeStateLane: ActiveStateLane,
+    attemptCompensatingRemove: boolean,
+  ): Promise<void> {
+    const cleanupOutcome = await retainedGuard.killAndReap();
+    retainedGuard.cleanupConfirmed = cleanupOutcome === undefined;
+    if (!attemptCompensatingRemove || cleanupOutcome !== undefined) return;
+    const removed = await activeStateLane.remove(
+      invocationId,
+      Date.now() + this.#activeStateOperationTimeoutMs,
+    );
+    if (removed) this.releaseActiveStateGuard(invocationId);
   }
 
   getResult(invocationId: string): LifecycleResultLookup {

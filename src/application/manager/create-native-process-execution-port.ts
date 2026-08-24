@@ -383,8 +383,9 @@ export const createNativeProcessExecutionPort = (
               exit: syntheticNoProcessExit,
             });
             submitDuplexCandidate(coordinator, candidate);
-            cancellationCompletion = dispatchDuplexCancellation(attachResult.session, () =>
-              activation.process.terminateAndReap(),
+            cancellationCompletion = dispatchDuplexCancellation(
+              attachResult.session,
+              activation.process.terminateAndReap.bind(activation.process),
             );
             return cancellationCompletion;
           };
