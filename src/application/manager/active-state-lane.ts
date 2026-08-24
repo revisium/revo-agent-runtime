@@ -37,12 +37,28 @@ const settleOperation = (operation: Promise<void>): Promise<OperationSettlement>
   );
 
 export class ActiveStateLane {
-  private appliedTail: Promise<boolean> = Promise.resolve(false);
+  private appliedTail: Promise<boolean>;
 
   constructor(
     private readonly sink: ActiveInvocationStateSink,
     private readonly operationTimeoutMs: number,
-  ) {}
+    initiallyApplied = false,
+  ) {
+    this.appliedTail = Promise.resolve(initiallyApplied);
+  }
+
+  /**
+   * Creates a remove-only lane for a row written by a previous host process.
+   * A fresh lane must not require its own save before removing that external row.
+   * Do not call save() on this lane; recovery retry requires a fresh lane rather
+   * than reusing this lane or retaining it as an active-state guard.
+   */
+  static forExternallyAppliedRow(
+    sink: ActiveInvocationStateSink,
+    operationTimeoutMs: number,
+  ): ActiveStateLane {
+    return new ActiveStateLane(sink, operationTimeoutMs, true);
+  }
 
   save(snapshot: ActiveInvocationSnapshot, deadlineAt: number): Promise<ActiveStateSaveResult> {
     const copied = copySnapshot(snapshot);

@@ -4,6 +4,7 @@ import { ActiveStateLane } from '../../../../src/application/manager/active-stat
 import type {
   ActiveInvocationSnapshot,
   ActiveInvocationStateSink,
+  ActiveStateOperationContext,
 } from '../../../../src/runtime/spec/index.js';
 
 interface Deferred {
@@ -55,6 +56,83 @@ test('never dispatches remove after a rejected save', async () => {
   });
   await expect(lane.remove(snapshot.invocationId, Date.now() + 100)).resolves.toBe(false);
   expect(remove).not.toHaveBeenCalled();
+});
+
+test('does not dispatch remove immediately for an ordinary lane', async () => {
+  const remove = vi.fn(async (): Promise<void> => undefined);
+  const lane = new ActiveStateLane(
+    Object.freeze({ save: async (): Promise<void> => undefined, remove }),
+    100,
+  );
+
+  await expect(lane.remove(snapshot.invocationId, Date.now() + 100)).resolves.toBe(false);
+  expect(remove).not.toHaveBeenCalled();
+});
+
+test('dispatches remove immediately for an externally applied row', async () => {
+  const remove = vi.fn(
+    async (_invocationId: string, _context: ActiveStateOperationContext): Promise<void> =>
+      undefined,
+  );
+  const lane = ActiveStateLane.forExternallyAppliedRow(
+    Object.freeze({ save: async (): Promise<void> => undefined, remove }),
+    100,
+  );
+
+  await expect(lane.remove(snapshot.invocationId, Date.now() + 100)).resolves.toBe(true);
+  expect(remove).toHaveBeenCalledTimes(1);
+  const call = remove.mock.calls[0];
+  if (call === undefined) throw new Error('Expected remove to be called.');
+  expect(call[0]).toBe(snapshot.invocationId);
+  expect(call[1].signal).toBeInstanceOf(AbortSignal);
+});
+
+test('aborts an externally applied row remove when it times out', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_000);
+  let signal: AbortSignal | undefined;
+  const lane = ActiveStateLane.forExternallyAppliedRow(
+    Object.freeze({
+      save: async (): Promise<void> => undefined,
+      remove: (_invocationId: string, context: ActiveStateOperationContext): Promise<void> => {
+        signal = context.signal;
+        return new Promise<void>(() => undefined);
+      },
+    }),
+    100,
+  );
+
+  const removing = lane.remove(snapshot.invocationId, 1_100);
+  await vi.advanceTimersByTimeAsync(100);
+
+  await expect(removing).resolves.toBe(false);
+  expect(signal?.aborted).toBe(true);
+});
+
+test('contains a synchronous remove throw', async () => {
+  const lane = ActiveStateLane.forExternallyAppliedRow(
+    Object.freeze({
+      save: async (): Promise<void> => undefined,
+      remove: (): Promise<void> => {
+        throw new Error('remove threw');
+      },
+    }),
+    100,
+  );
+
+  await expect(lane.remove(snapshot.invocationId, Date.now() + 100)).resolves.toBe(false);
+});
+
+test('does not retry an externally applied row remove on the same lane', async () => {
+  const remove = vi.fn(async (): Promise<void> => undefined);
+  const lane = ActiveStateLane.forExternallyAppliedRow(
+    Object.freeze({ save: async (): Promise<void> => undefined, remove }),
+    100,
+  );
+
+  await expect(lane.remove(snapshot.invocationId, Date.now() + 100)).resolves.toBe(true);
+  await expect(lane.remove(snapshot.invocationId, Date.now() + 100)).resolves.toBe(false);
+  expect(remove).toHaveBeenCalledTimes(1);
 });
 
 test('serializes remove after the preceding save fulfils', async () => {
