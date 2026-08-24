@@ -6,6 +6,7 @@ import type {
   takePreparedInvocationResourcesPayload,
 } from './output-preparation-attempt/index.js';
 import type { PreparedLaunch } from './prepared-launch.js';
+import type { ProcessCleanupFailureCause } from './process-supervision-port/index.js';
 import type { SpawnAndIdentifyResult } from './spawn-and-identify-result.js';
 import type { TerminalPublicationPort } from './terminal-publication-port/index.js';
 import type { WorkspaceAdmissionResult } from './workspace-admission-result.js';
@@ -21,6 +22,17 @@ export interface InvocationExecutionPorts {
       preparedLaunch: PreparedLaunch,
       resources?: PreparedInvocationResourcesPayload,
     ): Promise<SpawnAndIdentifyResult>;
+    inspectAndReconcileRecoveredProcess(
+      pid: number,
+      fingerprint: string,
+      inspectionDeadlineAt: number,
+    ): Promise<
+      | Readonly<{ status: 'absent' }>
+      | Readonly<{ status: 'identity_mismatch' }>
+      | Readonly<{ status: 'inconclusive' }>
+      | Readonly<{ status: 'terminated' }>
+      | Readonly<{ status: 'termination_unconfirmed'; cause: ProcessCleanupFailureCause }>
+    >;
   };
   readonly workspace: {
     admit(path: string): Promise<WorkspaceAdmissionResult>;

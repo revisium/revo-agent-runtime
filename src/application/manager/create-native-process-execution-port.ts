@@ -1,4 +1,8 @@
+import { kill } from 'node:process';
+
 import { NodePosixProcessSpawnDispatch } from '../../platform/process/node-posix-process-spawn-dispatch.js';
+import { NODE_POSIX_PROCESS_TERMINATION_TIMEOUTS } from '../../platform/process/node-posix-process-termination-timeouts.js';
+import { terminateProcessGroupAndReap } from '../../platform/process/posix-process-group-termination.js';
 import {
   createProcessStartAttempt,
   createRawResponseCapture,
@@ -29,7 +33,19 @@ type PreparedInvocationResourcesPayload = NonNullable<
 type NativeDispatch = Pick<
   NodePosixProcessSpawnDispatch,
   'beginStart' | 'inspectIdentity' | 'killUnactivated' | 'activateIo'
->;
+> &
+  Partial<Pick<NodePosixProcessSpawnDispatch, 'inspectRecoveredProcessIdentity'>>;
+
+const RECOVERY_NO_LEADER_REAP_SIGNAL = Promise.resolve();
+
+const isAbsentProcess = (pid: number): boolean => {
+  try {
+    kill(pid, 0);
+    return false;
+  } catch (error: unknown) {
+    return error instanceof Error && 'code' in error && error.code === 'ESRCH';
+  }
+};
 
 const AFTER_DEADLINE = Symbol('after-deadline');
 // Deliberate, narrow, temporary scope limit (execution-handoff.spec.md §14/§18): this slice arms
@@ -158,6 +174,32 @@ export const createNativeProcessExecutionPort = (
     .default,
 ): InvocationExecutionPorts['execution'] =>
   Object.freeze({
+    inspectAndReconcileRecoveredProcess: async (
+      pid: number,
+      fingerprint: string,
+      inspectionDeadlineAt: number,
+    ) => {
+      if (!Number.isSafeInteger(pid) || pid < 1)
+        return Object.freeze({ status: 'inconclusive' as const });
+      if (isAbsentProcess(pid)) return Object.freeze({ status: 'absent' as const });
+      const inspection =
+        dispatch.inspectRecoveredProcessIdentity === undefined
+          ? undefined
+          : await dispatch.inspectRecoveredProcessIdentity(pid, inspectionDeadlineAt);
+      if (inspection?.status !== 'identified')
+        return Object.freeze({ status: 'inconclusive' as const });
+      if (inspection.identity.fingerprint !== fingerprint)
+        return Object.freeze({ status: 'identity_mismatch' as const });
+      const outcome = await terminateProcessGroupAndReap(
+        pid,
+        // Recovery cannot observe a foreign ChildProcess close event; resolved completion makes leader reap deterministic.
+        RECOVERY_NO_LEADER_REAP_SIGNAL,
+        NODE_POSIX_PROCESS_TERMINATION_TIMEOUTS,
+      );
+      return outcome === undefined
+        ? Object.freeze({ status: 'terminated' as const })
+        : Object.freeze({ status: 'termination_unconfirmed' as const, cause: outcome.cause });
+    },
     spawnAndIdentify: async (
       snapshot,
       preparedLaunch,

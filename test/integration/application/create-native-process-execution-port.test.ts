@@ -146,3 +146,59 @@ test.runIf(process.platform === 'linux')(
     });
   },
 );
+
+test.runIf(process.platform === 'linux')(
+  'terminates a recovered process when the raw pid fingerprint matches',
+  async () => {
+    const execution = createNativeProcessExecutionPort();
+    const identified = await execution.spawnAndIdentify(
+      snapshot('recovered-process'),
+      preparedLaunch(),
+      preparedResources(),
+    );
+    expect(identified.status).toBe('identified');
+    if (identified.status !== 'identified') throw new Error('Expected identified process.');
+
+    await expect(
+      execution.inspectAndReconcileRecoveredProcess(
+        identified.identity.pid,
+        identified.identity.fingerprint,
+        Date.now() + 1_000,
+      ),
+    ).resolves.toEqual({ status: 'terminated' });
+  },
+);
+
+test.runIf(process.platform === 'linux')(
+  'does not signal a recovered process when its fingerprint mismatches',
+  async () => {
+    const execution = createNativeProcessExecutionPort();
+    const identified = await execution.spawnAndIdentify(
+      snapshot('recovered-mismatch'),
+      preparedLaunch(),
+      preparedResources(),
+    );
+    expect(identified.status).toBe('identified');
+    if (identified.status !== 'identified') throw new Error('Expected identified process.');
+
+    await expect(
+      execution.inspectAndReconcileRecoveredProcess(
+        identified.identity.pid,
+        'sha256:not-the-same-process',
+        Date.now() + 1_000,
+      ),
+    ).resolves.toEqual({ status: 'identity_mismatch' });
+    await expect(identified.killAndReap()).resolves.toBeUndefined();
+  },
+);
+
+test.runIf(process.platform === 'linux')(
+  'reports an absent recovered pid without signaling',
+  async () => {
+    const execution = createNativeProcessExecutionPort();
+
+    await expect(
+      execution.inspectAndReconcileRecoveredProcess(999_999, 'sha256:missing', Date.now() + 1_000),
+    ).resolves.toEqual({ status: 'absent' });
+  },
+);

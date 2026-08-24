@@ -1398,6 +1398,17 @@ type ExpectedInvocationExecutionPorts = {
       preparedLaunch: PreparedLaunch,
       resources?: NonNullable<ReturnType<typeof takePreparedInvocationResourcesPayload>>,
     ): Promise<SpawnAndIdentifyResult>;
+    inspectAndReconcileRecoveredProcess(
+      pid: number,
+      fingerprint: string,
+      inspectionDeadlineAt: number,
+    ): Promise<
+      | Readonly<{ status: 'absent' }>
+      | Readonly<{ status: 'identity_mismatch' }>
+      | Readonly<{ status: 'inconclusive' }>
+      | Readonly<{ status: 'terminated' }>
+      | Readonly<{ status: 'termination_unconfirmed'; cause: ProcessCleanupFailureCause }>
+    >;
   };
   readonly workspace: {
     admit(path: string): Promise<WorkspaceAdmissionResult>;

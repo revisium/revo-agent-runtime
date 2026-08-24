@@ -294,6 +294,7 @@ test('orders fresh executable proof after resource-bound preflight and before ou
   execution.enqueueStart('running');
   const ports: InvocationExecutionPorts & Readonly<{ executableProbe: ExecutableProbePort }> = {
     execution: {
+      inspectAndReconcileRecoveredProcess: async () => ({ status: 'inconclusive' as const }),
       spawnAndIdentify: async (snapshot, preparedLaunch, resources) => {
         order.push('execution-start');
         return await execution.spawnAndIdentify(snapshot, preparedLaunch, resources);

@@ -28,6 +28,7 @@ const rawEvidence = (bytes: Uint8Array) =>
 
 const createExecution = (bytes: Uint8Array): InvocationExecutionPorts['execution'] =>
   Object.freeze({
+    inspectAndReconcileRecoveredProcess: async () => ({ status: 'inconclusive' as const }),
     spawnAndIdentify: async (_snapshot, _preparedLaunch, resources) => {
       if (resources === undefined) throw new Error('Expected prepared resources.');
       const spawnedAt = Date.now();
