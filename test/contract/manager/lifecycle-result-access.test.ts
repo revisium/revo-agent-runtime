@@ -35,14 +35,17 @@ type LifecycleManagerPortsInput = Omit<
 > &
   Partial<Pick<InvocationExecutionPorts, 'workspace' | 'outputClaim' | 'outputPreparation'>>;
 
-const createLifecycleManager = (ports: LifecycleManagerPortsInput) =>
-  createInvocationLifecycleManager(lifecycleOptions, {
+const createLifecycleManager = async (ports: LifecycleManagerPortsInput) => {
+  const manager = createInvocationLifecycleManager(lifecycleOptions, {
     ...ports,
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
     outputClaim: ports.outputClaim ?? new FakeOutputClaimPort('created'),
     outputPreparation: ports.outputPreparation ?? new FakeOutputPreparationPort('prepared'),
     workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
   });
+  await manager.initialize([]);
+  return manager;
+};
 
 const resultSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -78,7 +81,7 @@ test('publishes a completed canonical result before synchronous terminal deliver
   const output = new FakeInvocationOutputPort();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
-  const manager = createLifecycleManager({
+  const manager = await createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output,
@@ -145,6 +148,7 @@ test('keeps an active waiter and handle result after later FIFO eviction while f
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
   );
+  await manager.initialize([]);
   const first = expectAcceptedInvocation(
     await manager.start(createStartInput({ invocationId: 'first' })),
   );
@@ -178,7 +182,7 @@ test('does not publish a pending terminal result before its output commit settle
   const output = new FakeInvocationOutputPort();
   output.enqueuePendingTerminalResultRecording();
   execution.enqueueStart('running');
-  const manager = createLifecycleManager({
+  const manager = await createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output,
@@ -250,7 +254,7 @@ test('uses validated default capacity and rejects invalid capacity through lifec
     output.enqueueTerminalResultRecording();
     execution.enqueueStart('running');
   }
-  const manager = createLifecycleManager({ execution, output, clock });
+  const manager = await createLifecycleManager({ execution, output, clock });
   const complete = async (index: number): Promise<void> => {
     if (index > 1_000) return;
     const accepted = await manager.start(createStartInput({ invocationId: `default-${index}` }));
@@ -272,7 +276,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   const outputFailureOutput = new FakeInvocationOutputPort();
   outputFailureExecution.enqueueStart('running');
   outputFailureOutput.enqueueTerminalResultRecording(new Error('write failed'));
-  const outputFailureManager = createLifecycleManager({
+  const outputFailureManager = await createLifecycleManager({
     execution: outputFailureExecution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output: outputFailureOutput,
@@ -293,7 +297,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   const executionFailureOutput = new FakeInvocationOutputPort();
   executionFailureExecution.enqueueStart('running');
   executionFailureOutput.enqueueTerminalResultRecording();
-  const executionFailureManager = createLifecycleManager({
+  const executionFailureManager = await createLifecycleManager({
     execution: executionFailureExecution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output: executionFailureOutput,
@@ -316,7 +320,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   const cancellationOutput = new FakeInvocationOutputPort();
   cancellationExecution.enqueueStart('running');
   cancellationOutput.enqueueTerminalResultRecording();
-  const cancellationManager = createLifecycleManager({
+  const cancellationManager = await createLifecycleManager({
     execution: cancellationExecution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output: cancellationOutput,
@@ -342,7 +346,7 @@ test('delivers one canonical terminal event for output failure, execution failur
   const deadlineClock = new FakeInvocationClock({ initialNowMs: 0 });
   deadlineExecution.enqueueStart('running');
   deadlineOutput.enqueueTerminalResultRecording();
-  const deadlineManager = createLifecycleManager({
+  const deadlineManager = await createLifecycleManager({
     execution: deadlineExecution,
     clock: deadlineClock,
     output: deadlineOutput,
@@ -375,7 +379,7 @@ test('isolates a throwing listener without stranding manager handle or active wa
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
   execution.enqueueStart('running');
-  const manager = createLifecycleManager({
+  const manager = await createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output,
@@ -455,6 +459,7 @@ test('admits subscriptions independently from completed result retention', async
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
   );
+  await manager.initialize([]);
   const received: unknown[] = [];
   const acceptedListener = manager.subscribe({}, (event) => received.push(event.invocationId));
   const refusedCalls: unknown[] = [];
@@ -480,7 +485,7 @@ test('cancel reports requested, already_completed, and unknown states', async ()
   const output = new FakeInvocationOutputPort();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
-  const manager = createLifecycleManager({
+  const manager = await createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output,
@@ -509,7 +514,7 @@ test('cancel memoizes an in-flight cancellation request dispatch', async () => {
   const output = new FakeInvocationOutputPort();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
-  const manager = createLifecycleManager({
+  const manager = await createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output,
@@ -534,7 +539,7 @@ test('cancel during finalization waits for and reports the real completed result
   const output = new FakeInvocationOutputPort();
   output.enqueuePendingTerminalResultRecording();
   execution.enqueueStart('running');
-  const manager = createLifecycleManager({
+  const manager = await createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output,
@@ -566,7 +571,7 @@ test('cancel requested does not force cancelled when natural completion wins', a
   const output = new FakeInvocationOutputPort();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
-  const manager = createLifecycleManager({
+  const manager = await createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output,
@@ -604,7 +609,7 @@ test('cancel during pending admission returns unknown', async () => {
   const output = new FakeInvocationOutputPort();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
-  const manager = createLifecycleManager({
+  const manager = await createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output,

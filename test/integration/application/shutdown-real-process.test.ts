@@ -122,6 +122,7 @@ setInterval(() => undefined, 1000);
         workspace: { admit: async (directory) => ({ status: 'admitted', directory }) },
       },
     );
+    await manager.initialize([]);
 
     const start = await manager.start({
       invocationId: 'real-shutdown',

@@ -5,6 +5,7 @@ import { probeExecutable } from '../../runtime/probe/index.js';
 import type { ExecutableProbePort, ProbeTarget } from '../../runtime/probe/index.js';
 import { SealedAgentRegistry } from '../../runtime/registry/index.js';
 import type { AgentDescriptor, AgentProbeResult, AgentRef } from '../../runtime/spec/index.js';
+import { inspectBatchRefs } from './inspect-batch-refs.js';
 import { InstalledBindingRegistry } from './installed-bindings.js';
 import { ProbeAdmission } from './probe-admission.js';
 
@@ -27,11 +28,6 @@ type BatchOperations =
   | Readonly<{ status: 'invalid'; index: number }>
   | Readonly<{ status: 'valid'; operations: readonly BatchOperation[] }>;
 
-type BatchInspection =
-  | Readonly<{ status: 'invalid' }>
-  | Readonly<{ status: 'limit' }>
-  | Readonly<{ status: 'valid'; refs: readonly unknown[] }>;
-
 const unknownAgent = (details: Readonly<Record<string, string | number>>): AgentManagerError =>
   new AgentManagerError(
     Object.freeze({
@@ -53,47 +49,6 @@ const invalidLimit = (): AgentManagerError =>
       details: Object.freeze({ operation: 'probeAgents', limit: AGENT_RUNTIME_LIMITS.probeBatch }),
     }),
   );
-
-const inspectBatchRefs = (value: unknown): BatchInspection => {
-  try {
-    if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype)
-      return Object.freeze({ status: 'invalid' });
-
-    const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
-    if (
-      lengthDescriptor === undefined ||
-      !('value' in lengthDescriptor) ||
-      typeof lengthDescriptor.value !== 'number' ||
-      !Number.isSafeInteger(lengthDescriptor.value) ||
-      lengthDescriptor.value < 0 ||
-      lengthDescriptor.enumerable ||
-      lengthDescriptor.configurable
-    )
-      return Object.freeze({ status: 'invalid' });
-
-    const length = lengthDescriptor.value;
-    if (length > AGENT_RUNTIME_LIMITS.probeBatch) return Object.freeze({ status: 'limit' });
-
-    const keys = Reflect.ownKeys(value);
-    if (keys.length !== length + 1 || keys.at(-1) !== 'length')
-      return Object.freeze({ status: 'invalid' });
-
-    const refs: unknown[] = [];
-    for (let index = 0; index < length; index += 1) {
-      const key = String(index);
-      if (keys[index] !== key) return Object.freeze({ status: 'invalid' });
-
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined || !('value' in descriptor) || !descriptor.enumerable)
-        return Object.freeze({ status: 'invalid' });
-      refs.push(descriptor.value);
-    }
-
-    return Object.freeze({ status: 'valid', refs: Object.freeze(refs) });
-  } catch {
-    return Object.freeze({ status: 'invalid' });
-  }
-};
 
 class InternalProbeableAgentDiscovery implements ProbeableAgentDiscovery {
   private readonly admission = new ProbeAdmission();
@@ -122,7 +77,7 @@ class InternalProbeableAgentDiscovery implements ProbeableAgentDiscovery {
   }
 
   async probeAgents(refs: readonly AgentRef[]): Promise<readonly AgentProbeResult[]> {
-    const inspection = inspectBatchRefs(refs);
+    const inspection = inspectBatchRefs(refs, AGENT_RUNTIME_LIMITS.probeBatch);
     if (inspection.status === 'invalid') throw unknownAgent({ operation: 'probeAgents' });
     if (inspection.status === 'limit') throw invalidLimit();
     if (inspection.refs.length === 0) return Object.freeze([]);

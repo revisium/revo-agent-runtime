@@ -44,10 +44,16 @@ const messageFor = (code: AgentFault['code']): string => {
       return AGENT_FAULT_MESSAGES.limitInvalid;
     case 'revo.agent.agent_unknown':
       return AGENT_FAULT_MESSAGES.agentUnknown;
+    case 'revo.agent.manager_not_initialized':
+      return AGENT_FAULT_MESSAGES.managerNotInitialized;
     case 'revo.agent.manager_closed':
       return AGENT_FAULT_MESSAGES.managerClosed;
     case 'revo.agent.shutdown_failed':
       return AGENT_FAULT_MESSAGES.shutdownFailed;
+    case 'revo.agent.recovery_invalid':
+      return AGENT_FAULT_MESSAGES.recoveryInvalid;
+    case 'revo.agent.recovery_failed':
+      return AGENT_FAULT_MESSAGES.recoveryFailed;
     case 'revo.agent.platform_unsupported':
       return AGENT_FAULT_MESSAGES.platformUnsupported;
     case 'revo.agent.probe_platform_unsupported':

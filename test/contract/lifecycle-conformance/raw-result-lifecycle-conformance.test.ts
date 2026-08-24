@@ -6,7 +6,7 @@ import { createLifecycleConformanceSubject } from '../../support/lifecycle-confo
 import { waitForLifecycleConformanceQuiescence } from '../../support/lifecycle-conformance/wait-for-lifecycle-conformance-quiescence.js';
 
 test('normalizes a valid object into an immutable success result without raw response payload', async () => {
-  const subject = createLifecycleConformanceSubject();
+  const subject = await createLifecycleConformanceSubject();
   subject.output.enqueueTerminalResultRecording();
   subject.execution.enqueueStart('running');
   const accepted = await subject.start(subject.createInput('valid-object'));
@@ -67,7 +67,7 @@ test.each([
 ] as const)(
   'reports exact raw diagnostics for %s responses',
   async (_, rawResponse, _reason, _rawResponseDiagnostic) => {
-    const subject = createLifecycleConformanceSubject();
+    const subject = await createLifecycleConformanceSubject();
     subject.output.enqueueTerminalResultRecording();
     subject.execution.enqueueStart('running');
     const accepted = await subject.start(subject.createInput(`raw-${_}`));
@@ -84,7 +84,7 @@ test.each([
 );
 
 test('returns bounded normalized schema diagnostics with exact raw response metadata', async () => {
-  const subject = createLifecycleConformanceSubject();
+  const subject = await createLifecycleConformanceSubject();
   subject.output.enqueueTerminalResultRecording();
   subject.execution.enqueueStart('running');
   const accepted = await subject.start(

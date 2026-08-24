@@ -81,8 +81,8 @@ const createStartInput = (invocationId: string, outputDirectory: string) =>
     output: Object.freeze({ directory: outputDirectory }),
   });
 
-const createManager = (execution: InvocationExecutionPorts['execution']) =>
-  createInvocationLifecycleManager(
+const createManager = async (execution: InvocationExecutionPorts['execution']) => {
+  const manager = createInvocationLifecycleManager(
     {
       definitions: [definition],
       activeStateSink: {
@@ -102,6 +102,9 @@ const createManager = (execution: InvocationExecutionPorts['execution']) =>
       },
     },
   );
+  await manager.initialize([]);
+  return manager;
+};
 
 const createOutputDirectory = async (name: string): Promise<string> => {
   temporaryRoot = await mkdtemp(join(tmpdir(), 'revo-terminal-finalization-'));
@@ -122,7 +125,7 @@ test.runIf(process.platform === 'linux')(
   'publishes result.json for a completed invocation',
   async () => {
     const outputDirectory = await createOutputDirectory('success');
-    const manager = createManager(createExecution(encoder.encode('{"ok":true}')));
+    const manager = await createManager(createExecution(encoder.encode('{"ok":true}')));
 
     const accepted = await manager.start(createStartInput('published-success', outputDirectory));
     if (accepted.status !== 'accepted') throw new Error('Expected accepted invocation.');
@@ -145,7 +148,7 @@ test.runIf(process.platform === 'linux')(
   'publishes eligible raw-final-response.txt bytes before result.json',
   async () => {
     const outputDirectory = await createOutputDirectory('invalid-json');
-    const manager = createManager(createExecution(encoder.encode('{')));
+    const manager = await createManager(createExecution(encoder.encode('{')));
 
     const accepted = await manager.start(createStartInput('published-raw', outputDirectory));
     if (accepted.status !== 'accepted') throw new Error('Expected accepted invocation.');

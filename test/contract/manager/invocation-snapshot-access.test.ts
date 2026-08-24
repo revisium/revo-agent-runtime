@@ -29,14 +29,17 @@ type LifecycleManagerPortsInput = Omit<
 > &
   Partial<Pick<InvocationExecutionPorts, 'workspace' | 'outputClaim' | 'outputPreparation'>>;
 
-const createLifecycleManager = (ports: LifecycleManagerPortsInput) =>
-  createInvocationLifecycleManager(lifecycleOptions, {
+const createLifecycleManager = async (ports: LifecycleManagerPortsInput) => {
+  const manager = createInvocationLifecycleManager(lifecycleOptions, {
     ...ports,
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
     outputClaim: ports.outputClaim ?? new FakeOutputClaimPort('created'),
     outputPreparation: ports.outputPreparation ?? new FakeOutputPreparationPort('prepared'),
     workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
   });
+  await manager.initialize([]);
+  return manager;
+};
 
 const resultSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -97,7 +100,7 @@ test('projects active and terminal invocation snapshots with canonical timestamp
     const output = new FakeInvocationOutputPort();
     output.enqueueTerminalResultRecording();
     execution.enqueuePendingStart();
-    const manager = createLifecycleManager({
+    const manager = await createLifecycleManager({
       execution,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       output,
@@ -148,7 +151,7 @@ test('projects cancelling, failed, cancelled, and timed_out statuses from lifecy
   execution.enqueueStart('running');
   execution.enqueueStart('running');
   const clock = new FakeInvocationClock({ initialNowMs: 0 });
-  const manager = createLifecycleManager({ execution, clock, output });
+  const manager = await createLifecycleManager({ execution, clock, output });
 
   const failed = expectAcceptedInvocation(
     await manager.start(createStartInput({ invocationId: 'failed-snap' })),
@@ -213,7 +216,7 @@ test('filters invocation snapshots and sorts by acceptedAt with invocationId tie
     output.enqueueTerminalResultRecording();
     execution.enqueueStart('running');
     execution.enqueueStart('running');
-    const manager = createLifecycleManager({
+    const manager = await createLifecycleManager({
       execution,
       output,
       outputClaim: claim,
@@ -272,7 +275,7 @@ test('keeps finalizing snapshots visible with the last active status and publish
   const output = new FakeInvocationOutputPort();
   output.enqueuePendingTerminalResultRecording();
   execution.enqueueStart('running');
-  const manager = createLifecycleManager({
+  const manager = await createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output,
@@ -306,7 +309,7 @@ test('keeps preacceptance spawn failure out of invocation snapshots', async () =
     },
   });
   execution.enqueueStart(new Error('spawn failed'));
-  const manager = createLifecycleManager({
+  const manager = await createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output,
@@ -326,7 +329,7 @@ test('uses invocationId as tie-breaker when acceptedAt timestamps are equal', as
     const output = new FakeInvocationOutputPort();
     execution.enqueueStart('running');
     execution.enqueueStart('running');
-    const manager = createLifecycleManager({
+    const manager = await createLifecycleManager({
       execution,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       output,
@@ -350,7 +353,7 @@ test('does not publish a terminal result for preacceptance spawn failure', async
   const output = new FakeInvocationOutputPort();
   output.enqueuePendingTerminalResultRecording();
   execution.enqueueStart(new Error('spawn failed'));
-  const manager = createLifecycleManager({
+  const manager = await createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output,
@@ -377,7 +380,7 @@ test('keeps pending admission out of invocation snapshots until active admission
   const output = new FakeInvocationOutputPort();
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
-  const manager = createLifecycleManager({
+  const manager = await createLifecycleManager({
     execution,
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     output,

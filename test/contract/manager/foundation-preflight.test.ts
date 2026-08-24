@@ -119,6 +119,7 @@ test('rejects workspace admission before output preparation or execution delegat
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     ports,
   );
+  await manager.initialize([]);
 
   await expect(
     manager.start(
@@ -144,6 +145,7 @@ test('admits a normalized absolute workspace before output preparation and execu
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     ports,
   );
+  await manager.initialize([]);
   probe.enqueueResolution({ status: 'resolved', executable: '/resolved/workspace-agent' });
   probe.enqueueVersionStart('running');
   output.enqueueTerminalResultRecording();
@@ -176,6 +178,7 @@ test('freshly probes every invocation before output preparation and execution de
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     ports,
   );
+  await manager.initialize([]);
 
   for (const executable of ['/resolved/first', '/resolved/second']) {
     probe.enqueueResolution({ status: 'resolved', executable });
@@ -270,6 +273,7 @@ test('rejects version mismatch before output preparation or execution delegation
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     ports,
   );
+  await manager.initialize([]);
   probe.enqueueResolution({ status: 'resolved', executable: '/resolved/version-mismatch-agent' });
   probe.enqueueVersionStart('running');
 
@@ -341,6 +345,7 @@ test('orders fresh executable proof after resource-bound preflight and before ou
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     ports,
   );
+  await manager.initialize([]);
 
   const started = manager.start(createStartInput(definition, { invocationId: 'ordered-proof' }));
   await flush();
@@ -367,6 +372,7 @@ test('rejects malformed launch evidence before output preparation or execution d
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     ports,
   );
+  await manager.initialize([]);
   probe.enqueueResolution({ status: 'resolved', executable: '' });
   probe.enqueueVersionStart('running');
 
@@ -388,6 +394,7 @@ test('fails target-platform preflight before output preparation or execution del
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     ports,
   );
+  await manager.initialize([]);
 
   try {
     await manager.start(createStartInput(definition, { invocationId: 'unsupported' }));
@@ -415,6 +422,7 @@ test('reserves an invocation id before probing and retains that reservation afte
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     ports,
   );
+  await manager.initialize([]);
   probe.enqueueResolution({ status: 'resolved', executable: '/resolved/duplicate' });
   probe.enqueueVersionStart('running');
   output.enqueueTerminalResultRecording();
@@ -462,6 +470,7 @@ test('maps a missing preflight composition port to a typed pre-acceptance reject
       },
     },
   );
+  await manager.initialize([]);
 
   await expect(
     manager.start(createStartInput(definition, { invocationId: 'missing-probe-port' })),
@@ -494,6 +503,7 @@ test.each([
       // @ts-expect-error Deliberately exercises unsafe JavaScript composition.
       ports,
     );
+    await manager.initialize([]);
 
     await expect(
       manager.start(createStartInput(definition, { invocationId: `malformed-${_name}` })),
