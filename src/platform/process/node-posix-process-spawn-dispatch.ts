@@ -1,9 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { readFile, readlink, stat } from 'node:fs/promises';
 import type { Readable } from 'node:stream';
-
-import canonicalize from 'canonicalize';
 
 import {
   beginProcessStart,
@@ -27,19 +23,10 @@ import {
   type ProcessStartAttempt,
   type RedactionChannel,
 } from '../../runtime/execution/index.js';
+import { inspectLinuxProcess } from './inspect-linux-process.js';
+import { NODE_POSIX_PROCESS_TERMINATION_TIMEOUTS } from './node-posix-process-termination-timeouts.js';
 import { terminateProcessGroupAndReap } from './posix-process-group-termination.js';
 import type { ProcessCleanupOutcome } from './process-cleanup-outcome.js';
-
-interface LinuxProcessFingerprintRecord {
-  readonly schemaVersion: 'process-fingerprint/v1';
-  readonly platform: 'linux';
-  readonly pid: number;
-  readonly processGroupId: number;
-  readonly creationIdentity: string;
-  readonly executablePath: string;
-  readonly executableIdentity: string;
-  readonly bootSessionIdentity: string;
-}
 
 interface NodePosixProcessSpawnHandle {
   readonly child: ChildProcessWithoutNullStreams;
@@ -54,11 +41,6 @@ interface NodePosixProcessSpawnHandle {
 
 const PROCESS_SPAWN_HANDLES = new WeakMap<object, NodePosixProcessSpawnHandle>();
 const ACTIVATED = new WeakSet<object>();
-const reconcileTimeoutMs = 500;
-const terminationGraceMs = 2_000;
-const postKillTimeoutMs = 500;
-const postTermReapTimeoutMs = 2_000;
-const terminationPollMs = 25;
 
 const noopOutputSink: ProcessOutputSink = Object.freeze({
   write: async (_chunk: Uint8Array): Promise<void> => undefined,
@@ -71,100 +53,6 @@ const rejectedActivation = (): ProcessIoActivationResult =>
 const failedInspection = (
   reason: Extract<ProcessIdentityInspectionResult, { status: 'failed' }>['reason'],
 ): ProcessIdentityInspectionResult => Object.freeze({ status: 'failed', reason });
-
-const positiveSafeInteger = (value: string | undefined): number | undefined => {
-  if (value === undefined || !/^[1-9]\d*$/u.test(value)) return undefined;
-
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1) return undefined;
-
-  return parsed;
-};
-
-const linuxProcessFields = async (pid: number): Promise<readonly string[] | undefined> => {
-  let statLine: string;
-  try {
-    statLine = await readFile(`/proc/${pid}/stat`, 'utf8');
-  } catch {
-    return undefined;
-  }
-
-  const commandEnd = statLine.lastIndexOf(')');
-  if (commandEnd < 0) return undefined;
-
-  return statLine
-    .slice(commandEnd + 1)
-    .trim()
-    .split(/\s+/u);
-};
-
-const fingerprint = (record: LinuxProcessFingerprintRecord): string | undefined => {
-  try {
-    const canonical = canonicalize(record);
-    if (canonical === undefined) return undefined;
-
-    return `sha256:${createHash('sha256').update(canonical, 'utf8').digest('hex')}`;
-  } catch {
-    return undefined;
-  }
-};
-
-const inspectLinuxProcess = async (pid: number): Promise<ProcessIdentityInspectionResult> => {
-  const fields = await linuxProcessFields(pid);
-  if (fields === undefined) return failedInspection('inspection_failed');
-
-  const processGroupId = positiveSafeInteger(fields[2]);
-  if (processGroupId === undefined) return failedInspection('inspection_failed');
-
-  const creationIdentity = fields[19];
-  if (creationIdentity === undefined || !/^[1-9]\d*$/u.test(creationIdentity))
-    return failedInspection('inspection_failed');
-
-  let executablePath: string;
-  try {
-    executablePath = await readlink(`/proc/${pid}/exe`);
-  } catch {
-    return failedInspection('inspection_failed');
-  }
-  if (!executablePath.startsWith('/')) return failedInspection('inspection_failed');
-
-  let executable: Awaited<ReturnType<typeof stat>>;
-  try {
-    executable = await stat(executablePath, { bigint: true });
-  } catch {
-    return failedInspection('inspection_failed');
-  }
-
-  let bootSessionIdentity: string;
-  try {
-    bootSessionIdentity = (await readFile('/proc/sys/kernel/random/boot_id', 'utf8')).trim();
-  } catch {
-    return failedInspection('inspection_failed');
-  }
-  if (bootSessionIdentity.length === 0) return failedInspection('inspection_failed');
-
-  if (processGroupId !== pid) return failedInspection('inspection_failed');
-
-  const record: LinuxProcessFingerprintRecord = {
-    schemaVersion: 'process-fingerprint/v1',
-    platform: 'linux',
-    pid,
-    processGroupId,
-    creationIdentity,
-    executablePath,
-    executableIdentity: `${executable.dev}:${executable.ino}`,
-    bootSessionIdentity,
-  };
-  const processFingerprint = fingerprint(record);
-  if (processFingerprint === undefined) return failedInspection('fingerprint_failed');
-
-  const identity: ProcessIdentity = Object.freeze({
-    pid,
-    processGroupId,
-    fingerprint: processFingerprint,
-  });
-  return Object.freeze({ status: 'identified', identity });
-};
 
 const timeoutAfter = (activeStateDeadline: number): Promise<ProcessIdentityInspectionResult> =>
   new Promise((resolve) => {
@@ -212,11 +100,7 @@ const terminateAndReap = (
   completion: Promise<ProcessExitObservation>,
 ): Promise<ProcessCleanupOutcome | undefined> =>
   terminateProcessGroupAndReap(processGroupId, completion, {
-    reconcileTimeoutMs,
-    terminationGraceMs,
-    postKillTimeoutMs,
-    postTermReapTimeoutMs,
-    terminationPollMs,
+    ...NODE_POSIX_PROCESS_TERMINATION_TIMEOUTS,
   });
 
 const toCleanupAttemptOutcome = (
@@ -353,6 +237,13 @@ export class NodePosixProcessSpawnDispatch {
       return failedInspection('inspection_failed');
 
     return Promise.race([inspectLinuxProcess(pid), timeoutAfter(activeStateDeadline)]);
+  }
+
+  inspectRecoveredProcessIdentity(
+    pid: number,
+    inspectionDeadlineAt: number,
+  ): Promise<ProcessIdentityInspectionResult> {
+    return Promise.race([inspectLinuxProcess(pid), timeoutAfter(inspectionDeadlineAt)]);
   }
 
   activateIo(

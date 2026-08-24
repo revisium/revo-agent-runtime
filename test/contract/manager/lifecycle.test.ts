@@ -204,6 +204,7 @@ test('saves running active state before acceptance and activates only after save
   const completion = testDeferred<InvocationTerminalObservation>();
   const output = new FakeInvocationOutputPort();
   const execution: InvocationExecutionPorts['execution'] = {
+    inspectAndReconcileRecoveredProcess: async () => ({ status: 'inconclusive' as const }),
     spawnAndIdentify: async () => {
       calls.push('spawn-and-identify');
       return Object.freeze({
@@ -268,6 +269,7 @@ test('kills without saving when shutdown closes the manager during spawn and ide
   const identified = testDeferred<void>();
   const calls: string[] = [];
   const execution: InvocationExecutionPorts['execution'] = {
+    inspectAndReconcileRecoveredProcess: async () => ({ status: 'inconclusive' as const }),
     spawnAndIdentify: async () => {
       calls.push('spawn-and-identify');
       await identified.promise;
@@ -317,6 +319,7 @@ test('kills and removes the saved row when shutdown closes the manager during sa
   const save = testDeferred<void>();
   const calls: string[] = [];
   const execution: InvocationExecutionPorts['execution'] = {
+    inspectAndReconcileRecoveredProcess: async () => ({ status: 'inconclusive' as const }),
     spawnAndIdentify: async () => ({
       status: 'identified' as const,
       spawnedAt: Date.now(),
@@ -511,6 +514,7 @@ test('passes prepared invocation resources as the third execution start argument
     ]
   > = [];
   const execution: InvocationExecutionPorts['execution'] = {
+    inspectAndReconcileRecoveredProcess: async () => ({ status: 'inconclusive' as const }),
     spawnAndIdentify: async (snapshot, preparedLaunch, resources) => {
       if (resources === undefined) throw new Error('Expected prepared resources.');
       starts.push([snapshot, preparedLaunch, resources]);

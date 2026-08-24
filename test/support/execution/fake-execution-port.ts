@@ -73,6 +73,12 @@ const deferred = <Value>(): Deferred<Value> => {
 export class FakeInvocationExecutionPort
   implements InvocationExecutionPort, FakeInvocationExecutionControls
 {
+  inspectAndReconcileRecoveredProcess(): Promise<{
+    readonly status: 'inconclusive';
+  }> {
+    return Promise.resolve(Object.freeze({ status: 'inconclusive' as const }));
+  }
+
   private readonly executions = new Map<number, PendingExecution>();
   private readonly callLog: InvocationExecutionCall[] = [];
   private readonly pendingStarts = new Map<number, Deferred<SpawnAndIdentifyResult>>();
