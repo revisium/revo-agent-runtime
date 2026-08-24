@@ -537,27 +537,14 @@ class InternalInvocationLifecycleManager {
         return Object.freeze({ status: 'rejected', reason: 'output_claim_failed' });
       if (this.quarantinedPreparationOutputDirectories.has(plan.outputDirectory))
         return Object.freeze({ status: 'rejected', reason: 'output_prepare_uncertain' });
-      const claim = await this.claimInvocationOutput(plan);
-      if (this.#closing) {
-        if (claim?.status === 'uncertain') {
-          this.quarantinedInvocationIds.set(snapshot.invocationId, claim.guard);
-          this.quarantinedOutputDirectories.add(plan.outputDirectory);
-          return Object.freeze({ status: 'rejected', reason: 'output_claim_uncertain' });
-        }
-        return Object.freeze({ status: 'rejected', reason: 'output_claim_failed' });
-      }
-      if (claim === undefined || claim.status === 'rejected')
-        return Object.freeze({ status: 'rejected', reason: 'output_claim_failed' });
-      if (claim.status === 'uncertain') {
-        this.quarantinedInvocationIds.set(snapshot.invocationId, claim.guard);
-        this.quarantinedOutputDirectories.add(plan.outputDirectory);
-        return Object.freeze({ status: 'rejected', reason: 'output_claim_uncertain' });
-      }
+      const claimOutcome = await this.resolveClaimedSession(snapshot.invocationId, plan);
+      if (claimOutcome.status === 'rejected')
+        return Object.freeze({ status: 'rejected', reason: claimOutcome.reason });
       const preparation = this.createOutputPreparation(
         snapshot,
         preparedLaunch,
         plan,
-        claim.session,
+        claimOutcome.session,
       );
       if (preparation === undefined)
         return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
@@ -1006,6 +993,35 @@ class InternalInvocationLifecycleManager {
       return Object.freeze({ status: 'prepared' as const, resources, authority: result.authority });
     }
     return Object.freeze({ status: result.status });
+  }
+
+  private async resolveClaimedSession(
+    invocationId: string,
+    plan: OutputResourcePlan,
+  ): Promise<
+    | Readonly<{
+        status: 'accepted';
+        session: Extract<OutputClaimResult, { status: 'claimed' }>['session'];
+      }>
+    | Readonly<{ status: 'rejected'; reason: 'output_claim_failed' | 'output_claim_uncertain' }>
+  > {
+    const claim = await this.claimInvocationOutput(plan);
+    if (this.#closing) {
+      if (claim?.status === 'uncertain') {
+        this.quarantinedInvocationIds.set(invocationId, claim.guard);
+        this.quarantinedOutputDirectories.add(plan.outputDirectory);
+        return Object.freeze({ status: 'rejected', reason: 'output_claim_uncertain' });
+      }
+      return Object.freeze({ status: 'rejected', reason: 'output_claim_failed' });
+    }
+    if (claim === undefined || claim.status === 'rejected')
+      return Object.freeze({ status: 'rejected', reason: 'output_claim_failed' });
+    if (claim.status === 'uncertain') {
+      this.quarantinedInvocationIds.set(invocationId, claim.guard);
+      this.quarantinedOutputDirectories.add(plan.outputDirectory);
+      return Object.freeze({ status: 'rejected', reason: 'output_claim_uncertain' });
+    }
+    return Object.freeze({ status: 'accepted', session: claim.session });
   }
 
   private async claimInvocationOutput(

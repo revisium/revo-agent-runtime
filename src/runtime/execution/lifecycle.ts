@@ -191,7 +191,7 @@ export class InvocationLifecycle {
       .then(() => execution.requestCancellation())
       .then(
         (outcome) => {
-          this.cleanupSettlementDeferred.resolve(outcome === undefined ? 'confirmed' : outcome);
+          this.cleanupSettlementDeferred.resolve(outcome ?? 'confirmed');
           cancellation.resolve(undefined);
         },
         (error: unknown) => {

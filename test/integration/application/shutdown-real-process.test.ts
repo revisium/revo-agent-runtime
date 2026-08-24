@@ -48,15 +48,16 @@ afterEach(async () => {
   temporaryRoot = undefined;
 });
 
-test('shutdown terminates and reaps a real process before resolving', async () => {
-  if (process.platform !== 'linux') return;
-  temporaryRoot = await mkdtemp(join(tmpdir(), 'revo-shutdown-real-'));
-  const outputParent = join(temporaryRoot, 'outputs');
-  await mkdir(outputParent);
-  const outputDirectory = join(outputParent, 'invocation');
-  const pidFile = join(temporaryRoot, 'child.pid');
-  const signalFile = join(temporaryRoot, 'signals.log');
-  const script = `
+test.runIf(process.platform === 'linux')(
+  'shutdown terminates and reaps a real process before resolving',
+  async () => {
+    temporaryRoot = await mkdtemp(join(tmpdir(), 'revo-shutdown-real-'));
+    const outputParent = join(temporaryRoot, 'outputs');
+    await mkdir(outputParent);
+    const outputDirectory = join(outputParent, 'invocation');
+    const pidFile = join(temporaryRoot, 'child.pid');
+    const signalFile = join(temporaryRoot, 'signals.log');
+    const script = `
 const fs = require('node:fs');
 const [pidFile, signalFile] = process.argv.slice(1, 3);
 fs.writeFileSync(pidFile, String(process.pid));
@@ -65,61 +66,64 @@ process.on('SIGTERM', () => {
 });
 setInterval(() => undefined, 1000);
 `;
-  const definition = buildAgentDefinition({
-    launch: {
-      command: process.execPath,
-      args: [
-        { kind: 'literal', value: '-e' },
-        { kind: 'literal', value: script },
-        { kind: 'literal', value: pidFile },
-        { kind: 'literal', value: signalFile },
-        { kind: 'prompt' },
-        { kind: 'result-schema' },
-      ],
-      versionProbe: {
-        args: ['-e', "console.log('agent 1.0.0')"],
-        stream: 'stdout',
-        prefix: 'agent ',
-        timeoutMs: 1_000,
+    const definition = buildAgentDefinition({
+      launch: {
+        command: process.execPath,
+        args: [
+          { kind: 'literal', value: '-e' },
+          { kind: 'literal', value: script },
+          { kind: 'literal', value: pidFile },
+          { kind: 'literal', value: signalFile },
+          { kind: 'prompt' },
+          { kind: 'result-schema' },
+        ],
+        versionProbe: {
+          args: ['-e', "console.log('agent 1.0.0')"],
+          stream: 'stdout',
+          prefix: 'agent ',
+          timeoutMs: 1_000,
+        },
       },
-    },
-  });
-  const manager = createInvocationLifecycleManager(
-    { definitions: [definition] },
-    {
-      clock: new FakeInvocationClock({ initialNowMs: 0 }),
-      executableProbe: new FreshAvailableExecutableProbePort(process.execPath, '1.0.0'),
-      output: createNodePosixInvocationOutputPort(),
-      outputClaim: new NodePosixOutputClaimPort(),
-      outputPreparation: new NodePosixOutputPreparationPort(),
-      workspace: { admit: async (directory) => ({ status: 'admitted', directory }) },
-    },
-  );
+    });
+    const manager = createInvocationLifecycleManager(
+      { definitions: [definition] },
+      {
+        clock: new FakeInvocationClock({ initialNowMs: 0 }),
+        executableProbe: new FreshAvailableExecutableProbePort(process.execPath, '1.0.0'),
+        output: createNodePosixInvocationOutputPort(),
+        outputClaim: new NodePosixOutputClaimPort(),
+        outputPreparation: new NodePosixOutputPreparationPort(),
+        workspace: { admit: async (directory) => ({ status: 'admitted', directory }) },
+      },
+    );
 
-  const start = await manager.start({
-    invocationId: 'real-shutdown',
-    agent: { id: definition.id, version: definition.version },
-    prompt: 'Return JSON.',
-    workspace: { directory: temporaryRoot },
-    parameters: {},
-    permissions: {},
-    result: { schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object' } },
-    output: { directory: outputDirectory },
-  });
-  expect(start.status).toBe('accepted');
-  if (start.status !== 'accepted') throw new Error('Expected accepted invocation.');
-  await waitUntil(async () => (await readIfExists(pidFile)) !== undefined);
-  const pidText = await readFile(pidFile, 'utf8');
-  const pid = Number(pidText);
-  expect(Number.isSafeInteger(pid)).toBe(true);
-  expect(processExists(pid)).toBe(true);
+    const start = await manager.start({
+      invocationId: 'real-shutdown',
+      agent: { id: definition.id, version: definition.version },
+      prompt: 'Return JSON.',
+      workspace: { directory: temporaryRoot },
+      parameters: {},
+      permissions: {},
+      result: {
+        schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object' },
+      },
+      output: { directory: outputDirectory },
+    });
+    expect(start.status).toBe('accepted');
+    if (start.status !== 'accepted') throw new Error('Expected accepted invocation.');
+    await waitUntil(async () => (await readIfExists(pidFile)) !== undefined);
+    const pidText = await readFile(pidFile, 'utf8');
+    const pid = Number(pidText);
+    expect(Number.isSafeInteger(pid)).toBe(true);
+    expect(processExists(pid)).toBe(true);
 
-  const startedAt = Date.now();
-  await expect(manager.shutdown('integration shutdown')).resolves.toBeUndefined();
-  const elapsedMs = Date.now() - startedAt;
+    const startedAt = Date.now();
+    await expect(manager.shutdown('integration shutdown')).resolves.toBeUndefined();
+    const elapsedMs = Date.now() - startedAt;
 
-  await expect(start.handle.result()).resolves.toMatchObject({ status: 'cancelled' });
-  await expect(readFile(signalFile, 'utf8')).resolves.toContain('SIGTERM');
-  expect(processExists(pid)).toBe(false);
-  expect(elapsedMs).toBeGreaterThanOrEqual(1_900);
-});
+    await expect(start.handle.result()).resolves.toMatchObject({ status: 'cancelled' });
+    await expect(readFile(signalFile, 'utf8')).resolves.toContain('SIGTERM');
+    expect(processExists(pid)).toBe(false);
+    expect(elapsedMs).toBeGreaterThanOrEqual(1_900);
+  },
+);
