@@ -6,20 +6,23 @@ import type {
   InvocationInputSnapshot,
   InvocationTerminalObservation,
   PreparedLaunch,
+  ProcessCleanupAttemptOutcome,
 } from '../../../src/runtime/execution/index.js';
+import type { ExecutableProbePort } from '../../../src/runtime/probe/index.js';
 import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
 import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../../support/execution/fake-output-claim-port.js';
 import { FakeInvocationOutputPort } from '../../support/execution/fake-output-port.js';
 import { FakeOutputPreparationPort } from '../../support/execution/fake-output-preparation-port.js';
+import { FakeExecutableProbePort } from '../../support/probe/fake-executable-probe-port.js';
 import { FreshAvailableExecutableProbePort } from '../../support/probe/fresh-available-executable-probe-port.js';
 
 const cancellationCompletion = (
   outcome:
-    | Readonly<{ status: 'committed'; completion: Promise<void> }>
+    | Readonly<{ status: 'committed'; completion: Promise<unknown> }>
     | Readonly<{ status: 'too_late' }>,
-): Promise<void> => {
+): Promise<unknown> => {
   expect(outcome.status).toBe('committed');
   if (outcome.status !== 'committed') throw new Error('Expected committed cancellation.');
   return outcome.completion;
@@ -34,14 +37,20 @@ type LifecycleManagerPortsInput = Omit<
   'workspace' | 'outputClaim' | 'outputPreparation'
 > &
   Partial<Pick<InvocationExecutionPorts, 'workspace' | 'outputClaim' | 'outputPreparation'>>;
+type LifecycleManagerInput = LifecycleManagerPortsInput &
+  Readonly<{ executableProbe?: ExecutableProbePort }>;
 
-const createLifecycleManager = (ports: LifecycleManagerPortsInput) =>
+const createLifecycleManager = (ports: LifecycleManagerInput) =>
   createInvocationLifecycleManager(lifecycleOptions, {
     ...ports,
-    executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
+    executableProbe:
+      ports.executableProbe ??
+      new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
     outputClaim: ports.outputClaim ?? new FakeOutputClaimPort('created'),
     outputPreparation: ports.outputPreparation ?? new FakeOutputPreparationPort('prepared'),
-    workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
+    workspace: ports.workspace ?? {
+      admit: async () => ({ status: 'admitted', directory: '/workspace/project' }),
+    },
   });
 
 const resultSchema = {
@@ -130,6 +139,44 @@ const flush = async (): Promise<void> => {
   await Promise.resolve();
   await Promise.resolve();
   await Promise.resolve();
+};
+
+interface TestDeferred<Value> {
+  readonly promise: Promise<Value>;
+  readonly resolve: (value: Value) => void;
+  readonly reject: (reason: Error) => void;
+}
+
+const testDeferred = <Value>(): TestDeferred<Value> => {
+  let resolve: ((value: Value) => void) | undefined;
+  let reject: ((reason: Error) => void) | undefined;
+  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  if (resolve === undefined || reject === undefined)
+    throw new Error('Unable to create test deferred.');
+  return Object.freeze({ promise, resolve, reject });
+};
+
+const availableProbeExit = () =>
+  Object.freeze({
+    status: 'exited' as const,
+    exitCode: 0,
+    signal: null,
+    stdout: new TextEncoder().encode('agent 1.0.0\n'),
+    stderr: new Uint8Array(),
+    overflow: 'none' as const,
+  });
+
+const waitUntil = async (predicate: () => boolean, remaining = 20): Promise<void> => {
+  if (predicate()) return;
+  if (remaining > 0) {
+    await Promise.resolve();
+    await waitUntil(predicate, remaining - 1);
+    return;
+  }
+  expect(predicate()).toBe(true);
 };
 
 test('prepared output settlement reaches accepted start and delegates unchanged prepared launch to execution', async () => {
@@ -455,6 +502,333 @@ test('retains the id after one output commit failure without retrying the commit
     status: 'rejected',
     reason: 'duplicate_invocation',
   });
+});
+
+const cleanupFailure = (): ProcessCleanupAttemptOutcome =>
+  Object.freeze({
+    cause: 'group_still_live',
+    termSent: true,
+    killSent: true,
+    lastKnownGroupState: 'present',
+    leaderReapState: 'pending',
+  });
+
+test('shutdown is idempotent and drains active invocations through cleanup settlement before completion', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  execution.enqueueStart('running');
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+  await expect(
+    manager.start(createStartInput({ invocationId: 'shutdown-a' })),
+  ).resolves.toMatchObject({
+    status: 'accepted',
+  });
+  await expect(
+    manager.start(createStartInput({ invocationId: 'shutdown-b' })),
+  ).resolves.toMatchObject({
+    status: 'accepted',
+  });
+  await flush();
+
+  const first = manager.shutdown('first reason');
+  const second = manager.shutdown('ignored reason');
+
+  expect(second).toBe(first);
+  await flush();
+  expect(execution.calls()).toEqual([
+    { type: 'start' },
+    { type: 'start' },
+    { type: 'request-cancellation', executionId: 1 },
+    { type: 'request-cancellation', executionId: 2 },
+  ]);
+  execution.settleCancellationRequest(1);
+  execution.settleCancellationRequest(2);
+  await flush();
+  expect(manager.getResult('shutdown-a')).toEqual({ state: 'active' });
+  execution.confirmCancellation(1);
+  execution.confirmCancellation(2);
+  await expect(first).resolves.toBeUndefined();
+  expect(manager.getResult('shutdown-a')).toMatchObject({ state: 'completed' });
+  expect(manager.getResult('shutdown-b')).toMatchObject({ state: 'completed' });
+});
+
+test('shutdown rejects with shutdown_failed on cleanup failure without deleting the active invocation', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+  await expect(
+    manager.start(createStartInput({ invocationId: 'shutdown-cleanup-failed' })),
+  ).resolves.toMatchObject({ status: 'accepted' });
+  await flush();
+
+  const shutdown = manager.shutdown('cleanup failed');
+  await flush();
+  execution.settleCancellationRequest(1, cleanupFailure());
+
+  await expect(shutdown).rejects.toMatchObject({
+    fault: { code: 'revo.agent.shutdown_failed', phase: 'shutdown', retryable: false },
+  });
+  expect(manager.getResult('shutdown-cleanup-failed')).toEqual({ state: 'active' });
+  expect(manager.getInvocation('shutdown-cleanup-failed')).toMatchObject({
+    invocationId: 'shutdown-cleanup-failed',
+    status: 'cancelling',
+  });
+});
+
+test('shutdown does not reject when invocation execution fails after confirmed cleanup', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+  await expect(
+    manager.start(createStartInput({ invocationId: 'shutdown-execution-failed' })),
+  ).resolves.toMatchObject({ status: 'accepted' });
+  await flush();
+
+  const shutdown = manager.shutdown('stop');
+  await flush();
+  execution.settleCancellationRequest(1);
+  execution.settleCompletionFailure(1, new Error('execution failed'));
+
+  await expect(shutdown).resolves.toBeUndefined();
+  expect(manager.getResult('shutdown-execution-failed')).toMatchObject({ state: 'completed' });
+});
+
+test('shutdown rejects new starts and new subscriptions while existing reads and cancel stay usable', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+  const accepted = await manager.start(createStartInput({ invocationId: 'shutdown-reads' }));
+  if (accepted.status !== 'accepted') throw new Error('Expected accepted invocation.');
+  await flush();
+
+  const shutdown = manager.shutdown('closing');
+  expect(() => manager.subscribe({}, () => undefined)).toThrow('Agent manager is closed.');
+  await expect(manager.start(createStartInput({ invocationId: 'after-close' }))).resolves.toEqual({
+    status: 'rejected',
+    reason: 'manager_closed',
+  });
+  expect(manager.getInvocation('shutdown-reads')).toMatchObject({ invocationId: 'shutdown-reads' });
+  expect(manager.listInvocations({ invocationId: 'shutdown-reads' })).toHaveLength(1);
+  expect(manager.getResult('shutdown-reads')).toEqual({ state: 'active' });
+  await expect(manager.cancel('shutdown-reads')).resolves.toEqual({ state: 'requested' });
+
+  execution.settleCancellationRequest(1);
+  execution.confirmCancellation(1);
+  await expect(shutdown).resolves.toBeUndefined();
+  await expect(accepted.handle.result()).resolves.toMatchObject({ status: 'cancelled' });
+});
+
+test('shutdown arbitration rejects a start waiting at workspace admission', async () => {
+  const workspaceAdmission =
+    testDeferred<Awaited<ReturnType<InvocationExecutionPorts['workspace']['admit']>>>();
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+    workspace: { admit: async () => workspaceAdmission.promise },
+  });
+
+  const start = manager.start(createStartInput({ invocationId: 'closing-at-workspace' }));
+  await flush();
+  const shutdown = manager.shutdown('closing');
+  workspaceAdmission.resolve({ status: 'admitted', directory: '/workspace/project' });
+
+  await expect(start).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  await expect(shutdown).resolves.toBeUndefined();
+  expect(execution.calls()).toEqual([]);
+  expect(manager.getResult('closing-at-workspace')).toEqual({ state: 'unknown' });
+});
+
+test('shutdown arbitration rejects a start waiting at output admission', async () => {
+  const outputAdmission = testDeferred<void>();
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const delayedOutput: InvocationExecutionPorts['output'] = Object.freeze({
+    admit: async (request: Parameters<InvocationExecutionPorts['output']['admit']>[0]) =>
+      outputAdmission.promise.then(() =>
+        Object.freeze({ status: 'admitted' as const, plan: Object.freeze({ ...request }) }),
+      ),
+    appendLifecycleEvent: output.appendLifecycleEvent.bind(output),
+    publishTerminalResult: output.publishTerminalResult.bind(output),
+    publishRawResponse: output.publishRawResponse.bind(output),
+    cleanupScratch: output.cleanupScratch.bind(output),
+  });
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output: delayedOutput,
+  });
+
+  const start = manager.start(createStartInput({ invocationId: 'closing-at-output-admit' }));
+  await flush();
+  const shutdown = manager.shutdown('closing');
+  outputAdmission.resolve(undefined);
+
+  await expect(start).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  await expect(shutdown).resolves.toBeUndefined();
+  expect(execution.calls()).toEqual([]);
+  expect(manager.getResult('closing-at-output-admit')).toEqual({ state: 'unknown' });
+});
+
+test('shutdown arbitration rejects a start waiting at executable probe', async () => {
+  const probe = new FakeExecutableProbePort({ platform: 'linux' });
+  probe.enqueueResolution({ status: 'resolved', executable: '/resolved/fixture-agent' });
+  probe.enqueueVersionStart('running');
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+    executableProbe: probe,
+  });
+
+  const start = manager.start(createStartInput({ invocationId: 'closing-at-probe' }));
+  await flush();
+  const shutdown = manager.shutdown('closing');
+  probe.settleCompletion(1, availableProbeExit());
+
+  await expect(start).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  await expect(shutdown).resolves.toBeUndefined();
+  expect(execution.calls()).toEqual([]);
+  expect(manager.getResult('closing-at-probe')).toEqual({ state: 'unknown' });
+});
+
+test('shutdown arbitration rejects and drains a start waiting at output claim', async () => {
+  const outputClaim = new FakeOutputClaimPort('pending');
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+    outputClaim,
+  });
+
+  const start = manager.start(createStartInput({ invocationId: 'closing-at-claim' }));
+  await waitUntil(() => outputClaim.pendingClaimCount() === 1);
+  expect(outputClaim.pendingClaimCount()).toBe(1);
+  const shutdown = manager.shutdown('closing');
+  outputClaim.settlePendingCreated(1);
+
+  await expect(start).resolves.toEqual({ status: 'rejected', reason: 'output_claim_failed' });
+  await expect(shutdown).resolves.toBeUndefined();
+  expect(outputClaim.pendingClaimCount()).toBe(0);
+  expect(execution.calls()).toEqual([]);
+  expect(manager.getResult('closing-at-claim')).toEqual({ state: 'unknown' });
+});
+
+test('shutdown arbitration rejects and quarantines a start waiting at output preparation settlement', async () => {
+  const outputPreparation = new FakeOutputPreparationPort('pending');
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+    outputPreparation,
+  });
+
+  const start = manager.start(createStartInput({ invocationId: 'closing-at-preparation' }));
+  await waitUntil(() => outputPreparation.pendingPreparationCount() === 1);
+  expect(outputPreparation.pendingPreparationCount()).toBe(1);
+  const shutdown = manager.shutdown('closing');
+  outputPreparation.settlePendingPrepared(1);
+
+  await expect(start).resolves.toEqual({
+    status: 'rejected',
+    reason: 'output_prepare_uncertain',
+  });
+  await expect(shutdown).resolves.toBeUndefined();
+  expect(outputPreparation.pendingPreparationCount()).toBe(0);
+  expect(execution.calls()).toEqual([]);
+  await expect(
+    manager.start(
+      createStartInput({
+        invocationId: 'closing-at-preparation',
+        output: { directory: '/outputs/other' },
+      }),
+    ),
+  ).resolves.toEqual({ status: 'rejected', reason: 'manager_closed' });
+});
+
+test('shutdown arbitration rejects at the final synchronous active-install boundary', async () => {
+  const outputPreparation = new FakeOutputPreparationPort('pending');
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+    outputPreparation,
+  });
+
+  const start = manager.start(createStartInput({ invocationId: 'closing-before-active' }));
+  await waitUntil(() => outputPreparation.pendingPreparationCount() === 1);
+  outputPreparation.settlePendingPrepared(1);
+  const shutdown = manager.shutdown('closing');
+
+  await expect(start).resolves.toEqual({
+    status: 'rejected',
+    reason: 'output_prepare_uncertain',
+  });
+  await expect(shutdown).resolves.toBeUndefined();
+  expect(execution.calls()).toEqual([]);
+  expect(manager.getResult('closing-before-active')).toEqual({ state: 'unknown' });
+});
+
+test('shutdown delivers the last terminal event to existing subscriptions before clearing them', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+  await expect(
+    manager.start(createStartInput({ invocationId: 'shutdown-terminal-event' })),
+  ).resolves.toMatchObject({ status: 'accepted' });
+  await flush();
+  const events: string[] = [];
+  const admission = manager.subscribe({}, (event) => events.push(event.invocationId));
+  expect(admission.state).toBe('subscribed');
+
+  const shutdown = manager.shutdown('closing');
+  await flush();
+  execution.settleCancellationRequest(1);
+  execution.confirmCancellation(1);
+  await expect(shutdown).resolves.toBeUndefined();
+
+  expect(events).toEqual(['shutdown-terminal-event']);
 });
 
 test('rejects an out-of-profile result schema before output preparation or execution start', async () => {

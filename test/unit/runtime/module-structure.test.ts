@@ -173,6 +173,7 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/process-supervision-port/invocation-token-carrier.ts',
     'execution/process-supervision-port/live-owned-process.ts',
     'execution/process-supervision-port/paused-process-io.ts',
+    'execution/process-supervision-port/process-cleanup-attempt-outcome.ts',
     'execution/process-supervision-port/process-cleanup-failure-cause.ts',
     'execution/process-supervision-port/process-cleanup-failure-evidence.ts',
     'execution/process-supervision-port/process-cleanup-failure.ts',

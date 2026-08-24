@@ -30,9 +30,11 @@ import {
   type ChildEnvironmentCapture,
   type InvocationExecutionPorts,
   type NormalizedInvocationOutcome,
+  type OutputClaimAttempt,
   type OutputClaimGuard,
   type OutputClaimResult,
   type OutputPreparationAttempt,
+  type ProcessCleanupAttemptOutcome,
   type OutputResourcePlan,
   type ResultSchemaValidator,
   type TerminalPublicationAuthority,
@@ -65,6 +67,7 @@ type RejectionReason =
   | 'output_prepare_failed'
   | 'output_prepare_uncertain'
   | 'environment_invalid'
+  | 'manager_closed'
   | 'preflight_failed';
 
 type LifecycleResultLookup =
@@ -107,6 +110,7 @@ type LifecycleStartOutcome =
 interface Deferred<Value> {
   readonly promise: Promise<Value>;
   readonly resolve: (value: Value) => void;
+  readonly reject: (reason: unknown) => void;
 }
 
 const resultSchemaPath = '/resultSchema';
@@ -358,12 +362,66 @@ const validateEffectiveInvocationInputs = (
 
 const createDeferred = <Value>(): Deferred<Value> => {
   let resolve: ((value: Value) => void) | undefined;
-  const promise = new Promise<Value>((resolvePromise) => {
+  let reject: ((reason: unknown) => void) | undefined;
+  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
-  if (resolve === undefined) throw new Error('Unable to create lifecycle result completion.');
-  return Object.freeze({ promise, resolve });
+  if (resolve === undefined || reject === undefined)
+    throw new Error('Unable to create lifecycle result completion.');
+  return Object.freeze({ promise, resolve, reject });
 };
+
+const managerClosedError = (): AgentManagerError =>
+  new AgentManagerError(
+    Object.freeze({
+      code: 'revo.agent.manager_closed' as const,
+      message: AGENT_FAULT_MESSAGES.managerClosed,
+      phase: 'manager' as const,
+      retryable: false,
+    }),
+  );
+
+const shutdownFailedError = (
+  failures: readonly ShutdownDrainResult[],
+  reason: string | undefined,
+): AgentManagerError => {
+  const first = failures.find((failure) => failure.kind === 'cleanup_failed');
+  return new AgentManagerError(
+    Object.freeze({
+      code: 'revo.agent.shutdown_failed' as const,
+      message: AGENT_FAULT_MESSAGES.shutdownFailed,
+      phase: 'shutdown' as const,
+      retryable: false,
+      details: Object.freeze({
+        ...(first === undefined ? {} : { invocationId: first.invocationId }),
+        failureCount: failures.length,
+        ...(reason === undefined ? {} : { reason }),
+      }),
+    }),
+  );
+};
+
+const textDecoder = new TextDecoder();
+const redactedShutdownReason = (
+  reason: string | undefined,
+  secretValues: readonly string[],
+): string | undefined => {
+  if (reason === undefined) return undefined;
+  let copied = textDecoder.decode(new TextEncoder().encode(reason).slice(0, 4096));
+  for (const secret of secretValues) {
+    if (secret.length > 0) copied = copied.split(secret).join('[REDACTED]');
+  }
+  return copied;
+};
+
+type ShutdownDrainResult =
+  | Readonly<{ invocationId: string; kind: 'terminal' }>
+  | Readonly<{
+      invocationId: string;
+      kind: 'cleanup_failed';
+      outcome: ProcessCleanupAttemptOutcome;
+    }>;
 
 const createResultSchemaValidator = (
   snapshot: InvocationInputSnapshot,
@@ -422,6 +480,9 @@ const createHandle = (
 
 class InternalInvocationLifecycleManager {
   readonly #configuredSecretValues: readonly string[];
+  #closing = false;
+  #shutdownDeferred: Deferred<void> | undefined;
+  #firstShutdownReason: string | undefined;
   private readonly executionPort: InvocationExecutionPorts['execution'];
   private readonly active = new Map<string, ActiveInvocation>();
   private readonly pending = new Set<string>();
@@ -431,7 +492,9 @@ class InternalInvocationLifecycleManager {
   private readonly quarantinedOutputDirectories = new Set<string>();
   private readonly quarantinedPreparationInvocationIds = new Set<string>();
   private readonly quarantinedPreparationOutputDirectories = new Set<string>();
+  private readonly pendingClaimAttempts = new Map<string, OutputClaimAttempt>();
   private readonly pendingPreparationAttempts = new Map<string, OutputPreparationAttempt>();
+  private readonly inFlightStarts = new Map<string, Deferred<void>>();
   constructor(
     private readonly ports: LifecycleManagerPorts,
     private readonly completed: CompletedInvocations,
@@ -453,10 +516,14 @@ class InternalInvocationLifecycleManager {
     const startContext = StartContextSnapshot.create(context);
     if (snapshot === undefined || startContext === undefined)
       return Object.freeze({ status: 'rejected', reason: 'invalid_request' });
+    if (this.#closing) return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
     if (!this.reserve(snapshot.invocationId))
       return Object.freeze({ status: 'rejected', reason: 'duplicate_invocation' });
+    const startCompletion = createDeferred<void>();
+    this.inFlightStarts.set(snapshot.invocationId, startCompletion);
     try {
       const preflightResult = await this.preflight(snapshot, startContext);
+      if (this.#closing) return Object.freeze({ status: 'rejected', reason: 'preflight_failed' });
       if (preflightResult.status === 'invalid-result-schema')
         return Object.freeze({ status: 'rejected', reason: 'invalid_result_schema' });
       if (preflightResult.status === 'rejected')
@@ -471,6 +538,14 @@ class InternalInvocationLifecycleManager {
       if (this.quarantinedPreparationOutputDirectories.has(plan.outputDirectory))
         return Object.freeze({ status: 'rejected', reason: 'output_prepare_uncertain' });
       const claim = await this.claimInvocationOutput(plan);
+      if (this.#closing) {
+        if (claim?.status === 'uncertain') {
+          this.quarantinedInvocationIds.set(snapshot.invocationId, claim.guard);
+          this.quarantinedOutputDirectories.add(plan.outputDirectory);
+          return Object.freeze({ status: 'rejected', reason: 'output_claim_uncertain' });
+        }
+        return Object.freeze({ status: 'rejected', reason: 'output_claim_failed' });
+      }
       if (claim === undefined || claim.status === 'rejected')
         return Object.freeze({ status: 'rejected', reason: 'output_claim_failed' });
       if (claim.status === 'uncertain') {
@@ -489,8 +564,11 @@ class InternalInvocationLifecycleManager {
       this.pendingPreparationAttempts.set(snapshot.invocationId, preparation.attempt);
       const preparationResult = await this.consumeAndBeginOutputPreparation(preparation);
       this.pendingPreparationAttempts.delete(snapshot.invocationId);
-      if (preparationResult.status === 'rejected')
+      if (preparationResult.status === 'rejected') {
+        this.quarantinedPreparationInvocationIds.add(snapshot.invocationId);
+        this.quarantinedPreparationOutputDirectories.add(plan.outputDirectory);
         return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
+      }
       if (preparationResult.status === 'uncertain') {
         this.quarantinedPreparationInvocationIds.add(snapshot.invocationId);
         this.quarantinedPreparationOutputDirectories.add(plan.outputDirectory);
@@ -498,6 +576,11 @@ class InternalInvocationLifecycleManager {
       }
       if (preparationResult.status !== 'prepared')
         return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
+      if (this.#closing) {
+        this.quarantinedPreparationInvocationIds.add(snapshot.invocationId);
+        this.quarantinedPreparationOutputDirectories.add(plan.outputDirectory);
+        return Object.freeze({ status: 'rejected', reason: 'output_prepare_uncertain' });
+      }
       const resources = preparationResult.resources;
       const authority = preparationResult.authority;
       const acceptedAt = createIsoTimestamp();
@@ -529,6 +612,8 @@ class InternalInvocationLifecycleManager {
     } finally {
       this.pendingPreparationAttempts.delete(snapshot.invocationId);
       this.pending.delete(snapshot.invocationId);
+      this.inFlightStarts.delete(snapshot.invocationId);
+      startCompletion.resolve(undefined);
     }
   }
 
@@ -593,7 +678,51 @@ class InternalInvocationLifecycleManager {
   }
 
   subscribe(filter: unknown, listener: TerminalEventListener): TerminalSubscriptionAdmission {
+    if (this.#closing) throw managerClosedError();
     return this.subscriptions.subscribe(filter, listener);
+  }
+
+  shutdown(reason?: string): Promise<void> {
+    if (this.#shutdownDeferred !== undefined) return this.#shutdownDeferred.promise;
+    this.#closing = true;
+    this.#firstShutdownReason = redactedShutdownReason(reason, this.#configuredSecretValues);
+    this.#shutdownDeferred = createDeferred<void>();
+    void this.performShutdown().then(this.#shutdownDeferred.resolve, this.#shutdownDeferred.reject);
+    return this.#shutdownDeferred.promise;
+  }
+
+  private async performShutdown(): Promise<void> {
+    const activeDrains = [...this.active.entries()].map(([invocationId, active]) =>
+      this.drainActiveInvocation(invocationId, active),
+    );
+    const claimDrains = [...this.pendingClaimAttempts.values()].map((attempt) => {
+      attempt.requestCancellation();
+      return attempt.quiescence.catch(() => undefined);
+    });
+    const preparationDrains = [...this.pendingPreparationAttempts.values()].map((attempt) => {
+      attempt.requestCancellation();
+      return attempt.quiescence.catch(() => undefined);
+    });
+    const startDrains = [...this.inFlightStarts.values()].map((start) => start.promise);
+
+    await Promise.all([...claimDrains, ...preparationDrains]);
+    await Promise.all(startDrains);
+    const results = await Promise.all(activeDrains);
+    const failures = results.filter((result) => result.kind === 'cleanup_failed');
+    if (failures.length > 0) throw shutdownFailedError(failures, this.#firstShutdownReason);
+    this.subscriptions.clear();
+  }
+
+  private async drainActiveInvocation(
+    invocationId: string,
+    active: ActiveInvocation,
+  ): Promise<ShutdownDrainResult> {
+    active.lifecycle.requestCancellation();
+    const outcome = await active.lifecycle.cleanupSettlement;
+    if (outcome !== 'confirmed' && outcome !== 'not_dispatched')
+      return Object.freeze({ invocationId, kind: 'cleanup_failed' as const, outcome });
+    await active.completion.promise.catch(() => undefined);
+    return Object.freeze({ invocationId, kind: 'terminal' as const });
   }
 
   private complete(
@@ -643,10 +772,12 @@ class InternalInvocationLifecycleManager {
     if (workspace === undefined || typeof workspace.admit !== 'function')
       return Object.freeze({ status: 'rejected' });
     const workspaceAdmission = await workspace.admit(snapshot.workspace);
+    if (this.#closing) return Object.freeze({ status: 'rejected' });
     if (workspaceAdmission.status !== 'admitted') return Object.freeze({ status: 'rejected' });
     const outputAdmissionRequest = createOutputAdmissionRequest(snapshot, request.binding);
     if (outputAdmissionRequest === undefined) return Object.freeze({ status: 'rejected' });
     const outputAdmission = await this.ports.output.admit(outputAdmissionRequest);
+    if (this.#closing) return Object.freeze({ status: 'rejected' });
     if (outputAdmission.status !== 'admitted') return Object.freeze({ status: 'rejected' });
     const interpretedTemplate = interpretArgumentTemplate({
       template: request.target.definition.launch.args,
@@ -699,6 +830,7 @@ class InternalInvocationLifecycleManager {
     const port = this.ports.executableProbe;
     if (port === undefined) return Object.freeze({ status: 'rejected' });
     const result = await probeExecutable(target, port);
+    if (this.#closing) return Object.freeze({ status: 'rejected' });
     if (result.status === 'available') {
       if (
         result.agent.id !== target.definition.id ||
@@ -888,8 +1020,13 @@ class InternalInvocationLifecycleManager {
       clock: this.ports.clock,
       port,
     });
-    beginOutputClaim(attempt);
-    return attempt.settlement;
+    this.pendingClaimAttempts.set(plan.invocationId, attempt);
+    try {
+      beginOutputClaim(attempt);
+      return await attempt.settlement;
+    } finally {
+      this.pendingClaimAttempts.delete(plan.invocationId);
+    }
   }
 }
 
@@ -903,6 +1040,7 @@ export const createInvocationLifecycleManager = (
   listInvocations(filter?: AgentInvocationFilter): readonly AgentInvocationSnapshot[];
   start(input: unknown, context?: unknown): Promise<LifecycleStartOutcome>;
   subscribe(filter: unknown, listener: TerminalEventListener): TerminalSubscriptionAdmission;
+  shutdown(reason?: string): Promise<void>;
   waitForResult(invocationId: string): Promise<LifecycleWaitResult>;
 }> => {
   const validated = validateManagerOptions(options);

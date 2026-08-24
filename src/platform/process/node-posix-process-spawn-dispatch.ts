@@ -16,6 +16,7 @@ import {
   SpawnAcceptedProcess,
   wrapRedactionChannelAsBoundedOutputSink,
   type LiveOwnedProcess,
+  type ProcessCleanupAttemptOutcome,
   type ProcessExitObservation,
   type ProcessIdentity,
   type ProcessIdentityInspectionResult,
@@ -218,6 +219,19 @@ const terminateAndReap = (
     terminationPollMs,
   });
 
+const toCleanupAttemptOutcome = (
+  outcome: ProcessCleanupOutcome | undefined,
+): ProcessCleanupAttemptOutcome | undefined =>
+  outcome === undefined
+    ? undefined
+    : Object.freeze({
+        cause: outcome.cause,
+        termSent: outcome.termSent,
+        killSent: outcome.killSent,
+        lastKnownGroupState: outcome.lastKnownGroupState,
+        leaderReapState: outcome.leaderReapState,
+      });
+
 const toBytes = (chunk: unknown): Uint8Array => {
   if (typeof chunk === 'string') return Buffer.from(chunk);
   if (chunk instanceof Uint8Array) return new Uint8Array(chunk);
@@ -230,7 +244,7 @@ const pumpStdout = async (
   stream: Readable,
   evidence: ProcessOutputSink,
   protocol: ProcessOutputSink,
-  cleanup: () => Promise<void>,
+  cleanup: () => Promise<unknown>,
 ): Promise<void> => {
   try {
     for await (const chunk of stream) {
@@ -248,7 +262,7 @@ const pumpStdout = async (
 const pumpStderr = async (
   stream: Readable,
   evidence: ProcessOutputSink,
-  cleanup: () => Promise<void>,
+  cleanup: () => Promise<unknown>,
 ): Promise<void> => {
   try {
     for await (const chunk of stream) await evidence.write(toBytes(chunk));
@@ -394,10 +408,10 @@ export class NodePosixProcessSpawnDispatch {
     }
 
     ACTIVATED.add(process);
-    let cleanup: Promise<void> | undefined;
-    const cleanupProcess = (): Promise<void> => {
+    let cleanup: Promise<ProcessCleanupAttemptOutcome | undefined> | undefined;
+    const cleanupProcess = (): Promise<ProcessCleanupAttemptOutcome | undefined> => {
       cleanup ??= terminateAndReap(identity.processGroupId, handle.completion).then(
-        () => undefined,
+        toCleanupAttemptOutcome,
       );
       return cleanup;
     };

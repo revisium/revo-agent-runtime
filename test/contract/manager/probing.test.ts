@@ -1,11 +1,19 @@
 import { expect, test } from 'vitest';
 
 import * as managerModule from '../../../src/application/manager/index.js';
-import { createProbeableAgentDiscovery } from '../../../src/application/manager/index.js';
+import {
+  createInvocationLifecycleManager,
+  createProbeableAgentDiscovery,
+} from '../../../src/application/manager/index.js';
 import { AgentManagerError } from '../../../src/runtime/errors/index.js';
 import { AGENT_FAULT_MESSAGES } from '../../../src/runtime/policy/index.js';
 import type { AgentDefinitionInput, AgentRef } from '../../../src/runtime/spec/index.js';
 import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
+import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
+import { FakeInvocationExecutionPort } from '../../support/execution/fake-execution-port.js';
+import { FakeOutputClaimPort } from '../../support/execution/fake-output-claim-port.js';
+import { FakeInvocationOutputPort } from '../../support/execution/fake-output-port.js';
+import { FakeOutputPreparationPort } from '../../support/execution/fake-output-preparation-port.js';
 import { FakeExecutableProbePort } from '../../support/probe/fake-executable-probe-port.js';
 
 const flushMicrotasks = async (remaining = 12): Promise<void> => {
@@ -368,4 +376,38 @@ test('shares one FIFO cap across private discovery APIs and yields before a late
   expect(singleResult.status).toBe('available');
   expect(batchResult).toHaveLength(9);
   expect(Object.isFrozen(batchResult)).toBe(true);
+});
+
+test('documents current shutdown gap: discovery probes still work after lifecycle manager closing', async () => {
+  const definition = withVersionProbe('gap-probe-after-close');
+  const lifecycleManager = createInvocationLifecycleManager(
+    { definitions: [definition] },
+    {
+      clock: new FakeInvocationClock({ initialNowMs: 0 }),
+      execution: new FakeInvocationExecutionPort(),
+      executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
+      output: new FakeInvocationOutputPort(),
+      outputClaim: new FakeOutputClaimPort('created'),
+      outputPreparation: new FakeOutputPreparationPort('prepared'),
+      workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
+    },
+  );
+  const discoveryPort = new FakeExecutableProbePort({ platform: 'linux' });
+  const discovery = createProbeableAgentDiscovery({ definitions: [definition] }, discoveryPort);
+
+  await expect(lifecycleManager.shutdown('closing lifecycle only')).resolves.toBeUndefined();
+  for (let index = 0; index < 2; index += 1) {
+    discoveryPort.enqueueResolution({
+      status: 'resolved',
+      executable: '/fixture/bin/gap-probe-after-close',
+    });
+    discoveryPort.enqueueVersionStart(exited());
+  }
+
+  await expect(discovery.probeAgent(reference('gap-probe-after-close'))).resolves.toMatchObject({
+    status: 'available',
+  });
+  await expect(discovery.probeAgents([reference('gap-probe-after-close')])).resolves.toMatchObject([
+    { status: 'available' },
+  ]);
 });

@@ -10,6 +10,7 @@ import type { NormalizedInvocationOutcome } from './normalized-invocation-outcom
 import { getTerminalPublicationInvocationToken } from './output-preparation-attempt/index.js';
 import type { TerminalPublicationAuthority } from './output-preparation-attempt/index.js';
 import type { PreparedLaunch } from './prepared-launch.js';
+import type { ProcessCleanupAttemptOutcome } from './process-supervision-port/index.js';
 
 type LifecycleState =
   | 'accepted'
@@ -30,16 +31,16 @@ const internalFailureObservation = (spawnedAt = Date.now()): InvocationTerminalO
     primary: Object.freeze({ kind: 'internal' }),
   });
 
-interface Deferred {
-  readonly promise: Promise<void>;
-  readonly resolve: () => void;
+interface Deferred<Value = void> {
+  readonly promise: Promise<Value>;
+  readonly resolve: (value: Value) => void;
   readonly reject: (reason: unknown) => void;
 }
 
-const deferred = (): Deferred => {
-  let resolve: (() => void) | undefined;
+const deferred = <Value = void>(): Deferred<Value> => {
+  let resolve: ((value: Value) => void) | undefined;
   let reject: ((reason: unknown) => void) | undefined;
-  const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+  const promise = new Promise<Value>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
   });
@@ -50,6 +51,9 @@ const deferred = (): Deferred => {
 
 export class InvocationLifecycle {
   private cancellation: Deferred | undefined;
+  private readonly cleanupSettlementDeferred = deferred<
+    ProcessCleanupAttemptOutcome | 'confirmed' | 'not_dispatched'
+  >();
   private cancellationCause: CancellationCause | undefined;
   private deadlineCancellation: (() => void) | undefined;
   private execution: RunningExecution | undefined;
@@ -77,6 +81,10 @@ export class InvocationLifecycle {
 
   requestCancellation(): CancellationCommitOutcome {
     return this.requestCancellationFor('caller');
+  }
+
+  get cleanupSettlement(): Promise<ProcessCleanupAttemptOutcome | 'confirmed' | 'not_dispatched'> {
+    return this.cleanupSettlementDeferred.promise;
   }
 
   currentState(): LifecycleState {
@@ -181,19 +189,25 @@ export class InvocationLifecycle {
       return;
     void Promise.resolve()
       .then(() => execution.requestCancellation())
-      .then(cancellation.resolve, (error: unknown) => {
-        cancellation.reject(error);
-        queueMicrotask(() =>
-          this.beginFinalization(
-            Object.freeze({
-              status: 'failed' as const,
-              spawnedAt: execution.spawnedAt,
-              exit: Object.freeze({ exitCode: null, signal: null }),
-              primary: Object.freeze({ kind: 'internal' as const }),
-            }),
-          ),
-        );
-      });
+      .then(
+        (outcome) => {
+          this.cleanupSettlementDeferred.resolve(outcome === undefined ? 'confirmed' : outcome);
+          cancellation.resolve(undefined);
+        },
+        (error: unknown) => {
+          cancellation.reject(error);
+          queueMicrotask(() =>
+            this.beginFinalization(
+              Object.freeze({
+                status: 'failed' as const,
+                spawnedAt: execution.spawnedAt,
+                exit: Object.freeze({ exitCode: null, signal: null }),
+                primary: Object.freeze({ kind: 'internal' as const }),
+              }),
+            ),
+          );
+        },
+      );
   }
 
   private beginFinalization(observation: InvocationTerminalObservation): void {
@@ -274,6 +288,7 @@ export class InvocationLifecycle {
       });
     }
     this.settlement = settlement;
+    this.cleanupSettlementDeferred.resolve('not_dispatched');
     this.state = 'terminal';
     this.onTerminal(settlement);
   }

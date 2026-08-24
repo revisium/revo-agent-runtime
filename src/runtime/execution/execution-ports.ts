@@ -7,6 +7,7 @@ import type {
   takePreparedInvocationResourcesPayload,
 } from './output-preparation-attempt/index.js';
 import type { PreparedLaunch } from './prepared-launch.js';
+import type { ProcessCleanupAttemptOutcome } from './process-supervision-port/index.js';
 import type { TerminalPublicationPort } from './terminal-publication-port/index.js';
 import type { WorkspaceAdmissionResult } from './workspace-admission-result.js';
 
@@ -23,7 +24,7 @@ export interface InvocationExecutionPorts {
     ): Promise<{
       readonly spawnedAt: number;
       readonly completion: Promise<InvocationTerminalObservation>;
-      requestCancellation(): Promise<void>;
+      requestCancellation(): Promise<ProcessCleanupAttemptOutcome | undefined>;
     }>;
   };
   readonly workspace: {

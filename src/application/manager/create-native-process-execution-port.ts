@@ -9,6 +9,7 @@ import {
   type InterimDuplexPrimaryFailure,
   type InvocationExecutionPorts,
   type InvocationTerminalObservation,
+  type ProcessCleanupAttemptOutcome,
   type ProcessExitObservation,
   type ProcessSpawnRequest,
   type ProcessStartAttempt,
@@ -74,7 +75,7 @@ const failedExecution = (spawnedAt: number): RunningExecution =>
   Object.freeze({
     spawnedAt,
     completion: Promise.resolve(failedObservation(spawnedAt)),
-    requestCancellation: async (): Promise<void> => undefined,
+    requestCancellation: async (): Promise<ProcessCleanupAttemptOutcome | undefined> => undefined,
   });
 
 const disposeResourcesFrontEnds = (
@@ -164,7 +165,8 @@ export const createNativeProcessExecutionPort = (
                 exit: syntheticNoProcessExit,
               }),
             ),
-            requestCancellation: async (): Promise<void> => undefined,
+            requestCancellation: async (): Promise<ProcessCleanupAttemptOutcome | undefined> =>
+              undefined,
           });
         return failedExecution(settlement.process.spawnedAt);
       }
@@ -263,7 +265,8 @@ export const createNativeProcessExecutionPort = (
         return Object.freeze({
           spawnedAt: settlement.process.spawnedAt,
           completion,
-          requestCancellation: async (): Promise<void> => undefined,
+          requestCancellation: async (): Promise<ProcessCleanupAttemptOutcome | undefined> =>
+            cleanup,
         });
       }
       const attachResult = attachOutcome;
@@ -280,7 +283,8 @@ export const createNativeProcessExecutionPort = (
           completion: Promise.resolve(candidate).then(
             async () => (await duplexCompletion(coordinator)) ?? candidate,
           ),
-          requestCancellation: async (): Promise<void> => undefined,
+          requestCancellation: async (): Promise<ProcessCleanupAttemptOutcome | undefined> =>
+            undefined,
         });
       }
 
@@ -332,8 +336,8 @@ export const createNativeProcessExecutionPort = (
           return (await duplexCompletion(coordinator)) ?? candidate;
         });
 
-      let cancellationCompletion: Promise<void> | undefined;
-      const requestCancellation = (): Promise<void> => {
+      let cancellationCompletion: Promise<ProcessCleanupAttemptOutcome | undefined> | undefined;
+      const requestCancellation = (): Promise<ProcessCleanupAttemptOutcome | undefined> => {
         if (cancellationCompletion !== undefined) return cancellationCompletion;
         const candidate: InvocationTerminalObservation = Object.freeze({
           status: 'cancelled' as const,
@@ -343,7 +347,7 @@ export const createNativeProcessExecutionPort = (
         submitDuplexCandidate(coordinator, candidate);
         cancellationCompletion = (async () => {
           const sent = await attachResult.session.requestCancellation();
-          if (sent !== 'sent') await activation.process.terminateAndReap();
+          return sent === 'sent' ? undefined : activation.process.terminateAndReap();
         })();
         return cancellationCompletion;
       };

@@ -10,6 +10,7 @@ import {
   settleProcessStart,
   type InvocationExecutionPorts,
   type LiveOwnedProcess,
+  type ProcessCleanupAttemptOutcome,
   type ProcessExitObservation,
   type ProcessIdentity,
   type ProcessInputSink,
@@ -424,7 +425,9 @@ test('disposes prepared resource front ends after failed identity inspection', a
 
 test('disposes prepared resource front ends after failed protocol attach', async () => {
   const resources = preparedResourcesWithSpies();
-  const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+  const terminateAndReap = vi.fn(
+    async (): Promise<ProcessCleanupAttemptOutcome | undefined> => undefined,
+  );
   const identity: ProcessIdentity = Object.freeze({
     pid: 10,
     processGroupId: 10,
@@ -475,7 +478,9 @@ const inertInput: ProcessInputSink = Object.freeze({
   abort: async (): Promise<void> => undefined,
 });
 
-const fakeLiveProcess = (terminateAndReap: () => Promise<void>): LiveOwnedProcess =>
+const fakeLiveProcess = (
+  terminateAndReap: () => Promise<ProcessCleanupAttemptOutcome | undefined>,
+): LiveOwnedProcess =>
   Object.freeze({
     spawnedAt: 1,
     identity: Object.freeze({ pid: 10, processGroupId: 10, fingerprint: 'sha256:test' }),
@@ -491,7 +496,9 @@ const pendingInput: ProcessInputSink = Object.freeze({
 });
 
 test('failed protocol attach terminates the activated process and fails completion', async () => {
-  const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+  const terminateAndReap = vi.fn(
+    async (): Promise<ProcessCleanupAttemptOutcome | undefined> => undefined,
+  );
   const identity: ProcessIdentity = Object.freeze({
     pid: 10,
     processGroupId: 10,
@@ -598,7 +605,9 @@ test('bounds protocol attach by preacceptance deadline without disposing live st
     vi.setSystemTime(spawnedAt);
     const resources = preparedResourcesWithSpies();
     const exit = deferred<{ readonly exitCode: 0; readonly signal: null }>();
-    const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+    const terminateAndReap = vi.fn(
+      async (): Promise<ProcessCleanupAttemptOutcome | undefined> => undefined,
+    );
     const identity: ProcessIdentity = Object.freeze({
       pid: 10,
       processGroupId: 10,
@@ -677,7 +686,9 @@ test('bounds protocol attach by fixed duplex-operation timeout before a longer p
     const spawnedAt = 30_000;
     vi.setSystemTime(spawnedAt);
     const exit = deferred<{ readonly exitCode: 0; readonly signal: null }>();
-    const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+    const terminateAndReap = vi.fn(
+      async (): Promise<ProcessCleanupAttemptOutcome | undefined> => undefined,
+    );
     const identity: ProcessIdentity = Object.freeze({
       pid: 10,
       processGroupId: 10,
@@ -747,7 +758,9 @@ test('bounds protocol attach by fixed duplex-operation timeout before a longer p
 
 test('terminates and reports internal failure when protocol attach unexpectedly rejects', async () => {
   const exit = deferred<{ readonly exitCode: 0; readonly signal: null }>();
-  const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+  const terminateAndReap = vi.fn(
+    async (): Promise<ProcessCleanupAttemptOutcome | undefined> => undefined,
+  );
   const identity: ProcessIdentity = Object.freeze({
     pid: 10,
     processGroupId: 10,
@@ -811,7 +824,9 @@ test('reports internal failure when process completion rejects after a timeout-s
     const spawnedAt = 30_000;
     vi.setSystemTime(spawnedAt);
     const exit = deferred<{ readonly exitCode: 0; readonly signal: null }>();
-    const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+    const terminateAndReap = vi.fn(
+      async (): Promise<ProcessCleanupAttemptOutcome | undefined> => undefined,
+    );
     const identity: ProcessIdentity = Object.freeze({
       pid: 10,
       processGroupId: 10,
@@ -880,7 +895,9 @@ test('reports internal failure when process completion rejects after a timeout-s
 
 test('reports internal failure when protocol finalization rejects after a successful attach', async () => {
   const exit = deferred<{ readonly exitCode: 0; readonly signal: null }>();
-  const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+  const terminateAndReap = vi.fn(
+    async (): Promise<ProcessCleanupAttemptOutcome | undefined> => undefined,
+  );
   const identity: ProcessIdentity = Object.freeze({
     pid: 10,
     processGroupId: 10,
@@ -980,7 +997,7 @@ const attachedCancellationDriver = (input: {
 
 const activatedAttachedExecution = (input: {
   readonly completion: Promise<ProcessExitObservation>;
-  readonly terminateAndReap: () => Promise<void>;
+  readonly terminateAndReap: () => Promise<ProcessCleanupAttemptOutcome | undefined>;
 }): InvocationExecutionPorts['execution'] => {
   const identity: ProcessIdentity = Object.freeze({
     pid: 10,
@@ -1009,7 +1026,9 @@ const activatedAttachedExecution = (input: {
 
 test('memoizes caller cancellation completion and only terminates once', async () => {
   const exit = deferred<ProcessExitObservation>();
-  const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+  const terminateAndReap = vi.fn(
+    async (): Promise<ProcessCleanupAttemptOutcome | undefined> => undefined,
+  );
   attachedCancellationDriver({ requestCancellation: async () => 'unsupported' });
   const execution = activatedAttachedExecution({
     completion: exit.promise,
@@ -1031,7 +1050,9 @@ test('memoizes caller cancellation completion and only terminates once', async (
 
 test('keeps synchronously committed caller cancellation when natural completion follows', async () => {
   const exit = deferred<ProcessExitObservation>();
-  const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+  const terminateAndReap = vi.fn(
+    async (): Promise<ProcessCleanupAttemptOutcome | undefined> => undefined,
+  );
   attachedCancellationDriver({ requestCancellation: async () => 'unsupported' });
   const execution = activatedAttachedExecution({
     completion: exit.promise,
@@ -1056,7 +1077,9 @@ test('keeps synchronously committed caller cancellation when natural completion 
 
 test('fulfills caller cancellation after fallback termination cleanup', async () => {
   const exit = deferred<ProcessExitObservation>();
-  const terminateAndReap = vi.fn(async (): Promise<void> => undefined);
+  const terminateAndReap = vi.fn(
+    async (): Promise<ProcessCleanupAttemptOutcome | undefined> => undefined,
+  );
   attachedCancellationDriver({ requestCancellation: async () => 'unsupported' });
   const execution = activatedAttachedExecution({
     completion: exit.promise,
