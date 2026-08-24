@@ -3,6 +3,7 @@ export const AGENT_RUNTIME_LIMITS = Object.freeze({
   schemaBytes: 1_048_576,
   definitions: 1_000,
   probeBatch: 1_000,
+  activeSnapshots: 1_000,
   schemaDepth: 64,
   schemaNodes: 8_192,
   resultNodes: 65_536,

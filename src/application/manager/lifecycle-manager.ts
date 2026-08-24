@@ -59,6 +59,7 @@ import type {
 import { ActiveStateLane } from './active-state-lane.js';
 import { CompletedInvocations } from './completed-invocations.js';
 import { createNativeProcessExecutionPort } from './create-native-process-execution-port.js';
+import { inspectBatchRefs } from './inspect-batch-refs.js';
 import { InstalledBindingRegistry } from './installed-bindings.js';
 import type { RetainedInvocationRecord } from './retained-invocation-record.js';
 import { TerminalSubscriptions } from './subscriptions.js';
@@ -72,6 +73,7 @@ type RejectionReason =
   | 'output_prepare_failed'
   | 'output_prepare_uncertain'
   | 'environment_invalid'
+  | 'manager_not_initialized'
   | 'manager_closed'
   | 'process_identity_failed'
   | 'active_state_failed'
@@ -289,6 +291,7 @@ interface ResourceBoundPreflight {
 type PreflightRejection =
   | Readonly<{ status: 'rejected'; reason?: Extract<RejectionReason, 'environment_invalid'> }>
   | Readonly<{ status: 'invalid-result-schema' }>;
+type BatchInspection = ReturnType<typeof inspectBatchRefs>;
 
 const textEncoder = new TextEncoder();
 
@@ -396,6 +399,131 @@ const managerClosedError = (): AgentManagerError =>
     }),
   );
 
+const managerNotInitializedError = (): AgentManagerError =>
+  new AgentManagerError(
+    Object.freeze({
+      code: 'revo.agent.manager_not_initialized' as const,
+      message: AGENT_FAULT_MESSAGES.managerNotInitialized,
+      phase: 'initializing' as const,
+      retryable: false,
+    }),
+  );
+
+const recoveryInvalidError = (): AgentManagerError =>
+  new AgentManagerError(
+    Object.freeze({
+      code: 'revo.agent.recovery_invalid' as const,
+      message: AGENT_FAULT_MESSAGES.recoveryInvalid,
+      phase: 'initializing' as const,
+      retryable: false,
+    }),
+  );
+
+const recoveryFailedError = (
+  details: Readonly<{ invocationIds: readonly string[] }>,
+): AgentManagerError =>
+  new AgentManagerError(
+    Object.freeze({
+      code: 'revo.agent.recovery_failed' as const,
+      message: AGENT_FAULT_MESSAGES.recoveryFailed,
+      phase: 'initializing' as const,
+      retryable: false,
+      details: Object.freeze({ invocationIds: [...details.invocationIds] }),
+    }),
+  );
+
+const initializeLimitInvalidError = (): AgentManagerError =>
+  new AgentManagerError(
+    Object.freeze({
+      code: 'revo.agent.limit_invalid' as const,
+      message: AGENT_FAULT_MESSAGES.limitInvalid,
+      phase: 'initializing' as const,
+      retryable: false,
+      details: Object.freeze({
+        operation: 'initialize',
+        limit: AGENT_RUNTIME_LIMITS.activeSnapshots,
+      }),
+    }),
+  );
+
+const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && Object.getPrototypeOf(value) === Object.prototype;
+
+const hasExactKeys = (value: Record<string, unknown>, keys: readonly string[]): boolean => {
+  const ownKeys = Reflect.ownKeys(value);
+  return (
+    ownKeys.length === keys.length &&
+    keys.every((key) => ownKeys.includes(key)) &&
+    ownKeys.every((key) => typeof key === 'string')
+  );
+};
+
+const isPositiveSafeInteger = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;
+
+const validateAndCopyRows = (
+  refs: readonly unknown[],
+):
+  | Readonly<{ status: 'invalid' }>
+  | Readonly<{ status: 'valid'; snapshots: readonly ActiveInvocationSnapshot[] }> => {
+  const snapshots: ActiveInvocationSnapshot[] = [];
+  const invocationIds = new Set<string>();
+  try {
+    for (const ref of refs) {
+      if (!isPlainRecord(ref) || !hasExactKeys(ref, ['invocationId', 'pin', 'state', 'process']))
+        return Object.freeze({ status: 'invalid' });
+      const pin = ref.pin;
+      const process = ref.process;
+      const pid = isPlainRecord(process) ? process.pid : undefined;
+      const processGroupId = isPlainRecord(process) ? process.processGroupId : undefined;
+      if (
+        !isPlainRecord(pin) ||
+        !hasExactKeys(pin, ['agentId', 'agentVersion', 'definitionDigest']) ||
+        typeof pin.agentId !== 'string' ||
+        pin.agentId.length === 0 ||
+        typeof pin.agentVersion !== 'string' ||
+        pin.agentVersion.length === 0 ||
+        typeof pin.definitionDigest !== 'string' ||
+        pin.definitionDigest.length === 0 ||
+        typeof ref.invocationId !== 'string' ||
+        ref.invocationId.length === 0 ||
+        (ref.state !== 'running' && ref.state !== 'cancelling') ||
+        !isPlainRecord(process) ||
+        !hasExactKeys(process, ['pid', 'processGroupId', 'fingerprint', 'startedAt']) ||
+        !isPositiveSafeInteger(pid) ||
+        !isPositiveSafeInteger(processGroupId) ||
+        typeof process.fingerprint !== 'string' ||
+        process.fingerprint.length === 0 ||
+        typeof process.startedAt !== 'string' ||
+        process.startedAt.length === 0 ||
+        invocationIds.has(ref.invocationId)
+      )
+        return Object.freeze({ status: 'invalid' });
+      invocationIds.add(ref.invocationId);
+      snapshots.push(
+        Object.freeze({
+          invocationId: ref.invocationId,
+          pin: Object.freeze({
+            agentId: pin.agentId,
+            agentVersion: pin.agentVersion,
+            definitionDigest: pin.definitionDigest,
+          }),
+          state: ref.state,
+          process: Object.freeze({
+            pid,
+            processGroupId,
+            fingerprint: process.fingerprint,
+            startedAt: process.startedAt,
+          }),
+        }),
+      );
+    }
+  } catch {
+    return Object.freeze({ status: 'invalid' });
+  }
+  return Object.freeze({ status: 'valid', snapshots: Object.freeze(snapshots) });
+};
+
 const shutdownFailedError = (
   failures: readonly ShutdownDrainResult[],
   reason: string | undefined,
@@ -497,6 +625,8 @@ class InternalInvocationLifecycleManager {
   readonly #activeStateOperationTimeoutMs: number;
   #closing = false;
   #shutdownDeferred: Deferred<void> | undefined;
+  #initialized: 'pending' | 'ready' | 'failed' = 'pending';
+  #initializationDeferred: Deferred<void> | undefined;
   #firstShutdownReason: string | undefined;
   private readonly executionPort: InvocationExecutionPorts['execution'];
   private readonly active = new Map<string, ActiveInvocation>();
@@ -533,7 +663,38 @@ class InternalInvocationLifecycleManager {
       ports.execution ?? createNativeProcessExecutionPort(undefined, activeStateOperationTimeoutMs);
   }
 
+  initialize(snapshots: unknown): Promise<void> {
+    if (this.#initializationDeferred !== undefined) return this.#initializationDeferred.promise;
+    if (this.#closing) return Promise.reject(managerClosedError());
+
+    this.#initializationDeferred = createDeferred<void>();
+    const inspection = inspectBatchRefs(snapshots, AGENT_RUNTIME_LIMITS.activeSnapshots);
+    void this.#settleInitialization(inspection).then(
+      () => {
+        this.#initialized = 'ready';
+        this.#initializationDeferred?.resolve(undefined);
+      },
+      (error_: unknown) => {
+        this.#initialized = 'failed';
+        this.#initializationDeferred?.reject(error_);
+      },
+    );
+    return this.#initializationDeferred.promise;
+  }
+
+  #startReadinessRejection(): LifecycleStartOutcome | undefined {
+    if (this.#closing) return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
+    if (this.#initialized !== 'ready')
+      return Object.freeze({
+        status: 'rejected',
+        reason: this.#initialized === 'failed' ? 'manager_closed' : 'manager_not_initialized',
+      });
+    return undefined;
+  }
+
   async start(input: unknown, context?: unknown): Promise<LifecycleStartOutcome> {
+    const notReady = this.#startReadinessRejection();
+    if (notReady !== undefined) return notReady;
     const snapshot = InvocationInputSnapshot.create(input, this.limits);
     const startContext = StartContextSnapshot.create(context);
     if (snapshot === undefined || startContext === undefined)
@@ -802,6 +963,7 @@ class InternalInvocationLifecycleManager {
   }
 
   getResult(invocationId: string): LifecycleResultLookup {
+    this.#assertReady();
     if (this.active.has(invocationId)) return Object.freeze({ state: 'active' });
 
     const record = this.completed.get(invocationId);
@@ -811,6 +973,7 @@ class InternalInvocationLifecycleManager {
   }
 
   waitForResult(invocationId: string): Promise<LifecycleWaitResult> {
+    this.#assertReady();
     const active = this.active.get(invocationId);
     if (active !== undefined) return active.completion.promise;
 
@@ -819,6 +982,7 @@ class InternalInvocationLifecycleManager {
   }
 
   cancel(invocationId: string): Promise<CancelOutcome> {
+    this.#assertReady();
     const active = this.active.get(invocationId);
     if (active !== undefined) {
       const outcome = active.lifecycle.requestCancellation();
@@ -839,6 +1003,7 @@ class InternalInvocationLifecycleManager {
   }
 
   getInvocation(invocationId: string): AgentInvocationSnapshot | undefined {
+    this.#assertReady();
     const active = this.active.get(invocationId);
     if (active !== undefined) return activeSnapshot(invocationId, active);
     const record = this.completed.get(invocationId);
@@ -846,6 +1011,7 @@ class InternalInvocationLifecycleManager {
   }
 
   listInvocations(filter?: AgentInvocationFilter): readonly AgentInvocationSnapshot[] {
+    this.#assertReady();
     const snapshots = [
       ...[...this.active.entries()].map(([invocationId, active]) =>
         activeSnapshot(invocationId, active),
@@ -863,7 +1029,26 @@ class InternalInvocationLifecycleManager {
 
   subscribe(filter: unknown, listener: TerminalEventListener): TerminalSubscriptionAdmission {
     if (this.#closing) throw managerClosedError();
+    this.#assertReady();
     return this.subscriptions.subscribe(filter, listener);
+  }
+
+  #assertReady(): void {
+    if (this.#initialized === 'ready') return;
+    throw this.#initialized === 'failed' ? managerClosedError() : managerNotInitializedError();
+  }
+
+  async #settleInitialization(inspection: BatchInspection): Promise<void> {
+    await Promise.resolve();
+    if (inspection.status === 'invalid') throw recoveryInvalidError();
+    if (inspection.status === 'limit') throw initializeLimitInvalidError();
+
+    const rows = validateAndCopyRows(inspection.refs);
+    if (rows.status === 'invalid') throw recoveryInvalidError();
+    if (rows.snapshots.length === 0) return;
+    throw recoveryFailedError({
+      invocationIds: rows.snapshots.map((snapshot) => snapshot.invocationId),
+    });
   }
 
   shutdown(reason?: string): Promise<void> {
@@ -1299,6 +1484,7 @@ export const createInvocationLifecycleManager = (
   options: unknown,
   ports: LifecycleManagerPorts,
 ): Readonly<{
+  initialize(snapshots: readonly ActiveInvocationSnapshot[]): Promise<void>;
   cancel(invocationId: string): Promise<CancelOutcome>;
   getInvocation(invocationId: string): AgentInvocationSnapshot | undefined;
   getResult(invocationId: string): LifecycleResultLookup;

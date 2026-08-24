@@ -14,7 +14,7 @@ const cancellationCompletion = (
 };
 
 test('rejects invalid preflight inputs without accepting an invocation', async () => {
-  const invalidRequest = createLifecycleConformanceSubject();
+  const invalidRequest = await createLifecycleConformanceSubject();
   const invalidRequestEvents: unknown[] = [];
   invalidRequest.manager.subscribe({}, (event) => invalidRequestEvents.push(event));
   await expect(invalidRequest.start(invalidRequest.createInput(''))).resolves.toEqual({
@@ -26,7 +26,7 @@ test('rejects invalid preflight inputs without accepting an invocation', async (
   expect(invalidRequest.manager.getResult('')).toEqual({ state: 'unknown' });
   expect(invalidRequestEvents).toEqual([]);
 
-  const invalidSchema = createLifecycleConformanceSubject();
+  const invalidSchema = await createLifecycleConformanceSubject();
   const invalidSchemaEvents: unknown[] = [];
   invalidSchema.manager.subscribe({}, (event) => invalidSchemaEvents.push(event));
   await expect(
@@ -41,7 +41,7 @@ test('rejects invalid preflight inputs without accepting an invocation', async (
   expect(invalidSchema.manager.getResult('invalid-schema')).toEqual({ state: 'unknown' });
   expect(invalidSchemaEvents).toEqual([]);
 
-  const unavailableOutput = createLifecycleConformanceSubject();
+  const unavailableOutput = await createLifecycleConformanceSubject();
   const unavailableOutputEvents: unknown[] = [];
   unavailableOutput.manager.subscribe({}, (event) => unavailableOutputEvents.push(event));
   unavailableOutput.outputPreparation.enqueue('scratch-create-failed');
@@ -57,7 +57,7 @@ test('rejects invalid preflight inputs without accepting an invocation', async (
 });
 
 test('accepts only one concurrent invocation and snapshots caller-owned input', async () => {
-  const subject = createLifecycleConformanceSubject();
+  const subject = await createLifecycleConformanceSubject();
   const metadata = { nested: { state: 'accepted' } };
   subject.output.enqueueTerminalResultRecording();
   subject.execution.enqueueStart('running');
@@ -83,7 +83,7 @@ test('accepts only one concurrent invocation and snapshots caller-owned input', 
 });
 
 test('cancels one accepted invocation exactly once after spawn confirmation', async () => {
-  const subject = createLifecycleConformanceSubject();
+  const subject = await createLifecycleConformanceSubject();
   subject.output.enqueueTerminalResultRecording();
   subject.execution.enqueuePendingStart();
 

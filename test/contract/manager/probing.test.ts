@@ -401,6 +401,7 @@ test('documents current shutdown gap: discovery probes still work after lifecycl
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
   );
+  await lifecycleManager.initialize([]);
   const discoveryPort = new FakeExecutableProbePort({ platform: 'linux' });
   const discovery = createProbeableAgentDiscovery(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },

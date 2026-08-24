@@ -65,9 +65,9 @@ const createInput = (
         }),
   });
 
-export const createLifecycleConformanceSubject = (
+export const createLifecycleConformanceSubject = async (
   options: Readonly<{ maxCompletedInvocations?: number }> = Object.freeze({}),
-): LifecycleConformanceSubject => {
+): Promise<LifecycleConformanceSubject> => {
   const clock = new FakeInvocationClock({ initialNowMs: 0 });
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
@@ -93,6 +93,7 @@ export const createLifecycleConformanceSubject = (
     },
   });
   const manager = createInvocationLifecycleManager(managerOptions, ports);
+  await manager.initialize([]);
 
   return Object.freeze({
     clock,

@@ -98,6 +98,7 @@ test('reuses compiled effective input validators across starts for the same defi
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
   );
+  await manager.initialize([]);
 
   const outcomes = await Promise.all(
     ['cached-effective-input-one', 'cached-effective-input-two'].map((invocationId) =>
@@ -159,6 +160,7 @@ test('rejects effective parameters before workspace, output, and execution when 
       workspace: { admit: workspace },
     },
   );
+  await manager.initialize([]);
 
   await expect(
     manager.start({
@@ -211,6 +213,7 @@ test('rejects effective permissions before workspace, output, and execution when
       workspace: { admit: workspace },
     },
   );
+  await manager.initialize([]);
 
   await expect(
     manager.start({
@@ -299,6 +302,7 @@ test('retains package-owned canonical effective parameter and permission copies 
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
   );
+  await manager.initialize([]);
 
   const outcome = await manager.start({
     invocationId: 'canonical-effective-inputs',
@@ -386,6 +390,7 @@ test('plans output resources after workspace admission and before executable pro
       workspace: { admit: workspace },
     },
   );
+  await manager.initialize([]);
 
   const outcome = await manager.start({
     invocationId: 'output-resource-plan',
@@ -452,6 +457,7 @@ test('rejects output admission failures before executable probe, output prepare,
       workspace: { admit: workspace },
     },
   );
+  await manager.initialize([]);
 
   await expect(
     manager.start({
@@ -503,6 +509,7 @@ test('rejects mismatched or incomplete available probe evidence after output adm
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
   );
+  await manager.initialize([]);
   const exactAgent = Object.freeze({ id: definition.id, version: definition.version });
   const exactEvidence = {
     status: 'available' as const,
@@ -595,6 +602,7 @@ test('preclaim binding disagreement rejects before workspace admission', async (
       workspace: { admit: workspace },
     },
   );
+  await manager.initialize([]);
 
   await expect(
     manager.start({
@@ -749,6 +757,7 @@ test('captures named child environment from start context before workspace, outp
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
   );
+  await manager.initialize([]);
   const context = {
     environment: {
       inherit: ['REVO_VISIBLE_ENV'],
@@ -821,6 +830,7 @@ test('keeps registered secrets out of enumerable launch views', async () => {
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
   );
+  await manager.initialize([]);
 
   const outcome = await manager.start(
     {
@@ -865,7 +875,7 @@ test('keeps registered secrets out of enumerable launch views', async () => {
   }
 });
 
-test('keeps configured redaction secrets out of enumerable manager views', () => {
+test('keeps configured redaction secrets out of enumerable manager views', async () => {
   const definition = buildAgentDefinition();
   const manager = createInvocationLifecycleManager(
     {
@@ -886,6 +896,7 @@ test('keeps configured redaction secrets out of enumerable manager views', () =>
       },
     },
   );
+  await manager.initialize([]);
 
   const enumerableViews = [
     Object.keys(manager).join('\n'),
@@ -922,6 +933,7 @@ test('rejects registered secret failures before workspace, output, and execution
       workspace: { admit: workspace },
     },
   );
+  await manager.initialize([]);
 
   await expect(
     manager.start({
@@ -964,6 +976,7 @@ test('rejects missing inherited child environment names before workspace, output
       workspace: { admit: workspace },
     },
   );
+  await manager.initialize([]);
 
   await expect(
     manager.start(
@@ -1001,6 +1014,7 @@ test('rejects malformed start context before reserving invocation ids', async ()
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
   );
+  await manager.initialize([]);
   const context = { environment: { inherit: ['REVO_ALLOWED_ENV'] }, extra: true };
 
   await expect(
@@ -1124,6 +1138,7 @@ test('interprets launch template in definition order and maps each permission it
       workspace: { admit: workspace },
     },
   );
+  await manager.initialize([]);
 
   const outcome = await manager.start({
     invocationId: 'interpreted-template',
@@ -1193,6 +1208,7 @@ test('rejects permission mapping failures before executable probe, output prepar
       workspace: { admit: workspace },
     },
   );
+  await manager.initialize([]);
 
   await expect(
     manager.start({
@@ -1259,6 +1275,7 @@ test('retains resolved prompt stdin and canonical result-schema file payloads be
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
   );
+  await manager.initialize([]);
 
   const outcome = await manager.start({
     invocationId: 'prepared-payloads',
@@ -1342,6 +1359,7 @@ test('rejects prospective argv total bytes including the resolved executable bef
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
   );
+  await manager.initialize([]);
 
   await expect(
     manager.start({
@@ -1413,6 +1431,7 @@ test('rejects registered secret byte substrings in prospective argv with environ
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
   );
+  await manager.initialize([]);
 
   await expect(
     manager.start({
@@ -1480,6 +1499,7 @@ test('rejects registered secret byte substrings in prospective scratch payloads 
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
     },
   );
+  await manager.initialize([]);
 
   await expect(
     manager.start({

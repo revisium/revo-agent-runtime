@@ -2,71 +2,43 @@ import { AGENT_FAULT_MESSAGES } from '../policy/index.js';
 import type { AgentFault, AgentValidationDetails, JsonObject, JsonValue } from '../spec/index.js';
 import type { NormalizedInvocationFailure } from './normalized-invocation-failure.js';
 
-const messageFor = (code: AgentFault['code']): string => {
-  switch (code) {
-    case 'revo.agent.active_state_failed':
-      return AGENT_FAULT_MESSAGES.activeStateFailed;
-    case 'revo.agent.protocol_failed':
-      return AGENT_FAULT_MESSAGES.protocolFailed;
-    case 'revo.agent.output_write_failed':
-      return AGENT_FAULT_MESSAGES.outputWriteFailed;
-    case 'revo.agent.process_failed':
-      return AGENT_FAULT_MESSAGES.processFailed;
-    case 'revo.agent.process_identity_failed':
-      return AGENT_FAULT_MESSAGES.processIdentityFailed;
-    case 'revo.agent.process_cleanup_failed':
-      return AGENT_FAULT_MESSAGES.processCleanupFailed;
-    case 'revo.agent.result_missing':
-      return AGENT_FAULT_MESSAGES.resultMissing;
-    case 'revo.agent.result_too_large':
-      return AGENT_FAULT_MESSAGES.resultTooLarge;
-    case 'revo.agent.result_invalid_json':
-      return AGENT_FAULT_MESSAGES.resultInvalidJson;
-    case 'revo.agent.result_not_object':
-      return AGENT_FAULT_MESSAGES.resultNotObject;
-    case 'revo.agent.result_schema_mismatch':
-      return AGENT_FAULT_MESSAGES.resultSchemaMismatch;
-    case 'revo.agent.scratch_cleanup_failed':
-      return AGENT_FAULT_MESSAGES.scratchCleanupFailed;
-    case 'revo.agent.internal':
-      return AGENT_FAULT_MESSAGES.internalConstruction;
-    case 'revo.agent.cancelled':
-      return AGENT_FAULT_MESSAGES.cancelled;
-    case 'revo.agent.timeout':
-      return AGENT_FAULT_MESSAGES.timeout;
-    case 'revo.agent.definition_invalid':
-      return AGENT_FAULT_MESSAGES.definitionInvalid;
-    case 'revo.agent.definition_duplicate':
-      return AGENT_FAULT_MESSAGES.definitionDuplicate;
-    case 'revo.agent.strategy_unsupported':
-      return AGENT_FAULT_MESSAGES.strategyUnsupported;
-    case 'revo.agent.limit_invalid':
-      return AGENT_FAULT_MESSAGES.limitInvalid;
-    case 'revo.agent.agent_unknown':
-      return AGENT_FAULT_MESSAGES.agentUnknown;
-    case 'revo.agent.manager_closed':
-      return AGENT_FAULT_MESSAGES.managerClosed;
-    case 'revo.agent.shutdown_failed':
-      return AGENT_FAULT_MESSAGES.shutdownFailed;
-    case 'revo.agent.platform_unsupported':
-      return AGENT_FAULT_MESSAGES.platformUnsupported;
-    case 'revo.agent.probe_platform_unsupported':
-      return AGENT_FAULT_MESSAGES.probePlatformUnsupported;
-    case 'revo.agent.probe_spawn_failed':
-      return AGENT_FAULT_MESSAGES.probeStartFailed;
-    case 'revo.agent.probe_timeout':
-      return AGENT_FAULT_MESSAGES.probeTimeout;
-    case 'revo.agent.probe_output_too_large':
-      return AGENT_FAULT_MESSAGES.probeOutputTooLarge;
-    case 'revo.agent.probe_process_failed':
-      return AGENT_FAULT_MESSAGES.probeProcessFailed;
-    case 'revo.agent.probe_output_invalid':
-      return AGENT_FAULT_MESSAGES.probeOutputInvalid;
-    case 'revo.agent.probe_version_mismatch':
-      return AGENT_FAULT_MESSAGES.probeVersionMismatch;
-  }
-  throw new Error('Unhandled agent fault code.');
-};
+const MESSAGE_BY_CODE: Readonly<Record<AgentFault['code'], string>> = Object.freeze({
+  'revo.agent.active_state_failed': AGENT_FAULT_MESSAGES.activeStateFailed,
+  'revo.agent.protocol_failed': AGENT_FAULT_MESSAGES.protocolFailed,
+  'revo.agent.output_write_failed': AGENT_FAULT_MESSAGES.outputWriteFailed,
+  'revo.agent.process_failed': AGENT_FAULT_MESSAGES.processFailed,
+  'revo.agent.process_identity_failed': AGENT_FAULT_MESSAGES.processIdentityFailed,
+  'revo.agent.process_cleanup_failed': AGENT_FAULT_MESSAGES.processCleanupFailed,
+  'revo.agent.result_missing': AGENT_FAULT_MESSAGES.resultMissing,
+  'revo.agent.result_too_large': AGENT_FAULT_MESSAGES.resultTooLarge,
+  'revo.agent.result_invalid_json': AGENT_FAULT_MESSAGES.resultInvalidJson,
+  'revo.agent.result_not_object': AGENT_FAULT_MESSAGES.resultNotObject,
+  'revo.agent.result_schema_mismatch': AGENT_FAULT_MESSAGES.resultSchemaMismatch,
+  'revo.agent.scratch_cleanup_failed': AGENT_FAULT_MESSAGES.scratchCleanupFailed,
+  'revo.agent.internal': AGENT_FAULT_MESSAGES.internalConstruction,
+  'revo.agent.cancelled': AGENT_FAULT_MESSAGES.cancelled,
+  'revo.agent.timeout': AGENT_FAULT_MESSAGES.timeout,
+  'revo.agent.definition_invalid': AGENT_FAULT_MESSAGES.definitionInvalid,
+  'revo.agent.definition_duplicate': AGENT_FAULT_MESSAGES.definitionDuplicate,
+  'revo.agent.strategy_unsupported': AGENT_FAULT_MESSAGES.strategyUnsupported,
+  'revo.agent.limit_invalid': AGENT_FAULT_MESSAGES.limitInvalid,
+  'revo.agent.agent_unknown': AGENT_FAULT_MESSAGES.agentUnknown,
+  'revo.agent.manager_not_initialized': AGENT_FAULT_MESSAGES.managerNotInitialized,
+  'revo.agent.manager_closed': AGENT_FAULT_MESSAGES.managerClosed,
+  'revo.agent.shutdown_failed': AGENT_FAULT_MESSAGES.shutdownFailed,
+  'revo.agent.recovery_invalid': AGENT_FAULT_MESSAGES.recoveryInvalid,
+  'revo.agent.recovery_failed': AGENT_FAULT_MESSAGES.recoveryFailed,
+  'revo.agent.platform_unsupported': AGENT_FAULT_MESSAGES.platformUnsupported,
+  'revo.agent.probe_platform_unsupported': AGENT_FAULT_MESSAGES.probePlatformUnsupported,
+  'revo.agent.probe_spawn_failed': AGENT_FAULT_MESSAGES.probeStartFailed,
+  'revo.agent.probe_timeout': AGENT_FAULT_MESSAGES.probeTimeout,
+  'revo.agent.probe_output_too_large': AGENT_FAULT_MESSAGES.probeOutputTooLarge,
+  'revo.agent.probe_process_failed': AGENT_FAULT_MESSAGES.probeProcessFailed,
+  'revo.agent.probe_output_invalid': AGENT_FAULT_MESSAGES.probeOutputInvalid,
+  'revo.agent.probe_version_mismatch': AGENT_FAULT_MESSAGES.probeVersionMismatch,
+});
+
+const messageFor = (code: AgentFault['code']): string => MESSAGE_BY_CODE[code];
 
 const diagnosticsDetails = (
   diagnostics: AgentValidationDetails | undefined,

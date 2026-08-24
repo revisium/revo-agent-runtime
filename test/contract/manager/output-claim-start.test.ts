@@ -109,7 +109,7 @@ class OrderedClaimPort implements OutputClaimExclusiveCreatePort {
   }
 }
 
-const createSubject = (
+const createSubject = async (
   outputClaim: OutputClaimExclusiveCreatePort = new FakeOutputClaimPort('created'),
   outputPreparation: FakeOutputPreparationPort = new FakeOutputPreparationPort('prepared'),
 ) => {
@@ -128,17 +128,20 @@ const createSubject = (
         Object.freeze({ status: 'admitted' as const, directory: '/workspace/project' }),
     },
   };
-  return Object.freeze({
+  const manager = createInvocationLifecycleManager(
+    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
+    ports,
+  );
+  await manager.initialize([]);
+  const subject = Object.freeze({
     clock,
     execution,
-    manager: createInvocationLifecycleManager(
-      { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-      ports,
-    ),
+    manager,
     output,
     outputPreparation,
     ports,
   });
+  return subject;
 };
 
 test('claims output before preparing the admitted output plan', async () => {
@@ -168,6 +171,7 @@ test('claims output before preparing the admitted output plan', async () => {
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     ports,
   );
+  await manager.initialize([]);
 
   await expect(manager.start(createStartInput({ invocationId: 'created' }))).resolves.toMatchObject(
     { status: 'accepted' },
@@ -185,7 +189,7 @@ test.each(['leaf-exists', 'create-failed'] as const)(
   async (operation) => {
     const claim = new FakeOutputClaimPort();
     claim.enqueue(operation);
-    const { manager, outputPreparation } = createSubject(claim);
+    const { manager, outputPreparation } = await createSubject(claim);
 
     await expect(
       manager.start(createStartInput({ invocationId: `rejected-${operation}` })),
@@ -204,7 +208,7 @@ test.each(['leaf-exists', 'create-failed'] as const)(
 test('converts a predispatch adapter throw into output claim failure', async () => {
   const claim = new FakeOutputClaimPort();
   claim.enqueue('throw-before-dispatch');
-  const { manager } = createSubject(claim);
+  const { manager } = await createSubject(claim);
 
   await expect(manager.start(createStartInput({ invocationId: 'throw-before' }))).resolves.toEqual({
     status: 'rejected',
@@ -217,7 +221,7 @@ test.each(['pending', 'throw-after-dispatch'] as const)(
   async (operation) => {
     const claim = new FakeOutputClaimPort();
     claim.enqueue(operation);
-    const { manager, clock, outputPreparation } = createSubject(claim);
+    const { manager, clock, outputPreparation } = await createSubject(claim);
 
     const started = manager.start(createStartInput({ invocationId: `uncertain-${operation}` }));
     if (operation === 'pending') {
@@ -245,7 +249,7 @@ test.each(['pending', 'throw-after-dispatch'] as const)(
 test('late claim reconciliation after timeout does not release the quarantined id', async () => {
   const claim = new FakeOutputClaimPort();
   claim.enqueue('pending');
-  const { manager, clock } = createSubject(claim);
+  const { manager, clock } = await createSubject(claim);
 
   const started = manager.start(createStartInput({ invocationId: 'late-created' }));
   await advanceClaimDeadline(clock);
@@ -265,7 +269,7 @@ test('late claim reconciliation after timeout does not release the quarantined i
 test('quarantined output path prevents a second claim for the same admitted path', async () => {
   const claim = new FakeOutputClaimPort();
   claim.enqueue('pending');
-  const { manager, clock } = createSubject(claim);
+  const { manager, clock } = await createSubject(claim);
 
   const first = manager.start(
     createStartInput({ invocationId: 'path-owner', output: { directory: '/out/x' } }),
@@ -323,6 +327,7 @@ test('trailing-slash output admission rejects before a second claim attempt is c
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
     ports,
   );
+  await manager.initialize([]);
 
   const first = manager.start(
     createStartInput({ invocationId: 'slash-owner', output: { directory: outputDirectory } }),
@@ -366,7 +371,7 @@ test('trailing-slash output admission rejects before a second claim attempt is c
 });
 
 test('fails closed when the output claim port is missing', async () => {
-  const subject = createSubject();
+  const subject = await createSubject();
   Reflect.deleteProperty(subject.ports, 'outputClaim');
 
   await expect(
@@ -379,7 +384,7 @@ test('fails closed when the output claim port is missing', async () => {
 
 test('records exactly one claim request for one start call', async () => {
   const claim = new FakeOutputClaimPort('created');
-  const { manager, output, execution } = createSubject(claim);
+  const { manager, output, execution } = await createSubject(claim);
   output.enqueueTerminalResultRecording();
   execution.enqueueStart('running');
 
