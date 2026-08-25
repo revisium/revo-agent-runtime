@@ -531,7 +531,7 @@ const shutdownFailedError = (
   failures: readonly ShutdownDrainResult[],
   reason: string | undefined,
 ): AgentManagerError => {
-  const first = failures.find((failure) => failure.kind === 'cleanup_failed');
+  const first = failures.find((failure) => failure.kind !== 'recovery_incomplete');
   return new AgentManagerError(
     Object.freeze({
       code: 'revo.agent.shutdown_failed' as const,
@@ -567,7 +567,8 @@ type ShutdownDrainResult =
       kind: 'cleanup_failed';
       outcome: ProcessCleanupAttemptOutcome;
     }>
-  | Readonly<{ kind: 'recovery_incomplete' }>;
+  | Readonly<{ kind: 'recovery_incomplete' }>
+  | Readonly<{ invocationId: string; kind: 'recovery_cleanup_uncertain' }>;
 
 const createResultSchemaValidator = (
   snapshot: InvocationInputSnapshot,
@@ -649,6 +650,7 @@ class InternalInvocationLifecycleManager {
   #initialized: 'pending' | 'ready' | 'failed' = 'pending';
   #initializationDeferred: Deferred<void> | undefined;
   #initializationDeadlineAt = 0;
+  readonly #uncertainRecoveryInvocationIds = new Set<string>();
   #firstShutdownReason: string | undefined;
   private readonly executionPort: InvocationExecutionPorts['execution'];
   private readonly active = new Map<string, ActiveInvocation>();
@@ -1091,7 +1093,12 @@ class InternalInvocationLifecycleManager {
       this.activeStateSink,
       this.#activeStateOperationTimeoutMs,
       this.#initializationDeadlineAt,
-      () => this.#closing,
+      Object.freeze({
+        isClosing: () => this.#closing,
+        onTerminationUnconfirmed: (invocationId: string) => {
+          this.#uncertainRecoveryInvocationIds.add(invocationId);
+        },
+      }),
     );
     if (failures.length > 0) throw recoveryFailedError(failures);
   }
@@ -1131,6 +1138,8 @@ class InternalInvocationLifecycleManager {
         result.kind === 'cleanup_failed',
     );
     if (recoveryIncomplete) failures.push(Object.freeze({ kind: 'recovery_incomplete' as const }));
+    for (const invocationId of this.#uncertainRecoveryInvocationIds)
+      failures.push(Object.freeze({ invocationId, kind: 'recovery_cleanup_uncertain' as const }));
     if (failures.length > 0) throw shutdownFailedError(failures, this.#firstShutdownReason);
     this.subscriptions.clear();
   }

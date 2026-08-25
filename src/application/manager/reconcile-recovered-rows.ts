@@ -9,6 +9,10 @@ import type { RecoveredRowFailure } from './recovered-row-failure.js';
 type RecoveryFailureCategory = RecoveredRowFailure['category'];
 
 type RecoveryExecutionPort = InvocationExecutionPorts['execution'];
+type RecoveryHooks = Readonly<{
+  isClosing: () => boolean;
+  onTerminationUnconfirmed: (invocationId: string) => void;
+}>;
 
 const compareStrings = (left: string, right: string): number => {
   if (left < right) return -1;
@@ -29,9 +33,9 @@ const reconcileRow = async (
   activeStateSink: ActiveInvocationStateSink,
   operationTimeoutMs: number,
   initializationDeadlineAt: number,
-  isClosing: () => boolean,
+  hooks: RecoveryHooks,
 ): Promise<RecoveryFailureCategory | undefined> => {
-  if (isClosing()) return 'manager_closing';
+  if (hooks.isClosing()) return 'manager_closing';
   if (Date.now() >= initializationDeadlineAt) return 'deadline_exceeded';
 
   const definition = registry.getDefinition(
@@ -54,7 +58,11 @@ const reconcileRow = async (
   }
 
   const status = typeof outcome?.status === 'string' ? outcome.status : undefined;
-  if (status !== 'absent' && status !== 'terminated') return preservedCategoryFor(status);
+  if (status !== 'absent' && status !== 'terminated') {
+    const category = preservedCategoryFor(status);
+    if (category === 'termination_unconfirmed') hooks.onTerminationUnconfirmed(row.invocationId);
+    return category;
+  }
 
   const removeDeadlineAt = Math.min(Date.now() + operationTimeoutMs, initializationDeadlineAt);
   if (removeDeadlineAt <= Date.now()) return 'deadline_exceeded';
@@ -74,7 +82,7 @@ export const reconcileRecoveredRows = async (
   activeStateSink: ActiveInvocationStateSink,
   operationTimeoutMs: number,
   initializationDeadlineAt: number,
-  isClosing: () => boolean,
+  hooks: RecoveryHooks,
 ): Promise<readonly RecoveredRowFailure[]> => {
   const ordered = [...snapshots].toSorted((left, right) =>
     compareStrings(left.invocationId, right.invocationId),
@@ -90,7 +98,7 @@ export const reconcileRecoveredRows = async (
       activeStateSink,
       operationTimeoutMs,
       initializationDeadlineAt,
-      isClosing,
+      hooks,
     );
     if (category !== undefined)
       failures.push(Object.freeze({ invocationId: row.invocationId, category }));
