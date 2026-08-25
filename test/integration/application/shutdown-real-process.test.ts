@@ -113,14 +113,14 @@ setInterval(() => undefined, 1000);
         }),
         definitions: [definition],
       },
-      {
+      () => ({
         clock: new FakeInvocationClock({ initialNowMs: 0 }),
         executableProbe: new FreshAvailableExecutableProbePort(process.execPath, '1.0.0'),
         output: createNodePosixInvocationOutputPort(),
         outputClaim: new NodePosixOutputClaimPort(),
         outputPreparation: new NodePosixOutputPreparationPort(),
         workspace: { admit: async (directory) => ({ status: 'admitted', directory }) },
-      },
+      }),
     );
     await manager.initialize([]);
 

@@ -373,6 +373,7 @@ test('exposes the exact frozen agent fault messages', () => {
     probeOutputInvalid: 'Agent version probe output is invalid.',
     probeVersionMismatch: 'Agent executable version does not satisfy its constraint.',
     internalConstruction: 'Agent manager construction failed unexpectedly.',
+    internalStart: 'Agent start failed unexpectedly.',
     internalProbe: 'Agent probe failed unexpectedly.',
     protocolFailed: 'Agent protocol failed.',
     outputWriteFailed: 'Agent output write failed.',

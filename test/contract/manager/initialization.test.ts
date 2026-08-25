@@ -40,7 +40,7 @@ const createManager = (
       definitions: Object.freeze([definition]),
       ...(limits === undefined ? {} : { limits }),
     }),
-    {
+    () => ({
       execution,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       output: new FakeInvocationOutputPort(),
@@ -50,7 +50,7 @@ const createManager = (
       workspace: {
         admit: async () => ({ status: 'admitted' as const, directory: '/workspace/project' }),
       },
-    },
+    }),
   );
 
 const snapshot = (

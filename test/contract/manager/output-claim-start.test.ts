@@ -130,7 +130,7 @@ const createSubject = async (
   };
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    ports,
+    () => ports,
   );
   await manager.initialize([]);
   const subject = Object.freeze({
@@ -169,7 +169,7 @@ test('claims output before preparing the admitted output plan', async () => {
   };
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    ports,
+    () => ports,
   );
   await manager.initialize([]);
 
@@ -195,13 +195,13 @@ test.each(['leaf-exists', 'create-failed'] as const)(
       manager.start(createStartInput({ invocationId: `rejected-${operation}` })),
     ).resolves.toEqual({
       status: 'rejected',
-      reason: 'output_claim_failed',
+      reason: 'output_conflict',
     });
     expect(manager.getResult(`rejected-${operation}`)).toEqual({ state: 'unknown' });
     expect(outputPreparation.requests()).toHaveLength(0);
     await expect(
       manager.start(createStartInput({ invocationId: `rejected-${operation}` })),
-    ).resolves.not.toEqual({ status: 'rejected', reason: 'duplicate_invocation' });
+    ).resolves.not.toEqual({ status: 'rejected', reason: 'invocation_duplicate' });
   },
 );
 
@@ -212,7 +212,7 @@ test('converts a predispatch adapter throw into output claim failure', async () 
 
   await expect(manager.start(createStartInput({ invocationId: 'throw-before' }))).resolves.toEqual({
     status: 'rejected',
-    reason: 'output_claim_failed',
+    reason: 'output_conflict',
   });
 });
 
@@ -230,7 +230,7 @@ test.each(['pending', 'throw-after-dispatch'] as const)(
 
     await expect(started).resolves.toEqual({
       status: 'rejected',
-      reason: 'output_claim_uncertain',
+      reason: 'output_conflict',
     });
     expect(manager.getResult(`uncertain-${operation}`)).toEqual({ state: 'unknown' });
     await expect(manager.waitForResult(`uncertain-${operation}`)).rejects.toMatchObject({
@@ -241,7 +241,7 @@ test.each(['pending', 'throw-after-dispatch'] as const)(
       manager.start(createStartInput({ invocationId: `uncertain-${operation}` })),
     ).resolves.toEqual({
       status: 'rejected',
-      reason: 'duplicate_invocation',
+      reason: 'invocation_duplicate',
     });
   },
 );
@@ -255,14 +255,14 @@ test('late claim reconciliation after timeout does not release the quarantined i
   await advanceClaimDeadline(clock);
   await expect(started).resolves.toEqual({
     status: 'rejected',
-    reason: 'output_claim_uncertain',
+    reason: 'output_conflict',
   });
 
   claim.settlePendingCreated(1);
   await flush();
   await expect(manager.start(createStartInput({ invocationId: 'late-created' }))).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
 });
 
@@ -277,7 +277,7 @@ test('quarantined output path prevents a second claim for the same admitted path
   await advanceClaimDeadline(clock);
   await expect(first).resolves.toEqual({
     status: 'rejected',
-    reason: 'output_claim_uncertain',
+    reason: 'output_conflict',
   });
   await expect(
     manager.start(
@@ -285,7 +285,7 @@ test('quarantined output path prevents a second claim for the same admitted path
     ),
   ).resolves.toEqual({
     status: 'rejected',
-    reason: 'output_claim_failed',
+    reason: 'output_conflict',
   });
   expect(claim.requests()).toHaveLength(1);
 });
@@ -325,7 +325,7 @@ test('trailing-slash output admission rejects before a second claim attempt is c
   };
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    ports,
+    () => ports,
   );
   await manager.initialize([]);
 
@@ -334,7 +334,7 @@ test('trailing-slash output admission rejects before a second claim attempt is c
   );
   await expect(first).resolves.toEqual({
     status: 'rejected',
-    reason: 'output_claim_uncertain',
+    reason: 'output_conflict',
   });
   await expect(
     manager.start(
@@ -345,7 +345,7 @@ test('trailing-slash output admission rejects before a second claim attempt is c
     ),
   ).resolves.toEqual({
     status: 'rejected',
-    reason: 'preflight_failed',
+    reason: 'output_path_invalid',
   });
   expect(output.calls().filter((call) => call.type === 'admit')).toEqual([
     {
@@ -378,7 +378,7 @@ test('fails closed when the output claim port is missing', async () => {
     subject.manager.start(createStartInput({ invocationId: 'missing-claim-port' })),
   ).resolves.toEqual({
     status: 'rejected',
-    reason: 'output_claim_failed',
+    reason: 'output_conflict',
   });
 });
 

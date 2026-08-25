@@ -260,28 +260,28 @@ const createEffectiveLimits = (
 };
 
 export class InvocationInputSnapshot {
-  readonly agent: AgentRef | undefined;
+  readonly agent: AgentRef;
   readonly invocationId: string;
   readonly limits: InvocationEffectiveLimits;
   readonly metadata: SnapshotRecord | undefined;
-  readonly outputDirectory: string | undefined;
-  readonly parameters: SnapshotRecord | undefined;
-  readonly permissions: SnapshotRecord | undefined;
-  readonly prompt: string | undefined;
+  readonly outputDirectory: string;
+  readonly parameters: SnapshotRecord;
+  readonly permissions: SnapshotRecord;
+  readonly prompt: string;
   readonly resultSchema: SnapshotRecord;
   readonly wallClockTimeoutMs: number;
   readonly workspace: string;
 
   private constructor(
     input: Readonly<{
-      agent: AgentRef | undefined;
+      agent: AgentRef;
       invocationId: string;
       limits: InvocationEffectiveLimits;
       metadata: SnapshotRecord | undefined;
-      outputDirectory: string | undefined;
-      parameters: SnapshotRecord | undefined;
-      permissions: SnapshotRecord | undefined;
-      prompt: string | undefined;
+      outputDirectory: string;
+      parameters: SnapshotRecord;
+      permissions: SnapshotRecord;
+      prompt: string;
       resultSchema: SnapshotRecord;
       wallClockTimeoutMs: number;
       workspace: string;

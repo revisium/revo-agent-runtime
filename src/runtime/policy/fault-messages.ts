@@ -48,5 +48,6 @@ export const AGENT_FAULT_MESSAGES = Object.freeze({
   cancelled: 'Agent invocation was cancelled.',
   timeout: 'Agent invocation timed out.',
   internalConstruction: 'Agent manager construction failed unexpectedly.',
+  internalStart: 'Agent start failed unexpectedly.',
   internalProbe: 'Agent probe failed unexpectedly.',
 } as const);

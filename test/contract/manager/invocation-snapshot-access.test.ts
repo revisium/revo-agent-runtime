@@ -30,13 +30,13 @@ type LifecycleManagerPortsInput = Omit<
   Partial<Pick<InvocationExecutionPorts, 'workspace' | 'outputClaim' | 'outputPreparation'>>;
 
 const createLifecycleManager = async (ports: LifecycleManagerPortsInput) => {
-  const manager = createInvocationLifecycleManager(lifecycleOptions, {
+  const manager = createInvocationLifecycleManager(lifecycleOptions, () => ({
     ...ports,
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
     outputClaim: ports.outputClaim ?? new FakeOutputClaimPort('created'),
     outputPreparation: ports.outputPreparation ?? new FakeOutputPreparationPort('prepared'),
     workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
-  });
+  }));
   await manager.initialize([]);
   return manager;
 };
@@ -332,7 +332,7 @@ test('keeps preacceptance spawn failure out of invocation snapshots', async () =
   });
   await expect(
     manager.start(createStartInput({ invocationId: 'start-failure-finalize' })),
-  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  ).resolves.toEqual({ status: 'rejected', reason: 'spawn_failed' });
   expect(manager.getInvocation('start-failure-finalize')).toBeUndefined();
   expect(output.calls().filter((call) => call.type === 'publish-terminal-result')).toEqual([]);
 });
@@ -377,7 +377,7 @@ test('does not publish a terminal result for preacceptance spawn failure', async
 
   await expect(
     manager.start(createStartInput({ invocationId: 'start-failure-finalizing' })),
-  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  ).resolves.toEqual({ status: 'rejected', reason: 'spawn_failed' });
   expect(manager.getInvocation('start-failure-finalizing')).toBeUndefined();
   expect(output.calls().filter((call) => call.type === 'publish-terminal-result')).toEqual([]);
 });

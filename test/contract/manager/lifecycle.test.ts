@@ -67,7 +67,7 @@ const createLifecycleManager = (
           ? {}
           : { redaction: Object.freeze({ secrets: Object.freeze([...redactionSecrets]) }) }),
       }),
-      {
+      () => ({
         ...ports,
         executableProbe:
           ports.executableProbe ??
@@ -77,7 +77,7 @@ const createLifecycleManager = (
         workspace: ports.workspace ?? {
           admit: async () => ({ status: 'admitted', directory: '/workspace/project' }),
         },
-      },
+      }),
     );
     await manager.initialize([]);
     return manager;
@@ -100,7 +100,7 @@ test('rejects an invalid request before output preparation or execution start', 
 
   await expect(manager.start(createStartInput({ invocationId: '' }))).resolves.toEqual({
     status: 'rejected',
-    reason: 'invalid_request',
+    reason: 'invocation_invalid',
   });
   expect(output.calls()).toEqual([]);
   expect(execution.calls()).toEqual([]);
@@ -146,7 +146,7 @@ test('does not admit output preparation failures', async () => {
     manager.start(createStartInput({ invocationId: 'prepare-failure' })),
   ).resolves.toEqual({
     status: 'rejected',
-    reason: 'output_prepare_failed',
+    reason: 'scratch_failed',
   });
   expect(execution.calls()).toEqual([]);
 });
@@ -399,7 +399,7 @@ test('retains invocation and output-directory guards after a rejected running sa
     manager.start(createStartInput({ invocationId: 'retained-active-row' })),
   ).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
   await expect(
     manager.start(
@@ -580,7 +580,7 @@ test('uncertain output preparation quarantines the invocation id and output dire
     ),
   ).resolves.toEqual({
     status: 'rejected',
-    reason: 'output_prepare_uncertain',
+    reason: 'scratch_failed',
   });
   expect(execution.calls()).toEqual([]);
   await expect(
@@ -590,7 +590,7 @@ test('uncertain output preparation quarantines the invocation id and output dire
         output: { directory: '/out/other' },
       }),
     ),
-  ).resolves.toMatchObject({ status: 'rejected', reason: 'duplicate_invocation' });
+  ).resolves.toMatchObject({ status: 'rejected', reason: 'invocation_duplicate' });
   await expect(
     manager.start(
       createStartInput({
@@ -598,7 +598,7 @@ test('uncertain output preparation quarantines the invocation id and output dire
         output: { directory: '/out/uncertain' },
       }),
     ),
-  ).resolves.toMatchObject({ status: 'rejected', reason: 'output_prepare_uncertain' });
+  ).resolves.toMatchObject({ status: 'rejected', reason: 'scratch_failed' });
 });
 
 test('retains an id after terminal settlement until FIFO eviction', async () => {
@@ -620,7 +620,7 @@ test('retains an id after terminal settlement until FIFO eviction', async () => 
   await flush();
   const second = await manager.start(createStartInput({ invocationId: 'reused' }));
 
-  expect(second).toEqual({ status: 'rejected', reason: 'duplicate_invocation' });
+  expect(second).toEqual({ status: 'rejected', reason: 'invocation_duplicate' });
   expect(execution.calls()).toEqual([{ type: 'start' }]);
 });
 
@@ -652,7 +652,7 @@ test('retains failed composition admission after completion rejection', async ()
   expect(lifecycle.terminalResult()).toMatchObject({ status: 'failed' });
   await expect(manager.start(createStartInput({ invocationId: 'failed-reuse' }))).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
 });
 
@@ -680,7 +680,7 @@ test('retains caller-cancelled composition admission after confirmed cancellatio
     manager.start(createStartInput({ invocationId: 'cancelled-reuse' })),
   ).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
   execution.confirmCancellation(1);
   await flush();
@@ -689,7 +689,7 @@ test('retains caller-cancelled composition admission after confirmed cancellatio
     manager.start(createStartInput({ invocationId: 'cancelled-reuse' })),
   ).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
 });
 
@@ -716,7 +716,7 @@ test('retains deadline-cancelled composition admission after confirmed cancellat
   await expect(manager.start(createStartInput({ invocationId: 'timeout-reuse' }))).resolves.toEqual(
     {
       status: 'rejected',
-      reason: 'duplicate_invocation',
+      reason: 'invocation_duplicate',
     },
   );
   execution.settleCancellationRequest(1);
@@ -726,7 +726,7 @@ test('retains deadline-cancelled composition admission after confirmed cancellat
   await expect(manager.start(createStartInput({ invocationId: 'timeout-reuse' }))).resolves.toEqual(
     {
       status: 'rejected',
-      reason: 'duplicate_invocation',
+      reason: 'invocation_duplicate',
     },
   );
 });
@@ -757,7 +757,7 @@ test('keeps a racing natural completion as the only terminal composition settlem
   expect(lifecycle.terminalResult()).toMatchObject({ status: 'succeeded', value: {} });
   await expect(manager.start(createStartInput({ invocationId: 'race-reuse' }))).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
 });
 
@@ -780,7 +780,7 @@ test('keeps an id active until its one pending terminal-result commit settles', 
   expect(first.currentState()).toBe('finalizing');
   await expect(manager.start(createStartInput({ invocationId: 'finalizing' }))).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
   expect(output.calls().filter((call) => call.type === 'publish-terminal-result')).toHaveLength(1);
 
@@ -789,7 +789,7 @@ test('keeps an id active until its one pending terminal-result commit settles', 
   expect(first.terminalResult()).toMatchObject({ status: 'succeeded', value: { ok: true } });
   await expect(manager.start(createStartInput({ invocationId: 'finalizing' }))).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
 });
 
@@ -818,7 +818,7 @@ test('retains the id after one output commit failure without retrying the commit
     manager.start(createStartInput({ invocationId: 'output-failure' })),
   ).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
 });
 
@@ -1024,7 +1024,7 @@ test('shutdown arbitration rejects a start waiting at workspace admission', asyn
   const shutdown = manager.shutdown('closing');
   workspaceAdmission.resolve({ status: 'admitted', directory: '/workspace/project' });
 
-  await expect(start).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  await expect(start).resolves.toEqual({ status: 'rejected', reason: 'manager_closed' });
   await expect(shutdown).resolves.toBeUndefined();
   expect(execution.calls()).toEqual([]);
   expect(manager.getResult('closing-at-workspace')).toEqual({ state: 'unknown' });
@@ -1055,7 +1055,7 @@ test('shutdown arbitration rejects a start waiting at output admission', async (
   const shutdown = manager.shutdown('closing');
   outputAdmission.resolve(undefined);
 
-  await expect(start).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  await expect(start).resolves.toEqual({ status: 'rejected', reason: 'manager_closed' });
   await expect(shutdown).resolves.toBeUndefined();
   expect(execution.calls()).toEqual([]);
   expect(manager.getResult('closing-at-output-admit')).toEqual({ state: 'unknown' });
@@ -1079,7 +1079,7 @@ test('shutdown arbitration rejects a start waiting at executable probe', async (
   const shutdown = manager.shutdown('closing');
   probe.settleCompletion(1, availableProbeExit());
 
-  await expect(start).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  await expect(start).resolves.toEqual({ status: 'rejected', reason: 'manager_closed' });
   await expect(shutdown).resolves.toBeUndefined();
   expect(execution.calls()).toEqual([]);
   expect(manager.getResult('closing-at-probe')).toEqual({ state: 'unknown' });
@@ -1102,7 +1102,7 @@ test('shutdown arbitration rejects and drains a start waiting at output claim', 
   const shutdown = manager.shutdown('closing');
   outputClaim.settlePendingCreated(1);
 
-  await expect(start).resolves.toEqual({ status: 'rejected', reason: 'output_claim_failed' });
+  await expect(start).resolves.toEqual({ status: 'rejected', reason: 'output_conflict' });
   await expect(shutdown).resolves.toBeUndefined();
   expect(outputClaim.pendingClaimCount()).toBe(0);
   expect(execution.calls()).toEqual([]);
@@ -1128,7 +1128,7 @@ test('shutdown arbitration rejects and quarantines a start waiting at output pre
 
   await expect(start).resolves.toEqual({
     status: 'rejected',
-    reason: 'output_prepare_uncertain',
+    reason: 'scratch_failed',
   });
   await expect(shutdown).resolves.toBeUndefined();
   expect(outputPreparation.pendingPreparationCount()).toBe(0);
@@ -1161,7 +1161,7 @@ test('shutdown arbitration rejects at the final synchronous active-install bound
 
   await expect(start).resolves.toEqual({
     status: 'rejected',
-    reason: 'output_prepare_uncertain',
+    reason: 'scratch_failed',
   });
   await expect(shutdown).resolves.toBeUndefined();
   expect(execution.calls()).toEqual([]);
@@ -1213,7 +1213,7 @@ test('rejects an out-of-profile result schema before output preparation or execu
         },
       }),
     ),
-  ).resolves.toMatchObject({ status: 'rejected', reason: 'invalid_result_schema' });
+  ).resolves.toMatchObject({ status: 'rejected', reason: 'result_schema_invalid' });
   expect(output.calls()).toEqual([]);
   expect(execution.calls()).toEqual([]);
 });
@@ -1246,7 +1246,7 @@ test('checks retained invocation ids before rejecting an invalid result schema',
         },
       }),
     ),
-  ).resolves.toMatchObject({ status: 'rejected', reason: 'duplicate_invocation' });
+  ).resolves.toMatchObject({ status: 'rejected', reason: 'invocation_duplicate' });
 });
 
 test('finalizes a deep in-bound response with one output commit before retaining its id', async () => {
@@ -1272,7 +1272,7 @@ test('finalizes a deep in-bound response with one output commit before retaining
   expect(output.calls().filter((call) => call.type === 'publish-terminal-result')).toHaveLength(1);
   await expect(manager.start(createStartInput({ invocationId: 'deep-result' }))).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
 
   output.fulfilPendingTerminalResultRecording(1);
@@ -1281,6 +1281,6 @@ test('finalizes a deep in-bound response with one output commit before retaining
   expect(lifecycle.terminalResult()?.status).toBe('succeeded');
   await expect(manager.start(createStartInput({ invocationId: 'deep-result' }))).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
 });

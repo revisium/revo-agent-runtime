@@ -19,7 +19,7 @@ test('rejects invalid preflight inputs without accepting an invocation', async (
   invalidRequest.manager.subscribe({}, (event) => invalidRequestEvents.push(event));
   await expect(invalidRequest.start(invalidRequest.createInput(''))).resolves.toEqual({
     status: 'rejected',
-    reason: 'invalid_request',
+    reason: 'invocation_invalid',
   });
   expect(invalidRequest.output.calls()).toEqual([]);
   expect(invalidRequest.execution.calls()).toEqual([]);
@@ -35,7 +35,7 @@ test('rejects invalid preflight inputs without accepting an invocation', async (
         resultSchema: { $schema: 'https://json-schema.org/draft/2020-12/schema', format: 'email' },
       }),
     ),
-  ).resolves.toMatchObject({ status: 'rejected', reason: 'invalid_result_schema' });
+  ).resolves.toMatchObject({ status: 'rejected', reason: 'result_schema_invalid' });
   expect(invalidSchema.output.calls()).toEqual([]);
   expect(invalidSchema.execution.calls()).toEqual([]);
   expect(invalidSchema.manager.getResult('invalid-schema')).toEqual({ state: 'unknown' });
@@ -49,7 +49,7 @@ test('rejects invalid preflight inputs without accepting an invocation', async (
     unavailableOutput.start(unavailableOutput.createInput('output-unavailable')),
   ).resolves.toEqual({
     status: 'rejected',
-    reason: 'output_prepare_failed',
+    reason: 'scratch_failed',
   });
   expect(unavailableOutput.execution.calls()).toEqual([]);
   expect(unavailableOutput.manager.getResult('output-unavailable')).toEqual({ state: 'unknown' });
@@ -67,7 +67,7 @@ test('accepts only one concurrent invocation and snapshots caller-owned input', 
   const accepted = admissions.find((admission) => admission.status === 'accepted');
   const rejected = admissions.find((admission) => admission.status === 'rejected');
   expect(accepted?.status).toBe('accepted');
-  expect(rejected).toEqual({ status: 'rejected', reason: 'duplicate_invocation' });
+  expect(rejected).toEqual({ status: 'rejected', reason: 'invocation_duplicate' });
   expect(subject.execution.calls()).toEqual([{ type: 'start' }]);
 
   metadata.nested.state = 'mutated';
@@ -113,7 +113,7 @@ test('cancels one accepted invocation exactly once after spawn confirmation', as
   });
   await expect(subject.start(subject.createInput('pending-cancellation'))).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
 
   subject.execution.confirmCancellation(1);

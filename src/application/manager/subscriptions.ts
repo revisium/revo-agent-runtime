@@ -7,9 +7,18 @@ type TerminalInvocationEvent = Readonly<{
 }>;
 
 type TerminalEventListener = (event: TerminalInvocationEvent) => void;
-type TerminalSubscriptionAdmission =
-  | Readonly<{ state: 'subscribed'; dispose: () => void }>
-  | Readonly<{ state: 'rejected'; reason: 'capacity' }>;
+type TerminalSubscriptionAdmission = Readonly<{ state: 'subscribed'; dispose: () => void }>;
+
+const invalidSubscription = (message: string): AgentManagerError =>
+  new AgentManagerError(
+    Object.freeze({
+      code: 'revo.agent.invocation_invalid' as const,
+      message: AGENT_FAULT_MESSAGES.invocationInvalid,
+      phase: 'manager' as const,
+      retryable: false,
+      details: Object.freeze({ message }),
+    }),
+  );
 
 interface Subscription {
   readonly invocationId: string | undefined;
@@ -20,11 +29,12 @@ const isFilterRecord = (value: unknown): value is Record<PropertyKey, unknown> =
   value !== null && typeof value === 'object' && !Array.isArray(value);
 
 const copyInvocationIdFilter = (filter: unknown): string | undefined => {
-  if (!isFilterRecord(filter)) throw new TypeError('Terminal event filter must be an object.');
+  if (!isFilterRecord(filter))
+    throw invalidSubscription('Terminal event filter must be an object.');
 
   const keys = Reflect.ownKeys(filter);
   if (keys.some((key) => key !== 'invocationId'))
-    throw new TypeError('Terminal event filter contains an unsupported field.');
+    throw invalidSubscription('Terminal event filter contains an unsupported field.');
   if (!Object.hasOwn(filter, 'invocationId')) return undefined;
 
   const invocationId = filter.invocationId;
@@ -33,7 +43,7 @@ const copyInvocationIdFilter = (filter: unknown): string | undefined => {
     invocationId.length === 0 ||
     encoder.encode(invocationId).byteLength > maximumInvocationIdBytes
   )
-    throw new TypeError('Terminal event filter invocationId is invalid.');
+    throw invalidSubscription('Terminal event filter invocationId is invalid.');
 
   return invocationId;
 };
@@ -47,7 +57,7 @@ export class TerminalSubscriptions {
 
   subscribe(filter: unknown, listener: TerminalEventListener): TerminalSubscriptionAdmission {
     if (!isTerminalEventListener(listener))
-      throw new TypeError('Terminal event listener must be a function.');
+      throw invalidSubscription('Terminal event listener must be a function.');
 
     const invocationId = copyInvocationIdFilter(filter);
     const subscription: Subscription = Object.freeze({ invocationId, listener });
@@ -83,3 +93,5 @@ export class TerminalSubscriptions {
     return this.isolatedFailures;
   }
 }
+import { AgentManagerError } from '../../runtime/errors/index.js';
+import { AGENT_FAULT_MESSAGES } from '../../runtime/policy/index.js';

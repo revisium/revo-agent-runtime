@@ -12,7 +12,7 @@ import { createNamedHostEnvironmentSnapshot } from './create-named-host-environm
 import { createNativeProcessExecutionPort } from './create-native-process-execution-port.js';
 import type { createInvocationLifecycleManager } from './lifecycle-manager.js';
 
-type LifecycleManagerPorts = Parameters<typeof createInvocationLifecycleManager>[1];
+type LifecycleManagerPorts = ReturnType<Parameters<typeof createInvocationLifecycleManager>[1]>;
 type DefaultInvocationPorts = LifecycleManagerPorts &
   Required<Pick<LifecycleManagerPorts, 'execution' | 'executableProbe'>>;
 

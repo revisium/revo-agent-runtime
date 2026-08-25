@@ -40,13 +40,13 @@ import {
   type TerminalPublicationAuthority,
 } from '../../runtime/execution/index.js';
 import { AGENT_FAULT_MESSAGES, AGENT_RUNTIME_LIMITS } from '../../runtime/policy/index.js';
-import { probeExecutable } from '../../runtime/probe/index.js';
-import type { ExecutableProbePort } from '../../runtime/probe/index.js';
+import { probeExecutable, type ExecutableProbePort } from '../../runtime/probe/index.js';
 import { SealedAgentRegistry } from '../../runtime/registry/index.js';
 import type {
   ActiveInvocationSnapshot,
   ActiveInvocationStateSink,
   ActiveProcessIdentity,
+  AgentFault,
   AgentDefinitionContract,
   AgentDescriptor,
   AgentProbeResult,
@@ -74,20 +74,34 @@ import { reconcileRecoveredRows } from './reconcile-recovered-rows.js';
 import type { RecoveredRowFailure } from './recovered-row-failure.js';
 import { TerminalSubscriptions } from './subscriptions.js';
 
-type RejectionReason =
-  | 'invalid_request'
-  | 'invalid_result_schema'
-  | 'duplicate_invocation'
-  | 'output_claim_failed'
-  | 'output_claim_uncertain'
-  | 'output_prepare_failed'
-  | 'output_prepare_uncertain'
+type SimpleStartRejectionReason =
+  | 'invocation_invalid'
+  | 'invocation_duplicate'
+  | 'output_conflict'
+  | 'scratch_failed'
   | 'environment_invalid'
   | 'manager_not_initialized'
   | 'manager_closed'
   | 'process_identity_failed'
   | 'active_state_failed'
-  | 'preflight_failed';
+  | 'result_schema_invalid'
+  | 'spawn_failed'
+  | 'limit_invalid'
+  | 'platform_unsupported'
+  | 'workspace_invalid'
+  | 'output_path_invalid'
+  | 'parameters_invalid'
+  | 'permissions_invalid'
+  | 'strategy_unsupported'
+  | 'agent_unknown'
+  | 'internal';
+type StartRejection =
+  | Readonly<{ status: 'rejected'; reason: SimpleStartRejectionReason }>
+  | Readonly<{
+      status: 'rejected';
+      reason: 'launch_proof_failed';
+      fault: AgentFault;
+    }>;
 
 type TerminalInvocationEvent = Readonly<{
   type: 'invocation.finished';
@@ -121,7 +135,7 @@ type LifecycleManagerPorts = Omit<InvocationExecutionPorts, 'execution'> &
   }>;
 
 type LifecycleStartOutcome =
-  | Readonly<{ status: 'rejected'; reason: RejectionReason }>
+  | StartRejection
   | Readonly<{ status: 'accepted'; handle: LifecycleHandle; lifecycle: InvocationLifecycle }>;
 
 interface Deferred<Value> {
@@ -286,9 +300,6 @@ interface ResourceBoundPreflight {
   >;
 }
 
-type PreflightRejection =
-  | Readonly<{ status: 'rejected'; reason?: Extract<RejectionReason, 'environment_invalid'> }>
-  | Readonly<{ status: 'invalid-result-schema' }>;
 type BatchInspection = ReturnType<typeof inspectBatchRefs>;
 
 const textEncoder = new TextEncoder();
@@ -341,12 +352,12 @@ const validateProspectiveBounds = (
     >['payloads'];
     secretValues: readonly string[];
   }>,
-): PreflightRejection | undefined => {
+): StartRejection | undefined => {
   if (
     totalProspectiveArgvBytes(request.executable, request.payloads.arguments) >
     AGENT_RUNTIME_LIMITS.argvBytes
   )
-    return Object.freeze({ status: 'rejected' });
+    return Object.freeze({ status: 'rejected', reason: 'limit_invalid' });
   for (const secret of request.secretValues) {
     if (deterministicInputContainsSecret(utf8Bytes(secret), request.payloads))
       return Object.freeze({ status: 'rejected', reason: 'environment_invalid' });
@@ -358,21 +369,44 @@ const validateEffectiveInvocationInputs = (
   validators: EffectiveInputValidators,
   definition: AgentDefinitionContract,
   snapshot: InvocationInputSnapshot,
-): EffectiveInvocationInputs | undefined => {
-  if (snapshot.parameters === undefined || snapshot.permissions === undefined) return undefined;
+):
+  | EffectiveInvocationInputs
+  | Readonly<{ status: 'rejected'; reason: 'parameters_invalid' | 'permissions_invalid' }> => {
   const effectiveParameters = overlayTopLevelDefaults(
     definition.parameters.defaults,
     snapshot.parameters,
   );
   if (validators.parameters.validate(effectiveParameters, effectiveParametersPath) !== undefined)
-    return undefined;
+    return Object.freeze({ status: 'rejected', reason: 'parameters_invalid' });
   const effectivePermissions = overlayTopLevelDefaults(
     definition.permissions.defaults,
     snapshot.permissions,
   );
   if (validators.permissions.validate(effectivePermissions, effectivePermissionsPath) !== undefined)
-    return undefined;
+    return Object.freeze({ status: 'rejected', reason: 'permissions_invalid' });
   return Object.freeze({ parameters: effectiveParameters, permissions: effectivePermissions });
+};
+
+const outputAdmissionRejectionReason = (
+  reason:
+    | 'unsupported_platform'
+    | 'invalid_path'
+    | 'missing_parent'
+    | 'parent_not_directory'
+    | 'leaf_exists'
+    | 'inspection_failed',
+): SimpleStartRejectionReason => {
+  if (reason === 'unsupported_platform') return 'platform_unsupported';
+  if (reason === 'leaf_exists') return 'output_conflict';
+  return 'output_path_invalid';
+};
+
+const argumentTemplateRejectionReason = (
+  reason: 'parameter_invalid' | 'permission_rejected' | 'delivery_incoherent',
+): SimpleStartRejectionReason => {
+  if (reason === 'parameter_invalid') return 'parameters_invalid';
+  if (reason === 'permission_rejected') return 'permissions_invalid';
+  return 'strategy_unsupported';
 };
 
 const createDeferred = <Value>(): Deferred<Value> => {
@@ -598,15 +632,13 @@ const createResultSchemaValidator = (
 const createOutputAdmissionRequest = (
   snapshot: InvocationInputSnapshot,
   binding: PreflightBinding,
-): OutputResourcePlan | undefined => {
-  if (snapshot.outputDirectory === undefined) return undefined;
-  return Object.freeze({
+): OutputResourcePlan =>
+  Object.freeze({
     invocationId: snapshot.invocationId,
     outputDirectory: snapshot.outputDirectory,
     needsPromptFile: binding.binding.delivery.prompt === 'file',
     needsResultSchemaFile: binding.binding.delivery.resultSchema === 'file',
   });
-};
 
 const createHandle = (
   invocationId: string,
@@ -722,28 +754,22 @@ class InternalInvocationLifecycleManager {
     const snapshot = InvocationInputSnapshot.create(input, this.limits);
     const startContext = StartContextSnapshot.create(context);
     if (snapshot === undefined || startContext === undefined)
-      return Object.freeze({ status: 'rejected', reason: 'invalid_request' });
+      return Object.freeze({ status: 'rejected', reason: 'invocation_invalid' });
     if (this.#closing) return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
     if (!this.reserve(snapshot.invocationId))
-      return Object.freeze({ status: 'rejected', reason: 'duplicate_invocation' });
+      return Object.freeze({ status: 'rejected', reason: 'invocation_duplicate' });
     const startCompletion = createDeferred<void>();
     this.inFlightStarts.set(snapshot.invocationId, startCompletion);
     try {
       const preflightResult = await this.preflight(snapshot, startContext);
-      if (this.#closing) return Object.freeze({ status: 'rejected', reason: 'preflight_failed' });
-      if (preflightResult.status === 'invalid-result-schema')
-        return Object.freeze({ status: 'rejected', reason: 'invalid_result_schema' });
-      if (preflightResult.status === 'rejected')
-        return Object.freeze({
-          status: 'rejected',
-          reason: preflightResult.reason ?? 'preflight_failed',
-        });
+      if (this.#closing) return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
+      if (preflightResult.status === 'rejected') return preflightResult;
       const preparedLaunch = preflightResult.preparedLaunch;
       const plan = preparedLaunch.outputResourcePlan;
       if (this.quarantinedOutputDirectories.has(plan.outputDirectory))
-        return Object.freeze({ status: 'rejected', reason: 'output_claim_failed' });
+        return Object.freeze({ status: 'rejected', reason: 'output_conflict' });
       if (this.quarantinedPreparationOutputDirectories.has(plan.outputDirectory))
-        return Object.freeze({ status: 'rejected', reason: 'output_prepare_uncertain' });
+        return Object.freeze({ status: 'rejected', reason: 'scratch_failed' });
       if (this.retainedActiveStateOutputDirectories.has(plan.outputDirectory))
         return Object.freeze({ status: 'rejected', reason: 'active_state_failed' });
       const claimOutcome = await this.resolveClaimedSession(snapshot.invocationId, plan);
@@ -835,30 +861,30 @@ class InternalInvocationLifecycleManager {
         resources: NonNullable<ReturnType<typeof takePreparedInvocationResourcesPayload>>;
         authority: TerminalPublicationAuthority;
       }>
-    | Readonly<{ status: 'rejected'; reason: RejectionReason }>
+    | Readonly<{ status: 'rejected'; reason: SimpleStartRejectionReason }>
   > {
     const preparation = this.createOutputPreparation(snapshot, preparedLaunch, plan, session);
     if (preparation === undefined)
-      return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
+      return Object.freeze({ status: 'rejected', reason: 'scratch_failed' });
     this.pendingPreparationAttempts.set(snapshot.invocationId, preparation.attempt);
     const preparationResult = await this.consumeAndBeginOutputPreparation(preparation);
     this.pendingPreparationAttempts.delete(snapshot.invocationId);
     if (preparationResult.status === 'rejected') {
       this.quarantinedPreparationInvocationIds.add(snapshot.invocationId);
       this.quarantinedPreparationOutputDirectories.add(plan.outputDirectory);
-      return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
+      return Object.freeze({ status: 'rejected', reason: 'scratch_failed' });
     }
     if (preparationResult.status === 'uncertain') {
       this.quarantinedPreparationInvocationIds.add(snapshot.invocationId);
       this.quarantinedPreparationOutputDirectories.add(plan.outputDirectory);
-      return Object.freeze({ status: 'rejected', reason: 'output_prepare_uncertain' });
+      return Object.freeze({ status: 'rejected', reason: 'scratch_failed' });
     }
     if (preparationResult.status !== 'prepared')
-      return Object.freeze({ status: 'rejected', reason: 'output_prepare_failed' });
+      return Object.freeze({ status: 'rejected', reason: 'scratch_failed' });
     if (this.#closing) {
       this.quarantinedPreparationInvocationIds.add(snapshot.invocationId);
       this.quarantinedPreparationOutputDirectories.add(plan.outputDirectory);
-      return Object.freeze({ status: 'rejected', reason: 'output_prepare_uncertain' });
+      return Object.freeze({ status: 'rejected', reason: 'scratch_failed' });
     }
     return Object.freeze({
       status: 'accepted' as const,
@@ -880,7 +906,7 @@ class InternalInvocationLifecycleManager {
         activeStateLane: ActiveStateLane;
         activeProcessIdentity: ActiveProcessIdentity;
       }>
-    | Readonly<{ status: 'rejected'; reason: RejectionReason }>
+    | Readonly<{ status: 'rejected'; reason: SimpleStartRejectionReason }>
   > {
     const spawn = await this.executionPort.spawnAndIdentify(snapshot, preparedLaunch, resources);
     if (spawn.status === 'failed') {
@@ -897,7 +923,7 @@ class InternalInvocationLifecycleManager {
       }
       return Object.freeze({
         status: 'rejected',
-        reason: spawn.reason === 'identity_failed' ? 'process_identity_failed' : 'preflight_failed',
+        reason: spawn.reason === 'identity_failed' ? 'process_identity_failed' : 'spawn_failed',
       });
     }
 
@@ -1234,20 +1260,26 @@ class InternalInvocationLifecycleManager {
       effectiveInputs: EffectiveInvocationInputs;
       target: ValidatedDefinition;
     }>,
-  ): Promise<
-    Readonly<{ status: 'accepted' } & ResourceBoundPreflight> | Readonly<{ status: 'rejected' }>
-  > {
+  ): Promise<Readonly<{ status: 'accepted' } & ResourceBoundPreflight> | StartRejection> {
     const workspace = this.ports.workspace;
-    if (workspace === undefined || typeof workspace.admit !== 'function')
-      return Object.freeze({ status: 'rejected' });
     const workspaceAdmission = await workspace.admit(snapshot.workspace);
-    if (this.#closing) return Object.freeze({ status: 'rejected' });
-    if (workspaceAdmission.status !== 'admitted') return Object.freeze({ status: 'rejected' });
+    if (this.#closing) return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
+    if (workspaceAdmission.status !== 'admitted')
+      return Object.freeze({
+        status: 'rejected',
+        reason:
+          workspaceAdmission.reason === 'unsupported_platform'
+            ? 'platform_unsupported'
+            : 'workspace_invalid',
+      });
     const outputAdmissionRequest = createOutputAdmissionRequest(snapshot, request.binding);
-    if (outputAdmissionRequest === undefined) return Object.freeze({ status: 'rejected' });
     const outputAdmission = await this.ports.output.admit(outputAdmissionRequest);
-    if (this.#closing) return Object.freeze({ status: 'rejected' });
-    if (outputAdmission.status !== 'admitted') return Object.freeze({ status: 'rejected' });
+    if (this.#closing) return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
+    if (outputAdmission.status !== 'admitted')
+      return Object.freeze({
+        status: 'rejected',
+        reason: outputAdmissionRejectionReason(outputAdmission.reason),
+      });
     const interpretedTemplate = interpretArgumentTemplate({
       template: request.target.definition.launch.args,
       effectiveParameters: request.effectiveInputs.parameters,
@@ -1256,8 +1288,11 @@ class InternalInvocationLifecycleManager {
       permissionStrategy: request.binding.permissionStrategy,
       workspace: workspaceAdmission,
     });
-    if (interpretedTemplate.status === 'rejected') return Object.freeze({ status: 'rejected' });
-    if (snapshot.prompt === undefined) return Object.freeze({ status: 'rejected' });
+    if (interpretedTemplate.status === 'rejected')
+      return Object.freeze({
+        status: 'rejected',
+        reason: argumentTemplateRejectionReason(interpretedTemplate.reason),
+      });
     const preparedPayloads = prepareInvocationPayloads({
       binding: request.binding.binding,
       interpretedArgumentTemplate: interpretedTemplate.template,
@@ -1265,7 +1300,8 @@ class InternalInvocationLifecycleManager {
       prompt: snapshot.prompt,
       resultSchemaBytes: canonicalizeJsonBytes(snapshot.resultSchema),
     });
-    if (preparedPayloads.status === 'rejected') return Object.freeze({ status: 'rejected' });
+    if (preparedPayloads.status === 'rejected')
+      return Object.freeze({ status: 'rejected', reason: 'strategy_unsupported' });
     return Object.freeze({
       status: 'accepted',
       interpretedTemplate,
@@ -1277,9 +1313,7 @@ class InternalInvocationLifecycleManager {
   private async preflight(
     snapshot: InvocationInputSnapshot,
     context: StartContextSnapshot,
-  ): Promise<
-    Readonly<{ status: 'accepted'; preparedLaunch: PreparedLaunch }> | PreflightRejection
-  > {
+  ): Promise<Readonly<{ status: 'accepted'; preparedLaunch: PreparedLaunch }> | StartRejection> {
     const resourceIndependent = this.prepareResourceIndependentPreflight(snapshot, context);
     if (resourceIndependent.status !== 'accepted') return resourceIndependent;
     const {
@@ -1295,16 +1329,16 @@ class InternalInvocationLifecycleManager {
       effectiveInputs,
       target,
     });
-    if (resourceBound.status === 'rejected') return Object.freeze({ status: 'rejected' });
+    if (resourceBound.status === 'rejected') return resourceBound;
     const result = await probeExecutable(target, this.ports.executableProbe);
-    if (this.#closing) return Object.freeze({ status: 'rejected' });
+    if (this.#closing) return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
     if (result.status === 'available') {
       if (
         result.agent.id !== target.definition.id ||
         result.agent.version !== target.definition.version ||
         result.definitionDigest !== target.definitionDigest
       )
-        return Object.freeze({ status: 'rejected' });
+        return Object.freeze({ status: 'rejected', reason: 'internal' });
       const boundsRejection = validateProspectiveBounds({
         executable: result.executable,
         payloads: resourceBound.preparedPayloads.payloads,
@@ -1333,51 +1367,48 @@ class InternalInvocationLifecycleManager {
         bindingToken: binding.bindingToken,
       });
       return preparedLaunch === undefined
-        ? Object.freeze({ status: 'rejected' })
+        ? Object.freeze({ status: 'rejected', reason: 'internal' })
         : Object.freeze({ status: 'accepted', preparedLaunch });
     }
-    if (result.error.code !== 'revo.agent.probe_platform_unsupported')
-      return Object.freeze({ status: 'rejected' });
-    throw new AgentManagerError(
-      Object.freeze({
-        code: 'revo.agent.platform_unsupported',
-        message: AGENT_FAULT_MESSAGES.platformUnsupported,
-        phase: 'preflight',
-        retryable: false,
-        ...(result.error.details === undefined ? {} : { details: result.error.details }),
-      }),
-    );
+    return Object.freeze({
+      status: 'rejected',
+      reason: 'launch_proof_failed',
+      fault: result.error,
+    });
   }
 
   private prepareResourceIndependentPreflight(
     snapshot: InvocationInputSnapshot,
     context: StartContextSnapshot,
-  ): Readonly<{ status: 'accepted' } & ResourceIndependentPreflight> | PreflightRejection {
-    if (snapshot.agent === undefined) return Object.freeze({ status: 'rejected' });
+  ): Readonly<{ status: 'accepted' } & ResourceIndependentPreflight> | StartRejection {
     const target = this.registry.getDefinition(snapshot.agent);
-    if (target === undefined) return Object.freeze({ status: 'rejected' });
+    if (target === undefined) return Object.freeze({ status: 'rejected', reason: 'agent_unknown' });
     const binding = this.installedBindings.createBinding(target);
     const effectiveInputValidators = this.effectiveInputValidators.get(target.definitionDigest);
-    if (effectiveInputValidators === undefined) return Object.freeze({ status: 'rejected' });
+    if (effectiveInputValidators === undefined)
+      return Object.freeze({ status: 'rejected', reason: 'internal' });
     const effectiveInputs = validateEffectiveInvocationInputs(
       effectiveInputValidators,
       target.definition,
       snapshot,
     );
-    if (effectiveInputs === undefined) return Object.freeze({ status: 'rejected' });
+    if ('status' in effectiveInputs) return effectiveInputs;
     const resultSchemaValidator = createResultSchemaValidator(snapshot);
     if (resultSchemaValidator === undefined)
-      return Object.freeze({ status: 'invalid-result-schema' });
+      return Object.freeze({ status: 'rejected', reason: 'result_schema_invalid' });
     const hostSnapshot = createNamedHostEnvironmentSnapshot(context.environment.inherit);
     const childEnvironment = captureChildEnvironment(context.environment, hostSnapshot);
-    if (childEnvironment.status === 'rejected') return Object.freeze({ status: 'rejected' });
+    if (childEnvironment.status === 'rejected')
+      return Object.freeze({ status: 'rejected', reason: 'environment_invalid' });
     const registeredSecrets = registerSecrets({
       configuredSecrets: this.#configuredSecretValues,
       invocationSecrets: childEnvironment.secretValues,
     });
-    if (registeredSecrets.status === 'rejected') return Object.freeze({ status: 'rejected' });
+    if (registeredSecrets.status === 'rejected')
+      return Object.freeze({ status: 'rejected', reason: 'environment_invalid' });
     const secretValues = revealRegisteredSecrets(registeredSecrets.registeredSecrets);
-    if (secretValues === undefined) return Object.freeze({ status: 'rejected' });
+    if (secretValues === undefined)
+      return Object.freeze({ status: 'rejected', reason: 'internal' });
     return Object.freeze({
       status: 'accepted',
       target,
@@ -1514,23 +1545,23 @@ class InternalInvocationLifecycleManager {
         status: 'accepted';
         session: Extract<OutputClaimResult, { status: 'claimed' }>['session'];
       }>
-    | Readonly<{ status: 'rejected'; reason: 'output_claim_failed' | 'output_claim_uncertain' }>
+    | Readonly<{ status: 'rejected'; reason: 'output_conflict' }>
   > {
     const claim = await this.claimInvocationOutput(plan);
     if (this.#closing) {
       if (claim?.status === 'uncertain') {
         this.quarantinedInvocationIds.set(invocationId, claim.guard);
         this.quarantinedOutputDirectories.add(plan.outputDirectory);
-        return Object.freeze({ status: 'rejected', reason: 'output_claim_uncertain' });
+        return Object.freeze({ status: 'rejected', reason: 'output_conflict' });
       }
-      return Object.freeze({ status: 'rejected', reason: 'output_claim_failed' });
+      return Object.freeze({ status: 'rejected', reason: 'output_conflict' });
     }
     if (claim === undefined || claim.status === 'rejected')
-      return Object.freeze({ status: 'rejected', reason: 'output_claim_failed' });
+      return Object.freeze({ status: 'rejected', reason: 'output_conflict' });
     if (claim.status === 'uncertain') {
       this.quarantinedInvocationIds.set(invocationId, claim.guard);
       this.quarantinedOutputDirectories.add(plan.outputDirectory);
-      return Object.freeze({ status: 'rejected', reason: 'output_claim_uncertain' });
+      return Object.freeze({ status: 'rejected', reason: 'output_conflict' });
     }
     return Object.freeze({ status: 'accepted', session: claim.session });
   }
@@ -1559,7 +1590,7 @@ class InternalInvocationLifecycleManager {
 
 export const createInvocationLifecycleManager = (
   options: unknown,
-  ports: LifecycleManagerPorts,
+  createPorts: (limits: Readonly<AgentManagerLimits>) => LifecycleManagerPorts,
 ): Readonly<{
   initialize(snapshots: readonly ActiveInvocationSnapshot[]): Promise<void>;
   cancel(invocationId: string): Promise<CancelInvocationResult>;
@@ -1576,6 +1607,7 @@ export const createInvocationLifecycleManager = (
   waitForResult(invocationId: string): Promise<AgentInvocationResult>;
 }> => {
   const validated = validateManagerOptions(options);
+  const ports = createPorts(validated.limits);
   const capacity = validated.limits.maxCompletedInvocations;
   if (capacity === undefined)
     throw new Error('Validated completed invocation capacity is required.');

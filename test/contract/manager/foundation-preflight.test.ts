@@ -2,7 +2,6 @@ import { expect, test, vi } from 'vitest';
 
 import { createInvocationLifecycleManager } from '../../../src/application/manager/index.js';
 import { validateManagerOptions } from '../../../src/runtime/definition/index.js';
-import { AgentManagerError } from '../../../src/runtime/errors/index.js';
 import type {
   InvocationExecutionPorts,
   WorkspaceAdmissionResult,
@@ -117,7 +116,7 @@ test('rejects workspace admission before output preparation or execution delegat
   const definition = buildAgentDefinition();
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    ports,
+    () => ports,
   );
   await manager.initialize([]);
 
@@ -128,7 +127,7 @@ test('rejects workspace admission before output preparation or execution delegat
         workspace: { directory: '../relative/./hostile\u0000path' },
       }),
     ),
-  ).resolves.toMatchObject({ status: 'rejected', reason: 'preflight_failed' });
+  ).resolves.toMatchObject({ status: 'rejected', reason: 'workspace_invalid' });
   expect(workspace).toHaveBeenCalledExactlyOnceWith('../relative/./hostile\u0000path');
   expect(probe.calls()).toEqual([]);
   expect(output.calls()).toEqual([]);
@@ -143,7 +142,7 @@ test('admits a normalized absolute workspace before output preparation and execu
   const definition = buildAgentDefinition();
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    ports,
+    () => ports,
   );
   await manager.initialize([]);
   probe.enqueueResolution({ status: 'resolved', executable: '/resolved/workspace-agent' });
@@ -176,7 +175,7 @@ test('freshly probes every invocation before output preparation and execution de
   if (validatedDefinition === undefined) throw new Error('Expected validated definition');
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    ports,
+    () => ports,
   );
   await manager.initialize([]);
 
@@ -271,7 +270,7 @@ test('rejects version mismatch before output preparation or execution delegation
   const definition = buildAgentDefinition();
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    ports,
+    () => ports,
   );
   await manager.initialize([]);
   probe.enqueueResolution({ status: 'resolved', executable: '/resolved/version-mismatch-agent' });
@@ -281,7 +280,11 @@ test('rejects version mismatch before output preparation or execution delegation
   await flush();
   probe.settleCompletion(1, exited('2.0.0'));
 
-  await expect(started).resolves.toMatchObject({ status: 'rejected', reason: 'preflight_failed' });
+  await expect(started).resolves.toMatchObject({
+    status: 'rejected',
+    reason: 'launch_proof_failed',
+    fault: { code: 'revo.agent.probe_version_mismatch' },
+  });
   expect(output.calls()).toEqual([outputAdmissionCall('version-mismatch')]);
   expect(execution.calls()).toEqual([]);
 });
@@ -343,7 +346,7 @@ test('orders fresh executable proof after resource-bound preflight and before ou
   };
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    ports,
+    () => ports,
   );
   await manager.initialize([]);
 
@@ -370,7 +373,7 @@ test('rejects malformed launch evidence before output preparation or execution d
   const definition = buildAgentDefinition();
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    ports,
+    () => ports,
   );
   await manager.initialize([]);
   probe.enqueueResolution({ status: 'resolved', executable: '' });
@@ -381,7 +384,11 @@ test('rejects malformed launch evidence before output preparation or execution d
   );
   await flush();
 
-  await expect(started).resolves.toMatchObject({ status: 'rejected', reason: 'preflight_failed' });
+  await expect(started).resolves.toMatchObject({
+    status: 'rejected',
+    reason: 'launch_proof_failed',
+    fault: { code: 'revo.agent.probe_spawn_failed' },
+  });
   expect(output.calls()).toEqual([outputAdmissionCall('malformed-launch-evidence')]);
   expect(probe.calls()).toEqual([{ type: 'resolve', command: '/fixture/bin/agent' }]);
   expect(execution.calls()).toEqual([]);
@@ -392,24 +399,23 @@ test('fails target-platform preflight before output preparation or execution del
   const definition = buildAgentDefinition();
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    ports,
+    () => ports,
   );
   await manager.initialize([]);
 
-  try {
-    await manager.start(createStartInput(definition, { invocationId: 'unsupported' }));
-    throw new Error('Expected target-platform preflight rejection.');
-  } catch (error: unknown) {
-    expect(error).toBeInstanceOf(AgentManagerError);
-    if (!(error instanceof AgentManagerError)) return;
-    expect(error.fault).toEqual({
-      code: 'revo.agent.platform_unsupported',
-      message: AGENT_FAULT_MESSAGES.platformUnsupported,
-      phase: 'preflight',
+  await expect(
+    manager.start(createStartInput(definition, { invocationId: 'unsupported' })),
+  ).resolves.toEqual({
+    status: 'rejected',
+    reason: 'launch_proof_failed',
+    fault: {
+      code: 'revo.agent.probe_platform_unsupported',
+      message: AGENT_FAULT_MESSAGES.probePlatformUnsupported,
+      phase: 'probing',
       retryable: false,
       details: { platform: 'darwin' },
-    });
-  }
+    },
+  });
   expect(probe.calls()).toEqual([]);
   expect(output.calls()).toEqual([outputAdmissionCall('unsupported')]);
   expect(execution.calls()).toEqual([]);
@@ -420,7 +426,7 @@ test('reserves an invocation id before probing and retains that reservation afte
   const definition = buildAgentDefinition();
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    ports,
+    () => ports,
   );
   await manager.initialize([]);
   probe.enqueueResolution({ status: 'resolved', executable: '/resolved/duplicate' });
@@ -433,7 +439,7 @@ test('reserves an invocation id before probing and retains that reservation afte
   await flush();
   await expect(manager.start(input)).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
   expect(probe.calls()).toHaveLength(2);
   expect(output.calls()).toEqual([outputAdmissionCall('duplicate')]);
@@ -447,42 +453,7 @@ test('reserves an invocation id before probing and retains that reservation afte
 
   await expect(manager.start(input)).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
   expect(probe.calls()).toHaveLength(2);
 });
-
-test.each([
-  ['missing workspace port', {}],
-  ['missing workspace admit function', { workspace: {} }],
-] as const)(
-  'maps malformed %s to a typed pre-acceptance rejection',
-  async (_name, malformedWorkspacePort) => {
-    const definition = buildAgentDefinition();
-    const execution = new FakeInvocationExecutionPort();
-    const output = new FakeInvocationOutputPort();
-    const probe = new FakeExecutableProbePort({ platform: 'linux' });
-    const ports = {
-      execution,
-      executableProbe: probe,
-      output,
-      clock: new FakeInvocationClock({ initialNowMs: 0 }),
-      outputClaim: new FakeOutputClaimPort('created'),
-      outputPreparation: new FakeOutputPreparationPort('prepared'),
-      ...malformedWorkspacePort,
-    };
-    const manager = createInvocationLifecycleManager(
-      { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-      // @ts-expect-error Deliberately exercises unsafe JavaScript composition.
-      ports,
-    );
-    await manager.initialize([]);
-
-    await expect(
-      manager.start(createStartInput(definition, { invocationId: `malformed-${_name}` })),
-    ).resolves.toMatchObject({ status: 'rejected', reason: 'preflight_failed' });
-    expect(probe.calls()).toEqual([]);
-    expect(output.calls()).toEqual([]);
-    expect(execution.calls()).toEqual([]);
-  },
-);

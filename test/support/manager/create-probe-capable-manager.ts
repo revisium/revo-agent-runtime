@@ -12,7 +12,7 @@ export const createProbeCapableManager = (definitions: readonly AgentDefinitionI
   const port = new FakeExecutableProbePort({ platform: 'linux' });
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions },
-    {
+    () => ({
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       execution: new FakeInvocationExecutionPort(),
       executableProbe: port,
@@ -20,7 +20,7 @@ export const createProbeCapableManager = (definitions: readonly AgentDefinitionI
       outputClaim: new FakeOutputClaimPort('created'),
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
-    },
+    }),
   );
   return Object.freeze({ manager, port });
 };
