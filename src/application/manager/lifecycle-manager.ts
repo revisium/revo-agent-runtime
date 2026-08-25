@@ -1076,13 +1076,7 @@ class InternalInvocationLifecycleManager {
     if (!isRecoverySupportedPlatform())
       throw recoveryFailedError(
         rows.snapshots
-          .toSorted((left, right) =>
-            left.invocationId < right.invocationId
-              ? -1
-              : left.invocationId > right.invocationId
-                ? 1
-                : 0,
-          )
+          .toSorted((left, right) => compareStrings(left.invocationId, right.invocationId))
           .map((snapshot) =>
             Object.freeze({
               invocationId: snapshot.invocationId,

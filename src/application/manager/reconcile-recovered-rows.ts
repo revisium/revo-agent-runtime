@@ -10,12 +10,62 @@ type RecoveryFailureCategory = RecoveredRowFailure['category'];
 
 type RecoveryExecutionPort = InvocationExecutionPorts['execution'];
 
-const preservedCategoryFor = (status: string | undefined): RecoveryFailureCategory =>
-  status === 'identity_mismatch'
-    ? 'identity_conflict'
-    : status === 'termination_unconfirmed'
-      ? 'termination_unconfirmed'
-      : 'inspection_inconclusive';
+const compareStrings = (left: string, right: string): number => {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+};
+
+const preservedCategoryFor = (status: string | undefined): RecoveryFailureCategory => {
+  if (status === 'identity_mismatch') return 'identity_conflict';
+  if (status === 'termination_unconfirmed') return 'termination_unconfirmed';
+  return 'inspection_inconclusive';
+};
+
+const reconcileRow = async (
+  row: ActiveInvocationSnapshot,
+  registry: SealedAgentRegistry,
+  execution: RecoveryExecutionPort,
+  activeStateSink: ActiveInvocationStateSink,
+  operationTimeoutMs: number,
+  initializationDeadlineAt: number,
+  isClosing: () => boolean,
+): Promise<RecoveryFailureCategory | undefined> => {
+  if (isClosing()) return 'manager_closing';
+  if (Date.now() >= initializationDeadlineAt) return 'deadline_exceeded';
+
+  const definition = registry.getDefinition(
+    Object.freeze({ id: row.pin.agentId, version: row.pin.agentVersion }),
+  );
+  if (definition === undefined) return 'pin_unknown';
+  if (definition.definitionDigest !== row.pin.definitionDigest) return 'pin_digest_mismatch';
+
+  let outcome:
+    | Awaited<ReturnType<RecoveryExecutionPort['inspectAndReconcileRecoveredProcess']>>
+    | undefined;
+  try {
+    outcome = await execution.inspectAndReconcileRecoveredProcess(
+      row.process.pid,
+      row.process.fingerprint,
+      Math.min(Date.now() + operationTimeoutMs, initializationDeadlineAt),
+    );
+  } catch {
+    return 'inspection_inconclusive';
+  }
+
+  const status = typeof outcome?.status === 'string' ? outcome.status : undefined;
+  if (status !== 'absent' && status !== 'terminated') return preservedCategoryFor(status);
+
+  const removeDeadlineAt = Math.min(Date.now() + operationTimeoutMs, initializationDeadlineAt);
+  if (removeDeadlineAt <= Date.now()) return 'deadline_exceeded';
+
+  const lane = ActiveStateLane.forExternallyAppliedRow(activeStateSink, operationTimeoutMs);
+  try {
+    return (await lane.remove(row.invocationId, removeDeadlineAt)) ? undefined : 'sink_failed';
+  } catch {
+    return 'sink_failed';
+  }
+};
 
 export const reconcileRecoveredRows = async (
   snapshots: readonly ActiveInvocationSnapshot[],
@@ -26,70 +76,24 @@ export const reconcileRecoveredRows = async (
   initializationDeadlineAt: number,
   isClosing: () => boolean,
 ): Promise<readonly RecoveredRowFailure[]> => {
-  const failures: RecoveredRowFailure[] = [];
   const ordered = [...snapshots].toSorted((left, right) =>
-    left.invocationId < right.invocationId ? -1 : left.invocationId > right.invocationId ? 1 : 0,
+    compareStrings(left.invocationId, right.invocationId),
   );
-  const fail = (invocationId: string, category: RecoveryFailureCategory): void => {
-    failures.push(Object.freeze({ invocationId, category }));
-  };
+  const failures: RecoveredRowFailure[] = [];
 
   for (const row of ordered) {
-    if (isClosing()) {
-      fail(row.invocationId, 'manager_closing');
-      continue;
-    }
-    if (Date.now() >= initializationDeadlineAt) {
-      fail(row.invocationId, 'deadline_exceeded');
-      continue;
-    }
-
-    const definition = registry.getDefinition(
-      Object.freeze({ id: row.pin.agentId, version: row.pin.agentVersion }),
+    // oxlint-disable-next-line no-await-in-loop -- recovery is specification-mandated FIFO.
+    const category = await reconcileRow(
+      row,
+      registry,
+      execution,
+      activeStateSink,
+      operationTimeoutMs,
+      initializationDeadlineAt,
+      isClosing,
     );
-    if (definition === undefined) {
-      fail(row.invocationId, 'pin_unknown');
-      continue;
-    }
-    if (definition.definitionDigest !== row.pin.definitionDigest) {
-      fail(row.invocationId, 'pin_digest_mismatch');
-      continue;
-    }
-
-    let outcome:
-      | Awaited<ReturnType<RecoveryExecutionPort['inspectAndReconcileRecoveredProcess']>>
-      | undefined;
-    try {
-      // oxlint-disable-next-line no-await-in-loop -- recovery is specification-mandated FIFO.
-      outcome = await execution.inspectAndReconcileRecoveredProcess(
-        row.process.pid,
-        row.process.fingerprint,
-        Math.min(Date.now() + operationTimeoutMs, initializationDeadlineAt),
-      );
-    } catch {
-      fail(row.invocationId, 'inspection_inconclusive');
-      continue;
-    }
-
-    const status = typeof outcome?.status === 'string' ? outcome.status : undefined;
-    if (status !== 'absent' && status !== 'terminated') {
-      fail(row.invocationId, preservedCategoryFor(status));
-      continue;
-    }
-
-    const removeDeadlineAt = Math.min(Date.now() + operationTimeoutMs, initializationDeadlineAt);
-    if (removeDeadlineAt <= Date.now()) {
-      fail(row.invocationId, 'deadline_exceeded');
-      continue;
-    }
-    const lane = ActiveStateLane.forExternallyAppliedRow(activeStateSink, operationTimeoutMs);
-    try {
-      // oxlint-disable-next-line no-await-in-loop -- recovery is specification-mandated FIFO.
-      if (!(await lane.remove(row.invocationId, removeDeadlineAt)))
-        fail(row.invocationId, 'sink_failed');
-    } catch {
-      fail(row.invocationId, 'sink_failed');
-    }
+    if (category !== undefined)
+      failures.push(Object.freeze({ invocationId: row.invocationId, category }));
   }
   return Object.freeze(failures);
 };
