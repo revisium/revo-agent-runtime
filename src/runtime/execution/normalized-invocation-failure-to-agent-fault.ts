@@ -81,8 +81,10 @@ const phaseFor = (failure: NormalizedInvocationFailure): AgentFault['phase'] => 
         case 'internal':
           return 'running';
       }
+      /* v8 ignore next */
       throw new Error('Unhandled duplex primary failure.');
   }
+  /* v8 ignore next */
   throw new Error('Unhandled normalized invocation failure.');
 };
 
