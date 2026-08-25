@@ -300,7 +300,6 @@ interface ResourceBoundPreflight {
   >;
 }
 
-type PreflightRejection = StartRejection;
 type BatchInspection = ReturnType<typeof inspectBatchRefs>;
 
 const textEncoder = new TextEncoder();
@@ -353,7 +352,7 @@ const validateProspectiveBounds = (
     >['payloads'];
     secretValues: readonly string[];
   }>,
-): PreflightRejection | undefined => {
+): StartRejection | undefined => {
   if (
     totalProspectiveArgvBytes(request.executable, request.payloads.arguments) >
     AGENT_RUNTIME_LIMITS.argvBytes
@@ -386,6 +385,28 @@ const validateEffectiveInvocationInputs = (
   if (validators.permissions.validate(effectivePermissions, effectivePermissionsPath) !== undefined)
     return Object.freeze({ status: 'rejected', reason: 'permissions_invalid' });
   return Object.freeze({ parameters: effectiveParameters, permissions: effectivePermissions });
+};
+
+const outputAdmissionRejectionReason = (
+  reason:
+    | 'unsupported_platform'
+    | 'invalid_path'
+    | 'missing_parent'
+    | 'parent_not_directory'
+    | 'leaf_exists'
+    | 'inspection_failed',
+): SimpleStartRejectionReason => {
+  if (reason === 'unsupported_platform') return 'platform_unsupported';
+  if (reason === 'leaf_exists') return 'output_conflict';
+  return 'output_path_invalid';
+};
+
+const argumentTemplateRejectionReason = (
+  reason: 'parameter_invalid' | 'permission_rejected' | 'delivery_incoherent',
+): SimpleStartRejectionReason => {
+  if (reason === 'parameter_invalid') return 'parameters_invalid';
+  if (reason === 'permission_rejected') return 'permissions_invalid';
+  return 'strategy_unsupported';
 };
 
 const createDeferred = <Value>(): Deferred<Value> => {
@@ -1257,12 +1278,7 @@ class InternalInvocationLifecycleManager {
     if (outputAdmission.status !== 'admitted')
       return Object.freeze({
         status: 'rejected',
-        reason:
-          outputAdmission.reason === 'unsupported_platform'
-            ? 'platform_unsupported'
-            : outputAdmission.reason === 'leaf_exists'
-              ? 'output_conflict'
-              : 'output_path_invalid',
+        reason: outputAdmissionRejectionReason(outputAdmission.reason),
       });
     const interpretedTemplate = interpretArgumentTemplate({
       template: request.target.definition.launch.args,
@@ -1275,12 +1291,7 @@ class InternalInvocationLifecycleManager {
     if (interpretedTemplate.status === 'rejected')
       return Object.freeze({
         status: 'rejected',
-        reason:
-          interpretedTemplate.reason === 'parameter_invalid'
-            ? 'parameters_invalid'
-            : interpretedTemplate.reason === 'permission_rejected'
-              ? 'permissions_invalid'
-              : 'strategy_unsupported',
+        reason: argumentTemplateRejectionReason(interpretedTemplate.reason),
       });
     const preparedPayloads = prepareInvocationPayloads({
       binding: request.binding.binding,
@@ -1302,9 +1313,7 @@ class InternalInvocationLifecycleManager {
   private async preflight(
     snapshot: InvocationInputSnapshot,
     context: StartContextSnapshot,
-  ): Promise<
-    Readonly<{ status: 'accepted'; preparedLaunch: PreparedLaunch }> | PreflightRejection
-  > {
+  ): Promise<Readonly<{ status: 'accepted'; preparedLaunch: PreparedLaunch }> | StartRejection> {
     const resourceIndependent = this.prepareResourceIndependentPreflight(snapshot, context);
     if (resourceIndependent.status !== 'accepted') return resourceIndependent;
     const {
@@ -1371,7 +1380,7 @@ class InternalInvocationLifecycleManager {
   private prepareResourceIndependentPreflight(
     snapshot: InvocationInputSnapshot,
     context: StartContextSnapshot,
-  ): Readonly<{ status: 'accepted' } & ResourceIndependentPreflight> | PreflightRejection {
+  ): Readonly<{ status: 'accepted' } & ResourceIndependentPreflight> | StartRejection {
     const target = this.registry.getDefinition(snapshot.agent);
     if (target === undefined) return Object.freeze({ status: 'rejected', reason: 'agent_unknown' });
     const binding = this.installedBindings.createBinding(target);
