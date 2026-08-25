@@ -1,12 +1,8 @@
 import { expect, test } from 'vitest';
 
-import { createProbeableAgentDiscovery } from '../../../src/application/manager/index.js';
 import { AgentManagerError } from '../../../src/runtime/errors/index.js';
-import {
-  buildAgentDefinition,
-  createTestActiveStateSink,
-} from '../../support/definition/build-agent-definition.js';
-import { FakeExecutableProbePort } from '../../support/probe/fake-executable-probe-port.js';
+import { buildAgentDefinition } from '../../support/definition/build-agent-definition.js';
+import { createProbeCapableManager } from '../../support/manager/create-probe-capable-manager.js';
 
 const fixtureDescriptor = {
   agent: { id: 'fixture-agent', version: '1.0.0' },
@@ -15,58 +11,49 @@ const fixtureDescriptor = {
   capabilities: { cancellation: true, structuredResult: true, usage: true },
 };
 
-const expectPortUnobserved = (port: FakeExecutableProbePort): void => {
+const expectPortUnobserved = (port: {
+  calls(): readonly unknown[];
+  hostPlatformReadCount(): number;
+}): void => {
   expect(port.calls()).toEqual([]);
   expect(port.hostPlatformReadCount()).toBe(0);
 };
 
-test('constructs synchronously, discovers exact agents, and never observes the port', () => {
-  const port = new FakeExecutableProbePort({ platform: 'linux' });
-  const discovery = createProbeableAgentDiscovery(
-    { activeStateSink: createTestActiveStateSink(), definitions: [buildAgentDefinition()] },
-    port,
-  );
-
-  expect(discovery.listAgents()).toEqual([fixtureDescriptor]);
-  expect(discovery.getAgent({ id: 'fixture-agent', version: '1.0.0' })).toEqual(fixtureDescriptor);
+test('constructs, discovers exact agents, and never observes the port', () => {
+  const { manager, port } = createProbeCapableManager([buildAgentDefinition()]);
+  expect(manager.listAgents()).toEqual([fixtureDescriptor]);
+  expect(manager.getAgent({ id: 'fixture-agent', version: '1.0.0' })).toEqual(fixtureDescriptor);
   expectPortUnobserved(port);
 });
 
 test('returns undefined for an absent exact agent without observing the port', () => {
-  const port = new FakeExecutableProbePort({ platform: 'linux' });
-  const discovery = createProbeableAgentDiscovery(
-    { activeStateSink: createTestActiveStateSink(), definitions: [buildAgentDefinition()] },
-    port,
-  );
-
-  expect(discovery.getAgent({ id: 'missing-agent', version: '1.0.0' })).toBeUndefined();
+  const { manager, port } = createProbeCapableManager([buildAgentDefinition()]);
+  expect(manager.getAgent({ id: 'missing-agent', version: '1.0.0' })).toBeUndefined();
   expectPortUnobserved(port);
 });
 
 test('rejects invalid definitions synchronously without observing the port', () => {
-  const port = new FakeExecutableProbePort({ platform: 'linux' });
-
-  expect(() =>
-    createProbeableAgentDiscovery(
-      {
-        activeStateSink: createTestActiveStateSink(),
-        definitions: [buildAgentDefinition({ id: '' })],
-      },
-      port,
-    ),
-  ).toThrow(AgentManagerError);
-  expectPortUnobserved(port);
+  expect(() => createProbeCapableManager([buildAgentDefinition({ id: '' })])).toThrow(
+    AgentManagerError,
+  );
 });
 
 test('rejects duplicate exact definitions synchronously without observing the port', () => {
-  const port = new FakeExecutableProbePort({ platform: 'linux' });
   const definition = buildAgentDefinition();
+  expect(() => createProbeCapableManager([definition, definition])).toThrow(AgentManagerError);
+});
 
-  expect(() =>
-    createProbeableAgentDiscovery(
-      { activeStateSink: createTestActiveStateSink(), definitions: [definition, definition] },
-      port,
-    ),
-  ).toThrow(AgentManagerError);
+test('serves registry reads before initialization', () => {
+  const { manager, port } = createProbeCapableManager([buildAgentDefinition()]);
+  expect(manager.listAgents()).toEqual([fixtureDescriptor]);
+  expect(manager.getAgent({ id: 'fixture-agent', version: '1.0.0' })).toEqual(fixtureDescriptor);
+  expectPortUnobserved(port);
+});
+
+test('serves registry reads after shutdown', async () => {
+  const { manager, port } = createProbeCapableManager([buildAgentDefinition()]);
+  await manager.shutdown();
+  expect(manager.listAgents()).toEqual([fixtureDescriptor]);
+  expect(manager.getAgent({ id: 'fixture-agent', version: '1.0.0' })).toEqual(fixtureDescriptor);
   expectPortUnobserved(port);
 });

@@ -1,23 +1,12 @@
-import { validateManagerOptions } from '../../runtime/definition/index.js';
-import { AgentManagerError } from '../../runtime/errors/index.js';
+import { AgentManagerError, limitInvalidError } from '../../runtime/errors/index.js';
 import { AGENT_FAULT_MESSAGES, AGENT_RUNTIME_LIMITS } from '../../runtime/policy/index.js';
 import { probeExecutable } from '../../runtime/probe/index.js';
 import type { ExecutableProbePort, ProbeTarget } from '../../runtime/probe/index.js';
 import { SealedAgentRegistry } from '../../runtime/registry/index.js';
-import type { AgentDescriptor, AgentProbeResult, AgentRef } from '../../runtime/spec/index.js';
+import type { AgentProbeResult, AgentRef } from '../../runtime/spec/index.js';
 import { inspectBatchRefs } from './inspect-batch-refs.js';
-import { InstalledBindingRegistry } from './installed-bindings.js';
+import { managerClosedError } from './manager-closed-error.js';
 import { ProbeAdmission } from './probe-admission.js';
-
-interface AgentDiscovery {
-  listAgents(): readonly AgentDescriptor[];
-  getAgent(agent: AgentRef): AgentDescriptor | undefined;
-}
-
-interface ProbeableAgentDiscovery extends AgentDiscovery {
-  probeAgent(agent: AgentRef): Promise<AgentProbeResult>;
-  probeAgents(refs: readonly AgentRef[]): Promise<readonly AgentProbeResult[]>;
-}
 
 interface BatchOperation {
   readonly target: ProbeTarget;
@@ -39,34 +28,21 @@ const unknownAgent = (details: Readonly<Record<string, string | number>>): Agent
     }),
   );
 
-const invalidLimit = (): AgentManagerError =>
-  new AgentManagerError(
-    Object.freeze({
-      code: 'revo.agent.limit_invalid' as const,
-      message: AGENT_FAULT_MESSAGES.limitInvalid,
-      phase: 'probing' as const,
-      retryable: false,
-      details: Object.freeze({ operation: 'probeAgents', limit: AGENT_RUNTIME_LIMITS.probeBatch }),
-    }),
-  );
-
-class InternalProbeableAgentDiscovery implements ProbeableAgentDiscovery {
+export class ProbeCoordinator {
   private readonly admission = new ProbeAdmission();
   private readonly probePort: ExecutableProbePort;
   private readonly registry: SealedAgentRegistry;
+  private readonly isClosing: () => boolean;
 
-  constructor(registry: SealedAgentRegistry, probePort: ExecutableProbePort) {
+  constructor(
+    registry: SealedAgentRegistry,
+    probePort: ExecutableProbePort,
+    isClosing: () => boolean,
+  ) {
     this.registry = registry;
     this.probePort = probePort;
+    this.isClosing = isClosing;
     Object.freeze(this);
-  }
-
-  listAgents(): readonly AgentDescriptor[] {
-    return this.registry.listAgents();
-  }
-
-  getAgent(agent: AgentRef): AgentDescriptor | undefined {
-    return this.registry.getAgent(agent);
   }
 
   async probeAgent(agent: AgentRef): Promise<AgentProbeResult> {
@@ -79,7 +55,13 @@ class InternalProbeableAgentDiscovery implements ProbeableAgentDiscovery {
   async probeAgents(refs: readonly AgentRef[]): Promise<readonly AgentProbeResult[]> {
     const inspection = inspectBatchRefs(refs, AGENT_RUNTIME_LIMITS.probeBatch);
     if (inspection.status === 'invalid') throw unknownAgent({ operation: 'probeAgents' });
-    if (inspection.status === 'limit') throw invalidLimit();
+    if (inspection.status === 'limit')
+      throw limitInvalidError(
+        'probing',
+        'probeAgents',
+        AGENT_RUNTIME_LIMITS.probeBatch,
+        AGENT_FAULT_MESSAGES.limitInvalid,
+      );
     if (inspection.refs.length === 0) return Object.freeze([]);
 
     const batchOperations = this.batchOperations(inspection.refs);
@@ -132,7 +114,10 @@ class InternalProbeableAgentDiscovery implements ProbeableAgentDiscovery {
   }
 
   private probeOperation(target: ProbeTarget): () => Promise<AgentProbeResult> {
-    return () => probeExecutable(target, this.probePort);
+    return () =>
+      this.isClosing()
+        ? Promise.reject(managerClosedError())
+        : probeExecutable(target, this.probePort);
   }
 
   private resolveTarget(ref: unknown): ProbeTarget | undefined {
@@ -148,14 +133,3 @@ class InternalProbeableAgentDiscovery implements ProbeableAgentDiscovery {
     }
   }
 }
-
-export const createProbeableAgentDiscovery = (
-  options: unknown,
-  probePort: ExecutableProbePort,
-): ProbeableAgentDiscovery => {
-  const validated = validateManagerOptions(options);
-  const registry = SealedAgentRegistry.create(validated.definitions);
-  InstalledBindingRegistry.create(validated.definitions);
-
-  return new InternalProbeableAgentDiscovery(registry, probePort);
-};

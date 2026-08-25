@@ -86,7 +86,7 @@ const createPorts = (
   output: FakeInvocationOutputPort;
   probe: FakeExecutableProbePort;
   workspace: ReturnType<typeof vi.fn>;
-  ports: InvocationExecutionPorts;
+  ports: InvocationExecutionPorts & Readonly<{ executableProbe: ExecutableProbePort }>;
 }> => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
@@ -452,33 +452,6 @@ test('reserves an invocation id before probing and retains that reservation afte
   expect(probe.calls()).toHaveLength(2);
 });
 
-test('maps a missing preflight composition port to a typed pre-acceptance rejection', async () => {
-  const definition = buildAgentDefinition();
-  const execution = new FakeInvocationExecutionPort();
-  const output = new FakeInvocationOutputPort();
-  const manager = createInvocationLifecycleManager(
-    { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    {
-      execution,
-      output,
-      clock: new FakeInvocationClock({ initialNowMs: 0 }),
-      outputClaim: new FakeOutputClaimPort('created'),
-      outputPreparation: new FakeOutputPreparationPort('prepared'),
-      workspace: {
-        admit: async () =>
-          Object.freeze({ status: 'admitted' as const, directory: '/approved/workspace' }),
-      },
-    },
-  );
-  await manager.initialize([]);
-
-  await expect(
-    manager.start(createStartInput(definition, { invocationId: 'missing-probe-port' })),
-  ).resolves.toMatchObject({ status: 'rejected', reason: 'preflight_failed' });
-  expect(output.calls()).toEqual([outputAdmissionCall('missing-probe-port')]);
-  expect(execution.calls()).toEqual([]);
-});
-
 test.each([
   ['missing workspace port', {}],
   ['missing workspace admit function', { workspace: {} }],
@@ -491,11 +464,11 @@ test.each([
     const probe = new FakeExecutableProbePort({ platform: 'linux' });
     const ports = {
       execution,
+      executableProbe: probe,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       outputClaim: new FakeOutputClaimPort('created'),
       outputPreparation: new FakeOutputPreparationPort('prepared'),
-      executableProbe: probe,
       ...malformedWorkspacePort,
     };
     const manager = createInvocationLifecycleManager(

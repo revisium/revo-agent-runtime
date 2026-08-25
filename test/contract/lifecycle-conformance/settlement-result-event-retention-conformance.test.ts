@@ -227,7 +227,7 @@ test('delivers one canonical result after lookup visibility and isolates listene
   await waitForLifecycleConformanceQuiescence();
   await second.handle.result();
   expect(lateEvents).toEqual([{ type: 'invocation.finished', invocationId: 'later' }]);
-  expect(throwingCalls).toBe(1);
+  expect(throwingCalls).toBe(2);
 });
 
 test('reaccepts the same literal id only after completed FIFO eviction while active ids remain protected', async () => {

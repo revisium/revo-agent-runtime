@@ -43,6 +43,7 @@ const isTerminalEventListener = (value: unknown): value is TerminalEventListener
 
 export class TerminalSubscriptions {
   private readonly subscriptions = new Set<Subscription>();
+  private isolatedFailures = 0;
 
   subscribe(filter: unknown, listener: TerminalEventListener): TerminalSubscriptionAdmission {
     if (!isTerminalEventListener(listener))
@@ -69,12 +70,16 @@ export class TerminalSubscriptions {
       try {
         subscription.listener(event);
       } catch {
-        this.subscriptions.delete(subscription);
+        this.isolatedFailures += 1;
       }
     }
   }
 
   clear(): void {
     this.subscriptions.clear();
+  }
+
+  isolatedFailureCount(): number {
+    return this.isolatedFailures;
   }
 }
