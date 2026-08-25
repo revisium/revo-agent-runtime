@@ -29,7 +29,6 @@ import {
   StartContextSnapshot,
   type ChildEnvironmentCapture,
   type InvocationExecutionPorts,
-  type NormalizedInvocationOutcome,
   type OutputClaimAttempt,
   type OutputClaimGuard,
   type OutputClaimResult,
@@ -50,9 +49,12 @@ import type {
   ActiveProcessIdentity,
   AgentDefinitionContract,
   AgentInvocationFilter,
+  AgentInvocationResult,
   AgentInvocationSnapshot,
+  AgentResultLookup,
   AgentInvocationStatus,
   AgentManagerLimits,
+  CancelInvocationResult,
   JsonObject,
   JsonValue,
 } from '../../runtime/spec/index.js';
@@ -65,7 +67,6 @@ import { InstalledBindingRegistry } from './installed-bindings.js';
 import { isRecoverySupportedPlatform } from './is-recovery-supported-platform.js';
 import { reconcileRecoveredRows } from './reconcile-recovered-rows.js';
 import type { RecoveredRowFailure } from './recovered-row-failure.js';
-import type { RetainedInvocationRecord } from './retained-invocation-record.js';
 import { TerminalSubscriptions } from './subscriptions.js';
 
 type RejectionReason =
@@ -83,15 +84,6 @@ type RejectionReason =
   | 'active_state_failed'
   | 'preflight_failed';
 
-type LifecycleResultLookup =
-  | Readonly<{ state: 'active' }>
-  | Readonly<{ state: 'completed'; result: NormalizedInvocationOutcome }>
-  | Readonly<{ state: 'unknown' }>;
-type LifecycleWaitResult = NormalizedInvocationOutcome | Readonly<{ state: 'unknown' }>;
-type CancelOutcome =
-  | Readonly<{ state: 'requested' }>
-  | Readonly<{ state: 'already_completed'; result: NormalizedInvocationOutcome }>
-  | Readonly<{ state: 'unknown' }>;
 type TerminalInvocationEvent = Readonly<{
   type: 'invocation.finished';
   invocationId: string;
@@ -101,12 +93,12 @@ type TerminalSubscriptionAdmission = ReturnType<TerminalSubscriptions['subscribe
 
 interface LifecycleHandle {
   readonly invocationId: string;
-  result(): Promise<NormalizedInvocationOutcome>;
+  result(): Promise<AgentInvocationResult>;
 }
 
 interface ActiveInvocation {
   readonly acceptedAt: string;
-  readonly completion: Deferred<NormalizedInvocationOutcome>;
+  readonly completion: Deferred<AgentInvocationResult>;
   readonly lifecycle: InvocationLifecycle;
 }
 
@@ -172,10 +164,10 @@ const activeSnapshot = (
   active: ActiveInvocation,
 ): AgentInvocationSnapshot => {
   const lifecycle = active.lifecycle;
-  const terminalSettlement = lifecycle.terminalSettlement();
+  const terminalResult = lifecycle.terminalResult();
   const status: AgentInvocationStatus =
-    lifecycle.currentState() === 'terminal' && terminalSettlement !== undefined
-      ? terminalSettlement.status
+    lifecycle.currentState() === 'terminal' && terminalResult !== undefined
+      ? terminalResult.status
       : lifecycle.activeStatus();
   const metadata = lifecycle.metadata();
   const startedAt = lifecycle.startedAt();
@@ -192,19 +184,16 @@ const activeSnapshot = (
   });
 };
 
-const retainedSnapshot = (
-  invocationId: string,
-  record: RetainedInvocationRecord,
-): AgentInvocationSnapshot =>
+const retainedSnapshot = (result: AgentInvocationResult): AgentInvocationSnapshot =>
   Object.freeze({
-    invocationId,
-    pin: record.pin,
-    status: record.outcome.status,
-    ...(record.metadata === undefined ? {} : { metadata: record.metadata }),
-    acceptedAt: record.acceptedAt,
-    ...(record.startedAt === undefined ? {} : { startedAt: record.startedAt }),
-    ...(record.finishedAt === undefined ? {} : { finishedAt: record.finishedAt }),
-    outputDirectory: record.outputDirectory,
+    invocationId: result.invocationId,
+    pin: result.pin,
+    status: result.status,
+    ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
+    acceptedAt: result.acceptedAt,
+    ...(result.startedAt === undefined ? {} : { startedAt: result.startedAt }),
+    finishedAt: result.finishedAt,
+    outputDirectory: result.files.directory,
   });
 
 const parametersSchemaPath = '/definition/parameters/schema';
@@ -409,6 +398,16 @@ const managerNotInitializedError = (): AgentManagerError =>
       code: 'revo.agent.manager_not_initialized' as const,
       message: AGENT_FAULT_MESSAGES.managerNotInitialized,
       phase: 'initializing' as const,
+      retryable: false,
+    }),
+  );
+
+const invocationUnknownError = (): AgentManagerError =>
+  new AgentManagerError(
+    Object.freeze({
+      code: 'revo.agent.invocation_unknown' as const,
+      message: AGENT_FAULT_MESSAGES.invocationUnknown,
+      phase: 'manager' as const,
       retryable: false,
     }),
   );
@@ -630,7 +629,7 @@ const createOutputAdmissionRequest = (
 
 const createHandle = (
   invocationId: string,
-  completion: Deferred<NormalizedInvocationOutcome>,
+  completion: Deferred<AgentInvocationResult>,
 ): LifecycleHandle =>
   Object.freeze({
     invocationId,
@@ -787,9 +786,8 @@ class InternalInvocationLifecycleManager {
       const { activate, startedAt, activeStateLane, activeProcessIdentity } = admission;
       const acceptedAt = createIsoTimestamp();
 
-      const completion = createDeferred<NormalizedInvocationOutcome>();
-      let lifecycle: InvocationLifecycle;
-      lifecycle = new InvocationLifecycle(
+      const completion = createDeferred<AgentInvocationResult>();
+      const lifecycle = new InvocationLifecycle(
         Object.freeze({ ...this.ports, execution: this.executionPort }),
         snapshot,
         preparedLaunch,
@@ -821,7 +819,7 @@ class InternalInvocationLifecycleManager {
               cleanupConfirmed: true,
             });
         },
-        (outcome) => this.complete(snapshot.invocationId, completion, lifecycle, outcome),
+        (result) => this.complete(snapshot.invocationId, completion, result),
       );
       this.active.set(
         snapshot.invocationId,
@@ -1004,26 +1002,30 @@ class InternalInvocationLifecycleManager {
     if (removed) this.releaseActiveStateGuard(invocationId);
   }
 
-  getResult(invocationId: string): LifecycleResultLookup {
+  getResult(invocationId: string): AgentResultLookup {
     this.#assertReady();
-    if (this.active.has(invocationId)) return Object.freeze({ state: 'active' });
+    const active = this.active.get(invocationId);
+    if (active !== undefined)
+      return Object.freeze({ state: 'running', invocation: activeSnapshot(invocationId, active) });
 
-    const record = this.completed.get(invocationId);
-    return record === undefined
+    const result = this.completed.get(invocationId);
+    return result === undefined
       ? Object.freeze({ state: 'unknown' })
-      : Object.freeze({ state: 'completed', result: record.outcome });
+      : Object.freeze({ state: 'completed', result });
   }
 
-  waitForResult(invocationId: string): Promise<LifecycleWaitResult> {
+  waitForResult(invocationId: string): Promise<AgentInvocationResult> {
     this.#assertReady();
     const active = this.active.get(invocationId);
     if (active !== undefined) return active.completion.promise;
 
-    const record = this.completed.get(invocationId);
-    return Promise.resolve(record?.outcome ?? Object.freeze({ state: 'unknown' } as const));
+    const result = this.completed.get(invocationId);
+    return result === undefined
+      ? Promise.reject(invocationUnknownError())
+      : Promise.resolve(result);
   }
 
-  cancel(invocationId: string): Promise<CancelOutcome> {
+  cancel(invocationId: string): Promise<CancelInvocationResult> {
     this.#assertReady();
     const active = this.active.get(invocationId);
     if (active !== undefined) {
@@ -1036,11 +1038,9 @@ class InternalInvocationLifecycleManager {
         Object.freeze({ state: 'already_completed' as const, result }),
       );
     }
-    const record = this.completed.get(invocationId);
-    if (record !== undefined)
-      return Promise.resolve(
-        Object.freeze({ state: 'already_completed' as const, result: record.outcome }),
-      );
+    const result = this.completed.get(invocationId);
+    if (result !== undefined)
+      return Promise.resolve(Object.freeze({ state: 'already_completed' as const, result }));
     return Promise.resolve(Object.freeze({ state: 'unknown' as const }));
   }
 
@@ -1048,8 +1048,8 @@ class InternalInvocationLifecycleManager {
     this.#assertReady();
     const active = this.active.get(invocationId);
     if (active !== undefined) return activeSnapshot(invocationId, active);
-    const record = this.completed.get(invocationId);
-    return record === undefined ? undefined : retainedSnapshot(invocationId, record);
+    const result = this.completed.get(invocationId);
+    return result === undefined ? undefined : retainedSnapshot(result);
   }
 
   listInvocations(filter?: AgentInvocationFilter): readonly AgentInvocationSnapshot[] {
@@ -1058,9 +1058,7 @@ class InternalInvocationLifecycleManager {
       ...[...this.active.entries()].map(([invocationId, active]) =>
         activeSnapshot(invocationId, active),
       ),
-      ...this.completed
-        .entries()
-        .map(([invocationId, record]) => retainedSnapshot(invocationId, record)),
+      ...this.completed.values().map((result) => retainedSnapshot(result)),
     ];
     return Object.freeze(
       snapshots
@@ -1200,25 +1198,12 @@ class InternalInvocationLifecycleManager {
 
   private complete(
     invocationId: string,
-    completion: Deferred<NormalizedInvocationOutcome>,
-    lifecycle: InvocationLifecycle,
-    outcome: NormalizedInvocationOutcome,
+    completion: Deferred<AgentInvocationResult>,
+    result: AgentInvocationResult,
   ): void {
     const active = this.active.get(invocationId);
     if (active === undefined) throw new Error('Completed invocation is not active.');
-    const acceptedAt = active.acceptedAt;
-    this.completed.commit(
-      invocationId,
-      Object.freeze({
-        outcome,
-        pin: lifecycle.pin(),
-        acceptedAt,
-        startedAt: lifecycle.startedAt(),
-        finishedAt: lifecycle.terminalFinishedAt(),
-        metadata: lifecycle.metadata(),
-        outputDirectory: lifecycle.outputDirectory(),
-      }),
-    );
+    this.completed.commit(invocationId, result);
     this.active.delete(invocationId);
     const event: TerminalInvocationEvent = Object.freeze({
       type: 'invocation.finished',
@@ -1227,7 +1212,7 @@ class InternalInvocationLifecycleManager {
     try {
       this.subscriptions.deliver(event);
     } finally {
-      completion.resolve(outcome);
+      completion.resolve(result);
     }
   }
 
@@ -1568,14 +1553,14 @@ export const createInvocationLifecycleManager = (
   ports: LifecycleManagerPorts,
 ): Readonly<{
   initialize(snapshots: readonly ActiveInvocationSnapshot[]): Promise<void>;
-  cancel(invocationId: string): Promise<CancelOutcome>;
+  cancel(invocationId: string): Promise<CancelInvocationResult>;
   getInvocation(invocationId: string): AgentInvocationSnapshot | undefined;
-  getResult(invocationId: string): LifecycleResultLookup;
+  getResult(invocationId: string): AgentResultLookup;
   listInvocations(filter?: AgentInvocationFilter): readonly AgentInvocationSnapshot[];
   start(input: unknown, context?: unknown): Promise<LifecycleStartOutcome>;
   subscribe(filter: unknown, listener: TerminalEventListener): TerminalSubscriptionAdmission;
   shutdown(reason?: string): Promise<void>;
-  waitForResult(invocationId: string): Promise<LifecycleWaitResult>;
+  waitForResult(invocationId: string): Promise<AgentInvocationResult>;
 }> => {
   const validated = validateManagerOptions(options);
   const capacity = validated.limits.maxCompletedInvocations;

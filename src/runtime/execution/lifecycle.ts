@@ -1,4 +1,4 @@
-import type { JsonObject } from '../spec/index.js';
+import type { AgentInvocationResult, JsonObject } from '../spec/index.js';
 import type { CancellationCommitOutcome } from './cancellation-commit-outcome.js';
 import type { InvocationExecutionPorts } from './execution-ports.js';
 import type { InvocationTerminalObservation } from './execution-terminal-observation.js';
@@ -57,7 +57,7 @@ export class InvocationLifecycle {
   private cancellationDispatched = false;
   private deadlineCancellation: (() => void) | undefined;
   private execution: RunningExecution | undefined;
-  private settlement: NormalizedInvocationOutcome | undefined;
+  private deliveredResult: AgentInvocationResult | undefined;
   private readonly startedAtIso: string;
   private terminalFinishedAtIso: string | undefined;
   private state: LifecycleState = 'accepted';
@@ -73,7 +73,7 @@ export class InvocationLifecycle {
     startedAt: string,
     private readonly saveCancellingState: () => void,
     private readonly removeActiveState: (invocationId: string) => Promise<void>,
-    private readonly onTerminal: (settlement: NormalizedInvocationOutcome) => void,
+    private readonly onTerminal: (result: AgentInvocationResult) => void,
   ) {
     this.startedAtIso = startedAt;
   }
@@ -97,8 +97,8 @@ export class InvocationLifecycle {
     return this.state;
   }
 
-  terminalSettlement(): NormalizedInvocationOutcome | undefined {
-    return this.settlement;
+  terminalResult(): AgentInvocationResult | undefined {
+    return this.deliveredResult;
   }
 
   terminalFinishedAt(): string | undefined {
@@ -269,55 +269,43 @@ export class InvocationLifecycle {
       });
     }
 
-    let settlement: NormalizedInvocationOutcome;
-    try {
-      const cleanupSettlement = await this.cleanupSettlementDeferred.promise;
-      if (cleanupSettlement === 'confirmed' || cleanupSettlement === 'not_dispatched') {
-        try {
-          await this.removeActiveState(this.snapshot.invocationId);
-        } catch {
-          // Active-row removal is diagnostic-only after confirmed local cleanup.
-        }
+    const invocationToken = getTerminalPublicationInvocationToken(this.authority);
+    const base = Object.freeze({
+      schemaVersion: 'agent-invocation-result/v1' as const,
+      invocationId: this.snapshot.invocationId,
+      pin: this.preparedLaunch.pin,
+      launch: Object.freeze({
+        executable: this.preparedLaunch.executable,
+        reportedVersion: this.preparedLaunch.reportedVersion,
+      }),
+      ...(this.snapshot.metadata === undefined ? {} : { metadata: this.snapshot.metadata }),
+      ...(this.startedAtIso === undefined ? {} : { startedAt: this.startedAtIso }),
+      acceptedAt: this.acceptedAt,
+      files: Object.freeze({
+        directory: this.authority.outputDirectory,
+        events: 'events.ndjson' as const,
+        stdout: 'stdout.log' as const,
+        stderr: 'stderr.log' as const,
+      }),
+    });
+    const cleanupSettlement = await this.cleanupSettlementDeferred.promise;
+    if (cleanupSettlement === 'confirmed' || cleanupSettlement === 'not_dispatched') {
+      try {
+        await this.removeActiveState(this.snapshot.invocationId);
+      } catch {
+        // Active-row removal is diagnostic-only after confirmed local cleanup.
       }
-      const finalized = await finalizeInvocationOutcome({
-        output: this.ports.output,
-        authority: this.authority,
-        invocationToken: getTerminalPublicationInvocationToken(this.authority),
-        base: Object.freeze({
-          schemaVersion: 'agent-invocation-result/v1' as const,
-          invocationId: this.snapshot.invocationId,
-          pin: this.preparedLaunch.pin,
-          launch: Object.freeze({
-            executable: this.preparedLaunch.executable,
-            reportedVersion: this.preparedLaunch.reportedVersion,
-          }),
-          ...(this.snapshot.metadata === undefined ? {} : { metadata: this.snapshot.metadata }),
-          ...(this.startedAtIso === undefined ? {} : { startedAt: this.startedAtIso }),
-          acceptedAt: this.acceptedAt,
-          files: Object.freeze({
-            directory: this.authority.outputDirectory,
-            events: 'events.ndjson' as const,
-            stdout: 'stdout.log' as const,
-            stderr: 'stderr.log' as const,
-          }),
-        }),
-        normalized,
-      });
-      this.terminalFinishedAtIso = finalized.delivered.finishedAt;
-      settlement = finalized.outcome;
-    } catch {
-      settlement = Object.freeze({
-        status: 'failed',
-        failure: Object.freeze({
-          kind: 'duplex',
-          primary: Object.freeze({ kind: 'internal' }),
-          code: 'revo.agent.internal',
-        }),
-        evidence: Object.freeze({ exit: Object.freeze({ exitCode: null, signal: null }) }),
-      });
     }
-    this.settlement = settlement;
+    const delivered = await finalizeInvocationOutcome({
+      output: this.ports.output,
+      authority: this.authority,
+      invocationToken,
+      base,
+      normalized,
+    });
+    this.terminalFinishedAtIso = delivered.finishedAt;
+    this.deliveredResult = delivered;
     this.state = 'terminal';
-    this.onTerminal(settlement);
+    this.onTerminal(delivered);
   }
 }

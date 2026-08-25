@@ -183,7 +183,7 @@ export class FakeInvocationOutputPort
   private readonly pendingTerminalResultRecordings = new Map<number, Deferred>();
   private readonly eventRecordingQueue: (Error | undefined)[] = [];
   private readonly callLog: InvocationOutputCall[] = [];
-  private readonly terminalResults: Array<AgentInvocationResult | NormalizedInvocationOutcome> = [];
+  private readonly terminalResults: AgentInvocationResult[] = [];
   private nextPendingTerminalResultRecordingId = 1;
 
   enqueueAdmission(result: OutputAdmissionResult | (() => OutputAdmissionResult)): void {
@@ -238,7 +238,6 @@ export class FakeInvocationOutputPort
     } else {
       this.complete(queued);
     }
-    this.terminalResults.push(copiedOutcome);
   }
 
   async publishTerminalResult(
@@ -295,7 +294,7 @@ export class FakeInvocationOutputPort
     return Object.freeze(this.callLog.map((call) => copyOutcomeCall(call)));
   }
 
-  recordedTerminalResults(): readonly (AgentInvocationResult | NormalizedInvocationOutcome)[] {
+  recordedTerminalResults(): readonly AgentInvocationResult[] {
     return Object.freeze([...this.terminalResults]);
   }
 

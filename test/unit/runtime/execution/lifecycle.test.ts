@@ -209,7 +209,7 @@ test('uses confirmed cancellation rather than a deadline fire as the terminal ou
   execution.settleCancellationRequest(1);
   execution.confirmCancellation(1);
   await flush();
-  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'timed_out' });
+  expect(lifecycle.terminalResult()).toMatchObject({ status: 'timed_out' });
   expect(settlements).toMatchObject([{ status: 'timed_out' }]);
 });
 
@@ -226,7 +226,7 @@ test('lets same-turn natural completion win over a rejected pending cancellation
   );
   await flush();
   expect(settlements).toMatchObject([{ status: 'succeeded', value: {} }]);
-  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'succeeded', value: {} });
+  expect(lifecycle.terminalResult()).toMatchObject({ status: 'succeeded', value: {} });
 });
 
 test('moves accepted through starting and running before natural completion', async () => {
@@ -328,7 +328,7 @@ test('commits failed once when execution completion rejects', async () => {
   execution.settleCompletionFailure(1, new Error('completion failed'));
   await flush();
 
-  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'failed' });
+  expect(lifecycle.terminalResult()).toMatchObject({ status: 'failed' });
   expect(settlements).toMatchObject([{ status: 'failed' }]);
 });
 
@@ -439,7 +439,7 @@ test('preserves the first terminal settlement when late controls arrive', async 
 
   expect(() => execution.settleNaturalCompletion(1)).toThrow('already settled');
   expect(settlements).toMatchObject([{ status: 'succeeded', value: {} }]);
-  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'succeeded', value: {} });
+  expect(lifecycle.terminalResult()).toMatchObject({ status: 'succeeded', value: {} });
 });
 
 test('lets completion failure win while caller cancellation is pending', async () => {
@@ -454,7 +454,7 @@ test('lets completion failure win while caller cancellation is pending', async (
   await flush();
 
   expect(settlements).toMatchObject([{ status: 'failed' }]);
-  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'failed' });
+  expect(lifecycle.terminalResult()).toMatchObject({ status: 'failed' });
 });
 
 test('settles a standalone rejected cancellation request as failed after microtask arbitration', async () => {
@@ -469,5 +469,5 @@ test('settles a standalone rejected cancellation request as failed after microta
   await flush();
 
   expect(settlements).toMatchObject([{ status: 'failed' }]);
-  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'failed' });
+  expect(lifecycle.terminalResult()).toMatchObject({ status: 'failed' });
 });

@@ -78,6 +78,7 @@ class FakeTerminalPublicationPort implements TerminalPublicationPort {
     status: 'published',
     file: 'result.json',
   });
+  terminalReject = false;
   readonly rawPublications: Uint8Array[] = [];
   readonly terminalPublications: AgentInvocationResult[] = [];
 
@@ -103,15 +104,52 @@ class FakeTerminalPublicationPort implements TerminalPublicationPort {
     result: AgentInvocationResult,
   ): Promise<TerminalResultPublicationResult> {
     this.terminalPublications.push(result);
+    if (this.terminalReject) throw new Error('terminal publication rejected');
     return this.terminalResult;
   }
 }
+
+test('converts a rejecting terminal publication into an output-write failure with exit evidence', async () => {
+  const output = new FakeTerminalPublicationPort();
+  output.terminalReject = true;
+
+  const result = await finalizeInvocationOutcome({
+    output,
+    authority,
+    invocationToken,
+    base,
+    normalized: parserFailure({
+      exit: Object.freeze({ exitCode: 7, signal: 'SIGTERM' }),
+    }),
+  });
+
+  expect(result).toMatchObject({
+    status: 'failed',
+    error: { code: 'revo.agent.output_write_failed' },
+    exit: { code: 7, signal: 'SIGTERM' },
+  });
+  expect(result.files.result).toBeUndefined();
+});
+
+test('optimistically commits result.json for a successfully published failed result', async () => {
+  const output = new FakeTerminalPublicationPort();
+  const result = await finalizeInvocationOutcome({
+    output,
+    authority,
+    invocationToken,
+    base,
+    normalized: parserFailure(),
+  });
+
+  expect(result.status).toBe('failed');
+  expect(result.files.result).toBe('result.json');
+});
 
 test('rebuilds delivered result after late result publication failure without retrying', async () => {
   const output = new FakeTerminalPublicationPort();
   output.terminalResult = Object.freeze({ status: 'write_failed' });
 
-  const settlement = await finalizeInvocationOutcome({
+  const result = await finalizeInvocationOutcome({
     output,
     authority,
     invocationToken,
@@ -120,15 +158,15 @@ test('rebuilds delivered result after late result publication failure without re
   });
 
   expect(output.terminalPublications).toHaveLength(1);
-  expect(settlement.outcome).toMatchObject({
+  expect(result).toMatchObject({
     status: 'failed',
-    failure: { kind: 'finalization', code: 'revo.agent.output_write_failed' },
+    error: { code: 'revo.agent.output_write_failed' },
   });
-  expect(settlement.delivered).toMatchObject({
+  expect(result).toMatchObject({
     status: 'failed',
     files: { directory: '/outputs/invocation-1' },
   });
-  expect(settlement.delivered.files.result).toBeUndefined();
+  expect(result.files.result).toBeUndefined();
 });
 
 test('treats an undefined invocation token as raw-response ineligible', async () => {
@@ -152,7 +190,7 @@ test('keeps scratch cleanup failure precedence over raw publication failure', as
   output.cleanupResult = Object.freeze({ status: 'failed', reason: 'cleanup_failed' });
   output.rawResult = Object.freeze({ status: 'write_failed' });
 
-  const settlement = await finalizeInvocationOutcome({
+  const result = await finalizeInvocationOutcome({
     output,
     authority,
     invocationToken,
@@ -161,9 +199,9 @@ test('keeps scratch cleanup failure precedence over raw publication failure', as
   });
 
   expect(output.rawPublications).toHaveLength(1);
-  expect(settlement.outcome).toMatchObject({
+  expect(result).toMatchObject({
     status: 'failed',
-    failure: { kind: 'finalization', code: 'revo.agent.scratch_cleanup_failed' },
+    error: { code: 'revo.agent.scratch_cleanup_failed' },
   });
 });
 
@@ -224,7 +262,7 @@ test('maps terminal result exit fields from normalized evidence', async () => {
 test('tags raw response file symmetrically only after successful raw publication', async () => {
   const output = new FakeTerminalPublicationPort();
 
-  const settlement = await finalizeInvocationOutcome({
+  const result = await finalizeInvocationOutcome({
     output,
     authority,
     invocationToken,
@@ -232,7 +270,7 @@ test('tags raw response file symmetrically only after successful raw publication
     normalized: parserFailure({ rawResponse: rawEvidence(new TextEncoder().encode('{')) }),
   });
 
-  expect(settlement.delivered).toMatchObject({
+  expect(result).toMatchObject({
     status: 'failed',
     rawResponse: { file: 'raw-final-response.txt' },
     files: { rawFinalResponse: 'raw-final-response.txt' },

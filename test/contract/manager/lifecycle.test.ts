@@ -649,7 +649,7 @@ test('retains failed composition admission after completion rejection', async ()
   await flush();
   execution.settleCompletionFailure(1, new Error('failed'));
   await flush();
-  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'failed' });
+  expect(lifecycle.terminalResult()).toMatchObject({ status: 'failed' });
   await expect(manager.start(createStartInput({ invocationId: 'failed-reuse' }))).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',
@@ -684,7 +684,7 @@ test('retains caller-cancelled composition admission after confirmed cancellatio
   });
   execution.confirmCancellation(1);
   await flush();
-  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'cancelled' });
+  expect(lifecycle.terminalResult()).toMatchObject({ status: 'cancelled' });
   await expect(
     manager.start(createStartInput({ invocationId: 'cancelled-reuse' })),
   ).resolves.toEqual({
@@ -722,7 +722,7 @@ test('retains deadline-cancelled composition admission after confirmed cancellat
   execution.settleCancellationRequest(1);
   execution.confirmCancellation(1);
   await flush();
-  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'timed_out' });
+  expect(lifecycle.terminalResult()).toMatchObject({ status: 'timed_out' });
   await expect(manager.start(createStartInput({ invocationId: 'timeout-reuse' }))).resolves.toEqual(
     {
       status: 'rejected',
@@ -754,7 +754,7 @@ test('keeps a racing natural completion as the only terminal composition settlem
     'Execution completed before cancellation request was accepted',
   );
   await flush();
-  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'succeeded', value: {} });
+  expect(lifecycle.terminalResult()).toMatchObject({ status: 'succeeded', value: {} });
   await expect(manager.start(createStartInput({ invocationId: 'race-reuse' }))).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',
@@ -786,7 +786,7 @@ test('keeps an id active until its one pending terminal-result commit settles', 
 
   output.fulfilPendingTerminalResultRecording(1);
   await flush();
-  expect(first.terminalSettlement()).toMatchObject({ status: 'succeeded', value: { ok: true } });
+  expect(first.terminalResult()).toMatchObject({ status: 'succeeded', value: { ok: true } });
   await expect(manager.start(createStartInput({ invocationId: 'finalizing' }))).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',
@@ -812,7 +812,7 @@ test('retains the id after one output commit failure without retrying the commit
   execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
   await flush();
 
-  expect(lifecycle.terminalSettlement()).toMatchObject({ status: 'failed' });
+  expect(lifecycle.terminalResult()).toMatchObject({ status: 'failed' });
   expect(output.calls().filter((call) => call.type === 'publish-terminal-result')).toHaveLength(1);
   await expect(
     manager.start(createStartInput({ invocationId: 'output-failure' })),
@@ -869,7 +869,10 @@ test('shutdown is idempotent and drains active invocations through cleanup settl
   execution.settleCancellationRequest(1);
   execution.settleCancellationRequest(2);
   await flush();
-  expect(manager.getResult('shutdown-a')).toEqual({ state: 'active' });
+  expect(manager.getResult('shutdown-a')).toMatchObject({
+    state: 'running',
+    invocation: { status: 'cancelling' },
+  });
   execution.confirmCancellation(1);
   execution.confirmCancellation(2);
   await expect(first).resolves.toBeUndefined();
@@ -899,7 +902,10 @@ test('shutdown rejects with shutdown_failed on cleanup failure without deleting 
   await expect(shutdown).rejects.toMatchObject({
     fault: { code: 'revo.agent.shutdown_failed', phase: 'shutdown', retryable: false },
   });
-  expect(manager.getResult('shutdown-cleanup-failed')).toEqual({ state: 'active' });
+  expect(manager.getResult('shutdown-cleanup-failed')).toMatchObject({
+    state: 'running',
+    invocation: { status: 'cancelling' },
+  });
   expect(manager.getInvocation('shutdown-cleanup-failed')).toMatchObject({
     invocationId: 'shutdown-cleanup-failed',
     status: 'cancelling',
@@ -989,7 +995,10 @@ test('shutdown rejects new starts and new subscriptions while existing reads and
   });
   expect(manager.getInvocation('shutdown-reads')).toMatchObject({ invocationId: 'shutdown-reads' });
   expect(manager.listInvocations({ invocationId: 'shutdown-reads' })).toHaveLength(1);
-  expect(manager.getResult('shutdown-reads')).toEqual({ state: 'active' });
+  expect(manager.getResult('shutdown-reads')).toMatchObject({
+    state: 'running',
+    invocation: { status: 'cancelling' },
+  });
   await expect(manager.cancel('shutdown-reads')).resolves.toEqual({ state: 'requested' });
 
   execution.settleCancellationRequest(1);
@@ -1226,7 +1235,7 @@ test('checks retained invocation ids before rejecting an invalid result schema',
   await flush();
   execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
   await flush();
-  expect(accepted.terminalSettlement()).toMatchObject({ status: 'succeeded', value: { ok: true } });
+  expect(accepted.terminalResult()).toMatchObject({ status: 'succeeded', value: { ok: true } });
 
   await expect(
     manager.start(
@@ -1269,7 +1278,7 @@ test('finalizes a deep in-bound response with one output commit before retaining
   output.fulfilPendingTerminalResultRecording(1);
   await flush();
   expect(lifecycle.currentState()).toBe('terminal');
-  expect(lifecycle.terminalSettlement()?.status).toBe('succeeded');
+  expect(lifecycle.terminalResult()?.status).toBe('succeeded');
   await expect(manager.start(createStartInput({ invocationId: 'deep-result' }))).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',

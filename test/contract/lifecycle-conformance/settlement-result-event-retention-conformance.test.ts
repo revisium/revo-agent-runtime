@@ -27,7 +27,10 @@ test('waits for caller and deadline cancellation confirmation before terminal se
   caller.execution.settleCancellationRequest(1);
   await expect(cancellationCompletion(callerCancellation)).resolves.toBeUndefined();
   expect(callerAccepted.lifecycle.currentState()).toBe('cancelling');
-  expect(caller.manager.getResult('caller-cancellation')).toEqual({ state: 'active' });
+  expect(caller.manager.getResult('caller-cancellation')).toMatchObject({
+    state: 'running',
+    invocation: { status: 'cancelling' },
+  });
   caller.execution.confirmCancellation(1);
   await waitForLifecycleConformanceQuiescence();
   await expect(callerAccepted.handle.result()).resolves.toMatchObject({ status: 'cancelled' });
@@ -45,7 +48,10 @@ test('waits for caller and deadline cancellation confirmation before terminal se
   deadline.clock.advanceBy(1_000);
   await waitForLifecycleConformanceQuiescence();
   expect(deadlineAccepted.lifecycle.currentState()).toBe('cancelling');
-  expect(deadline.manager.getResult('deadline-cancellation')).toEqual({ state: 'active' });
+  expect(deadline.manager.getResult('deadline-cancellation')).toMatchObject({
+    state: 'running',
+    invocation: { status: 'cancelling' },
+  });
   deadline.execution.settleCancellationRequest(1);
   deadline.execution.confirmCancellation(1);
   await waitForLifecycleConformanceQuiescence();
@@ -88,7 +94,10 @@ test('keeps finalizing work out of completed lookup and terminal delivery until 
   subject.execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
   await waitForLifecycleConformanceQuiescence();
   expect(accepted.lifecycle.currentState()).toBe('finalizing');
-  expect(subject.manager.getResult('finalizing-release')).toEqual({ state: 'active' });
+  expect(subject.manager.getResult('finalizing-release')).toMatchObject({
+    state: 'running',
+    invocation: { status: 'running' },
+  });
   expect(events).toEqual([]);
   await expect(subject.start(subject.createInput('finalizing-release'))).resolves.toEqual({
     status: 'rejected',
@@ -102,7 +111,10 @@ test('keeps finalizing work out of completed lookup and terminal delivery until 
   await waitForLifecycleConformanceQuiescence();
   const result = await accepted.handle.result();
   expect(result).toMatchObject({ status: 'succeeded', value: { ok: true } });
-  expect(subject.manager.getResult('finalizing-release')).toEqual({ state: 'completed', result });
+  expect(subject.manager.getResult('finalizing-release')).toMatchObject({
+    state: 'completed',
+    result,
+  });
   expect(events).toEqual([{ type: 'invocation.finished', invocationId: 'finalizing-release' }]);
   expect(
     subject.output.calls().filter((call) => call.type === 'publish-terminal-result'),
