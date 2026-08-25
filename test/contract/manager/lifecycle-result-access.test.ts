@@ -273,6 +273,7 @@ test('does not publish a pending terminal result before its output commit settle
 test('uses validated default capacity and rejects invalid capacity through lifecycle composition', async () => {
   const createPorts = () => ({
     execution: new FakeInvocationExecutionPort(),
+    executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
     output: new FakeInvocationOutputPort(),
     clock: new FakeInvocationClock({ initialNowMs: 0 }),
     outputClaim: new FakeOutputClaimPort('created'),
@@ -491,7 +492,7 @@ test('isolates a throwing listener without stranding manager handle or active wa
 
   const secondResult = await second.handle.result();
   expect(independentResults).toEqual([firstResult, secondResult]);
-  expect(throwingCalls).toBe(1);
+  expect(throwingCalls).toBe(2);
 });
 
 test('admits subscriptions independently from completed result retention', async () => {

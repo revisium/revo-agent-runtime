@@ -7,6 +7,7 @@ import {
   type ValidatedDefinition,
 } from '../../runtime/definition/index.js';
 import { AgentManagerError } from '../../runtime/errors/index.js';
+import { limitInvalidError } from '../../runtime/errors/index.js';
 import {
   captureChildEnvironment,
   beginOutputClaim,
@@ -48,6 +49,9 @@ import type {
   ActiveInvocationStateSink,
   ActiveProcessIdentity,
   AgentDefinitionContract,
+  AgentDescriptor,
+  AgentProbeResult,
+  AgentRef,
   AgentInvocationFilter,
   AgentInvocationResult,
   AgentInvocationSnapshot,
@@ -65,6 +69,8 @@ import { createNativeProcessExecutionPort } from './create-native-process-execut
 import { inspectBatchRefs } from './inspect-batch-refs.js';
 import { InstalledBindingRegistry } from './installed-bindings.js';
 import { isRecoverySupportedPlatform } from './is-recovery-supported-platform.js';
+import { managerClosedError } from './manager-closed-error.js';
+import { ProbeCoordinator } from './probe-coordinator.js';
 import { reconcileRecoveredRows } from './reconcile-recovered-rows.js';
 import type { RecoveredRowFailure } from './recovered-row-failure.js';
 import { TerminalSubscriptions } from './subscriptions.js';
@@ -112,7 +118,7 @@ interface RetainedActiveStateGuard {
 type LifecycleManagerPorts = Omit<InvocationExecutionPorts, 'execution'> &
   Readonly<{
     execution?: InvocationExecutionPorts['execution'];
-    executableProbe?: ExecutableProbePort;
+    executableProbe: ExecutableProbePort;
   }>;
 
 type LifecycleStartOutcome =
@@ -382,16 +388,6 @@ const createDeferred = <Value>(): Deferred<Value> => {
   return Object.freeze({ promise, resolve, reject });
 };
 
-const managerClosedError = (): AgentManagerError =>
-  new AgentManagerError(
-    Object.freeze({
-      code: 'revo.agent.manager_closed' as const,
-      message: AGENT_FAULT_MESSAGES.managerClosed,
-      phase: 'manager' as const,
-      retryable: false,
-    }),
-  );
-
 const managerNotInitializedError = (): AgentManagerError =>
   new AgentManagerError(
     Object.freeze({
@@ -446,20 +442,6 @@ const recoveryFailedError = (failures: readonly RecoveredRowFailure[]): AgentMan
     }),
   );
 };
-
-const initializeLimitInvalidError = (): AgentManagerError =>
-  new AgentManagerError(
-    Object.freeze({
-      code: 'revo.agent.limit_invalid' as const,
-      message: AGENT_FAULT_MESSAGES.limitInvalid,
-      phase: 'initializing' as const,
-      retryable: false,
-      details: Object.freeze({
-        operation: 'initialize',
-        limit: AGENT_RUNTIME_LIMITS.activeSnapshots,
-      }),
-    }),
-  );
 
 const isPlainRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && Object.getPrototypeOf(value) === Object.prototype;
@@ -678,6 +660,7 @@ class InternalInvocationLifecycleManager {
   // Retained until consumer-backed active-state reconciliation can inspect uncertain rows.
   private readonly retainedActiveStateGuards = new Map<string, RetainedActiveStateGuard>();
   private readonly retainedActiveStateOutputDirectories = new Set<string>();
+  private readonly probes: ProbeCoordinator;
   constructor(
     private readonly ports: LifecycleManagerPorts,
     private readonly completed: CompletedInvocations,
@@ -698,6 +681,7 @@ class InternalInvocationLifecycleManager {
     if (initializationTimeoutMs === undefined)
       throw new Error('Validated initialization timeout is required.');
     this.#initializationTimeoutMs = initializationTimeoutMs;
+    this.probes = new ProbeCoordinator(registry, ports.executableProbe, () => this.#closing);
     this.executionPort =
       ports.execution ?? createNativeProcessExecutionPort(undefined, activeStateOperationTimeoutMs);
   }
@@ -1067,10 +1051,32 @@ class InternalInvocationLifecycleManager {
     );
   }
 
+  listAgents(): readonly AgentDescriptor[] {
+    return this.registry.listAgents();
+  }
+
+  getAgent(agent: AgentRef): AgentDescriptor | undefined {
+    return this.registry.getAgent(agent);
+  }
+
+  async probeAgent(agent: AgentRef): Promise<AgentProbeResult> {
+    this.#assertOpenAndReady();
+    return this.probes.probeAgent(agent);
+  }
+
+  async probeAgents(refs: readonly AgentRef[]): Promise<readonly AgentProbeResult[]> {
+    this.#assertOpenAndReady();
+    return this.probes.probeAgents(refs);
+  }
+
   subscribe(filter: unknown, listener: TerminalEventListener): TerminalSubscriptionAdmission {
+    this.#assertOpenAndReady();
+    return this.subscriptions.subscribe(filter, listener);
+  }
+
+  #assertOpenAndReady(): void {
     if (this.#closing) throw managerClosedError();
     this.#assertReady();
-    return this.subscriptions.subscribe(filter, listener);
   }
 
   #assertReady(): void {
@@ -1084,7 +1090,13 @@ class InternalInvocationLifecycleManager {
   ): Promise<void> {
     await Promise.resolve();
     if (inspection.status === 'invalid') throw recoveryInvalidError();
-    if (inspection.status === 'limit') throw initializeLimitInvalidError();
+    if (inspection.status === 'limit')
+      throw limitInvalidError(
+        'initializing',
+        'initialize',
+        AGENT_RUNTIME_LIMITS.activeSnapshots,
+        AGENT_FAULT_MESSAGES.limitInvalid,
+      );
 
     if (rows === undefined || rows.status === 'invalid') throw recoveryInvalidError();
     if (rows.snapshots.length === 0) return;
@@ -1285,9 +1297,7 @@ class InternalInvocationLifecycleManager {
       target,
     });
     if (resourceBound.status === 'rejected') return Object.freeze({ status: 'rejected' });
-    const port = this.ports.executableProbe;
-    if (port === undefined) return Object.freeze({ status: 'rejected' });
-    const result = await probeExecutable(target, port);
+    const result = await probeExecutable(target, this.ports.executableProbe);
     if (this.#closing) return Object.freeze({ status: 'rejected' });
     if (result.status === 'available') {
       if (
@@ -1557,6 +1567,10 @@ export const createInvocationLifecycleManager = (
   getInvocation(invocationId: string): AgentInvocationSnapshot | undefined;
   getResult(invocationId: string): AgentResultLookup;
   listInvocations(filter?: AgentInvocationFilter): readonly AgentInvocationSnapshot[];
+  listAgents(): readonly AgentDescriptor[];
+  getAgent(agent: AgentRef): AgentDescriptor | undefined;
+  probeAgent(agent: AgentRef): Promise<AgentProbeResult>;
+  probeAgents(refs: readonly AgentRef[]): Promise<readonly AgentProbeResult[]>;
   start(input: unknown, context?: unknown): Promise<LifecycleStartOutcome>;
   subscribe(filter: unknown, listener: TerminalEventListener): TerminalSubscriptionAdmission;
   shutdown(reason?: string): Promise<void>;

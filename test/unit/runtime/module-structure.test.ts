@@ -60,6 +60,7 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'definition/validate-definition/validated-manager-construction.ts',
     'errors/agent-manager-error.ts',
     'errors/index.ts',
+    'errors/limit-invalid-error.ts',
     'execution/argument-template-interpretation/index.ts',
     'execution/argument-template-interpretation/interpreted-argument-template.ts',
     'execution/argument-template-interpretation/interpret-argument-template.ts',

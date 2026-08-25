@@ -67,7 +67,7 @@ test('keeps snapshot delivery future-only when a reentrant admission frees a slo
   expect(calls).toEqual(['current', 'late']);
 });
 
-test('frees a throwing listener while retaining a reentrant admission', () => {
+test('retains a throwing listener for future events while isolating the failure', () => {
   const subscriptions = new TerminalSubscriptions();
   const calls: string[] = [];
   let reentrantAdmission: SubscriptionAdmission | undefined;
@@ -88,7 +88,54 @@ test('frees a throwing listener while retaining a reentrant admission', () => {
   replacement();
 
   expect(reentrantAdmission).toEqual(expect.objectContaining({ state: 'subscribed' }));
-  expect(calls).toEqual(['throwing', 'independent', 'independent', 'hidden', 'replacement']);
+  expect(calls).toEqual([
+    'throwing',
+    'independent',
+    'throwing',
+    'independent',
+    'hidden',
+    'replacement',
+  ]);
+});
+
+test('counts repeated listener failures until explicit disposal', () => {
+  const subscriptions = new TerminalSubscriptions();
+  let recordingCalls = 0;
+  const throwing = expectSubscribed(
+    subscriptions.subscribe({}, () => {
+      throw new Error('failure');
+    }),
+  );
+  expectSubscribed(
+    subscriptions.subscribe({}, () => {
+      recordingCalls += 1;
+    }),
+  );
+
+  subscriptions.deliver(event('first'));
+  subscriptions.deliver(event('second'));
+  subscriptions.deliver(event('third'));
+  expect(recordingCalls).toBe(3);
+  expect(subscriptions.isolatedFailureCount()).toBe(3);
+
+  throwing();
+  subscriptions.deliver(event('fourth'));
+  expect(subscriptions.isolatedFailureCount()).toBe(3);
+});
+
+test('isolates one throwing listener from all other listeners in one delivery', () => {
+  const subscriptions = new TerminalSubscriptions();
+  const calls: string[] = [];
+  expectSubscribed(subscriptions.subscribe({}, () => calls.push('before')));
+  expectSubscribed(
+    subscriptions.subscribe({}, () => {
+      throw new Error('failure');
+    }),
+  );
+  expectSubscribed(subscriptions.subscribe({}, () => calls.push('after')));
+
+  subscriptions.deliver(event('single'));
+  expect(calls).toEqual(['before', 'after']);
 });
 
 test('copies matching filters and honors cross disposal during a snapshot', () => {
