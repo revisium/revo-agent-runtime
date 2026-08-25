@@ -101,7 +101,7 @@ test('keeps finalizing work out of completed lookup and terminal delivery until 
   expect(events).toEqual([]);
   await expect(subject.start(subject.createInput('finalizing-release'))).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
   expect(
     subject.output.calls().filter((call) => call.type === 'publish-terminal-result'),
@@ -250,7 +250,7 @@ test('reaccepts the same literal id only after completed FIFO eviction while act
   await waitForLifecycleConformanceQuiescence();
   await expect(subject.start(subject.createInput('reusable-id'))).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
   expect(subject.manager.getResult('reusable-id').state).toBe('completed');
 
@@ -271,7 +271,7 @@ test('reaccepts the same literal id only after completed FIFO eviction while act
   expect(subject.manager.getResult('reusable-id')).toEqual({ state: 'unknown' });
   await expect(subject.start(subject.createInput('active-id'))).resolves.toEqual({
     status: 'rejected',
-    reason: 'duplicate_invocation',
+    reason: 'invocation_duplicate',
   });
 
   const reaccepted = await subject.start(subject.createInput('reusable-id'));

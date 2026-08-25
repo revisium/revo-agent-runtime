@@ -36,13 +36,13 @@ type LifecycleManagerPortsInput = Omit<
   Partial<Pick<InvocationExecutionPorts, 'workspace' | 'outputClaim' | 'outputPreparation'>>;
 
 const createLifecycleManager = async (ports: LifecycleManagerPortsInput) => {
-  const manager = createInvocationLifecycleManager(lifecycleOptions, {
+  const manager = createInvocationLifecycleManager(lifecycleOptions, () => ({
     ...ports,
     executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
     outputClaim: ports.outputClaim ?? new FakeOutputClaimPort('created'),
     outputPreparation: ports.outputPreparation ?? new FakeOutputPreparationPort('prepared'),
     workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
-  });
+  }));
   await manager.initialize([]);
   return manager;
 };
@@ -189,7 +189,7 @@ test('keeps an active waiter and handle result after later FIFO eviction while f
       definitions: [definition],
       limits: { maxCompletedInvocations: 1 },
     },
-    {
+    () => ({
       execution,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       output,
@@ -197,7 +197,7 @@ test('keeps an active waiter and handle result after later FIFO eviction while f
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
-    },
+    }),
   );
   await manager.initialize([]);
   const first = expectAcceptedInvocation(
@@ -291,7 +291,7 @@ test('uses validated default capacity and rejects invalid capacity through lifec
         definitions: [definition],
         limits: { maxCompletedInvocations: 0 },
       },
-      invalidMinimum,
+      () => invalidMinimum,
     ),
   ).toThrow('Agent manager limit is invalid.');
   const invalidMaximum = createPorts();
@@ -302,7 +302,7 @@ test('uses validated default capacity and rejects invalid capacity through lifec
         definitions: [definition],
         limits: { maxCompletedInvocations: 1_001 },
       },
-      invalidMaximum,
+      () => invalidMaximum,
     ),
   ).toThrow('Agent manager limit is invalid.');
 
@@ -506,7 +506,7 @@ test('admits subscriptions independently from completed result retention', async
       definitions: [definition],
       limits: { maxCompletedInvocations: 1 },
     },
-    {
+    () => ({
       execution,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       output,
@@ -514,7 +514,7 @@ test('admits subscriptions independently from completed result retention', async
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FreshAvailableExecutableProbePort('/resolved/fixture-agent', '1.0.0'),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
-    },
+    }),
   );
   await manager.initialize([]);
   const received: unknown[] = [];

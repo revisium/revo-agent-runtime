@@ -92,7 +92,7 @@ export const createLifecycleConformanceSubject = async (
         Object.freeze({ status: 'admitted' as const, directory: '/workspace/project' }),
     },
   });
-  const manager = createInvocationLifecycleManager(managerOptions, ports);
+  const manager = createInvocationLifecycleManager(managerOptions, () => ports);
   await manager.initialize([]);
 
   return Object.freeze({

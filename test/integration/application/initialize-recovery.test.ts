@@ -186,7 +186,7 @@ const createRecoveryManager = (
       },
       definitions: [definition],
     },
-    {
+    () => ({
       execution,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       output,
@@ -196,7 +196,7 @@ const createRecoveryManager = (
       workspace: {
         admit: async (directory: string) => ({ status: 'admitted' as const, directory }),
       },
-    },
+    }),
   );
 };
 

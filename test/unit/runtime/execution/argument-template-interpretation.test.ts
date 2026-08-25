@@ -27,6 +27,7 @@ test('omits optional missing parameters and rejects required missing parameters'
 
   expect(interpretArgumentTemplate(baseRequest([{ kind: 'parameter', name: 'missing' }]))).toEqual({
     status: 'rejected',
+    reason: 'parameter_invalid',
   });
 });
 
@@ -38,7 +39,7 @@ test('rejects parameters that cannot render to canonical JSON arguments', () => 
         notFinite: Number.POSITIVE_INFINITY,
       }),
     }),
-  ).toEqual({ status: 'rejected' });
+  ).toEqual({ status: 'rejected', reason: 'parameter_invalid' });
 });
 
 test('rejects file-delivery template items when no matching resource slot was planned', () => {
@@ -52,7 +53,7 @@ test('rejects file-delivery template items when no matching resource slot was pl
         needsResultSchemaFile: true,
       }),
     }),
-  ).toEqual({ status: 'rejected' });
+  ).toEqual({ status: 'rejected', reason: 'delivery_incoherent' });
 
   expect(
     interpretArgumentTemplate({
@@ -64,5 +65,5 @@ test('rejects file-delivery template items when no matching resource slot was pl
         needsResultSchemaFile: false,
       }),
     }),
-  ).toEqual({ status: 'rejected' });
+  ).toEqual({ status: 'rejected', reason: 'delivery_incoherent' });
 });

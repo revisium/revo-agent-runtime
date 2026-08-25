@@ -88,7 +88,7 @@ test('reuses compiled effective input validators across starts for the same defi
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -96,7 +96,7 @@ test('reuses compiled effective input validators across starts for the same defi
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -150,7 +150,7 @@ test('rejects effective parameters before workspace, output, and execution when 
   }));
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -158,7 +158,7 @@ test('rejects effective parameters before workspace, output, and execution when 
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: probe,
       workspace: { admit: workspace },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -173,7 +173,7 @@ test('rejects effective parameters before workspace, output, and execution when 
       result: { schema: resultSchema },
       output: { directory: '/outputs/invocation' },
     }),
-  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  ).resolves.toEqual({ status: 'rejected', reason: 'parameters_invalid' });
 
   expect(workspace).not.toHaveBeenCalled();
   expect(probe.calls()).toEqual([]);
@@ -203,7 +203,7 @@ test('rejects effective permissions before workspace, output, and execution when
   }));
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -211,7 +211,7 @@ test('rejects effective permissions before workspace, output, and execution when
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: probe,
       workspace: { admit: workspace },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -226,7 +226,7 @@ test('rejects effective permissions before workspace, output, and execution when
       result: { schema: resultSchema },
       output: { directory: '/outputs/invocation' },
     }),
-  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  ).resolves.toEqual({ status: 'rejected', reason: 'permissions_invalid' });
 
   expect(workspace).not.toHaveBeenCalled();
   expect(probe.calls()).toEqual([]);
@@ -292,7 +292,7 @@ test('retains package-owned canonical effective parameter and permission copies 
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -300,7 +300,7 @@ test('retains package-owned canonical effective parameter and permission copies 
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -380,7 +380,7 @@ test('plans output resources after workspace admission and before executable pro
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -388,7 +388,7 @@ test('plans output resources after workspace admission and before executable pro
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: workspace },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -447,7 +447,7 @@ test('rejects output admission failures before executable probe, output prepare,
   output.enqueueAdmission({ status: 'rejected', reason: 'leaf_exists' });
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -455,7 +455,7 @@ test('rejects output admission failures before executable probe, output prepare,
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: probe,
       workspace: { admit: workspace },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -470,7 +470,7 @@ test('rejects output admission failures before executable probe, output prepare,
       result: { schema: resultSchema },
       output: { directory: '/outputs/invocation' },
     }),
-  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  ).resolves.toEqual({ status: 'rejected', reason: 'output_conflict' });
 
   expect(workspace).toHaveBeenCalledTimes(1);
   expect(output.calls()).toEqual([
@@ -499,7 +499,7 @@ test('rejects mismatched or incomplete available probe evidence after output adm
   const output = new FakeInvocationOutputPort();
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -507,7 +507,7 @@ test('rejects mismatched or incomplete available probe evidence after output adm
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
-    },
+    }),
   );
   await manager.initialize([]);
   const exactAgent = Object.freeze({ id: definition.id, version: definition.version });
@@ -549,10 +549,10 @@ test('rejects mismatched or incomplete available probe evidence after output adm
     ),
   );
   expect(outcomes).toEqual([
-    { status: 'rejected', reason: 'preflight_failed' },
-    { status: 'rejected', reason: 'preflight_failed' },
-    { status: 'rejected', reason: 'preflight_failed' },
-    { status: 'rejected', reason: 'preflight_failed' },
+    { status: 'rejected', reason: 'internal' },
+    { status: 'rejected', reason: 'internal' },
+    { status: 'rejected', reason: 'internal' },
+    { status: 'rejected', reason: 'internal' },
   ]);
 
   expect(output.calls()).toEqual(
@@ -592,7 +592,7 @@ test('preclaim binding disagreement rejects before workspace admission', async (
     });
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    {
+    () => ({
       execution: new FakeInvocationExecutionPort(),
       output: new FakeInvocationOutputPort(),
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -600,7 +600,7 @@ test('preclaim binding disagreement rejects before workspace admission', async (
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: workspace },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -646,7 +646,7 @@ test('rejects coherent but uninstalled package bindings during manager construct
     expect(() =>
       createInvocationLifecycleManager(
         { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-        {
+        () => ({
           execution: new FakeInvocationExecutionPort(),
           output: new FakeInvocationOutputPort(),
           clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -656,13 +656,13 @@ test('rejects coherent but uninstalled package bindings during manager construct
           workspace: {
             admit: async () => ({ status: 'admitted', directory: '/workspace/project' }),
           },
-        },
+        }),
       ),
     ).toThrowError(AgentManagerError);
     try {
       createInvocationLifecycleManager(
         { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-        {
+        () => ({
           execution: new FakeInvocationExecutionPort(),
           output: new FakeInvocationOutputPort(),
           clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -672,7 +672,7 @@ test('rejects coherent but uninstalled package bindings during manager construct
           workspace: {
             admit: async () => ({ status: 'admitted', directory: '/workspace/project' }),
           },
-        },
+        }),
       );
       throw new Error('Expected installed binding rejection.');
     } catch (error: unknown) {
@@ -747,7 +747,7 @@ test('captures named child environment from start context before workspace, outp
       definitions: [definition],
       redaction: { secrets: ['configured-secret'] },
     },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -755,7 +755,7 @@ test('captures named child environment from start context before workspace, outp
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
-    },
+    }),
   );
   await manager.initialize([]);
   const context = {
@@ -820,7 +820,7 @@ test('keeps registered secrets out of enumerable launch views', async () => {
       definitions: [definition],
       redaction: { secrets: ['configured-secret'] },
     },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -828,7 +828,7 @@ test('keeps registered secrets out of enumerable launch views', async () => {
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -883,7 +883,7 @@ test('keeps configured redaction secrets out of enumerable manager views', async
       definitions: [definition],
       redaction: { secrets: ['configured-secret'] },
     },
-    {
+    () => ({
       execution: new FakeInvocationExecutionPort(),
       output: new FakeInvocationOutputPort(),
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -894,7 +894,7 @@ test('keeps configured redaction secrets out of enumerable manager views', async
         admit: async () =>
           Object.freeze({ status: 'admitted' as const, directory: '/workspace/project' }),
       },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -923,7 +923,7 @@ test('rejects registered secret failures before workspace, output, and execution
       definitions: [definition],
       redaction: { secrets: [''] },
     },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -931,7 +931,7 @@ test('rejects registered secret failures before workspace, output, and execution
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: probe,
       workspace: { admit: workspace },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -946,7 +946,7 @@ test('rejects registered secret failures before workspace, output, and execution
       result: { schema: resultSchema },
       output: { directory: '/outputs/invocation' },
     }),
-  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  ).resolves.toEqual({ status: 'rejected', reason: 'environment_invalid' });
 
   expect(workspace).not.toHaveBeenCalled();
   expect(probe.calls()).toEqual([]);
@@ -966,7 +966,7 @@ test('rejects missing inherited child environment names before workspace, output
   }));
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -974,7 +974,7 @@ test('rejects missing inherited child environment names before workspace, output
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: probe,
       workspace: { admit: workspace },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -992,7 +992,7 @@ test('rejects missing inherited child environment names before workspace, output
       },
       { environment: { inherit: ['REVO_MISSING_ENV'] } },
     ),
-  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  ).resolves.toEqual({ status: 'rejected', reason: 'environment_invalid' });
 
   expect(workspace).not.toHaveBeenCalled();
   expect(probe.calls()).toEqual([]);
@@ -1004,7 +1004,7 @@ test('rejects malformed start context before reserving invocation ids', async ()
   const definition = buildAgentDefinition();
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    {
+    () => ({
       execution: new FakeInvocationExecutionPort(),
       output: new FakeInvocationOutputPort(),
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -1012,7 +1012,7 @@ test('rejects malformed start context before reserving invocation ids', async ()
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
-    },
+    }),
   );
   await manager.initialize([]);
   const context = { environment: { inherit: ['REVO_ALLOWED_ENV'] }, extra: true };
@@ -1031,7 +1031,7 @@ test('rejects malformed start context before reserving invocation ids', async ()
       },
       context,
     ),
-  ).resolves.toEqual({ status: 'rejected', reason: 'invalid_request' });
+  ).resolves.toEqual({ status: 'rejected', reason: 'invocation_invalid' });
 
   await expect(
     manager.start({
@@ -1044,7 +1044,7 @@ test('rejects malformed start context before reserving invocation ids', async ()
       result: { schema: resultSchema },
       output: { directory: '/outputs/invocation' },
     }),
-  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  ).resolves.toEqual({ status: 'rejected', reason: 'agent_unknown' });
 });
 
 test('interprets launch template in definition order and maps each permission item once before probe', async () => {
@@ -1128,7 +1128,7 @@ test('interprets launch template in definition order and maps each permission it
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -1136,7 +1136,7 @@ test('interprets launch template in definition order and maps each permission it
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: workspace },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -1198,7 +1198,7 @@ test('rejects permission mapping failures before executable probe, output prepar
   }));
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -1206,7 +1206,7 @@ test('rejects permission mapping failures before executable probe, output prepar
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: probe,
       workspace: { admit: workspace },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -1221,7 +1221,7 @@ test('rejects permission mapping failures before executable probe, output prepar
       result: { schema: resultSchema },
       output: { directory: '/outputs/invocation' },
     }),
-  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  ).resolves.toEqual({ status: 'rejected', reason: 'permissions_invalid' });
 
   expect(workspace).toHaveBeenCalledTimes(1);
   expect(output.calls()).toEqual([
@@ -1265,7 +1265,7 @@ test('retains resolved prompt stdin and canonical result-schema file payloads be
   execution.enqueueStart('running');
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -1273,7 +1273,7 @@ test('retains resolved prompt stdin and canonical result-schema file payloads be
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -1349,7 +1349,7 @@ test('rejects prospective argv total bytes including the resolved executable bef
   });
   const manager = createInvocationLifecycleManager(
     { activeStateSink: createTestActiveStateSink(), definitions: [definition] },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -1357,7 +1357,7 @@ test('rejects prospective argv total bytes including the resolved executable bef
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -1372,7 +1372,7 @@ test('rejects prospective argv total bytes including the resolved executable bef
       result: { schema: resultSchema },
       output: { directory: '/outputs/invocation' },
     }),
-  ).resolves.toEqual({ status: 'rejected', reason: 'preflight_failed' });
+  ).resolves.toEqual({ status: 'rejected', reason: 'limit_invalid' });
 
   expect(calls).toEqual(['output-admission', 'probe']);
   expect(output.calls()).toEqual([
@@ -1421,7 +1421,7 @@ test('rejects registered secret byte substrings in prospective argv with environ
       definitions: [definition],
       redaction: { secrets: ['secret-value'] },
     },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -1429,7 +1429,7 @@ test('rejects registered secret byte substrings in prospective argv with environ
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
-    },
+    }),
   );
   await manager.initialize([]);
 
@@ -1489,7 +1489,7 @@ test('rejects registered secret byte substrings in prospective scratch payloads 
       definitions: [definition],
       redaction: { secrets: ['secret-value'] },
     },
-    {
+    () => ({
       execution,
       output,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
@@ -1497,7 +1497,7 @@ test('rejects registered secret byte substrings in prospective scratch payloads 
       outputPreparation: new FakeOutputPreparationPort('prepared'),
       executableProbe: new FakeExecutableProbePort({ platform: 'linux' }),
       workspace: { admit: async () => ({ status: 'admitted', directory: '/workspace/project' }) },
-    },
+    }),
   );
   await manager.initialize([]);
 

@@ -90,7 +90,7 @@ const createManager = async (execution: InvocationExecutionPorts['execution']) =
         remove: async () => undefined,
       },
     },
-    {
+    () => ({
       execution,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
       output: createNodePosixInvocationOutputPort(),
@@ -100,7 +100,7 @@ const createManager = async (execution: InvocationExecutionPorts['execution']) =
       workspace: {
         admit: async () => Object.freeze({ status: 'admitted' as const, directory: process.cwd() }),
       },
-    },
+    }),
   );
   await manager.initialize([]);
   return manager;

@@ -10,7 +10,10 @@ type InterpretedArgumentTemplateItem = InterpretedArgumentTemplate[number];
 
 type TemplateInterpretationResult =
   | Readonly<{ status: 'interpreted'; template: InterpretedArgumentTemplate }>
-  | Readonly<{ status: 'rejected' }>;
+  | Readonly<{
+      status: 'rejected';
+      reason: 'parameter_invalid' | 'permission_rejected' | 'delivery_incoherent';
+    }>;
 
 const renderJsonArgument = (value: JsonValue): string | undefined => {
   if (typeof value === 'string') return value;
@@ -27,21 +30,21 @@ const interpretedArguments = (args: readonly string[]): InterpretedArgumentTempl
 const interpretParameter = (
   item: Extract<AgentArgumentTemplate, Readonly<{ kind: 'parameter' }>>,
   effectiveParameters: JsonObject,
-): InterpretedArgumentTemplateItem | undefined => {
+): InterpretedArgumentTemplateItem | 'parameter_invalid' => {
   const value = ownJsonValue(effectiveParameters, item.name);
   if (value === undefined)
-    return item.omitIfMissing === true ? interpretedArguments([]) : undefined;
+    return item.omitIfMissing === true ? interpretedArguments([]) : 'parameter_invalid';
   const rendered = renderJsonArgument(value);
-  return rendered === undefined ? undefined : interpretedArguments([rendered]);
+  return rendered === undefined ? 'parameter_invalid' : interpretedArguments([rendered]);
 };
 
 const interpretPermission = (
   item: Extract<AgentArgumentTemplate, Readonly<{ kind: 'permission' }>>,
   effectivePermissions: JsonObject,
   permissionStrategy: PermissionStrategyPort,
-): InterpretedArgumentTemplateItem | undefined => {
+): InterpretedArgumentTemplateItem | 'permission_rejected' => {
   const result = permissionStrategy.map({ item, effectivePermissions });
-  if (result.status === 'rejected') return undefined;
+  if (result.status === 'rejected') return 'permission_rejected';
   if (result.status === 'omitted') return interpretedArguments([]);
   return interpretedArguments(result.arguments);
 };
@@ -55,7 +58,12 @@ const interpretItem = (
     permissionStrategy: PermissionStrategyPort;
     workspace: Extract<WorkspaceAdmissionResult, Readonly<{ status: 'admitted' }>>;
   }>,
-): InterpretedArgumentTemplateItem | undefined => {
+):
+  | InterpretedArgumentTemplateItem
+  | 'parameter_invalid'
+  | 'permission_rejected'
+  | 'delivery_incoherent'
+  | undefined => {
   switch (item.kind) {
     case 'literal':
       return interpretedArguments([item.value]);
@@ -64,12 +72,12 @@ const interpretItem = (
     case 'prompt':
       return Object.freeze({ kind: 'prompt' });
     case 'prompt-file':
-      if (!request.outputResourcePlan.needsPromptFile) return undefined;
+      if (!request.outputResourcePlan.needsPromptFile) return 'delivery_incoherent';
       return Object.freeze({ kind: 'prompt-file' });
     case 'result-schema':
       return Object.freeze({ kind: 'result-schema' });
     case 'result-schema-file':
-      if (!request.outputResourcePlan.needsResultSchemaFile) return undefined;
+      if (!request.outputResourcePlan.needsResultSchemaFile) return 'delivery_incoherent';
       return Object.freeze({ kind: 'result-schema-file' });
     case 'parameter':
       return interpretParameter(item, request.effectiveParameters);
@@ -92,7 +100,9 @@ export const interpretArgumentTemplate = (
   const interpreted: InterpretedArgumentTemplateItem[] = [];
   for (const item of request.template) {
     const result = interpretItem(item, request);
-    if (result === undefined) return Object.freeze({ status: 'rejected' });
+    if (typeof result === 'string') return Object.freeze({ status: 'rejected', reason: result });
+    if (result === undefined)
+      return Object.freeze({ status: 'rejected', reason: 'delivery_incoherent' });
     interpreted.push(result);
   }
   return Object.freeze({ status: 'interpreted', template: Object.freeze(interpreted) });
