@@ -58,6 +58,7 @@ import type {
 } from '../../runtime/spec/index.js';
 import { ActiveStateLane } from './active-state-lane.js';
 import { CompletedInvocations } from './completed-invocations.js';
+import { createNamedHostEnvironmentSnapshot } from './create-named-host-environment-snapshot.js';
 import { createNativeProcessExecutionPort } from './create-native-process-execution-port.js';
 import { inspectBatchRefs } from './inspect-batch-refs.js';
 import { InstalledBindingRegistry } from './installed-bindings.js';
@@ -612,24 +613,6 @@ const createResultSchemaValidator = (
   } catch {
     return undefined;
   }
-};
-
-const createNamedHostEnvironmentSnapshot = (
-  names: readonly string[],
-): Readonly<Record<string, string>> => {
-  const snapshot: Record<string, string> = {};
-  Object.setPrototypeOf(snapshot, null);
-  for (const name of names) {
-    const value = process.env[name];
-    if (value === undefined) continue;
-    Object.defineProperty(snapshot, name, {
-      value,
-      enumerable: true,
-      configurable: false,
-      writable: false,
-    });
-  }
-  return Object.freeze(snapshot);
 };
 
 const createOutputAdmissionRequest = (

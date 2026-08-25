@@ -1,4 +1,5 @@
 export { NodePosixBoundedCommandPort } from './node-posix-bounded-command-port.js';
+export { NodePosixExecutableProbePort } from './node-posix-executable-probe-port.js';
 export { NodePosixWorkspacePort } from './node-posix-workspace-port.js';
 export { NodePosixOutputAdmissionPort } from './node-posix-output-admission-port.js';
 export { createNodePosixInvocationOutputPort } from './node-posix-invocation-output-port.js';
