@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
 
 import { createInvocationLifecycleManager } from '../../../src/application/manager/index.js';
+import { AgentManagerError } from '../../../src/runtime/errors/index.js';
 import type {
   InvocationExecutionPorts,
   InvocationInputSnapshot,
@@ -52,6 +53,7 @@ const createLifecycleManager = (
   ports: LifecycleManagerInput,
   activeStateSink: ActiveInvocationStateSink = defaultActiveStateSink,
   activeStateOperationTimeoutMs?: number,
+  redactionSecrets: readonly string[] = [],
 ): Promise<ReturnType<typeof createInvocationLifecycleManager>> =>
   (async () => {
     const manager = createInvocationLifecycleManager(
@@ -61,6 +63,9 @@ const createLifecycleManager = (
         ...(activeStateOperationTimeoutMs === undefined
           ? {}
           : { limits: Object.freeze({ activeStateOperationTimeoutMs }) }),
+        ...(redactionSecrets.length === 0
+          ? {}
+          : { redaction: Object.freeze({ secrets: Object.freeze([...redactionSecrets]) }) }),
       }),
       {
         ...ports,
@@ -899,6 +904,43 @@ test('shutdown rejects with shutdown_failed on cleanup failure without deleting 
     invocationId: 'shutdown-cleanup-failed',
     status: 'cancelling',
   });
+});
+
+test('redacts a secret before truncating the shutdown reason', async () => {
+  const secret = 'SUPERSECRETVALUE';
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = await createLifecycleManager(
+    { execution, clock: new FakeInvocationClock({ initialNowMs: 0 }), output },
+    defaultActiveStateSink,
+    undefined,
+    [secret],
+  );
+  await expect(
+    manager.start(createStartInput({ invocationId: 'shutdown-redaction-boundary' })),
+  ).resolves.toMatchObject({ status: 'accepted' });
+  await flush();
+
+  const shutdown = manager.shutdown(`${'x'.repeat(4_089)}${secret}`);
+  await flush();
+  execution.settleCancellationRequest(1, cleanupFailure());
+
+  await expect(shutdown).rejects.toBeInstanceOf(AgentManagerError);
+  try {
+    await shutdown;
+  } catch (error: unknown) {
+    expect(error).toBeInstanceOf(AgentManagerError);
+    if (!(error instanceof AgentManagerError)) return;
+    const reasonValue: unknown = error.fault.details?.reason;
+    expect(typeof reasonValue).toBe('string');
+    if (typeof reasonValue !== 'string') return;
+    const reason = reasonValue;
+    expect(reason).toContain('[REDACT');
+    expect(reason).not.toContain('SUPERSE');
+    expect(new TextEncoder().encode(reason).byteLength).toBeLessThanOrEqual(4_096);
+  }
 });
 
 test('shutdown does not reject when invocation execution fails after confirmed cleanup', async () => {

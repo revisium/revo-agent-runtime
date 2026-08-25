@@ -20,6 +20,7 @@ import { FakeInvocationClock } from '../../support/execution/fake-clock.js';
 import { FakeOutputClaimPort } from '../../support/execution/fake-output-claim-port.js';
 import { FakeInvocationOutputPort } from '../../support/execution/fake-output-port.js';
 import { FakeOutputPreparationPort } from '../../support/execution/fake-output-preparation-port.js';
+import { FreshAvailableExecutableProbePort } from '../../support/probe/fresh-available-executable-probe-port.js';
 
 const resultSchema = Object.freeze({
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -166,11 +167,19 @@ const recoveryRow = (
     }),
   });
 
-const createRecoveryManager = (execution: InvocationExecutionPorts['execution'], calls: string[]) =>
-  createInvocationLifecycleManager(
+const createRecoveryManager = (
+  execution: InvocationExecutionPorts['execution'],
+  calls: string[],
+  runningPids: number[] = [],
+) => {
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
+  return createInvocationLifecycleManager(
     {
       activeStateSink: {
-        save: async () => undefined,
+        save: async (activeSnapshot: ActiveInvocationSnapshot) => {
+          if (activeSnapshot.state === 'running') runningPids.push(activeSnapshot.process.pid);
+        },
         remove: async (invocationId: string) => {
           calls.push(invocationId);
         },
@@ -180,14 +189,16 @@ const createRecoveryManager = (execution: InvocationExecutionPorts['execution'],
     {
       execution,
       clock: new FakeInvocationClock({ initialNowMs: 0 }),
-      output: new FakeInvocationOutputPort(),
+      output,
       outputClaim: new FakeOutputClaimPort('created'),
       outputPreparation: new FakeOutputPreparationPort('prepared'),
+      executableProbe: new FreshAvailableExecutableProbePort(process.execPath, '1.0.0'),
       workspace: {
         admit: async (directory: string) => ({ status: 'admitted' as const, directory }),
       },
     },
   );
+};
 
 test.runIf(process.platform === 'linux')(
   'reconciles a real matching recovered process and removes its row',
@@ -237,5 +248,41 @@ test.runIf(process.platform === 'linux')(
     await manager.initialize([recoveryRow('recovery-absent', 999_999, 'sha256:missing')]);
 
     expect(calls).toEqual(['recovery-absent']);
+  },
+);
+
+test.runIf(process.platform === 'linux')(
+  'continues with ordinary start and shutdown after successful non-empty recovery',
+  async () => {
+    const execution = createNativeProcessExecutionPort();
+    const identified = await spawnRecovered(execution, 'recovery-cross-phase');
+    const calls: string[] = [];
+    const runningPids: number[] = [];
+    const manager = createRecoveryManager(execution, calls, runningPids);
+
+    await manager.initialize([
+      recoveryRow('recovery-cross-phase', identified.identity.pid, identified.identity.fingerprint),
+    ]);
+    expect(() => process.kill(identified.identity.pid, 0)).toThrow();
+
+    const started = await manager.start({
+      invocationId: 'ordinary-after-recovery',
+      agent: { id: definition.id, version: definition.version },
+      prompt: 'Return JSON.',
+      workspace: { directory: process.cwd() },
+      parameters: {},
+      permissions: {},
+      result: { schema: resultSchema },
+      output: { directory: '/tmp/ordinary-after-recovery' },
+    });
+    expect(started.status).toBe('accepted');
+    if (started.status !== 'accepted') throw new Error('Expected accepted invocation.');
+
+    await expect(manager.shutdown('done')).resolves.toBeUndefined();
+    await expect(started.handle.result()).resolves.toMatchObject({ status: 'cancelled' });
+    const runningPid = runningPids[0];
+    if (runningPid === undefined) throw new Error('Expected ordinary running process.');
+    expect(() => process.kill(runningPid, 0)).toThrow();
+    expect(calls).toEqual(['recovery-cross-phase', 'ordinary-after-recovery']);
   },
 );
