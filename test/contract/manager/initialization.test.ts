@@ -205,6 +205,103 @@ test('preserves identity mismatches without removing them', async () => {
   expect(sink.calls).toEqual([]);
 });
 
+test('rejects shutdown after recovery reports uncertain cleanup', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueRecoveryResult({ status: 'termination_unconfirmed', cause: 'group_still_live' });
+  const manager = createManager(execution);
+
+  await expect(
+    manager.initialize(asSnapshots([snapshot('uncertain-recovery')])),
+  ).rejects.toMatchObject({
+    fault: {
+      code: 'revo.agent.recovery_failed',
+      details: {
+        failures: [{ invocationId: 'uncertain-recovery', category: 'termination_unconfirmed' }],
+      },
+    },
+  });
+  await expect(manager.shutdown()).rejects.toMatchObject({
+    fault: {
+      code: 'revo.agent.shutdown_failed',
+      details: { invocationId: 'uncertain-recovery', failureCount: 1 },
+    },
+  });
+});
+
+test('retains uncertain cleanup discovered before a mid-batch shutdown', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueRecoveryResult({ status: 'termination_unconfirmed', cause: 'group_still_live' });
+  execution.enqueueRecoveryResult({ status: 'absent' });
+  const sink = createRecordingActiveStateSink();
+  let manager: ReturnType<typeof createManager>;
+  let shutdown: Promise<void> | undefined;
+  manager = createManager(execution, sink);
+  const original = execution.inspectAndReconcileRecoveredProcess.bind(execution);
+  let first = true;
+  execution.inspectAndReconcileRecoveredProcess = async (...args) => {
+    const result = await original(...args);
+    if (first) {
+      first = false;
+      shutdown = manager.shutdown();
+    }
+    return result;
+  };
+
+  await expect(
+    manager.initialize(asSnapshots([snapshot('a'), snapshot('b')])),
+  ).rejects.toMatchObject({
+    fault: {
+      details: {
+        failures: [
+          { invocationId: 'a', category: 'termination_unconfirmed' },
+          { invocationId: 'b', category: 'manager_closing' },
+        ],
+      },
+    },
+  });
+  if (shutdown === undefined) throw new Error('Expected shutdown to be started.');
+  await expect(shutdown).rejects.toMatchObject({
+    fault: { code: 'revo.agent.shutdown_failed', details: { failureCount: 1 } },
+  });
+  expect(sink.calls).toEqual([]);
+});
+
+test('retains uncertain cleanup evidence when a later recovery row hangs', async () => {
+  let secondRowStarted: (() => void) | undefined;
+  const secondRowStartedPromise = new Promise<void>((resolve) => {
+    secondRowStarted = resolve;
+  });
+  let calls = 0;
+  const execution: InvocationExecutionPorts['execution'] = {
+    inspectAndReconcileRecoveredProcess: async () => {
+      calls += 1;
+      if (calls === 1)
+        return { status: 'termination_unconfirmed' as const, cause: 'group_still_live' as const };
+      secondRowStarted?.();
+      return await new Promise<
+        Awaited<
+          ReturnType<InvocationExecutionPorts['execution']['inspectAndReconcileRecoveredProcess']>
+        >
+      >(() => undefined);
+    },
+    spawnAndIdentify: async () => ({ status: 'failed', reason: 'spawn_failed' as const }),
+  };
+  const manager = createManager(execution, createTestActiveStateSink(), {
+    initializationTimeoutMs: 1_000,
+    activeStateOperationTimeoutMs: 1_000,
+  });
+  const initialization = manager.initialize(asSnapshots([snapshot('a'), snapshot('b')]));
+  await secondRowStartedPromise;
+
+  await expect(manager.shutdown()).rejects.toMatchObject({
+    fault: {
+      code: 'revo.agent.shutdown_failed',
+      details: { invocationId: 'a', failureCount: 2 },
+    },
+  });
+  expect(initialization).toBeInstanceOf(Promise);
+});
+
 test('reports unknown pins without inspecting the process', async () => {
   const execution = new FakeInvocationExecutionPort();
   const manager = createManager(execution);
