@@ -38,7 +38,6 @@ export type { InvocationTerminalObservation } from './execution-terminal-observa
 export type { InterimDuplexPrimaryFailure } from './interim-duplex-primary-failure.js';
 export { buildAgentInvocationResult } from './build-agent-invocation-result.js';
 export { finalizeInvocationOutcome } from './finalize-invocation-outcome.js';
-export type { FinalizedInvocationSettlement } from './finalized-invocation-settlement.js';
 export { InvocationInputSnapshot } from './input-snapshot.js';
 export { StartContextSnapshot } from './start-context-snapshot.js';
 export type { CancellationCommitOutcome } from './cancellation-commit-outcome.js';

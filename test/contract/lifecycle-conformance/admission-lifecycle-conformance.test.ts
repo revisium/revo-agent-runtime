@@ -94,7 +94,10 @@ test('cancels one accepted invocation exactly once after spawn confirmation', as
   if (accepted.status !== 'accepted') throw new Error('Expected pending invocation acceptance.');
   const cancellation = accepted.lifecycle.requestCancellation();
   expect(accepted.lifecycle.currentState()).toBe('cancelling');
-  expect(subject.manager.getResult('pending-cancellation')).toEqual({ state: 'active' });
+  expect(subject.manager.getResult('pending-cancellation')).toMatchObject({
+    state: 'running',
+    invocation: { status: 'cancelling' },
+  });
   expect(subject.output.recordedTerminalResults()).toEqual([]);
 
   await waitForLifecycleConformanceQuiescence();
@@ -104,7 +107,10 @@ test('cancels one accepted invocation exactly once after spawn confirmation', as
   ]);
   subject.execution.settleCancellationRequest(1);
   await expect(cancellationCompletion(cancellation)).resolves.toBeUndefined();
-  expect(subject.manager.getResult('pending-cancellation')).toEqual({ state: 'active' });
+  expect(subject.manager.getResult('pending-cancellation')).toMatchObject({
+    state: 'running',
+    invocation: { status: 'cancelling' },
+  });
   await expect(subject.start(subject.createInput('pending-cancellation'))).resolves.toEqual({
     status: 'rejected',
     reason: 'duplicate_invocation',

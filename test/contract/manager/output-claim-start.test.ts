@@ -233,8 +233,8 @@ test.each(['pending', 'throw-after-dispatch'] as const)(
       reason: 'output_claim_uncertain',
     });
     expect(manager.getResult(`uncertain-${operation}`)).toEqual({ state: 'unknown' });
-    await expect(manager.waitForResult(`uncertain-${operation}`)).resolves.toEqual({
-      state: 'unknown',
+    await expect(manager.waitForResult(`uncertain-${operation}`)).rejects.toMatchObject({
+      fault: { code: 'revo.agent.invocation_unknown' },
     });
     expect(outputPreparation.requests()).toHaveLength(0);
     await expect(

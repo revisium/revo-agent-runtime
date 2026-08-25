@@ -7,10 +7,10 @@ import {
   InvocationInputSnapshot,
   InvocationLifecycle,
   PreparedLaunch,
-  type NormalizedInvocationOutcome,
   type ResultSchemaValidator,
 } from '../../../src/runtime/execution/index.js';
 import { TerminalPublicationAuthority } from '../../../src/runtime/execution/output-preparation-attempt/index.js';
+import type { AgentInvocationResult } from '../../../src/runtime/spec/index.js';
 import { FakeInvocationClock } from '../execution/fake-clock.js';
 import { FakeInvocationExecutionPort } from '../execution/fake-execution-port.js';
 import { FakeOutputClaimPort } from '../execution/fake-output-claim-port.js';
@@ -45,7 +45,7 @@ export interface AcceptedInvocationLifecycleSubject {
   readonly execution: FakeInvocationExecutionPort;
   readonly lifecycle: InvocationLifecycle;
   readonly output: FakeInvocationOutputPort;
-  terminalSettlements(): readonly NormalizedInvocationOutcome[];
+  terminalResults(): readonly AgentInvocationResult[];
 }
 
 export const createAcceptedInvocationLifecycleSubject = (
@@ -104,7 +104,7 @@ export const createAcceptedInvocationLifecycleSubject = (
   const clock = new FakeInvocationClock({ initialNowMs: 0 });
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
-  const settlements: NormalizedInvocationOutcome[] = [];
+  const settlements: AgentInvocationResult[] = [];
   const lifecycle = new InvocationLifecycle(
     {
       execution,
@@ -125,7 +125,7 @@ export const createAcceptedInvocationLifecycleSubject = (
     '2026-08-22T00:00:01.000Z',
     () => undefined,
     async () => undefined,
-    (settlement) => settlements.push(settlement),
+    (result) => settlements.push(result),
   );
 
   return Object.freeze({
@@ -133,6 +133,6 @@ export const createAcceptedInvocationLifecycleSubject = (
     execution,
     lifecycle,
     output,
-    terminalSettlements: () => Object.freeze([...settlements]),
+    terminalResults: () => Object.freeze([...settlements]),
   });
 };

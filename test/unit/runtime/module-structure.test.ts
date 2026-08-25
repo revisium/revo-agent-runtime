@@ -85,7 +85,6 @@ test('runtime tree comparison is independent of directory enumeration order', as
     'execution/execution-ports.ts',
     'execution/execution-terminal-observation.ts',
     'execution/finalize-invocation-outcome.ts',
-    'execution/finalized-invocation-settlement.ts',
     'execution/freeze-json-value.ts',
     'execution/input-snapshot.ts',
     'execution/interim-duplex-primary-failure.ts',

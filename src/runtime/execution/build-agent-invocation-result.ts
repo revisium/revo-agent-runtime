@@ -66,6 +66,7 @@ export const buildAgentInvocationResult = (input: {
     case 'failed':
       return Object.freeze({
         ...base,
+        files: committedFiles(base.files),
         status: 'failed' as const,
         error: toAgentFault(outcome.failure),
         ...(outcome.evidence.rawResponse === undefined

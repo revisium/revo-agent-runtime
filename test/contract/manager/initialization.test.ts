@@ -119,6 +119,19 @@ test('shutdown wins over the not-initialized start gate', async () => {
   });
 });
 
+test('waitForResult throws synchronously before initialization', () => {
+  const manager = createManager();
+
+  expect(() => manager.waitForResult('before-ready')).toThrowError(AgentManagerError);
+  try {
+    void manager.waitForResult('before-ready');
+  } catch (error: unknown) {
+    expect(error).toBeInstanceOf(AgentManagerError);
+    if (error instanceof AgentManagerError)
+      expect(error.fault.code).toBe('revo.agent.manager_not_initialized');
+  }
+});
+
 test('failed initialization permanently closes gated operations', async () => {
   const manager = createManager();
   await expectFault(manager.initialize(asSnapshots({})), recoveryInvalidFault);
@@ -139,7 +152,9 @@ test('keeps process-local reads available after shutdown', async () => {
   expect(manager.getResult('missing')).toEqual({ state: 'unknown' });
   expect(manager.getInvocation('missing')).toBeUndefined();
   expect(manager.listInvocations()).toEqual([]);
-  await expect(manager.waitForResult('missing')).resolves.toEqual({ state: 'unknown' });
+  await expect(manager.waitForResult('missing')).rejects.toMatchObject({
+    fault: { code: 'revo.agent.invocation_unknown' },
+  });
   await expect(manager.cancel('missing')).resolves.toEqual({ state: 'unknown' });
 });
 

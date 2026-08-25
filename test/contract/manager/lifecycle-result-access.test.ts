@@ -116,12 +116,63 @@ test('publishes a completed canonical result before synchronous terminal deliver
 
   const handleOutcome = await handleResult;
   const waiterOutcome = await activeWaiter;
+  const secondWaiterOutcome = await manager.waitForResult('ordered');
   expect(eventDelivered).toBe(true);
   expect(waiterOutcome).toBe(handleOutcome);
-  expect(await manager.waitForResult('ordered')).toBe(handleOutcome);
+  expect(secondWaiterOutcome).toBe(handleOutcome);
+  const lookup = manager.getResult('ordered');
+  expect(lookup.state).toBe('completed');
+  if (lookup.state !== 'completed') throw new Error('Expected completed result lookup.');
+  expect(lookup.result).toBe(handleOutcome);
+  await expect(manager.cancel('ordered')).resolves.toEqual({
+    state: 'already_completed',
+    result: handleOutcome,
+  });
   expect(Object.isFrozen(handleOutcome)).toBe(true);
-  expect('files' in handleOutcome).toBe(false);
+  expect(handleOutcome.files.directory).toBe('/outputs/invocation');
+  expect(handleOutcome.files.result).toBe('result.json');
+  expect(handleOutcome.schemaVersion).toBe('agent-invocation-result/v1');
+  expect(handleOutcome.invocationId).toBe('ordered');
+  expect(handleOutcome.exit).toEqual({ code: 0, signal: null });
+  expect(handleOutcome.durationMs).toBeGreaterThanOrEqual(0);
+  const published = output.recordedTerminalResults();
+  expect(published).toHaveLength(1);
+  expect(published[0]).toBe(handleOutcome);
   if (handleOutcome.status === 'succeeded') expect(Object.isFrozen(handleOutcome.value)).toBe(true);
+});
+
+test('rejecting terminal publication still commits one failed result with exit evidence', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueuePendingTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = await createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+  const events: string[] = [];
+  manager.subscribe({}, (event) => events.push(event.invocationId));
+  const accepted = expectAcceptedInvocation(
+    await manager.start(createStartInput({ invocationId: 'terminal-rejection' })),
+  );
+  await flush();
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
+  await flush();
+  output.rejectPendingTerminalResultRecording(1, new Error('terminal publication rejected'));
+  const result = await accepted.handle.result();
+
+  expect(result).toMatchObject({
+    status: 'failed',
+    error: { code: 'revo.agent.output_write_failed' },
+    exit: { code: 0, signal: null },
+  });
+  if (result.status !== 'failed') throw new Error('Expected failed result.');
+  expect(result.error.code).not.toBe('revo.agent.internal');
+  expect(result.files.result).toBeUndefined();
+  expect(events).toEqual(['terminal-rejection']);
+  expect(output.recordedTerminalResults()).toHaveLength(0);
+  expect(output.calls().filter((call) => call.type === 'publish-terminal-result')).toHaveLength(1);
 });
 
 test('keeps an active waiter and handle result after later FIFO eviction while fresh access becomes unknown', async () => {
@@ -167,7 +218,9 @@ test('keeps an active waiter and handle result after later FIFO eviction while f
   const firstHandleResult = await first.handle.result();
   expect(await activeWaiter).toBe(firstHandleResult);
   expect(manager.getResult('first')).toEqual({ state: 'unknown' });
-  await expect(manager.waitForResult('first')).resolves.toEqual({ state: 'unknown' });
+  await expect(manager.waitForResult('first')).rejects.toMatchObject({
+    fault: { code: 'revo.agent.invocation_unknown' },
+  });
   const secondLookup = manager.getResult('second');
   expect(secondLookup.state).toBe('completed');
   if (secondLookup.state !== 'completed') throw new Error('Expected retained second result.');
@@ -204,7 +257,10 @@ test('does not publish a pending terminal result before its output commit settle
   await flush();
 
   expect(accepted.lifecycle.currentState()).toBe('finalizing');
-  expect(manager.getResult('pending-result')).toEqual({ state: 'active' });
+  expect(manager.getResult('pending-result')).toMatchObject({
+    state: 'running',
+    invocation: { status: 'running' },
+  });
   expect(eventCalls).toBe(0);
   expect(waiterSettled).toBe(false);
   output.fulfilPendingTerminalResultRecording(1);
@@ -551,7 +607,10 @@ test('cancel during finalization waits for and reports the real completed result
   execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
   await flush();
   expect(accepted.lifecycle.currentState()).toBe('finalizing');
-  expect(manager.getResult('cancel-finalizing')).toEqual({ state: 'active' });
+  expect(manager.getResult('cancel-finalizing')).toMatchObject({
+    state: 'running',
+    invocation: { status: 'running' },
+  });
   let cancelSettled = false;
   const cancellation = manager.cancel('cancel-finalizing').then((outcome) => {
     cancelSettled = true;

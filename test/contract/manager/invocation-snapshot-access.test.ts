@@ -172,7 +172,15 @@ test('projects cancelling, failed, cancelled, and timed_out statuses from lifecy
   execution.confirmCancellation(2);
   await flush();
   expectSnapshot(manager, 'cancelled-snap', 'cancelled');
-  await expect(cancelled.handle.result()).resolves.toMatchObject({ status: 'cancelled' });
+  const cancelledResult = await cancelled.handle.result();
+  expect(cancelledResult).toMatchObject({
+    status: 'cancelled',
+    error: { code: 'revo.agent.cancelled', phase: 'running' },
+  });
+  const cancelledLookup = manager.getResult('cancelled-snap');
+  expect(cancelledLookup.state).toBe('completed');
+  if (cancelledLookup.state !== 'completed') throw new Error('Expected cancelled result.');
+  expect(cancelledLookup.result).toBe(cancelledResult);
 
   const timedOut = expectAcceptedInvocation(
     await manager.start(
@@ -190,7 +198,15 @@ test('projects cancelling, failed, cancelled, and timed_out statuses from lifecy
   execution.confirmCancellation(3);
   await flush();
   expectSnapshot(manager, 'timeout-snap', 'timed_out');
-  await expect(timedOut.handle.result()).resolves.toMatchObject({ status: 'timed_out' });
+  const timedOutResult = await timedOut.handle.result();
+  expect(timedOutResult).toMatchObject({
+    status: 'timed_out',
+    error: { code: 'revo.agent.timeout', phase: 'running' },
+  });
+  const timedOutLookup = manager.getResult('timeout-snap');
+  expect(timedOutLookup.state).toBe('completed');
+  if (timedOutLookup.state !== 'completed') throw new Error('Expected timed-out result.');
+  expect(timedOutLookup.result).toBe(timedOutResult);
 
   const naturalRace = expectAcceptedInvocation(
     await manager.start(createStartInput({ invocationId: 'natural-race-snap' })),

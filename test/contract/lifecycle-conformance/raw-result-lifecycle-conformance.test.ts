@@ -1,6 +1,9 @@
 import { expect, test } from 'vitest';
 
-import type { ResultSchemaValidator } from '../../../src/runtime/execution/index.js';
+import {
+  BoundedRawResponseEvidence,
+  type ResultSchemaValidator,
+} from '../../../src/runtime/execution/index.js';
 import { createAcceptedInvocationLifecycleSubject } from '../../support/lifecycle-conformance/create-accepted-invocation-lifecycle-subject.js';
 import { createLifecycleConformanceSubject } from '../../support/lifecycle-conformance/create-lifecycle-conformance-subject.js';
 import { waitForLifecycleConformanceQuiescence } from '../../support/lifecycle-conformance/wait-for-lifecycle-conformance-quiescence.js';
@@ -112,10 +115,17 @@ test('returns bounded normalized schema diagnostics with exact raw response meta
   subject.execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
   await waitForLifecycleConformanceQuiescence();
 
-  await expect(accepted.handle.result()).resolves.toMatchObject({
+  const result = await accepted.handle.result();
+  expect(result).toMatchObject({
     status: 'failed',
-    failure: { kind: 'result_schema', code: 'revo.agent.result_schema_mismatch' },
+    error: { code: 'revo.agent.result_schema_mismatch', retryable: false },
   });
+  if (result.status !== 'failed') throw new Error('Expected failed result.');
+  expect('evidence' in result).toBe(false);
+  expect(result.rawResponse).toBeDefined();
+  expect(result.rawResponse).not.toBeInstanceOf(BoundedRawResponseEvidence);
+  expect(Object.getPrototypeOf(result.rawResponse)).toBe(Object.prototype);
+  expect(result.rawResponse?.preview).toBeTypeOf('string');
 });
 
 test('maps a throwing accepted-lifecycle validator to one redacted terminal failure', async () => {
@@ -133,9 +143,9 @@ test('maps a throwing accepted-lifecycle validator to one redacted terminal fail
   subject.execution.settleNaturalCompletion(1, new TextEncoder().encode('{"value":1}'));
   await waitForLifecycleConformanceQuiescence();
 
-  expect(subject.terminalSettlements()).toMatchObject([{ status: 'failed' }]);
+  expect(subject.terminalResults()).toMatchObject([{ status: 'failed' }]);
   expect(
     subject.output.calls().filter((call) => call.type === 'publish-terminal-result'),
   ).toHaveLength(1);
-  expect(JSON.stringify(subject.terminalSettlements())).not.toContain('validator secret');
+  expect(JSON.stringify(subject.terminalResults())).not.toContain('validator secret');
 });

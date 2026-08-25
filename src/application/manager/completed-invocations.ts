@@ -1,7 +1,7 @@
-import type { RetainedInvocationRecord } from './retained-invocation-record.js';
+import type { AgentInvocationResult } from '../../runtime/spec/index.js';
 
 export class CompletedInvocations {
-  private readonly records = new Map<string, RetainedInvocationRecord>();
+  private readonly records = new Map<string, AgentInvocationResult>();
 
   constructor(private readonly capacity: number) {}
 
@@ -9,15 +9,15 @@ export class CompletedInvocations {
     return this.records.has(invocationId);
   }
 
-  get(invocationId: string): RetainedInvocationRecord | undefined {
+  get(invocationId: string): AgentInvocationResult | undefined {
     return this.records.get(invocationId);
   }
 
-  entries(): readonly (readonly [string, RetainedInvocationRecord])[] {
-    return Object.freeze([...this.records.entries()].map((entry) => Object.freeze(entry)));
+  values(): readonly AgentInvocationResult[] {
+    return Object.freeze([...this.records.values()]);
   }
 
-  commit(invocationId: string, record: RetainedInvocationRecord): void {
+  commit(invocationId: string, record: AgentInvocationResult): void {
     this.records.set(invocationId, record);
     while (this.records.size > this.capacity) {
       const oldestInvocationId = this.records.keys().next().value;
