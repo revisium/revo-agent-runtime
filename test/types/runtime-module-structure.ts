@@ -140,6 +140,7 @@ import type {
 } from '../../src/runtime/probe/index.js';
 import type {
   ActiveInvocationSnapshot,
+  ActiveInvocationState,
   ActiveInvocationStateSink,
   ActiveProcessIdentity,
   ActiveStateOperationContext,
@@ -161,14 +162,20 @@ import type {
   AgentExecutionPin,
   AgentEvent,
   AgentInvocationFilter,
+  AgentInvocationHandle,
   AgentInvocationSnapshot,
   AgentInvocationStatus,
+  AgentResultLookup,
+  AgentStartContext,
+  AgentTerminalStatus,
   AgentInvocationResult,
   AgentInvocationSucceeded,
+  CancelInvocationResult,
   JsonObject,
   JsonPrimitive,
   JsonSchema202012,
   JsonValue,
+  StartAgentInvocation,
 } from '../../src/runtime/spec/index.js';
 
 type Equal<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
@@ -181,6 +188,20 @@ type ExpectedAgentFaultCode =
   | 'revo.agent.strategy_unsupported'
   | 'revo.agent.limit_invalid'
   | 'revo.agent.agent_unknown'
+  | 'revo.agent.invocation_invalid'
+  | 'revo.agent.invocation_duplicate'
+  | 'revo.agent.invocation_unknown'
+  | 'revo.agent.workspace_invalid'
+  | 'revo.agent.parameters_invalid'
+  | 'revo.agent.permissions_invalid'
+  | 'revo.agent.result_schema_invalid'
+  | 'revo.agent.environment_invalid'
+  | 'revo.agent.output_path_invalid'
+  | 'revo.agent.output_conflict'
+  | 'revo.agent.scratch_failed'
+  | 'revo.agent.spawn_failed'
+  | 'revo.agent.authentication_failed'
+  | 'revo.agent.permission_denied'
   | 'revo.agent.manager_not_initialized'
   | 'revo.agent.manager_closed'
   | 'revo.agent.shutdown_failed'
@@ -218,6 +239,21 @@ type ExpectedValidationDiagnosticInput = {
 };
 
 export type AgentFaultCodeIsExact = Expect<Equal<AgentFaultCode, ExpectedAgentFaultCode>>;
+
+type ExpectedAgentFaultPhase =
+  | 'construction'
+  | 'initializing'
+  | 'manager'
+  | 'shutdown'
+  | 'probing'
+  | 'preflight'
+  | 'starting'
+  | 'execution'
+  | 'running'
+  | 'collecting_result'
+  | 'finalizing';
+
+export type AgentFaultPhaseIsExact = Expect<Equal<AgentFault['phase'], ExpectedAgentFaultPhase>>;
 
 export type ValidationDiagnosticInputIsExact = Expect<
   Equal<ValidationDiagnosticInput, ExpectedValidationDiagnosticInput>
@@ -624,6 +660,7 @@ export type CohesiveSpecificationSurface = readonly [
 ];
 
 export type RuntimeContractSurface = readonly [
+  ActiveInvocationState,
   AgentArgumentTemplate,
   AgentDefinitionContract,
   AgentDefinitionInput,
@@ -641,14 +678,20 @@ export type RuntimeContractSurface = readonly [
   AgentExecutionPin,
   AgentEvent,
   AgentInvocationFilter,
+  AgentInvocationHandle,
   AgentInvocationSnapshot,
   AgentInvocationStatus,
+  AgentResultLookup,
+  AgentStartContext,
+  AgentTerminalStatus,
   AgentInvocationResult,
   AgentInvocationSucceeded,
+  CancelInvocationResult,
   JsonObject,
   JsonPrimitive,
   JsonSchema202012,
   JsonValue,
+  StartAgentInvocation,
 ];
 
 type ExpectedOutputClaimResult =
@@ -1254,6 +1297,71 @@ export type AgentInvocationSnapshotIsExact = Expect<
 export type AgentInvocationFilterIsExact = Expect<
   Equal<AgentInvocationFilter, ExpectedAgentInvocationFilter>
 >;
+
+type ExpectedAgentTerminalStatus = 'succeeded' | 'failed' | 'cancelled' | 'timed_out';
+
+type ExpectedAgentResultLookup =
+  | Readonly<{ state: 'running'; invocation: AgentInvocationSnapshot }>
+  | Readonly<{ state: 'completed'; result: AgentInvocationResult }>
+  | Readonly<{ state: 'unknown' }>;
+
+type ExpectedCancelInvocationResult =
+  | Readonly<{ state: 'requested' }>
+  | Readonly<{ state: 'already_completed'; result: AgentInvocationResult }>
+  | Readonly<{ state: 'unknown' }>;
+
+type ExpectedStartAgentInvocation = {
+  readonly invocationId: string;
+  readonly agent: AgentRef;
+  readonly prompt: string;
+  readonly workspace: { readonly directory: string };
+  readonly parameters: JsonObject;
+  readonly permissions: JsonObject;
+  readonly metadata?: JsonObject;
+  readonly result: { readonly schema: JsonSchema202012 };
+  readonly limits?: {
+    readonly wallClockTimeoutMs?: number;
+    readonly idleTimeoutMs?: number;
+    readonly maxEventBytes?: number;
+    readonly maxEventsFileBytes?: number;
+    readonly maxStdoutBytes?: number;
+    readonly maxStderrBytes?: number;
+    readonly maxRawResponseBytes?: number;
+  };
+  readonly output: { readonly directory: string };
+};
+
+type ExpectedAgentStartContext = {
+  readonly signal?: AbortSignal;
+  readonly environment?: {
+    readonly inherit?: readonly string[];
+    readonly variables?: Readonly<Record<string, string>>;
+    readonly secrets?: Readonly<Record<string, string>>;
+  };
+};
+
+type ExpectedAgentInvocationHandle = {
+  readonly invocationId: string;
+  readonly pin: AgentExecutionPin;
+  result(): Promise<AgentInvocationResult>;
+  cancel(reason?: string): Promise<CancelInvocationResult>;
+};
+
+export type AgentTerminalStatusIsExact = Expect<
+  Equal<AgentTerminalStatus, ExpectedAgentTerminalStatus>
+>;
+export type AgentResultLookupIsExact = Expect<Equal<AgentResultLookup, ExpectedAgentResultLookup>>;
+export type CancelInvocationResultIsExact = Expect<
+  Equal<CancelInvocationResult, ExpectedCancelInvocationResult>
+>;
+export type StartAgentInvocationIsExact = Expect<
+  Equal<StartAgentInvocation, ExpectedStartAgentInvocation>
+>;
+export type AgentStartContextIsExact = Expect<Equal<AgentStartContext, ExpectedAgentStartContext>>;
+export type AgentInvocationHandleIsExact = Expect<
+  Equal<AgentInvocationHandle, ExpectedAgentInvocationHandle>
+>;
+
 export type AgentEventIsIncluded = Expect<Equal<AgentEvent, AgentEvent>>;
 export type AgentInvocationSucceededIsIncluded = Expect<
   Equal<AgentInvocationSucceeded, AgentInvocationSucceeded>

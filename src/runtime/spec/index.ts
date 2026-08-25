@@ -21,6 +21,7 @@ export type {
 export type { JsonObject, JsonPrimitive, JsonSchema202012, JsonValue } from './json/index.js';
 export type {
   ActiveInvocationSnapshot,
+  ActiveInvocationState,
   ActiveInvocationStateSink,
   ActiveProcessIdentity,
   ActiveStateOperationContext,
@@ -29,8 +30,14 @@ export type {
 } from './manager-options/index.js';
 export type {
   AgentInvocationFilter,
+  AgentInvocationHandle,
   AgentInvocationSnapshot,
   AgentInvocationStatus,
+  AgentResultLookup,
+  AgentStartContext,
+  AgentTerminalStatus,
+  CancelInvocationResult,
+  StartAgentInvocation,
 } from './agent-invocation/index.js';
 export type { AgentEvent, AgentEventBase } from './agent-event/index.js';
 export type {
