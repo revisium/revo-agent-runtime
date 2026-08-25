@@ -3,6 +3,7 @@ import type {
   AgentFault,
   AgentInvocationResult,
   AgentInvocationResultBase,
+  AgentRawResponseDiagnostic,
 } from '../spec/index.js';
 import { toAgentFault } from './normalized-invocation-failure-to-agent-fault.js';
 import type { NormalizedInvocationOutcome } from './normalized-invocation-outcome.js';
@@ -10,6 +11,11 @@ import type { NormalizedInvocationOutcome } from './normalized-invocation-outcom
 type AgentInvocationResultBaseInput = Omit<AgentInvocationResultBase, 'files'> & {
   readonly files: AgentInvocationResultBase['files'];
 };
+
+const rawResponseDiagnostic = (
+  view: NonNullable<NormalizedInvocationOutcome['evidence']['rawResponse']>['view'],
+): AgentRawResponseDiagnostic =>
+  Object.freeze({ preview: view.preview, truncated: view.truncated });
 
 const cancelledFault = (): AgentFault =>
   Object.freeze({
@@ -64,7 +70,7 @@ export const buildAgentInvocationResult = (input: {
         error: toAgentFault(outcome.failure),
         ...(outcome.evidence.rawResponse === undefined
           ? {}
-          : { rawResponse: outcome.evidence.rawResponse.view }),
+          : { rawResponse: rawResponseDiagnostic(outcome.evidence.rawResponse.view) }),
       });
   }
   throw new Error('Unhandled normalized invocation outcome status.');

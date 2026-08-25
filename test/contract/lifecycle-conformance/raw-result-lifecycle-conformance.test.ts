@@ -79,7 +79,15 @@ test.each([
     else subject.execution.settleNaturalCompletion(1, rawResponse);
     await waitForLifecycleConformanceQuiescence();
 
-    await expect(accepted.handle.result()).resolves.toMatchObject({ status: 'failed' });
+    const result = await accepted.handle.result();
+    expect(result).toMatchObject({ status: 'failed' });
+    const delivered = subject.output.recordedTerminalResults().at(-1);
+    if (delivered !== undefined && delivered.status === 'failed' && 'rawResponse' in delivered)
+      expect(Object.keys(delivered.rawResponse ?? {}).toSorted()).toEqual([
+        'file',
+        'preview',
+        'truncated',
+      ]);
   },
 );
 

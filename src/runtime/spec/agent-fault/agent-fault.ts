@@ -60,7 +60,6 @@ export interface AgentFault {
     | 'probing'
     | 'preflight'
     | 'starting'
-    | 'execution'
     | 'running'
     | 'collecting_result'
     | 'finalizing';

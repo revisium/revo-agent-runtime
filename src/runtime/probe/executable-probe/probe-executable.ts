@@ -68,14 +68,14 @@ const unavailable = (
 const available = (
   target: ProbeTarget,
   executable: string,
-  reportedVersion?: string,
+  reportedVersion: string,
 ): AgentProbeResult =>
   Object.freeze({
     status: 'available',
     agent: Object.freeze({ id: target.definition.id, version: target.definition.version }),
     definitionDigest: target.definitionDigest,
     executable,
-    ...(reportedVersion === undefined ? {} : { reportedVersion }),
+    reportedVersion,
   });
 
 const truncateUtf8 = (

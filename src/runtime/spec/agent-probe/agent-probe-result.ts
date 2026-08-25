@@ -6,7 +6,7 @@ export interface AgentProbeAvailable {
   readonly agent: AgentRef;
   readonly definitionDigest: string;
   readonly executable: string;
-  readonly reportedVersion?: string;
+  readonly reportedVersion: string;
 }
 
 export interface AgentProbeUnavailable {

@@ -44,7 +44,7 @@ test.each(ALL_FAULT_CODES)('maps every fault code %s to a non-empty message', (c
   const fault = toAgentFault(failure);
   expect(fault.code).toBe(code);
   expect(fault.message.length).toBeGreaterThan(0);
-  expect(fault.phase).toBe('execution');
+  expect(fault.phase).toBe('collecting_result');
   expect(fault.retryable).toBe(false);
   expect(fault.details).toBeUndefined();
 });
@@ -58,6 +58,73 @@ test('maps a duplex failure using its own code', () => {
   const fault = toAgentFault(failure);
   expect(fault.code).toBe('revo.agent.process_failed');
   expect(fault.details).toBeUndefined();
+  expect(fault.phase).toBe('running');
+});
+
+const cleanupFailure = Object.freeze({
+  kind: 'process_cleanup_failed' as const,
+  cause: 'leader_reap_timeout' as const,
+  evidence: Object.freeze({
+    trigger: 'natural_exit' as const,
+    cause: 'leader_reap_timeout' as const,
+    termSent: true,
+    killSent: false,
+    lastKnownGroupState: 'absent' as const,
+    leaderReapState: 'pending' as const,
+  }),
+});
+
+test.each([
+  [
+    Object.freeze({
+      kind: 'parser',
+      reason: 'invalid_json',
+      code: 'revo.agent.result_invalid_json',
+    }),
+    'collecting_result',
+  ],
+  [
+    Object.freeze({ kind: 'result_schema', code: 'revo.agent.result_schema_mismatch' }),
+    'collecting_result',
+  ],
+  [
+    Object.freeze({
+      kind: 'duplex',
+      primary: Object.freeze({ kind: 'parser_failed', reason: 'invalid_json' }),
+      code: 'revo.agent.result_invalid_json',
+    }),
+    'collecting_result',
+  ],
+  [
+    Object.freeze({
+      kind: 'duplex',
+      primary: Object.freeze({ kind: 'result_schema_failed' }),
+      code: 'revo.agent.result_schema_mismatch',
+    }),
+    'collecting_result',
+  ],
+  [Object.freeze({ kind: 'finalization', code: 'revo.agent.output_write_failed' }), 'finalizing'],
+] as const)('maps %s failures to the owning phase', (failure, phase) => {
+  expect(toAgentFault(failure as NormalizedInvocationFailure).phase).toBe(phase);
+});
+
+test.each([
+  Object.freeze({ kind: 'attach_failed' }),
+  Object.freeze({ kind: 'stdin_write_failed' }),
+  Object.freeze({ kind: 'stdin_end_failed' }),
+  Object.freeze({ kind: 'stdout_sink_failed' }),
+  Object.freeze({ kind: 'stderr_sink_failed' }),
+  Object.freeze({ kind: 'protocol_sink_failed' }),
+  Object.freeze({ kind: 'duplex_operation_timeout', operation: 'attach' }),
+  cleanupFailure,
+  Object.freeze({ kind: 'internal' }),
+] as const)('maps duplex primary %o to the running phase', (primary) => {
+  const failure: NormalizedInvocationFailure = Object.freeze({
+    kind: 'duplex',
+    primary,
+    code: 'revo.agent.process_failed',
+  });
+  expect(toAgentFault(failure).phase).toBe('running');
 });
 
 test.each<'revo.agent.scratch_cleanup_failed' | 'revo.agent.output_write_failed'>([
