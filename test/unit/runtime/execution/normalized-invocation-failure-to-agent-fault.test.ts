@@ -44,7 +44,7 @@ test.each(ALL_FAULT_CODES)('maps every fault code %s to a non-empty message', (c
   const fault = toAgentFault(failure);
   expect(fault.code).toBe(code);
   expect(fault.message.length).toBeGreaterThan(0);
-  expect(fault.phase).toBe('execution');
+  expect(fault.phase).toBe('collecting_result');
   expect(fault.retryable).toBe(false);
   expect(fault.details).toBeUndefined();
 });
@@ -58,6 +58,33 @@ test('maps a duplex failure using its own code', () => {
   const fault = toAgentFault(failure);
   expect(fault.code).toBe('revo.agent.process_failed');
   expect(fault.details).toBeUndefined();
+  expect(fault.phase).toBe('running');
+});
+
+test.each([
+  [
+    Object.freeze({
+      kind: 'parser',
+      reason: 'invalid_json',
+      code: 'revo.agent.result_invalid_json',
+    }),
+    'collecting_result',
+  ],
+  [
+    Object.freeze({ kind: 'result_schema', code: 'revo.agent.result_schema_mismatch' }),
+    'collecting_result',
+  ],
+  [
+    Object.freeze({
+      kind: 'duplex',
+      primary: Object.freeze({ kind: 'parser_failed', reason: 'invalid_json' }),
+      code: 'revo.agent.result_invalid_json',
+    }),
+    'collecting_result',
+  ],
+  [Object.freeze({ kind: 'finalization', code: 'revo.agent.output_write_failed' }), 'finalizing'],
+] as const)('maps %s failures to the owning phase', (failure, phase) => {
+  expect(toAgentFault(failure as NormalizedInvocationFailure).phase).toBe(phase);
 });
 
 test.each<'revo.agent.scratch_cleanup_failed' | 'revo.agent.output_write_failed'>([

@@ -137,20 +137,22 @@ const event = (value = 'ok'): AgentEvent =>
     schemaVersion: 'agent-event/v1',
     type: 'invocation.started',
     invocationId: 'invocation-1',
-    at: '2026-08-22T00:00:00.000Z',
-    message: value,
+    pin: Object.freeze({ agentId: 'codex', agentVersion: '1.0.0', definitionDigest: 'sha256:abc' }),
+    sequence: 1,
+    timestamp: `2026-08-22T00:00:00.${value === 'ok' ? '000' : '001'}Z`,
   });
 const terminalEvent = (value = 'done'): AgentEvent =>
   Object.freeze({
     schemaVersion: 'agent-event/v1',
     type: 'invocation.finished',
     invocationId: 'invocation-1',
-    at: '2026-08-22T00:00:01.000Z',
-    message: value,
+    pin: Object.freeze({ agentId: 'codex', agentVersion: '1.0.0', definitionDigest: 'sha256:abc' }),
+    sequence: 2,
+    timestamp: `2026-08-22T00:00:01.${value === 'done' ? '000' : '001'}Z`,
   });
 const withSerializedBodyBytes = (base: AgentEvent, targetBytes: number): AgentEvent => {
-  const overhead = encoder.encode(JSON.stringify({ ...base, message: '' })).byteLength;
-  return Object.freeze({ ...base, message: 'x'.repeat(targetBytes - overhead) });
+  const overhead = encoder.encode(JSON.stringify({ ...base, invocationId: '' })).byteLength;
+  return Object.freeze({ ...base, invocationId: 'x'.repeat(targetBytes - overhead) });
 };
 const result = (outputDirectory: string): AgentInvocationSucceeded =>
   Object.freeze({

@@ -39,7 +39,14 @@ export type {
   CancelInvocationResult,
   StartAgentInvocation,
 } from './agent-invocation/index.js';
-export type { AgentEvent, AgentEventBase } from './agent-event/index.js';
+export type {
+  AgentEvent,
+  AgentEventBase,
+  AgentEventFilter,
+  AgentEventListener,
+  Unsubscribe,
+} from './agent-event/index.js';
+export type { AgentManager } from './agent-manager/index.js';
 export type {
   AgentCommittedOutputFiles,
   AgentInvocationCancelled,

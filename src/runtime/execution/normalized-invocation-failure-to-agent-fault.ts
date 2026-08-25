@@ -54,6 +54,38 @@ const MESSAGE_BY_CODE: Readonly<Record<AgentFault['code'], string>> = Object.fre
 
 const messageFor = (code: AgentFault['code']): string => MESSAGE_BY_CODE[code];
 
+// Phase reflects which stage OWNS the failure's reporting, not literally what operation failed — e.g.
+// a duplex-coordinator-owned cleanup failure during postacceptance drainage reports 'running' because
+// the coordinator owns that whole phase, matching the existing sibling cancelled/timeout-fault convention.
+const phaseFor = (failure: NormalizedInvocationFailure): AgentFault['phase'] => {
+  switch (failure.kind) {
+    case 'finalization':
+      return 'finalizing';
+    case 'parser':
+    case 'result_schema':
+      return 'collecting_result';
+    case 'duplex':
+      switch (failure.primary.kind) {
+        case 'parser_failed':
+        case 'result_schema_failed':
+          return 'collecting_result';
+        case 'attach_failed':
+        case 'stdin_write_failed':
+        case 'stdin_end_failed':
+        case 'stdout_sink_failed':
+        case 'stderr_sink_failed':
+        case 'protocol_sink_failed':
+        case 'process_failed':
+        case 'duplex_operation_timeout':
+        case 'process_cleanup_failed':
+        case 'internal':
+          return 'running';
+      }
+      throw new Error('Unhandled duplex primary failure.');
+  }
+  throw new Error('Unhandled normalized invocation failure.');
+};
+
 const diagnosticsDetails = (
   diagnostics: AgentValidationDetails | undefined,
 ): JsonObject | undefined => {
@@ -82,7 +114,7 @@ export const toAgentFault = (failure: NormalizedInvocationFailure): AgentFault =
   return Object.freeze({
     code: failure.code,
     message: messageFor(failure.code),
-    phase: 'execution',
+    phase: phaseFor(failure),
     retryable: false,
     ...(details === undefined ? {} : { details }),
   });

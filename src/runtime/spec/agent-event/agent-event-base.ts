@@ -1,11 +1,9 @@
+import type { AgentExecutionPin } from '../agent-definition/index.js';
+
 export interface AgentEventBase {
   readonly schemaVersion: 'agent-event/v1';
-  readonly type:
-    | 'invocation.accepted'
-    | 'invocation.started'
-    | 'invocation.exited'
-    | 'invocation.finished';
   readonly invocationId: string;
-  readonly at: string;
-  readonly message?: string;
+  readonly pin: AgentExecutionPin;
+  readonly sequence: number;
+  readonly timestamp: string;
 }

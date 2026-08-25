@@ -157,11 +157,18 @@ import type {
   AgentProbeResult,
   AgentProbeUnavailable,
   AgentRef,
+  AgentUsage,
+  AgentRawResponseDiagnostic,
   AgentValidationDetails,
   AgentValidationDiagnostic,
   AgentVersionProbe,
   AgentExecutionPin,
   AgentEvent,
+  AgentEventBase,
+  AgentEventFilter,
+  AgentEventListener,
+  AgentManager,
+  Unsubscribe,
   AgentInvocationFilter,
   AgentInvocationHandle,
   AgentInvocationSnapshot,
@@ -249,7 +256,6 @@ type ExpectedAgentFaultPhase =
   | 'probing'
   | 'preflight'
   | 'starting'
-  | 'execution'
   | 'running'
   | 'collecting_result'
   | 'finalizing';
@@ -1302,6 +1308,58 @@ export type AgentInvocationFilterIsExact = Expect<
 
 type ExpectedAgentTerminalStatus = 'succeeded' | 'failed' | 'cancelled' | 'timed_out';
 
+type ExpectedAgentEventBase = {
+  readonly schemaVersion: 'agent-event/v1';
+  readonly invocationId: string;
+  readonly pin: AgentExecutionPin;
+  readonly sequence: number;
+  readonly timestamp: string;
+};
+
+type ExpectedAgentEvent =
+  | (ExpectedAgentEventBase & { readonly type: 'invocation.accepted' })
+  | (ExpectedAgentEventBase & { readonly type: 'invocation.started' })
+  | (ExpectedAgentEventBase & { readonly type: 'invocation.cancelling' })
+  | (ExpectedAgentEventBase & { readonly type: 'invocation.finished' });
+
+type ExpectedAgentEventFilter = {
+  readonly invocationId?: string;
+  readonly agent?: AgentRef;
+  readonly types?: readonly AgentEvent['type'][];
+};
+
+type ExpectedAgentUsage = {
+  readonly inputTokens?: number;
+  readonly cachedInputTokens?: number;
+  readonly outputTokens?: number;
+  readonly reasoningOutputTokens?: number;
+  readonly reportedCost?: number;
+  readonly reportedCurrency?: string;
+};
+
+type ExpectedAgentRawResponseDiagnostic = {
+  readonly preview: string;
+  readonly truncated: boolean;
+  readonly file?: 'raw-final-response.txt';
+};
+
+type ExpectedAgentManager = {
+  listAgents(): readonly AgentDescriptor[];
+  getAgent(agent: AgentRef): AgentDescriptor | undefined;
+  initialize(snapshots: readonly ActiveInvocationSnapshot[]): Promise<void>;
+  probeAgent(agent: AgentRef): Promise<AgentProbeResult>;
+  subscribe(filter: AgentEventFilter, listener: AgentEventListener): Unsubscribe;
+  start(request: StartAgentInvocation, context?: AgentStartContext): Promise<AgentInvocationHandle>;
+  listInvocations(filter?: AgentInvocationFilter): readonly AgentInvocationSnapshot[];
+  getInvocation(invocationId: string): AgentInvocationSnapshot | undefined;
+  getResult(invocationId: string): AgentResultLookup;
+  waitForResult(invocationId: string): Promise<AgentInvocationResult>;
+  cancel(invocationId: string, reason?: string): Promise<CancelInvocationResult>;
+  shutdown(reason?: string): Promise<void>;
+};
+
+type ExpectedAgentRef = { readonly id: string; readonly version: string };
+
 type ExpectedAgentResultLookup =
   | Readonly<{ state: 'running'; invocation: AgentInvocationSnapshot }>
   | Readonly<{ state: 'completed'; result: AgentInvocationResult }>
@@ -1364,7 +1422,31 @@ export type AgentInvocationHandleIsExact = Expect<
   Equal<AgentInvocationHandle, ExpectedAgentInvocationHandle>
 >;
 
-export type AgentEventIsIncluded = Expect<Equal<AgentEvent, AgentEvent>>;
+export type AgentEventBaseIsExact = Expect<Equal<AgentEventBase, ExpectedAgentEventBase>>;
+export type AgentEventIsExact = Expect<Equal<AgentEvent, ExpectedAgentEvent>>;
+export type AgentEventFilterIsExact = Expect<Equal<AgentEventFilter, ExpectedAgentEventFilter>>;
+export type AgentEventListenerIsExact = Expect<
+  Equal<AgentEventListener, (event: AgentEvent) => void>
+>;
+export type UnsubscribeIsExact = Expect<Equal<Unsubscribe, () => void>>;
+export type AgentRefIsExact = Expect<Equal<AgentRef, ExpectedAgentRef>>;
+export type AgentProbeAvailableIsExact = Expect<
+  Equal<
+    AgentProbeAvailable,
+    {
+      readonly status: 'available';
+      readonly agent: AgentRef;
+      readonly definitionDigest: string;
+      readonly executable: string;
+      readonly reportedVersion: string;
+    }
+  >
+>;
+export type AgentUsageIsExact = Expect<Equal<AgentUsage, ExpectedAgentUsage>>;
+export type AgentRawResponseDiagnosticIsExact = Expect<
+  Equal<AgentRawResponseDiagnostic, ExpectedAgentRawResponseDiagnostic>
+>;
+export type AgentManagerIsExact = Expect<Equal<AgentManager, ExpectedAgentManager>>;
 export type AgentInvocationSucceededIsIncluded = Expect<
   Equal<AgentInvocationSucceeded, AgentInvocationSucceeded>
 >;
