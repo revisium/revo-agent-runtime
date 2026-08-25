@@ -650,7 +650,7 @@ class InternalInvocationLifecycleManager {
   #initialized: 'pending' | 'ready' | 'failed' = 'pending';
   #initializationDeferred: Deferred<void> | undefined;
   #initializationDeadlineAt = 0;
-  #uncertainRecoveryInvocationIds = new Set<string>();
+  readonly #uncertainRecoveryInvocationIds = new Set<string>();
   #firstShutdownReason: string | undefined;
   private readonly executionPort: InvocationExecutionPorts['execution'];
   private readonly active = new Map<string, ActiveInvocation>();
