@@ -5,10 +5,11 @@ import type {
   AgentInvocationFilter,
   AgentInvocationHandle,
   AgentInvocationSnapshot,
+  AgentResultLookup,
   AgentStartContext,
+  CancelInvocationResult,
   StartAgentInvocation,
 } from '../agent-invocation/index.js';
-import type { CancelInvocationResult, AgentResultLookup } from '../agent-invocation/index.js';
 import type { AgentProbeResult } from '../agent-probe/index.js';
 import type { ActiveInvocationSnapshot } from '../manager-options/index.js';
 
