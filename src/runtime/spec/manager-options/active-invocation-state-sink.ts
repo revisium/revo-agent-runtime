@@ -11,10 +11,12 @@ export interface ActiveProcessIdentity {
   readonly startedAt: string;
 }
 
+export type ActiveInvocationState = 'running' | 'cancelling';
+
 export interface ActiveInvocationSnapshot {
   readonly invocationId: string;
   readonly pin: AgentExecutionPin;
-  readonly state: 'running' | 'cancelling';
+  readonly state: ActiveInvocationState;
   readonly process: ActiveProcessIdentity;
 }
 
