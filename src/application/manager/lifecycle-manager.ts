@@ -422,18 +422,30 @@ const recoveryInvalidError = (): AgentManagerError =>
     }),
   );
 
-const recoveryFailedError = (failures: readonly RecoveredRowFailure[]): AgentManagerError =>
-  new AgentManagerError(
+const recoveryFailedError = (failures: readonly RecoveredRowFailure[]): AgentManagerError => {
+  const boundedFailures: RecoveredRowFailure[] = [];
+  for (const failure of failures) {
+    const copied = Object.freeze({ ...failure });
+    const candidate = [...boundedFailures, copied];
+    const candidateTruncated = candidate.length < failures.length;
+    const candidateDetails = JSON.stringify({ failures: candidate, truncated: candidateTruncated });
+    if (utf8Bytes(candidateDetails).byteLength > AGENT_RUNTIME_LIMITS.faultDetailsBytes) break;
+    boundedFailures.push(copied);
+  }
+  const truncated = boundedFailures.length < failures.length;
+  return new AgentManagerError(
     Object.freeze({
       code: 'revo.agent.recovery_failed' as const,
       message: AGENT_FAULT_MESSAGES.recoveryFailed,
       phase: 'initializing' as const,
       retryable: false,
       details: Object.freeze({
-        failures: failures.map((failure) => Object.freeze({ ...failure })),
+        failures: Object.freeze(boundedFailures),
+        truncated,
       }),
     }),
   );
+};
 
 const initializeLimitInvalidError = (): AgentManagerError =>
   new AgentManagerError(
@@ -464,6 +476,23 @@ const hasExactKeys = (value: Record<string, unknown>, keys: readonly string[]): 
 const isPositiveSafeInteger = (value: unknown): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value) && value >= 1;
 
+const recoveryCodePointAt = (value: string, index: number): number | undefined => {
+  const codePoint = value.codePointAt(index);
+  return codePoint === undefined || (codePoint >= 0xd800 && codePoint <= 0xdfff)
+    ? undefined
+    : codePoint;
+};
+
+const validRecoveryIdentifier = (value: string): boolean => {
+  if (value.length === 0 || value.length > AGENT_RUNTIME_LIMITS.agentIdentityBytes) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    const codePoint = recoveryCodePointAt(value, index);
+    if (codePoint === undefined) return false;
+    if (codePoint > 0xffff) index += 1;
+  }
+  return utf8Bytes(value).byteLength <= AGENT_RUNTIME_LIMITS.agentIdentityBytes;
+};
+
 const validateAndCopyRows = (
   refs: readonly unknown[],
 ):
@@ -483,13 +512,13 @@ const validateAndCopyRows = (
         !isPlainRecord(pin) ||
         !hasExactKeys(pin, ['agentId', 'agentVersion', 'definitionDigest']) ||
         typeof pin.agentId !== 'string' ||
-        pin.agentId.length === 0 ||
+        !validRecoveryIdentifier(pin.agentId) ||
         typeof pin.agentVersion !== 'string' ||
-        pin.agentVersion.length === 0 ||
+        !validRecoveryIdentifier(pin.agentVersion) ||
         typeof pin.definitionDigest !== 'string' ||
         pin.definitionDigest.length === 0 ||
         typeof ref.invocationId !== 'string' ||
-        ref.invocationId.length === 0 ||
+        !validRecoveryIdentifier(ref.invocationId) ||
         (ref.state !== 'running' && ref.state !== 'cancelling') ||
         !isPlainRecord(process) ||
         !hasExactKeys(process, ['pid', 'processGroupId', 'fingerprint', 'startedAt']) ||
@@ -553,11 +582,11 @@ const redactedShutdownReason = (
   secretValues: readonly string[],
 ): string | undefined => {
   if (reason === undefined) return undefined;
-  let copied = textDecoder.decode(new TextEncoder().encode(reason).slice(0, 4096));
+  let redacted = reason;
   for (const secret of secretValues) {
-    if (secret.length > 0) copied = copied.split(secret).join('[REDACTED]');
+    if (secret.length > 0) redacted = redacted.split(secret).join('[REDACTED]');
   }
-  return copied;
+  return textDecoder.decode(utf8Bytes(redacted).slice(0, AGENT_RUNTIME_LIMITS.descriptionBytes));
 };
 
 type ShutdownDrainResult =
@@ -698,7 +727,8 @@ class InternalInvocationLifecycleManager {
     this.#initializationDeadlineAt = Date.now() + this.#initializationTimeoutMs;
     this.#initializationDeferred = createDeferred<void>();
     const inspection = inspectBatchRefs(snapshots, AGENT_RUNTIME_LIMITS.activeSnapshots);
-    void this.#settleInitialization(inspection).then(
+    const rows = inspection.status === 'valid' ? validateAndCopyRows(inspection.refs) : undefined;
+    void this.#settleInitialization(inspection, rows).then(
       () => {
         this.#initialized = 'ready';
         this.#initializationDeferred?.resolve(undefined);
@@ -1067,13 +1097,15 @@ class InternalInvocationLifecycleManager {
     throw this.#initialized === 'failed' ? managerClosedError() : managerNotInitializedError();
   }
 
-  async #settleInitialization(inspection: BatchInspection): Promise<void> {
+  async #settleInitialization(
+    inspection: BatchInspection,
+    rows: ReturnType<typeof validateAndCopyRows> | undefined,
+  ): Promise<void> {
     await Promise.resolve();
     if (inspection.status === 'invalid') throw recoveryInvalidError();
     if (inspection.status === 'limit') throw initializeLimitInvalidError();
 
-    const rows = validateAndCopyRows(inspection.refs);
-    if (rows.status === 'invalid') throw recoveryInvalidError();
+    if (rows === undefined || rows.status === 'invalid') throw recoveryInvalidError();
     if (rows.snapshots.length === 0) return;
     if (!isRecoverySupportedPlatform())
       throw recoveryFailedError(

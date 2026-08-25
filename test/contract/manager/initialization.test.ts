@@ -328,6 +328,123 @@ test('reports digest mismatches without inspecting the process', async () => {
   expect(execution.recoveryCalls()).toEqual([]);
 });
 
+test('rejects over-bound recovery identifiers before any recovery side effect', async () => {
+  for (const row of [
+    snapshot('i'.repeat(257)),
+    snapshot('over-bound-agent', { agentId: 'a'.repeat(257) }),
+  ]) {
+    const execution = new FakeInvocationExecutionPort();
+    const sink = createRecordingActiveStateSink();
+    const manager = createManager(execution, sink);
+
+    // oxlint-disable-next-line no-await-in-loop -- each manager owns an isolated rejection assertion.
+    await expect(manager.initialize(asSnapshots([row]))).rejects.toMatchObject({
+      fault: { code: 'revo.agent.recovery_invalid' },
+    });
+    expect(execution.recoveryCalls()).toEqual([]);
+    expect(sink.calls).toEqual([]);
+  }
+});
+
+test('bounds recovery failure details and marks truncation', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const unknownAgentId = 'u'.repeat(256);
+  const rows = Array.from({ length: 1_000 }, (_, index) =>
+    snapshot(`${String(index).padStart(4, '0')}-${'i'.repeat(251)}`, {
+      agentId: unknownAgentId,
+    }),
+  );
+  const manager = createManager(execution);
+
+  await expect(manager.initialize(asSnapshots(rows))).rejects.toMatchObject({
+    fault: { code: 'revo.agent.recovery_failed' },
+  });
+  try {
+    await manager.initialize(asSnapshots(rows));
+  } catch (error: unknown) {
+    expect(error).toBeInstanceOf(AgentManagerError);
+    if (!(error instanceof AgentManagerError)) return;
+    const details = error.fault.details;
+    expect(details).toBeDefined();
+    if (details === undefined) return;
+    expect(details.truncated).toBe(true);
+    expect(new TextEncoder().encode(JSON.stringify(details)).byteLength).toBeLessThanOrEqual(
+      65_536,
+    );
+  }
+});
+
+test('keeps every small recovery failure in invocation order without truncation', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const manager = createManager(execution);
+
+  await expect(
+    manager.initialize(
+      asSnapshots([
+        snapshot('b-small', { agentId: 'missing-b' }),
+        snapshot('a-small', { agentId: 'missing-a' }),
+      ]),
+    ),
+  ).rejects.toMatchObject({
+    fault: {
+      details: {
+        failures: [
+          { invocationId: 'a-small', category: 'pin_unknown' },
+          { invocationId: 'b-small', category: 'pin_unknown' },
+        ],
+        truncated: false,
+      },
+    },
+  });
+});
+
+test('does not leak rejected recovery-port error details into public failures', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueRecoveryRejection(new Error('/sensitive/private/path SUPERSECRETVALUE'));
+  const manager = createManager(execution);
+
+  try {
+    await manager.initialize(asSnapshots([snapshot('port-rejected')]));
+  } catch (error: unknown) {
+    expect(error).toBeInstanceOf(AgentManagerError);
+    if (!(error instanceof AgentManagerError)) return;
+    const details = error.fault.details;
+    expect(details).toBeDefined();
+    if (details === undefined) return;
+    const failuresValue: unknown = details.failures;
+    expect(Array.isArray(failuresValue)).toBe(true);
+    if (!Array.isArray(failuresValue)) return;
+    const failure: unknown = failuresValue[0];
+    expect(failure).toBeDefined();
+    if (failure === undefined || typeof failure !== 'object' || failure === null) return;
+    expect(Reflect.ownKeys(failure)).toEqual(['invocationId', 'category']);
+    expect(JSON.stringify(details)).not.toContain('/sensitive/private/path');
+    expect(JSON.stringify(details)).not.toContain('SUPERSECRETVALUE');
+  }
+});
+
+test('copies recovery rows synchronously before the caller can mutate them', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueRecoveryResult({ status: 'absent' });
+  const sink = createRecordingActiveStateSink();
+  const manager = createManager(execution, sink);
+  const original = snapshot('synchronous-copy');
+  const row = {
+    ...original,
+    pin: { ...original.pin },
+    process: { ...original.process },
+  };
+  const rows = [row];
+
+  const initialization = manager.initialize(asSnapshots(rows));
+  row.pin.agentId = 'mutated-agent';
+  row.process.pid = 999_999;
+  await initialization;
+
+  expect(execution.recoveryCalls()[0]?.pid).toBe(123);
+  expect(sink.calls).toEqual(['synchronous-copy']);
+});
+
 test('marks rows deadline_exceeded before dispatching a later port call', async () => {
   vi.useFakeTimers();
   vi.setSystemTime(0);
