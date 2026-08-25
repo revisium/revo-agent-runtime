@@ -61,6 +61,9 @@ import { CompletedInvocations } from './completed-invocations.js';
 import { createNativeProcessExecutionPort } from './create-native-process-execution-port.js';
 import { inspectBatchRefs } from './inspect-batch-refs.js';
 import { InstalledBindingRegistry } from './installed-bindings.js';
+import { isRecoverySupportedPlatform } from './is-recovery-supported-platform.js';
+import { reconcileRecoveredRows } from './reconcile-recovered-rows.js';
+import type { RecoveredRowFailure } from './recovered-row-failure.js';
 import type { RetainedInvocationRecord } from './retained-invocation-record.js';
 import { TerminalSubscriptions } from './subscriptions.js';
 
@@ -419,16 +422,16 @@ const recoveryInvalidError = (): AgentManagerError =>
     }),
   );
 
-const recoveryFailedError = (
-  details: Readonly<{ invocationIds: readonly string[] }>,
-): AgentManagerError =>
+const recoveryFailedError = (failures: readonly RecoveredRowFailure[]): AgentManagerError =>
   new AgentManagerError(
     Object.freeze({
       code: 'revo.agent.recovery_failed' as const,
       message: AGENT_FAULT_MESSAGES.recoveryFailed,
       phase: 'initializing' as const,
       retryable: false,
-      details: Object.freeze({ invocationIds: [...details.invocationIds] }),
+      details: Object.freeze({
+        failures: failures.map((failure) => Object.freeze({ ...failure })),
+      }),
     }),
   );
 
@@ -563,7 +566,8 @@ type ShutdownDrainResult =
       invocationId: string;
       kind: 'cleanup_failed';
       outcome: ProcessCleanupAttemptOutcome;
-    }>;
+    }>
+  | Readonly<{ kind: 'recovery_incomplete' }>;
 
 const createResultSchemaValidator = (
   snapshot: InvocationInputSnapshot,
@@ -620,13 +624,31 @@ const createHandle = (
     result: () => completion.promise,
   });
 
+const settledBefore = (operation: Promise<unknown>, deadlineAt: number): Promise<boolean> =>
+  new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(false), Math.max(0, deadlineAt - Date.now()));
+    timer.unref?.();
+    void operation.then(
+      () => {
+        clearTimeout(timer);
+        resolve(true);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(true);
+      },
+    );
+  });
+
 class InternalInvocationLifecycleManager {
   readonly #configuredSecretValues: readonly string[];
   readonly #activeStateOperationTimeoutMs: number;
+  readonly #initializationTimeoutMs: number;
   #closing = false;
   #shutdownDeferred: Deferred<void> | undefined;
   #initialized: 'pending' | 'ready' | 'failed' = 'pending';
   #initializationDeferred: Deferred<void> | undefined;
+  #initializationDeadlineAt = 0;
   #firstShutdownReason: string | undefined;
   private readonly executionPort: InvocationExecutionPorts['execution'];
   private readonly active = new Map<string, ActiveInvocation>();
@@ -659,6 +681,10 @@ class InternalInvocationLifecycleManager {
     if (activeStateOperationTimeoutMs === undefined)
       throw new Error('Validated active-state operation timeout is required.');
     this.#activeStateOperationTimeoutMs = activeStateOperationTimeoutMs;
+    const initializationTimeoutMs = limits.initializationTimeoutMs;
+    if (initializationTimeoutMs === undefined)
+      throw new Error('Validated initialization timeout is required.');
+    this.#initializationTimeoutMs = initializationTimeoutMs;
     this.executionPort =
       ports.execution ?? createNativeProcessExecutionPort(undefined, activeStateOperationTimeoutMs);
   }
@@ -667,6 +693,7 @@ class InternalInvocationLifecycleManager {
     if (this.#initializationDeferred !== undefined) return this.#initializationDeferred.promise;
     if (this.#closing) return Promise.reject(managerClosedError());
 
+    this.#initializationDeadlineAt = Date.now() + this.#initializationTimeoutMs;
     this.#initializationDeferred = createDeferred<void>();
     const inspection = inspectBatchRefs(snapshots, AGENT_RUNTIME_LIMITS.activeSnapshots);
     void this.#settleInitialization(inspection).then(
@@ -1046,9 +1073,27 @@ class InternalInvocationLifecycleManager {
     const rows = validateAndCopyRows(inspection.refs);
     if (rows.status === 'invalid') throw recoveryInvalidError();
     if (rows.snapshots.length === 0) return;
-    throw recoveryFailedError({
-      invocationIds: rows.snapshots.map((snapshot) => snapshot.invocationId),
-    });
+    if (!isRecoverySupportedPlatform())
+      throw recoveryFailedError(
+        rows.snapshots
+          .toSorted((left, right) => compareStrings(left.invocationId, right.invocationId))
+          .map((snapshot) =>
+            Object.freeze({
+              invocationId: snapshot.invocationId,
+              category: 'platform_unsupported' as const,
+            }),
+          ),
+      );
+    const failures = await reconcileRecoveredRows(
+      rows.snapshots,
+      this.registry,
+      this.executionPort,
+      this.activeStateSink,
+      this.#activeStateOperationTimeoutMs,
+      this.#initializationDeadlineAt,
+      () => this.#closing,
+    );
+    if (failures.length > 0) throw recoveryFailedError(failures);
   }
 
   shutdown(reason?: string): Promise<void> {
@@ -1061,6 +1106,7 @@ class InternalInvocationLifecycleManager {
   }
 
   private async performShutdown(): Promise<void> {
+    const recoveryIncomplete = await this.#drainPendingInitialization();
     const activeDrains = [...this.active.entries()].map(([invocationId, active]) =>
       this.drainActiveInvocation(invocationId, active),
     );
@@ -1080,9 +1126,22 @@ class InternalInvocationLifecycleManager {
       ([invocationId, guard]) => this.drainRetainedActiveStateGuard(invocationId, guard),
     );
     const results = await Promise.all([...activeDrains, ...retainedActiveStateDrains]);
-    const failures = results.filter((result) => result.kind === 'cleanup_failed');
+    const failures: ShutdownDrainResult[] = results.filter(
+      (result): result is Extract<ShutdownDrainResult, { kind: 'cleanup_failed' }> =>
+        result.kind === 'cleanup_failed',
+    );
+    if (recoveryIncomplete) failures.push(Object.freeze({ kind: 'recovery_incomplete' as const }));
     if (failures.length > 0) throw shutdownFailedError(failures, this.#firstShutdownReason);
     this.subscriptions.clear();
+  }
+
+  async #drainPendingInitialization(): Promise<boolean> {
+    if (this.#initializationDeferred === undefined) return false;
+    const settled = await settledBefore(
+      this.#initializationDeferred.promise,
+      this.#initializationDeadlineAt,
+    );
+    return !settled;
   }
 
   private async drainRetainedActiveStateGuard(

@@ -1,15 +1,39 @@
 import type {
   ActiveInvocationStateSink,
+  ActiveStateOperationContext,
   AgentDefinitionInput,
   AgentManagerOptions,
   JsonSchema202012,
 } from '../../../src/runtime/spec/index.js';
+
+export type RecordingActiveStateSink = ActiveInvocationStateSink & {
+  readonly calls: readonly string[];
+  rejectNext(): void;
+  hangNext(): void;
+};
 
 export const createTestActiveStateSink = (): ActiveInvocationStateSink =>
   Object.freeze({
     save: async (): Promise<void> => undefined,
     remove: async (): Promise<void> => undefined,
   });
+
+export const createRecordingActiveStateSink = (): RecordingActiveStateSink => {
+  const calls: string[] = [];
+  const outcomes: Array<'reject' | 'hang'> = [];
+  return {
+    calls,
+    rejectNext: () => outcomes.push('reject'),
+    hangNext: () => outcomes.push('hang'),
+    save: async (): Promise<void> => undefined,
+    remove: async (invocationId: string, _context: ActiveStateOperationContext): Promise<void> => {
+      calls.push(invocationId);
+      const outcome = outcomes.shift();
+      if (outcome === 'reject') throw new Error('remove failed');
+      if (outcome === 'hang') await new Promise<void>(() => undefined);
+    },
+  };
+};
 
 export const p1ObjectSchema: JsonSchema202012 = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
