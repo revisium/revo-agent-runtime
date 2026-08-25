@@ -43,6 +43,7 @@ import type {
   ClaimedInvocationOutput,
   inspectOutputClaimGuard,
   InvocationExecutionPorts,
+  InvocationClockPort,
   InvocationInputSnapshot,
   InterimDuplexPrimaryFailure,
   InvocationTerminalObservation,
@@ -661,6 +662,7 @@ export type CohesiveSpecificationSurface = readonly [
 
 export type RuntimeContractSurface = readonly [
   ActiveInvocationState,
+  InvocationClockPort,
   AgentArgumentTemplate,
   AgentDefinitionContract,
   AgentDefinitionInput,

@@ -1,4 +1,5 @@
 export type { ExecutionBinding } from './execution-binding.js';
+export type { InvocationClockPort } from './invocation-clock-port.js';
 export type { InvocationExecutionPorts } from './execution-ports.js';
 export type { RunningExecution } from './running-execution.js';
 export type { SpawnAndIdentifyResult } from './spawn-and-identify-result.js';
