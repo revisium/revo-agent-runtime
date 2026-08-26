@@ -1,4 +1,4 @@
-import type { AgentInvocationResult, JsonObject } from '../spec/index.js';
+import type { AgentEvent, AgentInvocationResult, JsonObject } from '../spec/index.js';
 import type { CancellationCommitOutcome } from './cancellation-commit-outcome.js';
 import type { InvocationExecutionPorts } from './execution-ports.js';
 import type { InvocationTerminalObservation } from './execution-terminal-observation.js';
@@ -21,6 +21,10 @@ type LifecycleState =
   | 'terminal';
 type CancellationCause = 'caller' | 'deadline';
 type ActiveInvocationStatus = 'accepted' | 'starting' | 'running' | 'cancelling';
+type LifecycleEventType = Exclude<
+  AgentEvent['type'],
+  'invocation.accepted' | 'invocation.finished'
+>;
 
 const internalFailureObservation = (spawnedAt = Date.now()): InvocationTerminalObservation =>
   Object.freeze({
@@ -89,15 +93,17 @@ export class InvocationLifecycle {
     startedAt: string,
     private readonly saveCancellingState: () => void,
     private readonly removeActiveState: (invocationId: string) => Promise<void>,
+    private readonly emitEvent: (type: LifecycleEventType) => void,
     private readonly onTerminal: (result: AgentInvocationResult) => void,
   ) {
     this.startedAtIso = startedAt;
   }
 
   begin(): void {
-    if (this.state !== 'accepted') return;
-    this.state = 'starting';
-    this.lastActiveStatus = 'starting';
+    if (this.state === 'accepted') {
+      this.state = 'starting';
+      this.lastActiveStatus = 'starting';
+    } else if (this.state !== 'cancelling') return;
     void this.startExecution();
   }
 
@@ -171,6 +177,7 @@ export class InvocationLifecycle {
       if (this.state === 'starting') {
         this.state = 'running';
         this.lastActiveStatus = 'running';
+        this.emitEvent('invocation.started');
       } else if (this.state === 'cancelling') this.dispatchCancellation();
       void execution.completion.then(
         (observation) => this.beginFinalization(observation),
@@ -198,6 +205,7 @@ export class InvocationLifecycle {
     this.cancellation = deferred();
     this.state = 'cancelling';
     this.lastActiveStatus = 'cancelling';
+    this.emitEvent('invocation.cancelling');
     try {
       this.saveCancellingState();
     } catch {

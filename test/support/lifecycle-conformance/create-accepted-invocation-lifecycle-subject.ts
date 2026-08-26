@@ -125,6 +125,7 @@ export const createAcceptedInvocationLifecycleSubject = (
     '2026-08-22T00:00:01.000Z',
     () => undefined,
     async () => undefined,
+    () => undefined,
     (result) => settlements.push(result),
   );
 

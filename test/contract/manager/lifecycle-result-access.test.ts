@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 
 import { createInvocationLifecycleManager } from '../../../src/application/manager/index.js';
 import type { InvocationExecutionPorts } from '../../../src/runtime/execution/index.js';
+import type { AgentEvent } from '../../../src/runtime/spec/index.js';
 import {
   buildAgentDefinition,
   createTestActiveStateSink,
@@ -152,7 +153,7 @@ test('rejecting terminal publication still commits one failed result with exit e
     output,
   });
   const events: string[] = [];
-  manager.subscribe({}, (event) => events.push(event.invocationId));
+  manager.subscribe({ types: ['invocation.finished'] }, (event) => events.push(event.invocationId));
   const accepted = expectAcceptedInvocation(
     await manager.start(createStartInput({ invocationId: 'terminal-rejection' })),
   );
@@ -339,7 +340,9 @@ test('delivers one canonical terminal event for output failure, execution failur
     output: outputFailureOutput,
   });
   const outputFailureEvents: unknown[] = [];
-  outputFailureManager.subscribe({}, (event) => outputFailureEvents.push(event.invocationId));
+  outputFailureManager.subscribe({ types: ['invocation.finished'] }, (event) =>
+    outputFailureEvents.push(event.invocationId),
+  );
   const outputFailure = expectAcceptedInvocation(
     await outputFailureManager.start(createStartInput({ invocationId: 'output-failure-event' })),
   );
@@ -360,7 +363,9 @@ test('delivers one canonical terminal event for output failure, execution failur
     output: executionFailureOutput,
   });
   const executionFailureEvents: unknown[] = [];
-  executionFailureManager.subscribe({}, (event) => executionFailureEvents.push(event.invocationId));
+  executionFailureManager.subscribe({ types: ['invocation.finished'] }, (event) =>
+    executionFailureEvents.push(event.invocationId),
+  );
   const executionFailure = expectAcceptedInvocation(
     await executionFailureManager.start(
       createStartInput({ invocationId: 'execution-failure-event' }),
@@ -383,7 +388,9 @@ test('delivers one canonical terminal event for output failure, execution failur
     output: cancellationOutput,
   });
   const cancellationEvents: unknown[] = [];
-  cancellationManager.subscribe({}, (event) => cancellationEvents.push(event.invocationId));
+  cancellationManager.subscribe({ types: ['invocation.finished'] }, (event) =>
+    cancellationEvents.push(event.invocationId),
+  );
   const cancellation = expectAcceptedInvocation(
     await cancellationManager.start(createStartInput({ invocationId: 'caller-cancel-event' })),
   );
@@ -409,7 +416,9 @@ test('delivers one canonical terminal event for output failure, execution failur
     output: deadlineOutput,
   });
   const deadlineEvents: unknown[] = [];
-  deadlineManager.subscribe({}, (event) => deadlineEvents.push(event.invocationId));
+  deadlineManager.subscribe({ types: ['invocation.finished'] }, (event) =>
+    deadlineEvents.push(event.invocationId),
+  );
   const deadline = expectAcceptedInvocation(
     await deadlineManager.start(
       createStartInput({
@@ -429,6 +438,178 @@ test('delivers one canonical terminal event for output failure, execution failur
   expect(deadlineResult).toMatchObject({ status: 'timed_out' });
 });
 
+test('delivers the complete ordered event sequence with a per-invocation counter', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = await createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+  const events: Array<{ type: string; sequence: number }> = [];
+  manager.subscribe({}, (event) => events.push({ type: event.type, sequence: event.sequence }));
+
+  const accepted = expectAcceptedInvocation(
+    await manager.start(createStartInput({ invocationId: 'ordered-events' })),
+  );
+  await flush();
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
+  await accepted.handle.result();
+
+  expect(events.map(({ type }) => type)).toEqual([
+    'invocation.accepted',
+    'invocation.started',
+    'invocation.finished',
+  ]);
+  expect(events.map(({ sequence }) => sequence)).toEqual([1, 2, 3]);
+});
+
+test('cancels from an accepted listener without skipping activation or hanging shutdown', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = await createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+  const events: AgentEvent[] = [];
+  let acceptedCancellation: Promise<unknown> | undefined;
+  let listenerError: unknown;
+  manager.subscribe({}, (event) => {
+    events.push(event);
+    if (event.type === 'invocation.accepted') {
+      try {
+        acceptedCancellation = manager.cancel(event.invocationId, 'accepted-listener-reason');
+      } catch (error: unknown) {
+        listenerError = error;
+      }
+    }
+  });
+
+  const accepted = expectAcceptedInvocation(
+    await manager.start(createStartInput({ invocationId: 'cancel-before-begin' })),
+  );
+  expect(listenerError).toBeUndefined();
+  expect(acceptedCancellation).toBeDefined();
+  await acceptedCancellation;
+  await new Promise<void>((resolve) => setTimeout(resolve, 50));
+  expect(events.map((event) => event.type)).toEqual([
+    'invocation.accepted',
+    'invocation.cancelling',
+  ]);
+  expect(events.map((event) => event.sequence)).toEqual([1, 2]);
+  execution.settleCancellationRequest(1);
+  execution.confirmCancellation(1);
+  const result = await accepted.handle.result();
+
+  expect(result.status).toBe('cancelled');
+  expect(events.map((event) => event.type)).toEqual([
+    'invocation.accepted',
+    'invocation.cancelling',
+    'invocation.finished',
+  ]);
+  expect(events.map((event) => event.sequence)).toEqual([1, 2, 3]);
+  expect(JSON.stringify(events)).not.toContain('accepted-listener-reason');
+  expect(manager.getResult('cancel-before-begin')).toMatchObject({ state: 'completed' });
+});
+
+test('emits cancellation exactly once for caller and deadline causes', async () => {
+  const callerExecution = new FakeInvocationExecutionPort();
+  const callerOutput = new FakeInvocationOutputPort();
+  callerOutput.enqueueTerminalResultRecording();
+  callerExecution.enqueueStart('running');
+  const callerManager = await createLifecycleManager({
+    execution: callerExecution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output: callerOutput,
+  });
+  const callerEvents: AgentEvent[] = [];
+  callerManager.subscribe({}, (event) => callerEvents.push(event));
+  const caller = expectAcceptedInvocation(
+    await callerManager.start(createStartInput({ invocationId: 'caller-events' })),
+  );
+  await flush();
+  await callerManager.cancel('caller-events', 'caller-secret');
+  await callerManager.cancel('caller-events', 'caller-secret-again');
+  await new Promise<void>((resolve) => setTimeout(resolve, 50));
+  callerExecution.settleCancellationRequest(1);
+  callerExecution.confirmCancellation(1);
+  await caller.handle.result();
+  expect(callerEvents.map((event) => event.type)).toEqual([
+    'invocation.accepted',
+    'invocation.started',
+    'invocation.cancelling',
+    'invocation.finished',
+  ]);
+  expect(callerEvents.map((event) => event.sequence)).toEqual([1, 2, 3, 4]);
+  expect(callerEvents.filter(({ type }) => type === 'invocation.cancelling')).toHaveLength(1);
+  expect(JSON.stringify(callerEvents)).not.toContain('caller-secret');
+  await expect(callerManager.cancel('caller-events', 'too-late-secret')).resolves.toMatchObject({
+    state: 'already_completed',
+  });
+  expect(callerEvents.filter(({ type }) => type === 'invocation.cancelling')).toHaveLength(1);
+
+  const deadlineExecution = new FakeInvocationExecutionPort();
+  const deadlineOutput = new FakeInvocationOutputPort();
+  const deadlineClock = new FakeInvocationClock({ initialNowMs: 0 });
+  deadlineOutput.enqueueTerminalResultRecording();
+  deadlineExecution.enqueueStart('running');
+  const deadlineManager = await createLifecycleManager({
+    execution: deadlineExecution,
+    clock: deadlineClock,
+    output: deadlineOutput,
+  });
+  const deadlineEvents: AgentEvent[] = [];
+  deadlineManager.subscribe({}, (event) => deadlineEvents.push(event));
+  const deadline = expectAcceptedInvocation(
+    await deadlineManager.start(
+      createStartInput({
+        invocationId: 'deadline-events',
+        limits: { wallClockTimeoutMs: 1_000, idleTimeoutMs: 1_000 },
+      }),
+    ),
+  );
+  await flush();
+  deadlineClock.advanceBy(1_000);
+  await flush();
+  await flush();
+  deadlineExecution.settleCancellationRequest(1);
+  deadlineExecution.confirmCancellation(1);
+  await deadline.handle.result();
+  expect(deadlineEvents.map((event) => event.type)).toEqual([
+    'invocation.accepted',
+    'invocation.started',
+    'invocation.cancelling',
+    'invocation.finished',
+  ]);
+  expect(deadlineEvents.map((event) => event.sequence)).toEqual([1, 2, 3, 4]);
+});
+
+test('filters a subscription to only invocation.started', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = await createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+  const events: string[] = [];
+  manager.subscribe({ types: ['invocation.started'] }, (event) => events.push(event.type));
+  const accepted = expectAcceptedInvocation(
+    await manager.start(createStartInput({ invocationId: 'started-filter' })),
+  );
+  await flush();
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{}'));
+  await accepted.handle.result();
+  expect(events).toEqual(['invocation.started']);
+});
+
 test('isolates a throwing listener without stranding manager handle or active waiter resolution', async () => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
@@ -445,11 +626,11 @@ test('isolates a throwing listener without stranding manager handle or active wa
   let handleResolved = false;
   let waiterResolved = false;
   const independentResults: unknown[] = [];
-  manager.subscribe({}, () => {
+  manager.subscribe({ types: ['invocation.finished'] }, () => {
     throwingCalls += 1;
     throw new Error('listener failure');
   });
-  manager.subscribe({}, (event) => {
+  manager.subscribe({ types: ['invocation.finished'] }, (event) => {
     const lookup = manager.getResult(event.invocationId);
     expect(lookup.state).toBe('completed');
     if (lookup.state !== 'completed') throw new Error('Expected completed result lookup.');
@@ -516,9 +697,13 @@ test('admits subscriptions independently from completed result retention', async
   );
   await manager.initialize([]);
   const received: unknown[] = [];
-  manager.subscribe({}, (event) => received.push(event.invocationId));
+  manager.subscribe({ types: ['invocation.finished'] }, (event) =>
+    received.push(event.invocationId),
+  );
   const refusedCalls: unknown[] = [];
-  manager.subscribe({}, (event) => refusedCalls.push(event.invocationId));
+  manager.subscribe({ types: ['invocation.finished'] }, (event) =>
+    refusedCalls.push(event.invocationId),
+  );
 
   const accepted = expectAcceptedInvocation(
     await manager.start(createStartInput({ invocationId: 'subscription-capacity' })),

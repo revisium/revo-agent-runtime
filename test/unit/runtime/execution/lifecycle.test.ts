@@ -97,6 +97,7 @@ const startLifecycle = (
   hooks: Readonly<{
     removeActiveState?: (invocationId: string) => Promise<void>;
     saveCancellingState?: () => void;
+    emitEvent?: (type: 'invocation.started' | 'invocation.cancelling') => void;
   }> = {},
 ) => {
   const settlements: Array<{ readonly status: string }> = [];
@@ -123,6 +124,7 @@ const startLifecycle = (
     '2026-08-22T00:00:01.000Z',
     hooks.saveCancellingState ?? (() => undefined),
     hooks.removeActiveState ?? (async () => undefined),
+    hooks.emitEvent ?? (() => undefined),
     (settlement) => settlements.push(settlement),
   );
   lifecycle.begin();
@@ -159,6 +161,19 @@ test('passes the identical prepared launch instance to execution', async () => {
 
   expect(execution.startedPreparedLaunches()).toEqual([prepared]);
   expect(execution.startedPreparedLaunches()[0]).toBe(prepared);
+});
+
+test('never emits invocation.started when activation throws synchronously', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueStart(new Error('activation failed'));
+  const events: string[] = [];
+  const { settlements } = startLifecycle(execution, undefined, undefined, {
+    emitEvent: (type) => events.push(type),
+  });
+  await flush();
+
+  expect(events).toEqual([]);
+  expect(settlements).toMatchObject([{ status: 'failed', error: { code: 'revo.agent.internal' } }]);
 });
 
 test('queues cancellation during a deferred start and cancels exactly once after it runs', async () => {
