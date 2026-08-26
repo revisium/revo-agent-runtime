@@ -115,7 +115,14 @@ test('keeps finalizing work out of completed lookup and terminal delivery until 
     state: 'completed',
     result,
   });
-  expect(events).toEqual([{ type: 'invocation.finished', invocationId: 'finalizing-release' }]);
+  expect(events).toEqual([
+    expect.objectContaining({
+      schemaVersion: 'agent-event/v1',
+      type: 'invocation.finished',
+      invocationId: 'finalizing-release',
+      sequence: 1,
+    }),
+  ]);
   expect(
     subject.output.calls().filter((call) => call.type === 'publish-terminal-result'),
   ).toHaveLength(1);
@@ -155,7 +162,14 @@ test.each([
     const result = await accepted.handle.result();
     expect(result).toMatchObject({ status: 'failed' });
     expect(subject.manager.getResult(invocationId)).toEqual({ state: 'completed', result });
-    expect(events).toEqual([{ type: 'invocation.finished', invocationId }]);
+    expect(events).toEqual([
+      expect.objectContaining({
+        schemaVersion: 'agent-event/v1',
+        type: 'invocation.finished',
+        invocationId,
+        sequence: 1,
+      }),
+    ]);
     expect(
       subject.output.calls().filter((call) => call.type === 'publish-terminal-result'),
     ).toHaveLength(1);
@@ -173,11 +187,11 @@ test('delivers one canonical result after lookup visibility and isolates listene
   let handleResolved = false;
   let waiterResolved = false;
   const delivered: unknown[] = [];
-  const throwing = subject.manager.subscribe({}, () => {
+  subject.manager.subscribe({}, () => {
     throwingCalls += 1;
     throw new Error('listener failure');
   });
-  const matching = subject.manager.subscribe({ invocationId: 'delivered' }, (event) => {
+  subject.manager.subscribe({ invocationId: 'delivered' }, (event) => {
     const lookup = subject.manager.getResult(event.invocationId);
     expect(lookup.state).toBe('completed');
     if (lookup.state !== 'completed')
@@ -190,11 +204,7 @@ test('delivers one canonical result after lookup visibility and isolates listene
   const filtered = subject.manager.subscribe({ invocationId: 'other' }, (event) =>
     delivered.push(event),
   );
-  const overCapacity = subject.manager.subscribe({}, () => undefined);
-  expect(throwing.state).toBe('subscribed');
-  expect(matching.state).toBe('subscribed');
-  expect(filtered.state).toBe('subscribed');
-  expect(overCapacity.state).toBe('subscribed');
+  subject.manager.subscribe({}, () => undefined);
 
   const accepted = await subject.start(subject.createInput('delivered'));
   if (accepted.status !== 'accepted') throw new Error('Expected listener invocation acceptance.');
@@ -214,10 +224,9 @@ test('delivers one canonical result after lookup visibility and isolates listene
   expect(await waiter).toBe(result);
   expect(delivered).toEqual([result]);
   expect(throwingCalls).toBe(1);
-  if (filtered.state === 'subscribed') filtered.dispose();
+  filtered();
   const lateEvents: unknown[] = [];
-  const late = subject.manager.subscribe({}, (event) => lateEvents.push(event));
-  expect(late.state).toBe('subscribed');
+  subject.manager.subscribe({}, (event) => lateEvents.push(event));
   expect(lateEvents).toEqual([]);
 
   const second = await subject.start(subject.createInput('later'));
@@ -226,7 +235,14 @@ test('delivers one canonical result after lookup visibility and isolates listene
   subject.execution.settleNaturalCompletion(2, new TextEncoder().encode('{"id":"later"}'));
   await waitForLifecycleConformanceQuiescence();
   await second.handle.result();
-  expect(lateEvents).toEqual([{ type: 'invocation.finished', invocationId: 'later' }]);
+  expect(lateEvents).toEqual([
+    expect.objectContaining({
+      schemaVersion: 'agent-event/v1',
+      type: 'invocation.finished',
+      invocationId: 'later',
+      sequence: 1,
+    }),
+  ]);
   expect(throwingCalls).toBe(2);
 });
 

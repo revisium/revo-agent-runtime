@@ -54,6 +54,7 @@ export class InvocationLifecycle {
     ProcessCleanupAttemptOutcome | 'confirmed' | 'not_dispatched'
   >();
   private cancellationCause: CancellationCause | undefined;
+  private cancellationReason: string | undefined;
   private cancellationDispatched = false;
   private deadlineCancellation: (() => void) | undefined;
   private execution: RunningExecution | undefined;
@@ -85,8 +86,8 @@ export class InvocationLifecycle {
     void this.startExecution();
   }
 
-  requestCancellation(): CancellationCommitOutcome {
-    return this.requestCancellationFor('caller');
+  requestCancellation(reason?: string): CancellationCommitOutcome {
+    return this.requestCancellationFor('caller', reason);
   }
 
   get cleanupSettlement(): Promise<ProcessCleanupAttemptOutcome | 'confirmed' | 'not_dispatched'> {
@@ -166,7 +167,10 @@ export class InvocationLifecycle {
     }
   }
 
-  private requestCancellationFor(cause: CancellationCause): CancellationCommitOutcome {
+  private requestCancellationFor(
+    cause: CancellationCause,
+    reason?: string,
+  ): CancellationCommitOutcome {
     if (this.state === 'terminal' || this.state === 'finalizing')
       return Object.freeze({ status: 'too_late' as const });
     if (this.cancellation !== undefined)
@@ -175,6 +179,7 @@ export class InvocationLifecycle {
         completion: this.cancellation.promise,
       });
     this.cancellationCause = cause;
+    this.cancellationReason = reason;
     this.cancellation = deferred();
     this.state = 'cancelling';
     this.lastActiveStatus = 'cancelling';
@@ -248,6 +253,9 @@ export class InvocationLifecycle {
                 this.cancellationCause !== 'caller'
                   ? ('timed_out' as const)
                   : ('cancelled' as const),
+              ...(this.cancellationCause === 'caller' && this.cancellationReason !== undefined
+                ? { reason: this.cancellationReason }
+                : {}),
               evidence: Object.freeze({
                 exit: observation.exit,
                 ...(observation.usage === undefined ? {} : { usage: observation.usage }),

@@ -1183,8 +1183,7 @@ test('shutdown delivers the last terminal event to existing subscriptions before
   ).resolves.toMatchObject({ status: 'accepted' });
   await flush();
   const events: string[] = [];
-  const admission = manager.subscribe({}, (event) => events.push(event.invocationId));
-  expect(admission.state).toBe('subscribed');
+  manager.subscribe({}, (event) => events.push(event.invocationId));
 
   const shutdown = manager.shutdown('closing');
   await flush();

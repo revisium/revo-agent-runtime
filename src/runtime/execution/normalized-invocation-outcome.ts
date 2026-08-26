@@ -9,4 +9,5 @@ export type NormalizedInvocationOutcome =
       failure: NormalizedInvocationFailure;
       evidence: NormalizedInvocationEvidence;
     }>
-  | Readonly<{ status: 'cancelled' | 'timed_out'; evidence: NormalizedInvocationEvidence }>;
+  | Readonly<{ status: 'cancelled'; evidence: NormalizedInvocationEvidence; reason?: string }>
+  | Readonly<{ status: 'timed_out'; evidence: NormalizedInvocationEvidence }>;
