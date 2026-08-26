@@ -1,8 +1,10 @@
+import { AGENT_MANAGER_LIMITS } from '../../policy/index.js';
 import type { InvocationClockPort } from '../invocation-clock-port.js';
 import {
   isClaimedInvocationOutput,
   type ClaimedInvocationOutput,
 } from '../output-claim-attempt/index.js';
+import type { PreparedLaunch } from '../prepared-launch.js';
 import type { ConsumedOutputPreparationMaterial } from './consumed-output-preparation-material.js';
 import type { ConsumedRedactionMaterial } from './consumed-redaction-material.js';
 import type { OutputPreparationAttempt } from './output-preparation-attempt.js';
@@ -29,6 +31,7 @@ interface OutputPreparationAttemptInput {
   readonly session: ClaimedInvocationOutput;
   readonly clock: InvocationClockPort;
   readonly port: OutputPreparationMutationPort;
+  readonly limits?: Pick<PreparedLaunch['limits'], 'maxEventBytes' | 'maxEventsFileBytes'>;
 }
 
 interface PreparationState {
@@ -40,6 +43,8 @@ interface PreparationState {
   readonly settlement: Deferred<OutputPreparationResult>;
   readonly quiescence: Deferred<OutputPreparationQuiescence>;
   readonly platformOutcome: Deferred<PreparationPlatformOutcome>;
+  readonly maxEventBytes: number;
+  readonly maxEventsFileBytes: number;
   readonly cancelDeadline: () => void;
   phase: PreparationPhase;
   beginStarted: boolean;
@@ -109,6 +114,9 @@ export const createOutputPreparationAttempt = (
     settlement,
     quiescence,
     platformOutcome,
+    maxEventBytes: input.limits?.maxEventBytes ?? AGENT_MANAGER_LIMITS.maxEventBytes.default,
+    maxEventsFileBytes:
+      input.limits?.maxEventsFileBytes ?? AGENT_MANAGER_LIMITS.maxEventsFileBytes.default,
     cancelDeadline: () => undefined,
     phase: 'pending',
     beginStarted: false,
@@ -202,6 +210,8 @@ const settlePrepared = (
   TERMINAL_PUBLICATION_EVENTS_CAPABILITIES.set(state.authority, {
     invocationToken: state.invocationToken,
     eventsAppendSink: result.eventsAppendSink,
+    maxEventBytes: state.maxEventBytes,
+    maxEventsFileBytes: state.maxEventsFileBytes,
     usage: { nonterminalBytesWritten: 0 },
   });
   settleBoth(

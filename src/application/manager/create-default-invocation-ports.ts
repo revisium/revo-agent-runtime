@@ -39,10 +39,5 @@ export const createDefaultInvocationPorts = (
     workspace: new NodePosixWorkspacePort(),
     outputClaim: new NodePosixOutputClaimPort(),
     outputPreparation: new NodePosixOutputPreparationPort(),
-    output: createNodePosixInvocationOutputPort({
-      ...(limits.maxEventBytes === undefined ? {} : { maxEventBytes: limits.maxEventBytes }),
-      ...(limits.maxEventsFileBytes === undefined
-        ? {}
-        : { maxEventsFileBytes: limits.maxEventsFileBytes }),
-    }),
+    output: createNodePosixInvocationOutputPort(),
   });

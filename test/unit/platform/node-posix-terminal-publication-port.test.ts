@@ -77,7 +77,10 @@ const fileEventsSink = (path: string): EventsAppendSink =>
     flush: async () => undefined,
   });
 
-const makeAuthority = async (sink?: EventsAppendSink): Promise<TerminalPublicationAuthority> => {
+const makeAuthority = async (
+  sink?: EventsAppendSink,
+  limits?: Readonly<{ maxEventBytes?: number; maxEventsFileBytes?: number }>,
+): Promise<TerminalPublicationAuthority> => {
   const outputDirectory = await makeDirectory();
   const claimPort: OutputClaimExclusiveCreatePort = Object.freeze({
     createExclusiveOutputDirectory: async () => Object.freeze({ status: 'created' as const }),
@@ -111,6 +114,10 @@ const makeAuthority = async (sink?: EventsAppendSink): Promise<TerminalPublicati
     session: claimResult.session,
     clock,
     port: preparationPort,
+    limits: {
+      maxEventBytes: limits?.maxEventBytes ?? 65_536,
+      maxEventsFileBytes: limits?.maxEventsFileBytes ?? 16_777_216,
+    },
   });
   if (attempt === undefined) throw new Error('Expected preparation attempt.');
   beginOutputPreparation(
@@ -197,12 +204,11 @@ test('appendLifecycleEvent writes one valid JSON line with one LF', async () => 
 });
 
 test('appendLifecycleEvent accepts a nonterminal JSON body exactly at maxEventBytes', async () => {
-  const authority = await makeAuthority();
-  const port = new NodePosixTerminalPublicationPort({
+  const authority = await makeAuthority(undefined, {
     maxEventBytes: 256,
     maxEventsFileBytes: 2_097_667,
-    maxTerminalEventBytes: 2_097_152,
   });
+  const port = new NodePosixTerminalPublicationPort({ maxTerminalEventBytes: 2_097_152 });
   await expect(
     port.appendLifecycleEvent(authority, withSerializedBodyBytes(event(), 256)),
   ).resolves.toEqual({ status: 'appended' });
@@ -212,12 +218,11 @@ test('appendLifecycleEvent accepts a nonterminal JSON body exactly at maxEventBy
 });
 
 test('appendLifecycleEvent suppresses oversized and exhausted nonterminal lines without mutating the file', async () => {
-  const authority = await makeAuthority();
-  const port = new NodePosixTerminalPublicationPort({
+  const authority = await makeAuthority(undefined, {
     maxEventBytes: 256,
     maxEventsFileBytes: 2_097_667,
-    maxTerminalEventBytes: 2_097_152,
   });
+  const port = new NodePosixTerminalPublicationPort({ maxTerminalEventBytes: 2_097_152 });
   await expect(
     port.appendLifecycleEvent(authority, withSerializedBodyBytes(event(), 257)),
   ).resolves.toEqual({ status: 'suppressed', reason: 'nonterminal_budget_exhausted' });
@@ -235,11 +240,7 @@ test('appendLifecycleEvent suppresses oversized and exhausted nonterminal lines 
 
 test('appendLifecycleEvent terminal path bypasses nonterminal budget but enforces terminal body cap', async () => {
   const authority = await makeAuthority();
-  const port = new NodePosixTerminalPublicationPort({
-    maxEventBytes: 256,
-    maxEventsFileBytes: 2_097_667,
-    maxTerminalEventBytes: 256,
-  });
+  const port = new NodePosixTerminalPublicationPort({ maxTerminalEventBytes: 256 });
   await expect(
     port.appendLifecycleEvent(authority, withSerializedBodyBytes(event(), 256)),
   ).resolves.toEqual({ status: 'appended' });

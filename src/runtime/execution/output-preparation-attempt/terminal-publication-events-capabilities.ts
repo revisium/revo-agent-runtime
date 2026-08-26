@@ -6,6 +6,8 @@ export const TERMINAL_PUBLICATION_EVENTS_CAPABILITIES = new WeakMap<
   Readonly<{
     invocationToken: object;
     eventsAppendSink: EventsAppendSink;
+    maxEventBytes: number;
+    maxEventsFileBytes: number;
     usage: { nonterminalBytesWritten: number };
   }>
 >();
