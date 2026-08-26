@@ -445,11 +445,11 @@ test('isolates a throwing listener without stranding manager handle or active wa
   let handleResolved = false;
   let waiterResolved = false;
   const independentResults: unknown[] = [];
-  const throwingAdmission = manager.subscribe({}, () => {
+  manager.subscribe({}, () => {
     throwingCalls += 1;
     throw new Error('listener failure');
   });
-  const independentAdmission = manager.subscribe({}, (event) => {
+  manager.subscribe({}, (event) => {
     const lookup = manager.getResult(event.invocationId);
     expect(lookup.state).toBe('completed');
     if (lookup.state !== 'completed') throw new Error('Expected completed result lookup.');
@@ -460,8 +460,6 @@ test('isolates a throwing listener without stranding manager handle or active wa
     }
     independentResults.push(lookup.result);
   });
-  expect(throwingAdmission.state).toBe('subscribed');
-  expect(independentAdmission.state).toBe('subscribed');
 
   const first = expectAcceptedInvocation(
     await manager.start(createStartInput({ invocationId: 'first' })),
@@ -518,11 +516,9 @@ test('admits subscriptions independently from completed result retention', async
   );
   await manager.initialize([]);
   const received: unknown[] = [];
-  const acceptedListener = manager.subscribe({}, (event) => received.push(event.invocationId));
+  manager.subscribe({}, (event) => received.push(event.invocationId));
   const refusedCalls: unknown[] = [];
-  const rejectedListener = manager.subscribe({}, (event) => refusedCalls.push(event.invocationId));
-  expect(acceptedListener.state).toBe('subscribed');
-  expect(rejectedListener.state).toBe('subscribed');
+  manager.subscribe({}, (event) => refusedCalls.push(event.invocationId));
 
   const accepted = expectAcceptedInvocation(
     await manager.start(createStartInput({ invocationId: 'subscription-capacity' })),

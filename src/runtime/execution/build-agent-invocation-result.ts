@@ -17,12 +17,13 @@ const rawResponseDiagnostic = (
 ): AgentRawResponseDiagnostic =>
   Object.freeze({ preview: view.preview, truncated: view.truncated });
 
-const cancelledFault = (): AgentFault =>
+const cancelledFault = (reason?: string): AgentFault =>
   Object.freeze({
     code: 'revo.agent.cancelled',
     message: AGENT_FAULT_MESSAGES.cancelled,
     phase: 'running',
     retryable: false,
+    ...(reason === undefined ? {} : { details: Object.freeze({ reason }) }),
   });
 
 const timeoutFault = (): AgentFault =>
@@ -54,7 +55,7 @@ export const buildAgentInvocationResult = (input: {
         ...base,
         files: committedFiles(base.files),
         status: 'cancelled' as const,
-        error: cancelledFault(),
+        error: cancelledFault(outcome.reason),
       });
     case 'timed_out':
       return Object.freeze({

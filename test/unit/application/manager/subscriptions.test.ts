@@ -1,17 +1,24 @@
 import { expect, test } from 'vitest';
 
 import { TerminalSubscriptions } from '../../../../src/application/manager/subscriptions.js';
+import { AgentManagerError } from '../../../../src/runtime/errors/index.js';
 
 type TerminalInvocationEvent = Parameters<TerminalSubscriptions['deliver']>[0];
 type SubscriptionAdmission = ReturnType<TerminalSubscriptions['subscribe']>;
 
 const event = (invocationId: string): TerminalInvocationEvent => {
-  return Object.freeze({ type: 'invocation.finished', invocationId });
+  return Object.freeze({
+    schemaVersion: 'agent-event/v1',
+    type: 'invocation.finished',
+    invocationId,
+    pin: Object.freeze({ agentId: 'agent', agentVersion: '1.0.0', definitionDigest: 'digest' }),
+    sequence: 1,
+    timestamp: '2026-01-01T00:00:00.000Z',
+  });
 };
 
 const expectSubscribed = (admission: SubscriptionAdmission): (() => void) => {
-  if (admission.state !== 'subscribed') throw new Error('Expected subscription admission.');
-  return admission.dispose;
+  return admission;
 };
 
 test('admits listeners without a package-owned capacity', () => {
@@ -30,8 +37,8 @@ test('does not couple listener registration to completed retention capacity', ()
   const first = subscriptions.subscribe({}, () => undefined);
   const second = subscriptions.subscribe({}, () => undefined);
 
-  expect(first).toEqual(expect.objectContaining({ state: 'subscribed' }));
-  expect(second).toEqual(expect.objectContaining({ state: 'subscribed' }));
+  expect(first).toEqual(expect.any(Function));
+  expect(second).toEqual(expect.any(Function));
 });
 
 test('frees exactly one slot after idempotent disposal', () => {
@@ -63,7 +70,7 @@ test('keeps snapshot delivery future-only when a reentrant admission frees a slo
   subscriptions.deliver(event('first'));
   subscriptions.deliver(event('second'));
 
-  expect(reentrantAdmission).toEqual(expect.objectContaining({ state: 'subscribed' }));
+  expect(reentrantAdmission).toEqual(expect.any(Function));
   expect(calls).toEqual(['current', 'late']);
 });
 
@@ -87,7 +94,7 @@ test('retains a throwing listener for future events while isolating the failure'
   subscriptions.deliver(event('second'));
   replacement();
 
-  expect(reentrantAdmission).toEqual(expect.objectContaining({ state: 'subscribed' }));
+  expect(reentrantAdmission).toEqual(expect.any(Function));
   expect(calls).toEqual([
     'throwing',
     'independent',
@@ -136,6 +143,28 @@ test('isolates one throwing listener from all other listeners in one delivery', 
 
   subscriptions.deliver(event('single'));
   expect(calls).toEqual(['before', 'after']);
+});
+
+test('matches copied agent and event-type filters', () => {
+  const subscriptions = new TerminalSubscriptions();
+  const calls: string[] = [];
+  const agent = { id: 'agent', version: '1.0.0' };
+  const types: ('invocation.finished' | 'invocation.started')[] = ['invocation.finished'];
+  subscriptions.subscribe({ agent, types }, () => calls.push('matched'));
+  agent.id = 'changed';
+  types.push('invocation.started');
+  subscriptions.deliver(event('filtered'));
+  expect(calls).toEqual(['matched']);
+});
+
+test.each([
+  { filter: { types: 'invocation.finished' }, message: 'types' },
+  { filter: { types: ['unknown'] }, message: 'types' },
+  { filter: { agent: { id: 'agent' } }, message: 'agent' },
+  { filter: { unsupported: true }, message: 'unsupported' },
+])('rejects malformed $message filters', ({ filter }) => {
+  const subscriptions = new TerminalSubscriptions();
+  expect(() => subscriptions.subscribe(filter, () => undefined)).toThrowError(AgentManagerError);
 });
 
 test('copies matching filters and honors cross disposal during a snapshot', () => {

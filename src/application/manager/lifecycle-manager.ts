@@ -46,7 +46,6 @@ import type {
   ActiveInvocationSnapshot,
   ActiveInvocationStateSink,
   ActiveProcessIdentity,
-  AgentFault,
   AgentDefinitionContract,
   AgentDescriptor,
   AgentProbeResult,
@@ -60,6 +59,7 @@ import type {
   CancelInvocationResult,
   JsonObject,
   JsonValue,
+  AgentEvent,
 } from '../../runtime/spec/index.js';
 import { ActiveStateLane } from './active-state-lane.js';
 import { CompletedInvocations } from './completed-invocations.js';
@@ -69,50 +69,24 @@ import { inspectBatchRefs } from './inspect-batch-refs.js';
 import { InstalledBindingRegistry } from './installed-bindings.js';
 import { isRecoverySupportedPlatform } from './is-recovery-supported-platform.js';
 import { managerClosedError } from './manager-closed-error.js';
+import { managerNotInitializedError } from './manager-not-initialized-error.js';
+import { pinMatchesAgentRef } from './pin-matches-agent-ref.js';
 import { ProbeCoordinator } from './probe-coordinator.js';
 import { reconcileRecoveredRows } from './reconcile-recovered-rows.js';
 import type { RecoveredRowFailure } from './recovered-row-failure.js';
+import type { StartRejection } from './start-rejection.js';
 import { TerminalSubscriptions } from './subscriptions.js';
 
-type SimpleStartRejectionReason =
-  | 'invocation_invalid'
-  | 'invocation_duplicate'
-  | 'output_conflict'
-  | 'scratch_failed'
-  | 'environment_invalid'
-  | 'manager_not_initialized'
-  | 'manager_closed'
-  | 'process_identity_failed'
-  | 'active_state_failed'
-  | 'result_schema_invalid'
-  | 'spawn_failed'
-  | 'limit_invalid'
-  | 'platform_unsupported'
-  | 'workspace_invalid'
-  | 'output_path_invalid'
-  | 'parameters_invalid'
-  | 'permissions_invalid'
-  | 'strategy_unsupported'
-  | 'agent_unknown'
-  | 'internal';
-type StartRejection =
-  | Readonly<{ status: 'rejected'; reason: SimpleStartRejectionReason }>
-  | Readonly<{
-      status: 'rejected';
-      reason: 'launch_proof_failed';
-      fault: AgentFault;
-    }>;
-
-type TerminalInvocationEvent = Readonly<{
-  type: 'invocation.finished';
-  invocationId: string;
-}>;
-type TerminalEventListener = (event: TerminalInvocationEvent) => void;
+type SimpleStartRejectionReason = Exclude<StartRejection['reason'], 'launch_proof_failed'>;
+type TerminalInvocationEvent = Extract<AgentEvent, { type: 'invocation.finished' }>;
+type TerminalEventListener = (event: AgentEvent) => void;
 type TerminalSubscriptionAdmission = ReturnType<TerminalSubscriptions['subscribe']>;
 
 interface LifecycleHandle {
   readonly invocationId: string;
+  readonly pin: PreparedLaunch['pin'];
   result(): Promise<AgentInvocationResult>;
+  cancel(reason?: string): Promise<CancelInvocationResult>;
 }
 
 interface ActiveInvocation {
@@ -170,11 +144,7 @@ const matchesFilter = (
   if (filter === undefined) return true;
   if (filter.invocationId !== undefined && snapshot.invocationId !== filter.invocationId)
     return false;
-  if (
-    filter.agent !== undefined &&
-    (snapshot.pin.agentId !== filter.agent.id || snapshot.pin.agentVersion !== filter.agent.version)
-  )
-    return false;
+  if (filter.agent !== undefined && !pinMatchesAgentRef(snapshot.pin, filter.agent)) return false;
   return filter.statuses === undefined || filter.statuses.includes(snapshot.status);
 };
 
@@ -421,16 +391,6 @@ const createDeferred = <Value>(): Deferred<Value> => {
   return Object.freeze({ promise, resolve, reject });
 };
 
-const managerNotInitializedError = (): AgentManagerError =>
-  new AgentManagerError(
-    Object.freeze({
-      code: 'revo.agent.manager_not_initialized' as const,
-      message: AGENT_FAULT_MESSAGES.managerNotInitialized,
-      phase: 'initializing' as const,
-      retryable: false,
-    }),
-  );
-
 const invocationUnknownError = (): AgentManagerError =>
   new AgentManagerError(
     Object.freeze({
@@ -592,7 +552,7 @@ const shutdownFailedError = (
 };
 
 const textDecoder = new TextDecoder();
-const redactedShutdownReason = (
+const redactedReason = (
   reason: string | undefined,
   secretValues: readonly string[],
 ): string | undefined => {
@@ -643,10 +603,14 @@ const createOutputAdmissionRequest = (
 const createHandle = (
   invocationId: string,
   completion: Deferred<AgentInvocationResult>,
+  pin: PreparedLaunch['pin'],
+  cancel: (reason?: string) => Promise<CancelInvocationResult>,
 ): LifecycleHandle =>
   Object.freeze({
     invocationId,
+    pin,
     result: () => completion.promise,
+    cancel,
   });
 
 const settledBefore = (operation: Promise<unknown>, deadlineAt: number): Promise<boolean> =>
@@ -839,7 +803,9 @@ class InternalInvocationLifecycleManager {
         }),
       );
       this.pending.delete(snapshot.invocationId);
-      const handle = createHandle(snapshot.invocationId, completion);
+      const handle = createHandle(snapshot.invocationId, completion, preparedLaunch.pin, (reason) =>
+        this.cancel(snapshot.invocationId, reason),
+      );
       lifecycle.begin();
       return Object.freeze({ status: 'accepted', handle, lifecycle });
     } finally {
@@ -1034,11 +1000,13 @@ class InternalInvocationLifecycleManager {
       : Promise.resolve(result);
   }
 
-  cancel(invocationId: string): Promise<CancelInvocationResult> {
+  cancel(invocationId: string, reason?: string): Promise<CancelInvocationResult> {
     this.#assertReady();
     const active = this.active.get(invocationId);
     if (active !== undefined) {
-      const outcome = active.lifecycle.requestCancellation();
+      const outcome = active.lifecycle.requestCancellation(
+        redactedReason(reason, this.#configuredSecretValues),
+      );
       if (outcome.status === 'committed') {
         void outcome.completion.catch(() => undefined);
         return Promise.resolve(Object.freeze({ state: 'requested' as const }));
@@ -1156,7 +1124,7 @@ class InternalInvocationLifecycleManager {
   shutdown(reason?: string): Promise<void> {
     if (this.#shutdownDeferred !== undefined) return this.#shutdownDeferred.promise;
     this.#closing = true;
-    this.#firstShutdownReason = redactedShutdownReason(reason, this.#configuredSecretValues);
+    this.#firstShutdownReason = redactedReason(reason, this.#configuredSecretValues);
     this.#shutdownDeferred = createDeferred<void>();
     void this.performShutdown().then(this.#shutdownDeferred.resolve, this.#shutdownDeferred.reject);
     return this.#shutdownDeferred.promise;
@@ -1243,8 +1211,12 @@ class InternalInvocationLifecycleManager {
     this.completed.commit(invocationId, result);
     this.active.delete(invocationId);
     const event: TerminalInvocationEvent = Object.freeze({
+      schemaVersion: 'agent-event/v1',
       type: 'invocation.finished',
       invocationId,
+      pin: result.pin,
+      sequence: 1,
+      timestamp: result.finishedAt,
     });
     try {
       this.subscriptions.deliver(event);
@@ -1593,7 +1565,7 @@ export const createInvocationLifecycleManager = (
   createPorts: (limits: Readonly<AgentManagerLimits>) => LifecycleManagerPorts,
 ): Readonly<{
   initialize(snapshots: readonly ActiveInvocationSnapshot[]): Promise<void>;
-  cancel(invocationId: string): Promise<CancelInvocationResult>;
+  cancel(invocationId: string, reason?: string): Promise<CancelInvocationResult>;
   getInvocation(invocationId: string): AgentInvocationSnapshot | undefined;
   getResult(invocationId: string): AgentResultLookup;
   listInvocations(filter?: AgentInvocationFilter): readonly AgentInvocationSnapshot[];

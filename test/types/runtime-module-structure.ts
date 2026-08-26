@@ -1705,7 +1705,12 @@ type ExpectedNormalizedInvocationOutcome =
       readonly evidence: NormalizedInvocationEvidence;
     }>
   | Readonly<{
-      readonly status: 'cancelled' | 'timed_out';
+      readonly status: 'cancelled';
+      readonly evidence: NormalizedInvocationEvidence;
+      readonly reason?: string;
+    }>
+  | Readonly<{
+      readonly status: 'timed_out';
       readonly evidence: NormalizedInvocationEvidence;
     }>;
 
