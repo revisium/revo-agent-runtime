@@ -38,6 +38,47 @@ const isTerminalEventType = (value: unknown): value is TerminalInvocationEvent['
   value === 'invocation.cancelling' ||
   value === 'invocation.finished';
 
+const copyInvocationIdField = (filter: Record<PropertyKey, unknown>): string | undefined => {
+  if (!Object.hasOwn(filter, 'invocationId')) return undefined;
+  const invocationId = filter.invocationId;
+  if (!validIdentity(invocationId))
+    throw invalidSubscription('Terminal event filter invocationId is invalid.');
+  return invocationId;
+};
+
+const copyAgentField = (
+  filter: Record<PropertyKey, unknown>,
+): Readonly<{ id: string; version: string }> | undefined => {
+  if (!Object.hasOwn(filter, 'agent')) return undefined;
+  const agent = filter.agent;
+  if (
+    !isFilterRecord(agent) ||
+    Reflect.ownKeys(agent).length !== 2 ||
+    !Object.hasOwn(agent, 'id') ||
+    !Object.hasOwn(agent, 'version') ||
+    !validIdentity(agent.id) ||
+    !validIdentity(agent.version)
+  )
+    throw invalidSubscription('Terminal event filter agent is invalid.');
+  return Object.freeze({ id: agent.id, version: agent.version });
+};
+
+const copyTypesField = (
+  filter: Record<PropertyKey, unknown>,
+): readonly TerminalInvocationEvent['type'][] | undefined => {
+  if (!Object.hasOwn(filter, 'types')) return undefined;
+  const rawTypes = filter.types;
+  if (!Array.isArray(rawTypes) || rawTypes.length > 4)
+    throw invalidSubscription('Terminal event filter types are invalid.');
+  const copiedTypes: TerminalInvocationEvent['type'][] = [];
+  for (const type of rawTypes) {
+    if (!isTerminalEventType(type))
+      throw invalidSubscription('Terminal event filter types are invalid.');
+    copiedTypes.push(type);
+  }
+  return Object.freeze(copiedTypes);
+};
+
 const copyFilter = (
   filter: unknown,
 ): Readonly<{
@@ -51,38 +92,9 @@ const copyFilter = (
   const keys = Reflect.ownKeys(filter);
   if (keys.some((key) => key !== 'invocationId' && key !== 'agent' && key !== 'types'))
     throw invalidSubscription('Terminal event filter contains an unsupported field.');
-  const invocationId = filter.invocationId;
-  let copiedInvocationId: string | undefined;
-  if (Object.hasOwn(filter, 'invocationId')) {
-    if (!validIdentity(invocationId))
-      throw invalidSubscription('Terminal event filter invocationId is invalid.');
-    copiedInvocationId = invocationId;
-  }
-  let agent: Readonly<{ id: string; version: string }> | undefined;
-  if (Object.hasOwn(filter, 'agent')) {
-    if (
-      !isFilterRecord(filter.agent) ||
-      Reflect.ownKeys(filter.agent).length !== 2 ||
-      !Object.hasOwn(filter.agent, 'id') ||
-      !Object.hasOwn(filter.agent, 'version') ||
-      !validIdentity(filter.agent.id) ||
-      !validIdentity(filter.agent.version)
-    )
-      throw invalidSubscription('Terminal event filter agent is invalid.');
-    agent = Object.freeze({ id: filter.agent.id, version: filter.agent.version });
-  }
-  let types: readonly TerminalInvocationEvent['type'][] | undefined;
-  if (Object.hasOwn(filter, 'types')) {
-    if (!Array.isArray(filter.types) || filter.types.length > 4)
-      throw invalidSubscription('Terminal event filter types are invalid.');
-    const copiedTypes: TerminalInvocationEvent['type'][] = [];
-    for (const type of filter.types) {
-      if (!isTerminalEventType(type))
-        throw invalidSubscription('Terminal event filter types are invalid.');
-      copiedTypes.push(type);
-    }
-    types = Object.freeze(copiedTypes);
-  }
+  const copiedInvocationId = copyInvocationIdField(filter);
+  const agent = copyAgentField(filter);
+  const types = copyTypesField(filter);
   return Object.freeze({
     ...(copiedInvocationId === undefined ? {} : { invocationId: copiedInvocationId }),
     ...(agent === undefined ? {} : { agent }),

@@ -30,6 +30,21 @@ const internalFailureObservation = (spawnedAt = Date.now()): InvocationTerminalO
     primary: Object.freeze({ kind: 'internal' }),
   });
 
+const cancelledOrTimedOutOutcome = (
+  observation: Extract<InvocationTerminalObservation, { status: 'cancelled' }>,
+  cause: CancellationCause | undefined,
+  reason: string | undefined,
+): NormalizedInvocationOutcome =>
+  Object.freeze({
+    status: cause !== 'caller' ? ('timed_out' as const) : ('cancelled' as const),
+    ...(cause === 'caller' && reason !== undefined ? { reason } : {}),
+    evidence: Object.freeze({
+      exit: observation.exit,
+      ...(observation.usage === undefined ? {} : { usage: observation.usage }),
+      ...(observation.rawResponse === undefined ? {} : { rawResponse: observation.rawResponse }),
+    }),
+  });
+
 interface Deferred<Value = void> {
   readonly promise: Promise<Value>;
   readonly resolve: (value: Value) => void;
@@ -248,22 +263,7 @@ export class InvocationLifecycle {
     try {
       normalized =
         observation.status === 'cancelled'
-          ? Object.freeze({
-              status:
-                this.cancellationCause !== 'caller'
-                  ? ('timed_out' as const)
-                  : ('cancelled' as const),
-              ...(this.cancellationCause === 'caller' && this.cancellationReason !== undefined
-                ? { reason: this.cancellationReason }
-                : {}),
-              evidence: Object.freeze({
-                exit: observation.exit,
-                ...(observation.usage === undefined ? {} : { usage: observation.usage }),
-                ...(observation.rawResponse === undefined
-                  ? {}
-                  : { rawResponse: observation.rawResponse }),
-              }),
-            })
+          ? cancelledOrTimedOutOutcome(observation, this.cancellationCause, this.cancellationReason)
           : normalizeInvocationOutcome(observation, this.preparedLaunch.resultSchemaValidator);
     } catch {
       normalized = Object.freeze({
