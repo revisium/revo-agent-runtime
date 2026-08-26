@@ -1485,6 +1485,7 @@ class InternalInvocationLifecycleManager {
       session,
       clock: this.ports.clock,
       port: this.ports.outputPreparation,
+      limits: preparedLaunch.limits,
     });
     return attempt === undefined
       ? undefined

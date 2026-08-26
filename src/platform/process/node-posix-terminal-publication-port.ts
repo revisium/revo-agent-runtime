@@ -18,8 +18,6 @@ import type { AgentEvent, AgentInvocationResult } from '../../runtime/spec/index
 import { nodePosixPathAdmission } from './node-posix-path-admission.js';
 
 type Limits = Readonly<{
-  maxEventBytes?: number;
-  maxEventsFileBytes?: number;
   maxTerminalEventBytes?: number;
 }>;
 
@@ -110,14 +108,9 @@ const hardlinkPublishFile = async (
 };
 
 export class NodePosixTerminalPublicationPort implements TerminalPublicationPort {
-  readonly #maxEventBytes: number;
-  readonly #maxEventsFileBytes: number;
   readonly #maxTerminalEventBytes: number;
 
   constructor(limits: Limits = {}) {
-    this.#maxEventBytes = limits.maxEventBytes ?? AGENT_MANAGER_LIMITS.maxEventBytes.default;
-    this.#maxEventsFileBytes =
-      limits.maxEventsFileBytes ?? AGENT_MANAGER_LIMITS.maxEventsFileBytes.default;
     this.#maxTerminalEventBytes =
       limits.maxTerminalEventBytes ?? AGENT_MANAGER_LIMITS.maxTerminalEventBytes;
   }
@@ -131,12 +124,12 @@ export class NodePosixTerminalPublicationPort implements TerminalPublicationPort
     const jsonBytes = encoder.encode(JSON.stringify(event));
     if (event.type === 'invocation.finished')
       return this.#appendTerminalEvent(capability.eventsAppendSink, jsonBytes);
-    if (jsonBytes.byteLength > this.#maxEventBytes) return this.#suppressed();
+    if (jsonBytes.byteLength > capability.maxEventBytes) return this.#suppressed();
     // AgentManager v1 §10 defines +2 as exactly two LF bytes: this line and the eventual terminal event.
-    const reservation = this.#maxTerminalEventBytes + this.#maxEventBytes + 2;
+    const reservation = this.#maxTerminalEventBytes + capability.maxEventBytes + 2;
     if (
       capability.usage.nonterminalBytesWritten + jsonBytes.byteLength + 1 >
-      this.#maxEventsFileBytes - reservation
+      capability.maxEventsFileBytes - reservation
     )
       return this.#suppressed();
     const appended = await this.#writeAndFlush(capability.eventsAppendSink, jsonBytes);

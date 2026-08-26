@@ -22,6 +22,7 @@ import {
   beginOutputPreparation,
   createOutputPreparationAttempt,
   getOutputPreparationInvocationToken,
+  getTerminalPublicationEventsCapability,
   type OutputPreparationAttempt,
   type PreparedInvocationResources,
   type TerminalPublicationAuthority,
@@ -31,6 +32,7 @@ import {
   consumeRedactionMaterial,
   createPreparedExecutionSecurity,
 } from '../../../../src/runtime/execution/prepared-execution-security/index.js';
+import { AGENT_MANAGER_LIMITS } from '../../../../src/runtime/policy/index.js';
 import { FakeInvocationClock } from '../../../support/execution/fake-clock.js';
 import { FakeOutputClaimPort } from '../../../support/execution/fake-output-claim-port.js';
 import {
@@ -590,4 +592,43 @@ test.each([
   await attempt.quiescence;
 
   expect(observed).toEqual(['quiescence', 'settlement']);
+});
+
+test('a per-invocation event limit lower than the manager default is honored on the prepared capability', async () => {
+  const port = new FakeOutputPreparationPort();
+  port.enqueue('prepared');
+  const clock = new FakeInvocationClock({ initialNowMs: 1_000 });
+  const lowerMaxEventBytes = AGENT_MANAGER_LIMITS.maxEventBytes.default - 1;
+  const lowerMaxEventsFileBytes = AGENT_MANAGER_LIMITS.maxEventsFileBytes.default - 1;
+  const attempt = createOutputPreparationAttempt({
+    session: await claimedSession(),
+    clock,
+    port,
+    limits: { maxEventBytes: lowerMaxEventBytes, maxEventsFileBytes: lowerMaxEventsFileBytes },
+  });
+  if (attempt === undefined) throw new Error('Expected authentic output preparation attempt.');
+
+  beginPreparation(attempt);
+  const result = await attempt.settlement;
+
+  expect(result.status).toBe('prepared');
+  if (result.status !== 'prepared') throw new Error('Expected prepared result.');
+  const capability = getTerminalPublicationEventsCapability(result.authority);
+  expect(capability?.maxEventBytes).toBe(lowerMaxEventBytes);
+  expect(capability?.maxEventsFileBytes).toBe(lowerMaxEventsFileBytes);
+});
+
+test('the manager default event limits apply to the prepared capability when the invocation does not override them', async () => {
+  const port = new FakeOutputPreparationPort();
+  port.enqueue('prepared');
+  const { attempt } = await createAttempt(port);
+
+  beginPreparation(attempt);
+  const result = await attempt.settlement;
+
+  expect(result.status).toBe('prepared');
+  if (result.status !== 'prepared') throw new Error('Expected prepared result.');
+  const capability = getTerminalPublicationEventsCapability(result.authority);
+  expect(capability?.maxEventBytes).toBe(AGENT_MANAGER_LIMITS.maxEventBytes.default);
+  expect(capability?.maxEventsFileBytes).toBe(AGENT_MANAGER_LIMITS.maxEventsFileBytes.default);
 });
