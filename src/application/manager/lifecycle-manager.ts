@@ -59,7 +59,7 @@ import type {
   CancelInvocationResult,
   JsonObject,
   JsonValue,
-  AgentEvent,
+  AgentEventListener,
 } from '../../runtime/spec/index.js';
 import { ActiveStateLane } from './active-state-lane.js';
 import { CompletedInvocations } from './completed-invocations.js';
@@ -67,6 +67,7 @@ import { createNamedHostEnvironmentSnapshot } from './create-named-host-environm
 import { createNativeProcessExecutionPort } from './create-native-process-execution-port.js';
 import { inspectBatchRefs } from './inspect-batch-refs.js';
 import { InstalledBindingRegistry } from './installed-bindings.js';
+import { InvocationEventEmitter } from './invocation-event-emitter.js';
 import { isRecoverySupportedPlatform } from './is-recovery-supported-platform.js';
 import { managerClosedError } from './manager-closed-error.js';
 import { managerNotInitializedError } from './manager-not-initialized-error.js';
@@ -78,8 +79,7 @@ import type { StartRejection } from './start-rejection.js';
 import { TerminalSubscriptions } from './subscriptions.js';
 
 type SimpleStartRejectionReason = Exclude<StartRejection['reason'], 'launch_proof_failed'>;
-type TerminalInvocationEvent = Extract<AgentEvent, { type: 'invocation.finished' }>;
-type TerminalEventListener = (event: AgentEvent) => void;
+type TerminalEventListener = AgentEventListener;
 type TerminalSubscriptionAdmission = ReturnType<TerminalSubscriptions['subscribe']>;
 
 interface LifecycleHandle {
@@ -93,6 +93,7 @@ interface ActiveInvocation {
   readonly acceptedAt: string;
   readonly completion: Deferred<AgentInvocationResult>;
   readonly lifecycle: InvocationLifecycle;
+  readonly events: InvocationEventEmitter;
 }
 
 interface RetainedActiveStateGuard {
@@ -761,6 +762,11 @@ class InternalInvocationLifecycleManager {
       const acceptedAt = createIsoTimestamp();
 
       const completion = createDeferred<AgentInvocationResult>();
+      const eventEmitter = new InvocationEventEmitter(
+        snapshot.invocationId,
+        preparedLaunch.pin,
+        this.subscriptions,
+      );
       const lifecycle = new InvocationLifecycle(
         Object.freeze({ ...this.ports, execution: this.executionPort }),
         snapshot,
@@ -793,6 +799,7 @@ class InternalInvocationLifecycleManager {
               cleanupConfirmed: true,
             });
         },
+        (type) => eventEmitter.emit(type),
         (result) => this.complete(snapshot.invocationId, completion, result),
       );
       this.active.set(
@@ -801,12 +808,14 @@ class InternalInvocationLifecycleManager {
           acceptedAt,
           completion,
           lifecycle,
+          events: eventEmitter,
         }),
       );
       this.pending.delete(snapshot.invocationId);
       const handle = createHandle(snapshot.invocationId, completion, preparedLaunch.pin, (reason) =>
         this.cancel(snapshot.invocationId, reason),
       );
+      eventEmitter.emit('invocation.accepted');
       lifecycle.begin();
       return Object.freeze({ status: 'accepted', handle, lifecycle });
     } finally {
@@ -1222,16 +1231,8 @@ class InternalInvocationLifecycleManager {
     if (active === undefined) throw new Error('Completed invocation is not active.');
     this.completed.commit(invocationId, result);
     this.active.delete(invocationId);
-    const event: TerminalInvocationEvent = Object.freeze({
-      schemaVersion: 'agent-event/v1',
-      type: 'invocation.finished',
-      invocationId,
-      pin: result.pin,
-      sequence: 1,
-      timestamp: result.finishedAt,
-    });
     try {
-      this.subscriptions.deliver(event);
+      active.events.emit('invocation.finished', result.finishedAt);
     } finally {
       completion.resolve(result);
     }
