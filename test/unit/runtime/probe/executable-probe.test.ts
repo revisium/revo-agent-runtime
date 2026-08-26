@@ -426,7 +426,7 @@ test('gives a timeout precedence over a coincident failed completion', async () 
   );
 });
 
-test('rejects unexpected port failures and failed reap with the stable internal fault', async () => {
+test('rejects unexpected port failures while preserving the timeout fault after failed reap', async () => {
   const probeTarget = target();
   const throwingPort = new FakeExecutableProbePort({ platform: 'linux' });
   throwingPort.enqueueResolution(new Error('raw resolution failure'));
@@ -440,7 +440,11 @@ test('rejects unexpected port failures and failed reap with the stable internal 
   port.fireTimeout(1);
   await new Promise((resolve) => setTimeout(resolve, 0));
   port.settleTermination(1, new Error('raw reap failure'));
-  await expectInternalProbeFailure(pending);
+  await expect(pending).resolves.toEqual(
+    unavailable(probeTarget, 'revo.agent.probe_timeout', AGENT_FAULT_MESSAGES.probeTimeout, true, {
+      timeoutMs: 1_000,
+    }),
+  );
 });
 
 test('normalizes an AgentManagerError rejected by the port to the evaluator-owned fault', async () => {

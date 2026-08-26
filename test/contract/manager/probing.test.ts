@@ -443,8 +443,10 @@ test('rejects a queued probe at dequeue time after closing', async () => {
   const batch = manager.probeAgents(definitions.map(({ id, version }) => reference(id, version)));
   await flushMicrotasks();
   expect(port.calls().filter(({ type }) => type === 'start-version')).toHaveLength(8);
-  await manager.shutdown();
-  for (let probeId = 1; probeId <= 8; probeId += 1) port.settleCompletion(probeId, exited());
+  const shutdown = manager.shutdown();
+  await flushMicrotasks();
+  for (let probeId = 1; probeId <= 8; probeId += 1) port.settleTermination(probeId);
+  await shutdown;
 
   await expectFault(batch, {
     code: 'revo.agent.manager_closed',
@@ -453,6 +455,106 @@ test('rejects a queued probe at dequeue time after closing', async () => {
     retryable: false,
   });
   expect(port.calls().filter(({ type }) => type === 'start-version')).toHaveLength(8);
+});
+
+test('drains an already spawned probe before rejecting its caller', async () => {
+  const { manager, port } = await managerWithDefinitions([withVersionProbe('drain')]);
+  port.enqueueResolution({ status: 'resolved', executable: '/resolved/drain' });
+  port.enqueueVersionStart('running');
+
+  const probe = manager.probeAgent(reference('drain'));
+  await flushMicrotasks();
+  const shutdown = manager.shutdown();
+  await flushMicrotasks();
+  expect(port.calls()).toContainEqual({ type: 'terminate-and-reap', probeId: 1 });
+
+  let probeSettled = false;
+  void probe.then(
+    () => {
+      probeSettled = true;
+    },
+    () => {
+      probeSettled = true;
+    },
+  );
+  await flushMicrotasks();
+  expect(probeSettled).toBe(false);
+  let shutdownSettled = false;
+  void shutdown.finally(() => {
+    shutdownSettled = true;
+  });
+  await flushMicrotasks();
+  expect(shutdownSettled).toBe(false);
+  port.settleTermination(1);
+  await expect(probe).rejects.toBeInstanceOf(AgentManagerError);
+  await expect(shutdown).resolves.toBeUndefined();
+});
+
+test('reports unconfirmed probe cleanup without exposing an invocation id', async () => {
+  const { manager, port } = await managerWithDefinitions([withVersionProbe('failed-drain')]);
+  port.enqueueResolution({ status: 'resolved', executable: '/resolved/failed-drain' });
+  port.enqueueVersionStart('running');
+
+  const probe = manager.probeAgent(reference('failed-drain'));
+  await flushMicrotasks();
+  const shutdown = manager.shutdown();
+  await flushMicrotasks();
+  port.settleTermination(1, {
+    cause: 'group_still_live',
+    termSent: true,
+    killSent: true,
+    lastKnownGroupState: 'present',
+    leaderReapState: 'pending',
+  });
+
+  await expectFault(probe, {
+    code: 'revo.agent.manager_closed',
+    message: AGENT_FAULT_MESSAGES.managerClosed,
+    phase: 'manager',
+    retryable: false,
+  });
+  await expectFault(shutdown, {
+    code: 'revo.agent.shutdown_failed',
+    message: AGENT_FAULT_MESSAGES.shutdownFailed,
+    phase: 'shutdown',
+    retryable: false,
+    details: { failureCount: 1 },
+  });
+});
+
+test('retains an unconfirmed own-timeout cleanup for a later shutdown', async () => {
+  const { manager, port } = await managerWithDefinitions([withVersionProbe('timeout-retained')]);
+  port.enqueueResolution({ status: 'resolved', executable: '/resolved/timeout-retained' });
+  port.enqueueVersionStart('running');
+
+  const probe = manager.probeAgent(reference('timeout-retained'));
+  await flushMicrotasks();
+  port.fireTimeout(1);
+  await flushMicrotasks();
+  port.settleTermination(1, {
+    cause: 'leader_reap_timeout',
+    termSent: true,
+    killSent: false,
+    lastKnownGroupState: 'absent',
+    leaderReapState: 'pending',
+  });
+  await expect(probe).resolves.toMatchObject({
+    status: 'unavailable',
+    error: {
+      code: 'revo.agent.probe_timeout',
+      message: AGENT_FAULT_MESSAGES.probeTimeout,
+      phase: 'probing',
+      retryable: true,
+      details: { timeoutMs: 1_000 },
+    },
+  });
+  await expectFault(manager.shutdown(), {
+    code: 'revo.agent.shutdown_failed',
+    message: AGENT_FAULT_MESSAGES.shutdownFailed,
+    phase: 'shutdown',
+    retryable: false,
+    details: { failureCount: 1 },
+  });
 });
 
 test('checks closing before malformed references and batch limits', async () => {

@@ -40,7 +40,7 @@ import {
   type TerminalPublicationAuthority,
 } from '../../runtime/execution/index.js';
 import { AGENT_FAULT_MESSAGES, AGENT_RUNTIME_LIMITS } from '../../runtime/policy/index.js';
-import { probeExecutable, type ExecutableProbePort } from '../../runtime/probe/index.js';
+import type { ExecutableProbePort } from '../../runtime/probe/index.js';
 import { SealedAgentRegistry } from '../../runtime/registry/index.js';
 import type {
   ActiveInvocationSnapshot,
@@ -535,7 +535,7 @@ const shutdownFailedError = (
   failures: readonly ShutdownDrainResult[],
   reason: string | undefined,
 ): AgentManagerError => {
-  const first = failures.find((failure) => failure.kind !== 'recovery_incomplete');
+  const first = failures.find((failure) => 'invocationId' in failure);
   return new AgentManagerError(
     Object.freeze({
       code: 'revo.agent.shutdown_failed' as const,
@@ -572,7 +572,8 @@ type ShutdownDrainResult =
       outcome: ProcessCleanupAttemptOutcome;
     }>
   | Readonly<{ kind: 'recovery_incomplete' }>
-  | Readonly<{ invocationId: string; kind: 'recovery_cleanup_uncertain' }>;
+  | Readonly<{ invocationId: string; kind: 'recovery_cleanup_uncertain' }>
+  | Readonly<{ kind: 'probe_cleanup_failed'; outcome: ProcessCleanupAttemptOutcome }>;
 
 const createResultSchemaValidator = (
   snapshot: InvocationInputSnapshot,
@@ -1131,6 +1132,7 @@ class InternalInvocationLifecycleManager {
   }
 
   private async performShutdown(): Promise<void> {
+    const probeDrain = this.probes.drainInFlightProbes();
     const recoveryIncomplete = await this.#drainPendingInitialization();
     const activeDrains = [...this.active.entries()].map(([invocationId, active]) =>
       this.drainActiveInvocation(invocationId, active),
@@ -1156,10 +1158,20 @@ class InternalInvocationLifecycleManager {
         result.kind === 'cleanup_failed',
     );
     if (recoveryIncomplete) failures.push(Object.freeze({ kind: 'recovery_incomplete' as const }));
+    await this.appendProbeFailures(failures, probeDrain);
     for (const invocationId of this.#uncertainRecoveryInvocationIds)
       failures.push(Object.freeze({ invocationId, kind: 'recovery_cleanup_uncertain' as const }));
     if (failures.length > 0) throw shutdownFailedError(failures, this.#firstShutdownReason);
     this.subscriptions.clear();
+  }
+
+  private async appendProbeFailures(
+    failures: ShutdownDrainResult[],
+    probeDrain: Promise<readonly ProcessCleanupAttemptOutcome[]>,
+  ): Promise<void> {
+    const outcomes = await probeDrain;
+    for (const outcome of outcomes)
+      failures.push(Object.freeze({ kind: 'probe_cleanup_failed' as const, outcome }));
   }
 
   async #drainPendingInitialization(): Promise<boolean> {
@@ -1302,7 +1314,7 @@ class InternalInvocationLifecycleManager {
       target,
     });
     if (resourceBound.status === 'rejected') return resourceBound;
-    const result = await probeExecutable(target, this.ports.executableProbe);
+    const result = await this.probes.probeSupervised(target);
     if (this.#closing) return Object.freeze({ status: 'rejected', reason: 'manager_closed' });
     if (result.status === 'available') {
       if (

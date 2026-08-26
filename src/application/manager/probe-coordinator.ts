@@ -1,9 +1,14 @@
 import { AgentManagerError, limitInvalidError } from '../../runtime/errors/index.js';
+import type { ProcessCleanupAttemptOutcome } from '../../runtime/execution/index.js';
 import { AGENT_FAULT_MESSAGES, AGENT_RUNTIME_LIMITS } from '../../runtime/policy/index.js';
-import { probeExecutable } from '../../runtime/probe/index.js';
-import type { ExecutableProbePort, ProbeTarget } from '../../runtime/probe/index.js';
+import {
+  probeExecutable,
+  type ExecutableProbePort,
+  type ProbeTarget,
+} from '../../runtime/probe/index.js';
 import { SealedAgentRegistry } from '../../runtime/registry/index.js';
 import type { AgentProbeResult, AgentRef } from '../../runtime/spec/index.js';
+import { InFlightVersionProbe } from './in-flight-version-probe.js';
 import { inspectBatchRefs } from './inspect-batch-refs.js';
 import { managerClosedError } from './manager-closed-error.js';
 import { ProbeAdmission } from './probe-admission.js';
@@ -33,6 +38,9 @@ export class ProbeCoordinator {
   private readonly probePort: ExecutableProbePort;
   private readonly registry: SealedAgentRegistry;
   private readonly isClosing: () => boolean;
+  private readonly inFlight = new Set<InFlightVersionProbe>();
+  private readonly draining = new Set<InFlightVersionProbe>();
+  private readonly unconfirmed = new Set<ProcessCleanupAttemptOutcome>();
 
   constructor(
     registry: SealedAgentRegistry,
@@ -72,6 +80,37 @@ export class ProbeCoordinator {
       batchOperations.operations.map(({ target }) => this.probeOperation(target)),
     );
     return this.fanOutBatchResults(batchOperations.operations, results, inspection.refs.length);
+  }
+
+  async probeSupervised(target: ProbeTarget): Promise<AgentProbeResult> {
+    const probe = new InFlightVersionProbe(this.probePort, this.isClosing);
+    this.inFlight.add(probe);
+    try {
+      const result = await probeExecutable(target, probe.supervisedPort);
+      await probe.terminationSettled();
+      return result;
+    } finally {
+      this.inFlight.delete(probe);
+      const outcome = probe.terminationOutcome();
+      if (outcome !== undefined && !this.draining.has(probe)) this.unconfirmed.add(outcome);
+    }
+  }
+
+  async drainInFlightProbes(): Promise<readonly ProcessCleanupAttemptOutcome[]> {
+    const probes = [...this.inFlight];
+    for (const probe of probes) {
+      this.draining.add(probe);
+      probe.requestTermination();
+    }
+    const outcomes = [...this.unconfirmed];
+    this.unconfirmed.clear();
+    await Promise.all(probes.map((probe) => probe.terminationSettled()));
+    for (const probe of probes) {
+      const outcome = probe.terminationOutcome();
+      if (outcome !== undefined) outcomes.push(outcome);
+      this.draining.delete(probe);
+    }
+    return Object.freeze(outcomes);
   }
 
   private batchOperations(refs: readonly unknown[]): BatchOperations {
@@ -114,10 +153,12 @@ export class ProbeCoordinator {
   }
 
   private probeOperation(target: ProbeTarget): () => Promise<AgentProbeResult> {
-    return () =>
-      this.isClosing()
-        ? Promise.reject(managerClosedError())
-        : probeExecutable(target, this.probePort);
+    return async () => {
+      if (this.isClosing()) throw managerClosedError();
+      const result = await this.probeSupervised(target);
+      if (this.isClosing()) throw managerClosedError();
+      return result;
+    };
   }
 
   private resolveTarget(ref: unknown): ProbeTarget | undefined {

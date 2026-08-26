@@ -7,8 +7,11 @@ import type {
   BoundedCommandPort,
   BoundedCommandRequest,
   CommandResolution,
+  ProcessCleanupAttemptOutcome,
   RunningBoundedCommand,
 } from '../../runtime/execution/index.js';
+import { NODE_POSIX_PROCESS_TERMINATION_TIMEOUTS } from './node-posix-process-termination-timeouts.js';
+import { terminateProcessGroupAndReap } from './posix-process-group-termination.js';
 
 const positiveBound = (value: number | undefined, fallback: number): number => {
   const result = value ?? fallback;
@@ -16,9 +19,6 @@ const positiveBound = (value: number | undefined, fallback: number): number => {
     throw new Error('Command limits must be positive safe integers.');
   return result;
 };
-
-const isProcessGoneError = (error: unknown): boolean =>
-  error instanceof Error && 'code' in error && error.code === 'ESRCH';
 
 const overflowStatus = (overflow: { stdout: boolean; stderr: boolean }) => {
   if (overflow.stdout && overflow.stderr) return 'both' as const;
@@ -141,39 +141,17 @@ export class NodePosixBoundedCommandPort implements BoundedCommandPort {
     };
     void completion.then(clearCommandTimeout, clearCommandTimeout);
     const pid = child.pid;
-    let cleanup: Promise<void> | undefined;
-    const terminateAndReap = (): Promise<void> => {
-      cleanup ??= new Promise<void>((resolve, reject) => {
-        if (pid === undefined || !Number.isSafeInteger(pid) || pid < 1) {
-          void completion.then(
-            () => resolve(),
-            () => resolve(),
-          );
-          return;
-        }
-        try {
-          process.kill(-pid, 'SIGTERM');
-        } catch (error: unknown) {
-          if (!isProcessGoneError(error)) {
-            reject(error);
-            return;
-          }
-        }
-        setTimeout(() => {
-          try {
-            process.kill(-pid, 'SIGKILL');
-          } catch (error: unknown) {
-            if (!isProcessGoneError(error)) {
-              reject(error);
-              return;
-            }
-          }
-          void completion.then(
-            () => resolve(),
-            () => resolve(),
-          );
-        }, 2_000);
-      });
+    let cleanup: Promise<ProcessCleanupAttemptOutcome | undefined> | undefined;
+    const terminateAndReap = (): Promise<ProcessCleanupAttemptOutcome | undefined> => {
+      cleanup ??=
+        pid === undefined || !Number.isSafeInteger(pid) || pid < 1
+          ? completion.then(
+              () => undefined,
+              () => undefined,
+            )
+          : terminateProcessGroupAndReap(pid, completion, {
+              ...NODE_POSIX_PROCESS_TERMINATION_TIMEOUTS,
+            });
       return cleanup;
     };
     return Object.freeze({ completion, timeout, terminateAndReap });

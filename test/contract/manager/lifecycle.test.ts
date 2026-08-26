@@ -187,16 +187,6 @@ const testDeferred = <Value>(): TestDeferred<Value> => {
   return Object.freeze({ promise, resolve, reject });
 };
 
-const availableProbeExit = () =>
-  Object.freeze({
-    status: 'exited' as const,
-    exitCode: 0,
-    signal: null,
-    stdout: new TextEncoder().encode('agent 1.0.0\n'),
-    stderr: new Uint8Array(),
-    overflow: 'none' as const,
-  });
-
 const waitUntil = async (predicate: () => boolean, remaining = 100): Promise<void> => {
   if (predicate()) return;
   if (remaining > 0) {
@@ -1077,7 +1067,7 @@ test('shutdown arbitration rejects a start waiting at executable probe', async (
   const start = manager.start(createStartInput({ invocationId: 'closing-at-probe' }));
   await flush();
   const shutdown = manager.shutdown('closing');
-  probe.settleCompletion(1, availableProbeExit());
+  probe.settleTermination(1);
 
   await expect(start).resolves.toEqual({ status: 'rejected', reason: 'manager_closed' });
   await expect(shutdown).resolves.toBeUndefined();
