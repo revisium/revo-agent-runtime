@@ -69,32 +69,38 @@ describe('NodePosixBoundedCommandPort', () => {
   test('captures bounded stdout and stderr', async () => {
     const running = await port.start(request());
 
-    await expect(running.completion).resolves.toEqual({
+    const completion = await running.completion;
+    expect(completion).toMatchObject({
       status: 'exited',
       exitCode: 0,
       signal: null,
-      stdout: new TextEncoder().encode('out'),
-      stderr: new TextEncoder().encode('err'),
       overflow: 'none',
     });
+    if (completion.status !== 'exited') throw new Error('Expected an exited process.');
+    expect([...completion.stdout]).toEqual([...new TextEncoder().encode('out')]);
+    expect([...completion.stderr]).toEqual([...new TextEncoder().encode('err')]);
   });
 
   test('reports stdout and stderr overflow independently and together', async () => {
     const stdoutOverflow = await port.start(request({ maxStdoutBytes: 1, maxStderrBytes: 10 }));
-    await expect(stdoutOverflow.completion).resolves.toMatchObject({
+    const stdoutResult = await stdoutOverflow.completion;
+    expect(stdoutResult).toMatchObject({
       status: 'exited',
-      stdout: new TextEncoder().encode('o'),
-      stderr: new TextEncoder().encode('err'),
       overflow: 'stdout',
     });
+    if (stdoutResult.status !== 'exited') throw new Error('Expected an exited process.');
+    expect([...stdoutResult.stdout]).toEqual([...new TextEncoder().encode('o')]);
+    expect([...stdoutResult.stderr]).toEqual([...new TextEncoder().encode('err')]);
 
     const bothOverflow = await port.start(request({ maxStdoutBytes: 1, maxStderrBytes: 1 }));
-    await expect(bothOverflow.completion).resolves.toMatchObject({
+    const bothResult = await bothOverflow.completion;
+    expect(bothResult).toMatchObject({
       status: 'exited',
-      stdout: new TextEncoder().encode('o'),
-      stderr: new TextEncoder().encode('e'),
       overflow: 'both',
     });
+    if (bothResult.status !== 'exited') throw new Error('Expected an exited process.');
+    expect([...bothResult.stdout]).toEqual([...new TextEncoder().encode('o')]);
+    expect([...bothResult.stderr]).toEqual([...new TextEncoder().encode('e')]);
   });
 
   test('rejects invalid limits before spawning', async () => {
@@ -124,18 +130,28 @@ describe('NodePosixBoundedCommandPort', () => {
   });
 
   test('terminates and reaps a running process', async () => {
+    const kill = vi.spyOn(process, 'kill');
     const running = await port.start(
       request({
         args: ['--input-type=module', '--eval', 'setTimeout(() => {}, 5000);'],
       }),
     );
 
-    await expect(running.terminateAndReap()).resolves.toBeUndefined();
-    await expect(running.completion).resolves.toMatchObject({
-      status: 'exited',
-      exitCode: null,
-      signal: 'SIGTERM',
-    });
+    try {
+      const startedAt = Date.now();
+      await expect(running.terminateAndReap()).resolves.toBeUndefined();
+      expect(Date.now() - startedAt).toBeLessThan(1_000);
+      await expect(running.completion).resolves.toMatchObject({
+        status: 'exited',
+        exitCode: null,
+        signal: 'SIGTERM',
+      });
+      expect(kill.mock.calls.map(([, signal]) => signal).filter((signal) => signal !== 0)).toEqual([
+        'SIGTERM',
+      ]);
+    } finally {
+      kill.mockRestore();
+    }
   });
 
   test('accepts process groups that disappear before either signal', async () => {
@@ -149,12 +165,13 @@ describe('NodePosixBoundedCommandPort', () => {
 
       await expect(running.terminateAndReap()).resolves.toBeUndefined();
       await expect(running.completion).resolves.toMatchObject({ status: 'exited' });
+      expect(kill.mock.calls.every(([, signal]) => signal === 0)).toBe(true);
     } finally {
       kill.mockRestore();
     }
   });
 
-  test('rejects cleanup when the initial signal fails unexpectedly', async () => {
+  test('resolves cleanup evidence when the initial signal fails unexpectedly', async () => {
     const kill = vi.spyOn(process, 'kill').mockImplementation(() => {
       throw Object.assign(new Error('permission denied'), { code: 'EPERM' });
     });
@@ -163,14 +180,18 @@ describe('NodePosixBoundedCommandPort', () => {
         request({ args: ['--input-type=module', '--eval', 'setTimeout(() => {}, 20);'] }),
       );
 
-      await expect(running.terminateAndReap()).rejects.toThrow('permission denied');
+      await expect(running.terminateAndReap()).resolves.toMatchObject({
+        cause: 'termination_rejected',
+        termSent: false,
+        killSent: false,
+      });
       await expect(running.completion).resolves.toMatchObject({ status: 'exited' });
     } finally {
       kill.mockRestore();
     }
   });
 
-  test('rejects cleanup when escalation fails unexpectedly', async () => {
+  test('resolves cleanup evidence when escalation fails unexpectedly', async () => {
     const originalKill = process.kill.bind(process);
     const kill = vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
       if (signal === 'SIGTERM') return originalKill(pid, signal);
@@ -181,7 +202,11 @@ describe('NodePosixBoundedCommandPort', () => {
         request({ args: ['--input-type=module', '--eval', 'setTimeout(() => {}, 20);'] }),
       );
 
-      await expect(running.terminateAndReap()).rejects.toThrow('escalation denied');
+      await expect(running.terminateAndReap()).resolves.toMatchObject({
+        cause: 'post_kill_confirmation_rejected',
+        termSent: true,
+        killSent: false,
+      });
       await expect(running.completion).resolves.toMatchObject({ status: 'exited' });
     } finally {
       kill.mockRestore();

@@ -189,14 +189,14 @@ test('keeps termination pending until its scripted settlement and retains exact 
 
   port.settleTermination(1, failure);
   await expect(pendingTermination).rejects.toBe(failure);
-  expect(port.activeVersionProbes()).toBe(1);
+  expect(port.activeVersionProbes()).toBe(0);
 
   port.enqueueVersionStart('running');
   const second = await port.startVersionProbe(versionRequest());
   const successfulTermination = second.terminateAndReap();
   port.settleTermination(2);
   await expect(successfulTermination).resolves.toBeUndefined();
-  expect(port.activeVersionProbes()).toBe(1);
+  expect(port.activeVersionProbes()).toBe(0);
 });
 
 test('tracks active and maximum probes across concurrent completion, timeout, and reaping', async () => {

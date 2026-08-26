@@ -34,7 +34,7 @@ export class FreshAvailableExecutableProbePort implements ExecutableProbePort {
           }),
         ),
         timeout: new Promise<void>(() => undefined),
-        terminateAndReap: () => Promise.resolve(),
+        terminateAndReap: () => Promise.resolve(undefined),
       }),
     );
   }

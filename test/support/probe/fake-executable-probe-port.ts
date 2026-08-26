@@ -1,3 +1,4 @@
+import type { ProcessCleanupAttemptOutcome } from '../../../src/runtime/execution/index.js';
 import type {
   ExecutableProbePort,
   ExecutableResolution,
@@ -17,7 +18,7 @@ export interface FakeExecutableProbeControls {
   enqueueVersionStart(result: 'running' | VersionProbeObservation | Error): void;
   settleCompletion(probeId: number, observation: VersionProbeObservation | Error): void;
   fireTimeout(probeId: number): void;
-  settleTermination(probeId: number, result?: Error): void;
+  settleTermination(probeId: number, result?: ProcessCleanupAttemptOutcome | Error): void;
   calls(): readonly ProbePortCall[];
   hostPlatformReadCount(): number;
   activeVersionProbes(): number;
@@ -33,7 +34,7 @@ interface Deferred<Value> {
 interface PendingProbe {
   readonly completion: Deferred<VersionProbeObservation>;
   readonly timeout: Deferred<void>;
-  termination: Deferred<void> | undefined;
+  termination: Deferred<ProcessCleanupAttemptOutcome | undefined> | undefined;
   completionSettled: boolean;
   timeoutSettled: boolean;
   terminationSettled: boolean;
@@ -181,7 +182,7 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
     probe.timeout.resolve(undefined);
   }
 
-  settleTermination(probeId: number, result?: Error): void {
+  settleTermination(probeId: number, result?: ProcessCleanupAttemptOutcome | Error): void {
     const probe = this.probe(probeId);
     if (probe.termination === undefined) {
       throw new Error(`Termination for probe ${probeId} has not started`);
@@ -191,13 +192,26 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
     }
 
     probe.terminationSettled = true;
-    if (result === undefined) {
+    if (!probe.completionSettled) {
+      probe.completionSettled = true;
       this.release(probe);
+      probe.completion.resolve(
+        Object.freeze({
+          status: 'exited' as const,
+          exitCode: null,
+          signal: 'SIGTERM' as const,
+          stdout: new Uint8Array(),
+          stderr: new Uint8Array(),
+          overflow: 'none' as const,
+        }),
+      );
+    }
+    if (result === undefined) {
       probe.termination.resolve(undefined);
       return;
     }
-
-    probe.termination.reject(result);
+    if (result instanceof Error) probe.termination.reject(result);
+    else probe.termination.resolve(Object.freeze(result));
   }
 
   calls(): readonly ProbePortCall[] {
@@ -216,11 +230,11 @@ export class FakeExecutableProbePort implements ExecutableProbePort, FakeExecuta
     return this.maximumActiveProbeCount;
   }
 
-  private terminateAndReap(probeId: number): Promise<void> {
+  private terminateAndReap(probeId: number): Promise<ProcessCleanupAttemptOutcome | undefined> {
     const probe = this.probe(probeId);
     this.record(Object.freeze({ type: 'terminate-and-reap', probeId }));
     if (probe.termination === undefined) {
-      probe.termination = deferred<void>();
+      probe.termination = deferred<ProcessCleanupAttemptOutcome | undefined>();
     }
 
     return probe.termination.promise;

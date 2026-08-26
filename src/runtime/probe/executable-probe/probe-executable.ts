@@ -219,7 +219,7 @@ const evaluateVersionProbe = async (
     running.timeout.then(() => Object.freeze({ type: 'timeout' as const })),
   ]);
   if (outcome.type === 'timeout') {
-    await running.terminateAndReap();
+    await running.terminateAndReap().catch(() => undefined);
     return unavailable(
       target,
       'revo.agent.probe_timeout',

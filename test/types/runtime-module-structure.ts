@@ -378,7 +378,7 @@ type ExpectedVersionProbeObservation =
 type ExpectedRunningVersionProbe = {
   readonly completion: Promise<VersionProbeObservation>;
   readonly timeout: Promise<void>;
-  terminateAndReap(): Promise<void>;
+  terminateAndReap(): Promise<ProcessCleanupAttemptOutcome | undefined>;
 };
 
 type ExpectedExecutableProbePort = {
