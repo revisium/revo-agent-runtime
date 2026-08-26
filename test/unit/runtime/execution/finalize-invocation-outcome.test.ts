@@ -116,6 +116,7 @@ test('converts a rejecting terminal publication into an output-write failure wit
   const result = await finalizeInvocationOutcome({
     output,
     authority,
+    flushPendingEvidence: async () => false,
     invocationToken,
     base,
     normalized: parserFailure({
@@ -136,6 +137,7 @@ test('optimistically commits result.json for a successfully published failed res
   const result = await finalizeInvocationOutcome({
     output,
     authority,
+    flushPendingEvidence: async () => false,
     invocationToken,
     base,
     normalized: parserFailure(),
@@ -152,6 +154,7 @@ test('rebuilds delivered result after late result publication failure without re
   const result = await finalizeInvocationOutcome({
     output,
     authority,
+    flushPendingEvidence: async () => false,
     invocationToken,
     base,
     normalized: success,
@@ -176,6 +179,7 @@ test('treats an undefined invocation token as raw-response ineligible', async ()
   await finalizeInvocationOutcome({
     output,
     authority,
+    flushPendingEvidence: async () => false,
     invocationToken: undefined,
     base,
     normalized: parserFailure({ rawResponse }),
@@ -193,12 +197,62 @@ test('keeps scratch cleanup failure precedence over raw publication failure', as
   const result = await finalizeInvocationOutcome({
     output,
     authority,
+    flushPendingEvidence: async () => false,
     invocationToken,
     base,
     normalized: parserFailure({ rawResponse: rawEvidence(new TextEncoder().encode('{')) }),
   });
 
   expect(output.rawPublications).toHaveLength(1);
+  expect(result).toMatchObject({
+    status: 'failed',
+    error: { code: 'revo.agent.scratch_cleanup_failed' },
+  });
+});
+
+test('downgrades when pending nonterminal evidence failed', async () => {
+  const output = new FakeTerminalPublicationPort();
+  const result = await finalizeInvocationOutcome({
+    output,
+    authority,
+    flushPendingEvidence: async () => true,
+    invocationToken,
+    base,
+    normalized: success,
+  });
+
+  expect(result).toMatchObject({
+    status: 'failed',
+    error: { code: 'revo.agent.output_write_failed' },
+  });
+});
+
+test('does not downgrade for suppressed pending nonterminal evidence', async () => {
+  const output = new FakeTerminalPublicationPort();
+  const result = await finalizeInvocationOutcome({
+    output,
+    authority,
+    flushPendingEvidence: async () => false,
+    invocationToken,
+    base,
+    normalized: success,
+  });
+
+  expect(result.status).toBe('succeeded');
+});
+
+test('keeps scratch cleanup precedence over pending nonterminal evidence failure', async () => {
+  const output = new FakeTerminalPublicationPort();
+  output.cleanupResult = Object.freeze({ status: 'failed', reason: 'cleanup_failed' });
+  const result = await finalizeInvocationOutcome({
+    output,
+    authority,
+    flushPendingEvidence: async () => true,
+    invocationToken,
+    base,
+    normalized: success,
+  });
+
   expect(result).toMatchObject({
     status: 'failed',
     error: { code: 'revo.agent.scratch_cleanup_failed' },
@@ -213,6 +267,7 @@ test('mints raw-response eligibility from the original outcome before scratch do
   await finalizeInvocationOutcome({
     output,
     authority,
+    flushPendingEvidence: async () => false,
     invocationToken,
     base,
     normalized: parserFailure({ rawResponse: rawEvidence(bytes) }),
@@ -228,6 +283,7 @@ test('takes raw-response evidence exactly once even when publication is ineligib
   await finalizeInvocationOutcome({
     output,
     authority,
+    flushPendingEvidence: async () => false,
     invocationToken,
     base,
     normalized: parserFailure({ reason: 'frame_malformed', rawResponse }),
@@ -243,6 +299,7 @@ test('maps terminal result exit fields from normalized evidence', async () => {
   await finalizeInvocationOutcome({
     output,
     authority,
+    flushPendingEvidence: async () => false,
     invocationToken,
     base,
     normalized: success,
@@ -250,6 +307,7 @@ test('maps terminal result exit fields from normalized evidence', async () => {
   await finalizeInvocationOutcome({
     output,
     authority,
+    flushPendingEvidence: async () => false,
     invocationToken,
     base,
     normalized: parserFailure({ exit: Object.freeze({ exitCode: 7, signal: 'SIGTERM' }) }),
@@ -265,6 +323,7 @@ test('tags raw response file symmetrically only after successful raw publication
   const result = await finalizeInvocationOutcome({
     output,
     authority,
+    flushPendingEvidence: async () => false,
     invocationToken,
     base,
     normalized: parserFailure({ rawResponse: rawEvidence(new TextEncoder().encode('{')) }),

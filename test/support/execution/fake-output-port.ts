@@ -6,6 +6,7 @@ import type {
   ScratchCleanupResult,
   TerminalPublicationAuthority,
   TerminalResultPublicationResult,
+  OutputAppendResult,
 } from '../../../src/runtime/execution/index.js';
 import type {
   AgentEvent,
@@ -33,12 +34,16 @@ export interface FakeInvocationOutputControls {
   fulfilPendingTerminalResultRecording(recordingId: number): void;
   rejectPendingTerminalResultRecording(recordingId: number, error: Error): void;
   enqueueEventRecording(result?: Error): void;
+  enqueueLifecycleEventAppend(result: OutputAppendResult): void;
+  enqueuePendingLifecycleEventAppend(): void;
+  fulfilPendingLifecycleEventAppend(appendId: number, result?: OutputAppendResult): void;
   calls(): readonly InvocationOutputCall[];
   recordedTerminalResults(): readonly (AgentInvocationResult | NormalizedInvocationOutcome)[];
 }
 
 type InvocationOutputPort = InvocationExecutionPorts['output'];
 type TerminalResultRecording = Error | undefined | 'pending';
+type LifecycleEventRecording = OutputAppendResult | 'pending';
 
 interface Deferred {
   readonly promise: Promise<void>;
@@ -46,9 +51,14 @@ interface Deferred {
   readonly reject: (error: Error) => void;
 }
 
+interface LifecycleAppendDeferred {
+  readonly promise: Promise<OutputAppendResult>;
+  readonly resolve: (result: OutputAppendResult) => void;
+}
+
 const deferred = (): Deferred => {
   let resolve: (() => void) | undefined;
-  let reject: ((error: Error) => void) | undefined;
+  let reject: ((reason: Error) => void) | undefined;
   const promise = new Promise<void>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
     reject = rejectPromise;
@@ -56,6 +66,15 @@ const deferred = (): Deferred => {
   if (resolve === undefined || reject === undefined)
     throw new Error('Unable to create output deferred.');
   return { promise, resolve, reject };
+};
+
+const lifecycleAppendDeferred = (): LifecycleAppendDeferred => {
+  let resolve: ((result: OutputAppendResult) => void) | undefined;
+  const promise = new Promise<OutputAppendResult>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  if (resolve === undefined) throw new Error('Unable to create lifecycle append deferred.');
+  return { promise, resolve };
 };
 
 type MutableJsonObject = { [key: string]: MutableJsonValue };
@@ -182,9 +201,12 @@ export class FakeInvocationOutputPort
   private readonly terminalResultRecordingQueue: TerminalResultRecording[] = [];
   private readonly pendingTerminalResultRecordings = new Map<number, Deferred>();
   private readonly eventRecordingQueue: (Error | undefined)[] = [];
+  private readonly lifecycleEventRecordingQueue: LifecycleEventRecording[] = [];
+  private readonly pendingLifecycleEventAppends = new Map<number, LifecycleAppendDeferred>();
   private readonly callLog: InvocationOutputCall[] = [];
   private readonly terminalResults: AgentInvocationResult[] = [];
   private nextPendingTerminalResultRecordingId = 1;
+  private nextPendingLifecycleEventAppendId = 1;
 
   enqueueAdmission(result: OutputAdmissionResult | (() => OutputAdmissionResult)): void {
     this.admissionQueue.push(result);
@@ -212,6 +234,25 @@ export class FakeInvocationOutputPort
 
   enqueueEventRecording(result?: Error): void {
     this.eventRecordingQueue.push(result);
+  }
+
+  enqueueLifecycleEventAppend(result: OutputAppendResult): void {
+    this.lifecycleEventRecordingQueue.push(result);
+  }
+
+  enqueuePendingLifecycleEventAppend(): void {
+    this.lifecycleEventRecordingQueue.push('pending');
+  }
+
+  fulfilPendingLifecycleEventAppend(
+    appendId: number,
+    result: OutputAppendResult = { status: 'appended' },
+  ): void {
+    const pending = this.pendingLifecycleEventAppends.get(appendId);
+    if (pending === undefined)
+      throw new Error(`Unknown pending lifecycle event append ${appendId}`);
+    this.pendingLifecycleEventAppends.delete(appendId);
+    pending.resolve(result);
   }
 
   async admit(request: OutputAdmissionRequest): Promise<OutputAdmissionResult> {
@@ -265,10 +306,17 @@ export class FakeInvocationOutputPort
   async appendLifecycleEvent(
     _authority: TerminalPublicationAuthority,
     event: AgentEvent,
-  ): Promise<{ readonly status: 'appended' }> {
+  ): Promise<OutputAppendResult> {
     this.record(Object.freeze({ type: 'append-lifecycle-event', event }));
-    this.complete(this.take(this.eventRecordingQueue, 'event recording'));
-    return Object.freeze({ status: 'appended' as const });
+    const queued = this.lifecycleEventRecordingQueue.shift();
+    if (queued === 'pending') {
+      const appendId = this.nextPendingLifecycleEventAppendId;
+      this.nextPendingLifecycleEventAppendId += 1;
+      const pending = lifecycleAppendDeferred();
+      this.pendingLifecycleEventAppends.set(appendId, pending);
+      return pending.promise;
+    }
+    return queued ?? Object.freeze({ status: 'appended' as const });
   }
 
   async publishRawResponse(

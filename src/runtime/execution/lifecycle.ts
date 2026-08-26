@@ -94,6 +94,7 @@ export class InvocationLifecycle {
     private readonly saveCancellingState: () => void,
     private readonly removeActiveState: (invocationId: string) => Promise<void>,
     private readonly emitEvent: (type: LifecycleEventType) => void,
+    private readonly flushPendingEvidence: () => Promise<boolean>,
     private readonly onTerminal: (result: AgentInvocationResult) => void,
   ) {
     this.startedAtIso = startedAt;
@@ -315,6 +316,7 @@ export class InvocationLifecycle {
     const delivered = await finalizeInvocationOutcome({
       output: this.ports.output,
       authority: this.authority,
+      flushPendingEvidence: this.flushPendingEvidence,
       invocationToken,
       base,
       normalized,

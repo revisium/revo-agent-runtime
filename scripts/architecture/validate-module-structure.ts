@@ -241,6 +241,7 @@ const allowedPrivateTestImports = new Set([
   'test/unit/platform/node-posix-terminal-publication-port.test.ts->src/runtime/execution/output-preparation-attempt/consumed-redaction-material.ts',
   'test/unit/platform/node-posix-terminal-publication-port.test.ts->src/runtime/execution/output-preparation-attempt/terminal-publication-authority.ts',
   'test/unit/platform/node-posix-terminal-publication-port.test.ts->src/runtime/execution/secret-registration/registered-secrets.ts',
+  'test/unit/application/manager/invocation-event-emitter.test.ts->src/runtime/execution/output-preparation-attempt/terminal-publication-authority.ts',
 ]);
 
 const isAllowedPrivateTestImport = (path: string, target: string): boolean =>

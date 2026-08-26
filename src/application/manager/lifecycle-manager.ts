@@ -766,6 +766,8 @@ class InternalInvocationLifecycleManager {
         snapshot.invocationId,
         preparedLaunch.pin,
         this.subscriptions,
+        this.ports.output,
+        authority,
       );
       const lifecycle = new InvocationLifecycle(
         Object.freeze({ ...this.ports, execution: this.executionPort }),
@@ -800,6 +802,7 @@ class InternalInvocationLifecycleManager {
             });
         },
         (type) => eventEmitter.emit(type),
+        () => eventEmitter.settlePendingEvidence(),
         (result) => this.complete(snapshot.invocationId, completion, result),
       );
       this.active.set(

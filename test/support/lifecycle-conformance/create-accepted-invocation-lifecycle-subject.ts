@@ -126,6 +126,7 @@ export const createAcceptedInvocationLifecycleSubject = (
     () => undefined,
     async () => undefined,
     () => undefined,
+    async () => false,
     (result) => settlements.push(result),
   );
 

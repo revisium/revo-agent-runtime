@@ -129,6 +129,38 @@ test('admits one concurrent duplicate after preparation and passes an immutable 
   expect(execution.startedSnapshots()[0]?.metadata).toEqual({ nested: { state: 'accepted' } });
 });
 
+test('serializes lifecycle event appends in sequence order', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueStart('running');
+  const output = new FakeInvocationOutputPort();
+  output.enqueuePendingLifecycleEventAppend();
+  output.enqueueTerminalResultRecording();
+  const manager = await createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+
+  const outcome = await manager.start(createStartInput({ invocationId: 'ordered-events' }));
+  expect(outcome.status).toBe('accepted');
+  await flush();
+  expect(
+    output
+      .calls()
+      .filter((call) => call.type === 'append-lifecycle-event')
+      .map((call) => call.event.sequence),
+  ).toEqual([1]);
+
+  output.fulfilPendingLifecycleEventAppend(1);
+  await flush();
+  expect(
+    output
+      .calls()
+      .filter((call) => call.type === 'append-lifecycle-event')
+      .map((call) => call.event.sequence),
+  ).toEqual([1, 2]);
+});
+
 test('does not admit output preparation failures', async () => {
   const execution = new FakeInvocationExecutionPort();
   const output = new FakeInvocationOutputPort();
