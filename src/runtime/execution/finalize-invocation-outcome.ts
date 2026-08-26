@@ -44,13 +44,14 @@ const withoutCommittedResultFile = (result: AgentInvocationFailed): AgentInvocat
 export const finalizeInvocationOutcome = async (input: {
   readonly output: TerminalPublicationPort;
   readonly authority: TerminalPublicationAuthority;
+  readonly flushPendingEvidence: () => Promise<boolean>;
   readonly invocationToken: object | undefined;
   readonly base: Omit<AgentInvocationResultBase, 'finishedAt' | 'durationMs' | 'exit' | 'files'> & {
     readonly files: AgentOutputFiles;
   };
   readonly normalized: NormalizedInvocationOutcome;
 }): Promise<AgentInvocationResult> => {
-  const { output, authority, invocationToken, base, normalized } = input;
+  const { output, authority, invocationToken, base, normalized, flushPendingEvidence } = input;
   const settled = async <Value>(run: () => Promise<Value>, onRejected: Value): Promise<Value> => {
     try {
       return await run();
@@ -66,6 +67,7 @@ export const finalizeInvocationOutcome = async (input: {
         Object.freeze({ status: 'failed' as const, reason: 'cleanup_failed' as const }),
       )
     ).status === 'failed';
+  const pendingEvidenceFailed = await flushPendingEvidence();
   const rawBytes =
     normalized.evidence.rawResponse === undefined
       ? undefined
@@ -76,7 +78,7 @@ export const finalizeInvocationOutcome = async (input: {
       : mintRawFinalResponseEligibility(normalized, invocationToken);
 
   let rawResponsePublished = false;
-  let otherPreResultEvidenceFailed = false;
+  let otherPreResultEvidenceFailed = pendingEvidenceFailed;
   if (eligibility !== undefined) {
     const publication = await settled(
       () => output.publishRawResponse(authority, eligibility, rawBytes ?? new Uint8Array(0)),

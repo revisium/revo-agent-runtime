@@ -405,17 +405,22 @@ test('plans output resources after workspace admission and before executable pro
 
   expect(outcome.status).toBe('accepted');
   expect(calls).toEqual(['workspace', 'output-admission', 'probe']);
-  expect(output.calls()).toEqual([
-    {
-      type: 'admit',
-      request: {
-        invocationId: 'output-resource-plan',
-        outputDirectory: '/outputs/invocation',
-        needsPromptFile: true,
-        needsResultSchemaFile: true,
-      },
+  expect(output.calls()).toHaveLength(2);
+  expect(output.calls()[0]).toEqual({
+    type: 'admit',
+    request: {
+      invocationId: 'output-resource-plan',
+      outputDirectory: '/outputs/invocation',
+      needsPromptFile: true,
+      needsResultSchemaFile: true,
     },
-  ]);
+  });
+  const lifecycleEventCall = output.calls()[1];
+  expect(lifecycleEventCall?.type).toBe('append-lifecycle-event');
+  if (lifecycleEventCall?.type === 'append-lifecycle-event') {
+    expect(lifecycleEventCall.event.type).toBe('invocation.accepted');
+    expect(lifecycleEventCall.event.sequence).toBe(1);
+  }
   expect(execution.startedPreparedLaunches()).toEqual([
     expect.objectContaining({
       outputResourcePlan: {

@@ -1,4 +1,8 @@
-import { createIsoTimestamp } from '../../runtime/execution/index.js';
+import {
+  createIsoTimestamp,
+  type TerminalPublicationAuthority,
+  type TerminalPublicationPort,
+} from '../../runtime/execution/index.js';
 import type { AgentEvent, AgentExecutionPin } from '../../runtime/spec/index.js';
 import type { TerminalSubscriptions } from './subscriptions.js';
 
@@ -6,11 +10,15 @@ type InvocationEventType = AgentEvent['type'];
 
 export class InvocationEventEmitter {
   #sequence = 0;
+  #chain: Promise<void> = Promise.resolve();
+  #nonterminalAppendFailed = false;
 
   constructor(
     private readonly invocationId: string,
     private readonly pin: AgentExecutionPin,
     private readonly subscriptions: TerminalSubscriptions,
+    private readonly output: TerminalPublicationPort,
+    private readonly authority: TerminalPublicationAuthority,
   ) {}
 
   emit(type: InvocationEventType, timestamp = createIsoTimestamp()): void {
@@ -23,6 +31,21 @@ export class InvocationEventEmitter {
       sequence: this.#sequence,
       timestamp,
     });
+    if (event.type !== 'invocation.finished') {
+      this.#chain = this.#chain.then(async () => {
+        try {
+          const appended = await this.output.appendLifecycleEvent(this.authority, event);
+          if (appended.status === 'failed') this.#nonterminalAppendFailed = true;
+        } catch {
+          this.#nonterminalAppendFailed = true;
+        }
+      });
+    }
     this.subscriptions.deliver(event);
+  }
+
+  async settlePendingEvidence(): Promise<boolean> {
+    await this.#chain;
+    return this.#nonterminalAppendFailed;
   }
 }

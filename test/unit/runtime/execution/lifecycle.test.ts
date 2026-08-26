@@ -125,6 +125,7 @@ const startLifecycle = (
     hooks.saveCancellingState ?? (() => undefined),
     hooks.removeActiveState ?? (async () => undefined),
     hooks.emitEvent ?? (() => undefined),
+    async () => false,
     (settlement) => settlements.push(settlement),
   );
   lifecycle.begin();
@@ -174,6 +175,22 @@ test('never emits invocation.started when activation throws synchronously', asyn
 
   expect(events).toEqual([]);
   expect(settlements).toMatchObject([{ status: 'failed', error: { code: 'revo.agent.internal' } }]);
+});
+
+test('does not emit cancellation after finalization begins', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  execution.enqueueStart('running');
+  const events: string[] = [];
+  const { lifecycle } = startLifecycle(execution, undefined, undefined, {
+    emitEvent: (type) => events.push(type),
+  });
+
+  await flush();
+  execution.settleNaturalCompletion(1);
+  await flush();
+
+  expect(lifecycle.requestCancellation()).toEqual({ status: 'too_late' });
+  expect(events).toEqual(['invocation.started']);
 });
 
 test('queues cancellation during a deferred start and cancels exactly once after it runs', async () => {
