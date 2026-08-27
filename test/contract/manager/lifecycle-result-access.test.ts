@@ -271,6 +271,113 @@ test('does not publish a pending terminal result before its output commit settle
   expect(waiterSettled).toBe(true);
 });
 
+test('returns already_completed while terminal event append is pending', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueLifecycleEventAppend({ status: 'appended' });
+  output.enqueueLifecycleEventAppend({ status: 'appended' });
+  output.enqueuePendingLifecycleEventAppend();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = await createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+  const accepted = expectAcceptedInvocation(
+    await manager.start(createStartInput({ invocationId: 'terminal-append-race' })),
+  );
+
+  await flush();
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
+  await flush();
+
+  const lookup = manager.getResult('terminal-append-race');
+  expect(lookup.state).toBe('completed');
+  if (lookup.state !== 'completed')
+    throw new Error('Expected committed result during append wait.');
+  await expect(manager.cancel('terminal-append-race')).resolves.toEqual({
+    state: 'already_completed',
+    result: lookup.result,
+  });
+  output.fulfilPendingLifecycleEventAppend(1);
+  await expect(accepted.handle.result()).resolves.toBe(lookup.result);
+});
+
+test('keeps completion pending until the terminal event append settles', async () => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueLifecycleEventAppend({ status: 'appended' });
+  output.enqueueLifecycleEventAppend({ status: 'appended' });
+  output.enqueuePendingLifecycleEventAppend();
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = await createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+  const accepted = expectAcceptedInvocation(
+    await manager.start(createStartInput({ invocationId: 'terminal-append-completion-gate' })),
+  );
+  let waiterSettled = false;
+  let handleSettled = false;
+  void manager.waitForResult('terminal-append-completion-gate').then(() => {
+    waiterSettled = true;
+  });
+  void accepted.handle.result().then(() => {
+    handleSettled = true;
+  });
+
+  await flush();
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
+  await flush();
+
+  expect(manager.getResult('terminal-append-completion-gate').state).toBe('completed');
+  expect(waiterSettled).toBe(false);
+  expect(handleSettled).toBe(false);
+
+  output.fulfilPendingLifecycleEventAppend(1);
+  await flush();
+
+  expect(waiterSettled).toBe(true);
+  expect(handleSettled).toBe(true);
+});
+
+test.each([
+  Object.freeze({ status: 'failed' as const, reason: 'write_failed' as const }),
+  Object.freeze({ status: 'suppressed' as const, reason: 'nonterminal_budget_exhausted' as const }),
+])('terminal append outcome does not alter the committed result: %s', async (appendResult) => {
+  const execution = new FakeInvocationExecutionPort();
+  const output = new FakeInvocationOutputPort();
+  output.enqueueLifecycleEventAppend({ status: 'appended' });
+  output.enqueueLifecycleEventAppend({ status: 'appended' });
+  output.enqueueLifecycleEventAppend(appendResult);
+  output.enqueueTerminalResultRecording();
+  execution.enqueueStart('running');
+  const manager = await createLifecycleManager({
+    execution,
+    clock: new FakeInvocationClock({ initialNowMs: 0 }),
+    output,
+  });
+  const accepted = expectAcceptedInvocation(
+    await manager.start(
+      createStartInput({ invocationId: `terminal-outcome-${appendResult.status}` }),
+    ),
+  );
+
+  await flush();
+  execution.settleNaturalCompletion(1, new TextEncoder().encode('{"ok":true}'));
+  await flush();
+
+  const result = await accepted.handle.result();
+  expect(result).toMatchObject({ status: 'succeeded', value: { ok: true } });
+  expect(manager.getResult(`terminal-outcome-${appendResult.status}`)).toEqual({
+    state: 'completed',
+    result,
+  });
+});
+
 test('uses validated default capacity and rejects invalid capacity through lifecycle composition', async () => {
   const createPorts = () => ({
     execution: new FakeInvocationExecutionPort(),

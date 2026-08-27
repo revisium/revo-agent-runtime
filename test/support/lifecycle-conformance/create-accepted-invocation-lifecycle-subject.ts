@@ -127,7 +127,9 @@ export const createAcceptedInvocationLifecycleSubject = (
     async () => undefined,
     () => undefined,
     async () => false,
-    (result) => settlements.push(result),
+    async (result) => {
+      settlements.push(result);
+    },
   );
 
   return Object.freeze({

@@ -1225,17 +1225,17 @@ class InternalInvocationLifecycleManager {
     return Object.freeze({ invocationId, kind: 'terminal' as const });
   }
 
-  private complete(
+  private async complete(
     invocationId: string,
     completion: Deferred<AgentInvocationResult>,
     result: AgentInvocationResult,
-  ): void {
+  ): Promise<void> {
     const active = this.active.get(invocationId);
     if (active === undefined) throw new Error('Completed invocation is not active.');
     this.completed.commit(invocationId, result);
     this.active.delete(invocationId);
     try {
-      active.events.emit('invocation.finished', result.finishedAt);
+      await active.events.emitTerminal(result.finishedAt);
     } finally {
       completion.resolve(result);
     }
