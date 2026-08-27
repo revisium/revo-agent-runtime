@@ -95,7 +95,7 @@ export class InvocationLifecycle {
     private readonly removeActiveState: (invocationId: string) => Promise<void>,
     private readonly emitEvent: (type: LifecycleEventType) => void,
     private readonly flushPendingEvidence: () => Promise<boolean>,
-    private readonly onTerminal: (result: AgentInvocationResult) => void,
+    private readonly onTerminal: (result: AgentInvocationResult) => Promise<void>,
   ) {
     this.startedAtIso = startedAt;
   }
@@ -324,6 +324,6 @@ export class InvocationLifecycle {
     this.terminalFinishedAtIso = delivered.finishedAt;
     this.deliveredResult = delivered;
     this.state = 'terminal';
-    this.onTerminal(delivered);
+    await this.onTerminal(delivered);
   }
 }

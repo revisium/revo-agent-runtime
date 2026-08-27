@@ -126,7 +126,9 @@ const startLifecycle = (
     hooks.removeActiveState ?? (async () => undefined),
     hooks.emitEvent ?? (() => undefined),
     async () => false,
-    (settlement) => settlements.push(settlement),
+    async (settlement) => {
+      settlements.push(settlement);
+    },
   );
   lifecycle.begin();
   return { lifecycle, settlements, clock, prepared };

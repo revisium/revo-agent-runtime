@@ -158,26 +158,46 @@ test('emit delivers synchronously to subscribers without waiting for the append 
   await expect(emitter.settlePendingEvidence()).resolves.toBe(false);
 });
 
-test('the terminal event is delivered but never appended', async () => {
+test('the terminal event is appended before it is delivered', async () => {
   const output = new FakeTerminalPublicationPort();
   const { emitter, delivered } = createEmitter(output);
 
-  emitter.emit('invocation.finished');
+  output.enqueue('pending');
+  const terminal = emitter.emitTerminal('2026-08-27T00:00:00.000Z');
+  await Promise.resolve();
+  expect(delivered).toEqual([]);
+  expect(output.appended.map((event) => event.type)).toEqual(['invocation.finished']);
+  output.settlePending(0);
+  await terminal;
 
   expect(delivered).toHaveLength(1);
   expect(delivered[0]?.type).toBe('invocation.finished');
-  expect(output.appended).toEqual([]);
   await expect(emitter.settlePendingEvidence()).resolves.toBe(false);
 });
 
-test('sequence increments once per emit regardless of append outcome', () => {
+test.each([
+  Object.freeze({ status: 'appended' as const }),
+  Object.freeze({ status: 'suppressed' as const, reason: 'nonterminal_budget_exhausted' as const }),
+  Object.freeze({ status: 'failed' as const, reason: 'write_failed' as const }),
+  'reject' as const,
+])('ignores terminal append outcome %s', async (outcome) => {
+  const output = new FakeTerminalPublicationPort();
+  output.enqueue(outcome === 'reject' ? 'reject' : outcome);
+  const { emitter, delivered } = createEmitter(output);
+
+  await expect(emitter.emitTerminal()).resolves.toBeUndefined();
+  expect(delivered).toHaveLength(1);
+  expect(delivered[0]?.type).toBe('invocation.finished');
+});
+
+test('sequence increments once per event regardless of append outcome', async () => {
   const output = new FakeTerminalPublicationPort();
   output.enqueue(Object.freeze({ status: 'failed', reason: 'write_failed' }));
   const { emitter, delivered } = createEmitter(output);
 
   emitter.emit('invocation.accepted');
   emitter.emit('invocation.started');
-  emitter.emit('invocation.finished');
+  await emitter.emitTerminal();
 
   expect(delivered.map((event) => event.sequence)).toEqual([1, 2, 3]);
 });
