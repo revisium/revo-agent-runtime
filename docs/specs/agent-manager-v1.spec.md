@@ -2,7 +2,7 @@
 
 - Status: Draft
 - Version: 1.0.0
-- Implementation: Not implemented
+- Implementation: Provider-neutral implementation and curated root export available
 - Target package: `@revisium/revo-agent-runtime`
 - Schema dialect: JSON Schema draft 2020-12
 - Related decisions: [ADR-0002](../adr/0002-agent-manager-consumer-boundary.md),
@@ -18,8 +18,9 @@
 The key words MUST, MUST NOT, SHOULD, SHOULD NOT, MAY, REQUIRED, and OPTIONAL in this document are to be interpreted as
 described in RFC 2119 and BCP 14.
 
-This document is normative for the target v1 API. The package currently exports no runtime values or types; these
-declarations describe the contract to implement and test.
+This document is normative for the target v1 API. The current source exports the provider-neutral `createAgentManager`,
+`AgentManagerError`, and their complete curated named type surface. Implemented source, tests, declarations, and package
+exports remain the truth while this specification retains draft status; release availability is external metadata.
 
 ## 1. JSON-compatible values
 

@@ -45,29 +45,30 @@ package. Package-owned local process reconciliation is tested here.
 
 ## Test layers
 
-| Layer        | Owns                                                                                                                                         | Must not own                                                  |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Unit         | Pure validation, canonicalization, digest/fingerprint records, redaction, limits, parsing, filters, and retention decisions.                 | Package export claims or broad process lifecycle.             |
-| Contract     | Manager initialization, discovery, exact lookup, preflight, lifecycle, state-sink ordering, events, results, cancel/shutdown, stable faults. | Concrete Node process/filesystem behavior or private shape.   |
-| Integration  | Real temporary process/group, OS inspection, filesystem, native/ACP framing, file atomicity, and consumer flow.                              | Revo workflow policy, durable retry, or public product APIs.  |
-| Architecture | Dependency direction, cycle absence, forbidden imports, test-to-production direction, and probe efficacy.                                    | Runtime behavior or built package resolution.                 |
-| Package      | Built declarations, root export map, ESM resolution, packed contents, and deep-import denial.                                                | Invocation semantics or future API behavior before it exists. |
+| Layer        | Owns                                                                                                                                         | Must not own                                                 |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Unit         | Pure validation, canonicalization, digest/fingerprint records, redaction, limits, parsing, filters, and retention decisions.                 | Package export claims or broad process lifecycle.            |
+| Contract     | Manager initialization, discovery, exact lookup, preflight, lifecycle, state-sink ordering, events, results, cancel/shutdown, stable faults. | Concrete Node process/filesystem behavior or private shape.  |
+| Integration  | Real temporary process/group, OS inspection, filesystem, native/ACP framing, file atomicity, and consumer flow.                              | Revo workflow policy, durable retry, or public product APIs. |
+| Architecture | Dependency direction, cycle absence, forbidden imports, test-to-production direction, and probe efficacy.                                    | Runtime behavior or built package resolution.                |
+| Package      | Built declarations, root export map, ESM resolution, packed contents, and deep-import denial.                                                | Invocation semantics or provider-specific internals.         |
 
-Unit and contract lanes currently prove the implemented private discovery/probing responsibility and the private deterministic
-lifecycle/result proof. The architecture lane proves dependency direction, cycle/import probes, and test-to-production
-direction; the package lane proves the intentionally empty root export, built declarations, ESM resolution, packed contents,
-and deep-import denial. The lifecycle conformance harness is provider-neutral and uses deterministic fake ports; it is not
-integration proof of real process/filesystem behavior or a public API. The npm package remains unpublished; the complete public
-AgentManager and real process/filesystem/security/cancellation/shutdown, provider-adapter, and public-package work remain
-deferred. The `test:integration` lane runs with `pnpm test` now that it owns a Linux reference-child check for detached-group
+Unit and contract lanes prove discovery/probing and deterministic lifecycle/result behavior through the provider-neutral
+AgentManager. The architecture lane proves dependency direction, cycle/import probes, and test-to-production direction; the
+package lane proves the curated root values and complete transitive public type surface, built declarations, ESM resolution,
+packed contents, ATTW, and deep-import denial. The lifecycle conformance harness is provider-neutral and uses deterministic
+fake ports; separate integration suites own real process/filesystem and adapter behavior. Additional providers and supported
+platform declarations remain deferred. The `test:integration` lane runs with `pnpm test`
+now that it owns a Linux reference-child check for detached-group
 cleanup, canonical OS fingerprinting, and explicit child-environment isolation. This is candidate-host evidence, not a
 supported-platform claim. The repository does not keep empty lanes or permanent `passWithNoTests` configuration.
-Current fake lifecycle and Linux reference-child evidence do not implement B+ and do not prove a supported invocation cell.
+The implementation provides B+ and proves it with the provider-neutral lifecycle harness and Linux reference-child evidence.
+That candidate-host evidence does not establish a published or supported invocation cell.
 
 ## Definition and registry proof
 
-Definition, registry, and executable-probe tests must cover each implemented behavior below. Items that depend on execution
-or the public AgentManager remain target requirements until those responsibilities are implemented:
+Definition, registry, and executable-probe tests must cover each implemented behavior below. Deferred provider and supported-
+platform claims remain target requirements:
 
 - closed draft 2020-12 schemas and stable validation diagnostics;
 - RFC 8785 canonicalization and lowercase SHA-256 digest generation over the complete definition;
@@ -91,8 +92,7 @@ Generic registry tests use arbitrary agent ids. They MUST NOT pass because an im
 
 ## AgentManager contract proof
 
-The following cases are target proof requirements for the not-yet-public AgentManager. They do not claim that current source or
-tests already implement them. Manager tests must prove:
+The following cases are proof requirements for the root-exported AgentManager. Manager tests must prove:
 
 - initialization is one-shot and concurrency-safe, copies the first caller input, and gates every non-registry manager
   operation except shutdown until its shared completion succeeds;
@@ -340,9 +340,9 @@ A configuration change is not proven by a green graph that happens to contain no
 
 ## Package proof
 
-The package lane during bootstrap proves:
+The package lane proves:
 
-- the source root has no accidental public API;
+- the source root exposes only `createAgentManager`, `AgentManagerError`, and the curated provider-neutral type surface;
 - package metadata declares the intended ESM-only root export;
 - build emits JavaScript, source maps, declarations, and declaration maps;
 - `publint` validates source package metadata and exports before packing;
@@ -354,13 +354,9 @@ The package lane during bootstrap proves:
 - an undeclared deep import is rejected with `ERR_PACKAGE_PATH_NOT_EXPORTED`;
 - packed contents contain only declared public files.
 
-This does not prove AgentManager behavior. Package tests evolve with public exports only when implementation, declarations,
-tests, and README examples are introduced together.
-
-When the target API is implemented, package/type-surface proof MUST include the factory
-`createAgentManager(options): AgentManager`, public `AgentManagerError` with its readonly `AgentFault`, the complete manager
-surface including `initialize(snapshots)`, `shutdown(reason?: string): Promise<void>`, the `ActiveInvocationStateSink` and
-snapshot contracts, and the complete invocation-handle surface.
+This does not prove AgentManager behavior; behavior remains owned by unit, contract, and integration tests. The packed strict
+TypeScript consumer imports the factory, public `AgentManagerError` contract, and every curated transitive named type required
+by public manager options and method signatures.
 
 ## Coverage and quality metrics
 

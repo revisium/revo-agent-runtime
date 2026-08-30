@@ -1,9 +1,9 @@
 # AgentManager cross-repository extraction roadmap
 
 - Status: Approved roadmap
-- Implementation: private agent discovery/executable probing, private deterministic lifecycle/result conformance, the private Linux POSIX process-supervision and workspace-admission seam, and initial private native-Codex execution slices are implemented and tested; the provider-neutral filesystem/output layer, manager-level cancellation/shutdown settlement, frozen real-process harness, Codex adapter conformance, and public-package work remain target or deferred
+- Implementation: the provider-neutral AgentManager is implemented and root-exported with its frozen real-process harness and native-Codex adapter; additional providers and supported-platform declarations remain deferred
 - Target package: `@revisium/revo-agent-runtime`
-- Publication: npm publication remains disabled until the Complete unpublished public package candidate is approved
+- Publication: the historical package-candidate gate is complete; standard release workflows own versioning and publication
 - Source repository: `revo-agent-runtime`
 - Consumer repository: sibling `orchestrator`
 
@@ -18,10 +18,9 @@ package. It is a delivery plan, not a public API and not a replacement for the n
 When sources disagree, follow the order in the [repository contract](../REPOSITORY.md): implemented source, tests, and the
 public export map describe shipped behavior; accepted ADRs own durable architecture decisions; stable and draft specs own
 their respective contract status. This roadmap may be revised when explicit research changes sequencing, but it MUST NOT make
-an unimplemented target appear shipped. The root export remains empty until the provider-neutral shared core, its filesystem/output layer, the provider-neutral
-frozen real-process harness, and the first supported provider adapter (native Codex) are complete, and the Complete
-unpublished public package candidate proof passes. Native Claude and ACP remain required adapters to the same
-provider-neutral contract and are delivered after the public export.
+an unimplemented target appear shipped. The root export was added with the provider-neutral shared core, its filesystem/output
+layer, the frozen real-process harness, and the first adapter (native Codex), with complete package proof. Native Claude and
+ACP remain required adapters to the same provider-neutral contract and follow without changing that root surface.
 
 The boundary is already decided by [ADR-0001](./adr/0001-agent-runtime-boundary.md),
 [ADR-0002](./adr/0002-agent-manager-consumer-boundary.md),
@@ -41,11 +40,12 @@ continues.
 The roadmap carries these approved constraints:
 
 1. The AgentManager v1 draft is the target contract. It changes only through explicit, recorded research.
-2. Roadmap responsibilities may merge sequentially, but intermediate merges do not create a public or published API.
-3. The package MUST remain unpublished on npm until the Complete unpublished public package candidate is complete.
-4. The root export MUST remain empty until the provider-neutral frozen real-process harness passes and native Codex — the
-   first supported provider adapter — instantiates it without exclusions. The Complete unpublished public package candidate
-   adds the complete curated **provider-neutral** public surface only after implementation, declarations, examples,
+2. Roadmap responsibilities may merge sequentially, but the historical intermediate merges did not create a public API.
+3. The historical npm-publication gate remained closed until the Complete unpublished public package candidate was complete;
+   that gate is now satisfied, and normal release automation owns later publication.
+4. The root export MUST be added only after the provider-neutral frozen real-process harness passes and native Codex — the
+   first adapter — instantiates it without exclusions. The completed candidate adds the curated
+   **provider-neutral** public surface with implementation, declarations, examples,
    conformance, and package proof agree. The public surface MUST NOT contain a Codex-specific type, entrypoint, convenience
    API, or provider-specific lifecycle contract.
 5. The **provider-neutral public AgentManager contract** MAY be exported once native Codex instantiates and passes the one
@@ -71,7 +71,7 @@ The roadmap carries these approved constraints:
     post-spawn process fingerprints have separate purposes.
 11. Events are lifecycle-only; `invocation.finished` signals result availability through the result APIs. Bounded redacted
     streams, raw response, typed terminal result, and exact invocation files remain their own contracts.
-12. This documentation decision records no implementation, provider/CI/platform conformance, or root export. Per
+12. This roadmap decision does not by itself prove implementation, provider/CI/platform conformance, or publication. Per
     [ADR-0011](./adr/0011-consumer-governed-local-supervision.md), v1 has no package active-invocation cap or internal admission
     queue, and synchronous listeners have no package queue, worker pool, or numeric fanout limit. The consumer owns admission,
     concurrency, listener cost, downstream buffering, fanout, and backpressure.
@@ -338,13 +338,13 @@ contradiction has completed the Contract decision research and Human approval of
 platform conformance research is non-waivable before supported-cell closure and native provider adapter conformance work even if
 package-owned fixtures or legacy provider tests are green.
 
-## 7. Corrected responsibility graph
+## 7. Historical B+ responsibility graph
 
-The approved B+ migration is deliberately narrower than a provider rollout. Canonical documentation alignment is the entry
-gate for package-private product-code migration; every following stage remains target work and does not change the empty root
-export. Intermediate pull requests MAY build inactive internals, but no merge may activate old and new execution, I/O,
-normalization, completion, or publication paths concurrently. Full Provider and platform conformance research remains a
-non-waivable prerequisite for supported-cell closure and native provider adapter conformance.
+This graph records the historical delivery order accepted before the root-export cutover. The private migration and package-
+candidate stages are complete; ADR-0012 superseded the earlier empty-root gate after the frozen harness and first adapter
+evidence. The graph does not claim production API stability, a supported cell, or active-invocation reconnection. Full
+Provider and platform conformance research remains a non-waivable prerequisite for
+supported-cell closure and native provider adapter conformance.
 
 | Sequence | Target responsibility                | Entry gate                                                                                  | Exit boundary                                                                                                                                                                                                    |
 | -------- | ------------------------------------ | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -431,17 +431,17 @@ bounded probe output, requested timeout termination/reap, and stable probe prece
 checks only static definition/template/delivery/probe-literal coherence. Dynamic parameter/default/prompt/schema argv expansion
 belongs to Deterministic lifecycle and result conformance. Provider permission expansion belongs to the three provider adapter
 conformance work items. Real probe process ownership and integration belong to Real process, filesystem, security, cancellation,
-and shutdown conformance. Architecture verification proves the intended dependency direction. The root export is still empty.
+and shutdown conformance. Architecture verification proves the intended dependency direction. This responsibility was later
+incorporated into the root-exported manager.
 
-**Status:** This private discovery-and-probing implementation is tested. The package remains unpublished and the root export
-remains empty; this roadmap responsibility does not make the public AgentManager available or advance the remaining real
-process/filesystem/security/cancellation/shutdown, provider-adapter, and public-package work.
+**Status:** Discovery and probing are tested and consumed by the AgentManager. This responsibility alone does not establish
+provider or supported-platform support.
 
 ### Deterministic lifecycle and result conformance
 
-**Status:** Implemented and tested privately through PR #24–28, ending at `01a5d55`. It proves only deterministic fake
-execution/file ports and a provider-neutral base shared conformance harness; it does not prove a real child process, secure
-filesystem publication, production cancellation/kill/reap/shutdown, streaming redaction, provider success, or a public export.
+**Status:** Implemented and tested through the provider-neutral base shared conformance harness. That deterministic layer
+alone does not prove a real child process, secure filesystem publication, production cancellation/kill/reap/shutdown,
+streaming redaction, or provider success; separate integration tests supply those proofs.
 
 **Entry:** Private agent discovery and executable probing is green.
 
@@ -454,8 +454,8 @@ parsing/object/closed consumer-schema-profile decisions behind ports; completed 
 the same immutable result through handle/lookup/wait paths, terminal-event result availability, and bounded FIFO completed retention. The harness expresses
 provider-neutral scenarios without branching on `codex`, `claude`, or `acp`.
 
-Deterministic lifecycle and result conformance MUST NOT claim a real child process, secure filesystem publication, production cancellation, kill/reap, streaming
-redaction, or provider success. It is an internal lifecycle/result proof only. The root export remains empty.
+Deterministic lifecycle and result conformance MUST NOT claim a real child process, secure filesystem publication, production
+cancellation, kill/reap, streaming redaction, or provider success. It remains one proof layer beneath the root API.
 
 ### Real process, filesystem, security, cancellation, and shutdown conformance
 
@@ -491,7 +491,8 @@ It owns no Codex, Claude, ACP, other provider wire/version behavior, public expo
 reasons, no raw-byte bypass, retained-authority races/quiescence, non-replacing raw/result publication, and absence of any old
 compatibility overload, alias, eager/paused dual path, dual publication authority, or second completion/normalization path.
 Linux/local-`ext4` evidence remains candidate-host evidence until supported-cell closure; missing native/provider/CI/Sonar
-evidence is blocked or skipped, never passed. The root export remains empty.
+evidence is blocked or skipped, never passed. The current root export does not turn candidate-host evidence into a published
+support claim.
 
 ### Native Codex adapter conformance
 
@@ -521,7 +522,7 @@ real-process harness without exclusions, and passes ACP-specific framing, correl
 cancellation/close, diagnostics, bounds, completion barrier, and session/process isolation tests. Pooling and
 cross-invocation session reuse remain deferred.
 
-### Complete unpublished public package candidate
+### Complete unpublished public package candidate (historical completed phase name)
 
 **Entry:** the provider-neutral frozen real-process harness passes; Native Codex adapter conformance passes that harness
 without exclusions plus its wire-specific suite; and Codex/Linux supported-cell closure is approved. Native Claude and ACP
@@ -532,8 +533,8 @@ and exact packed-package proof.
 
 **Exit:** runtime, contract, integration, architecture, type-surface, declaration, export, packed ESM/strict-TypeScript
 consumer, deep-import denial, content, coverage, and full repository verification pass on the same head. The specification no
-longer describes implemented behavior as unavailable. AgentManager may now be called complete, but the npm package remains
-unpublished. The README, specification, and release notes MUST state the exact supported provider/platform coverage of this
+longer describes implemented behavior as unavailable. The historical candidate remained unpublished at this gate. README,
+specification, and release notes MUST state the exact supported provider/platform coverage of this
 export (native Codex on the approved Linux cell) and MUST NOT imply Claude or ACP availability. The exported contract MUST be
 provider-neutral and MUST contain no Codex-specific type or entrypoint.
 
@@ -545,7 +546,7 @@ gate after that evidence is available and before One-way orchestrator cutover. I
 
 - the exact orchestrator candidate head;
 - the exact package version, source commit, packed tarball filename, and cryptographic digest;
-- the approved unpublished delivery mechanism;
+- the approved exact artifact delivery mechanism;
 - the orchestrator dependency declaration and lockfile change that select that exact artifact;
 - the package export/type proof consumed by the orchestrator;
 - consumer mapping tests for accepted/preflight failures, terminal statuses, typed faults, events, usage, output files,
@@ -601,8 +602,8 @@ as passed.
 | Human approval of the exact package artifact and consumer candidate        | Exact orchestrator head, artifact identity, approved dependency and lockfile diff, successful isolated consumer install, mapping/durable-gate results, and human acceptance.                                                                                                                                                             |
 | One-way orchestrator cutover                                               | Merge and activation of only the head approved by Human approval of the exact package artifact and consumer candidate, provider cutover tests, legacy-path absence proof, and the orchestrator's complete `pnpm verify`.                                                                                                                 |
 
-No roadmap responsibility may weaken required tests, bounds, public types, or package gates to become green. The Complete unpublished public package candidate remains unpublished even
-after all local verification passes.
+No roadmap responsibility may weaken required tests, bounds, public types, or package gates to become green. The historical
+candidate gate did not itself authorize publication; standard release automation now owns release transitions and publishing.
 
 Intermediate B+ migration heads must prove that inactive internals are unreachable from production until their atomic cutover;
 verification must never accept simultaneous old/new execution calls, eager/paused I/O, normalization/completion paths, or
@@ -611,11 +612,13 @@ publication authorities.
 ## 9. Specification and ADR change control
 
 During Contract decision research and Provider and platform conformance research, informative probe logs and captured provider fixtures stay separate from normative requirements. Every draft
-specification change identifies the research that justifies it. The public AgentManager spec remains Draft and unimplemented until source, tests,
-declarations, examples, and exports implement the complete public contract together in the Complete unpublished public package candidate.
+specification change identifies the research that justifies it. Historically, the AgentManager spec remained Draft and
+unimplemented until source, tests, declarations, examples, and exports implemented the complete public contract together.
+That implementation gate is complete under ADR-0012. Release state is governed by release metadata and workflows; production
+API stability remains a separate claim.
 
-ADR-0013 and `docs/specs/execution-handoff.spec.md` are canonical for the accepted B+ private migration. Product code remains
-unimplemented. A later finding that contradicts phase order, authority ownership, parser taxonomy, ADR-0003 eligibility,
+ADR-0013 and `docs/specs/execution-handoff.spec.md` are canonical for the implemented local B+ private migration. Active-
+invocation crash recovery remains unimplemented. A later finding that contradicts phase order, authority ownership, parser taxonomy, ADR-0003 eligibility,
 publication precedence, or migration prohibitions stops implementation and returns to a new ADR and human gate; it does not
 silently reinterpret the accepted private contract.
 
@@ -639,7 +642,7 @@ not edited in place.
 | Paused I/O fills operating-system pipes during setup                | The child blocks before acceptance or activation.                                                                               | Arm wall/idle/setup deadlines at spawn, keep the setup window to identity/save only, use no user-space preactivation buffer, and activate one bounded coordinator immediately after acceptance.                                                                                                                                                                                                                                             |
 | Old and new private paths coexist during migration                  | Execution, completion, cleanup, or publication may happen twice under different semantics.                                      | Atomic cutover per seam; inactive internals only before cutover; architecture/contract tests prove no overload, alias, dual authority, eager/paused branch, or second completion/normalization path.                                                                                                                                                                                                                                        |
 | Raw evidence or result publication authority is confused            | Ineligible provider bytes leak, committed evidence is replaced, or a false durable terminal result is claimed.                  | Output-port-only redaction destinations, ADR-0003 eligibility capability, separate non-replacing raw/result publication, exact precedence tests, and immutable process-local completion after late recording failure.                                                                                                                                                                                                                       |
-| Public API is exposed incrementally                                 | Consumers bind to partial or contradictory declarations.                                                                        | Empty root until the provider-neutral shared core, filesystem layer, frozen harness, and native Codex adapter conformance are complete; one Complete unpublished public package candidate export and packed-consumer gate; the exported surface is provider-neutral and its supported provider/platform coverage is stated explicitly.                                                                                                      |
+| Public API is exposed incrementally                                 | Consumers bind to partial or contradictory declarations.                                                                        | The historical empty-root gate held until the provider-neutral shared core, filesystem layer, frozen harness, and native Codex adapter conformance completed; ADR-0012 then allowed one candidate root export and packed-consumer gate. The exported surface is provider-neutral; release state, production stability, and supported provider/platform coverage remain separate explicit claims.                                            |
 | Unpublished cross-repo consumption is not exact                     | One-way orchestrator cutover tests a different artifact from the reviewed Complete unpublished public package candidate output. | Human approval of the exact package artifact and consumer candidate version, commit, tarball digest, dependency, and lockfile acceptance.                                                                                                                                                                                                                                                                                                   |
 | Human-gate policy leaks into the package                            | Process-local completion begins driving durable workflow transitions.                                                           | Provider-neutral JSON result only; One-way orchestrator cutover consumer mapping tests; durable gate creation/resume stays in orchestrator.                                                                                                                                                                                                                                                                                                 |
 | Sequential merges are mistaken for completeness                     | One adapter or narrow test lane is reported as the finished AgentManager.                                                       | Roadmap responsibility status is explicit. Only the Complete unpublished public package candidate may claim a complete **public contract**, and only the ACP adapter conformance item may claim complete **provider coverage**. The two claims are never merged.                                                                                                                                                                            |
@@ -656,7 +659,7 @@ These decisions are deliberately unresolved until their owning gate. They MUST N
 | Provider and platform conformance research and Private agent discovery and executable probing                 | Approval of any executable-probe or platform-unavailable observation that changes a Human approval of contract decisions decision, the draft spec, or an accepted ADR.                                                                                               |
 | Provider and platform conformance research, Supported-cell closure, and All provider adapter conformance work | Full provider, process-ownership, filesystem, permission, cancellation, and supported-cell evidence before supported-cell closure and each consuming native provider adapter conformance item; not before the scoped provider-neutral Linux/local-`ext4` POSIX core. |
 | Real process, filesystem, security, cancellation, and shutdown conformance                                    | Acceptance of any residual platform limitation after the approved fail-closed behavior is implemented and tested.                                                                                                                                                    |
-| Human approval of the exact package artifact and consumer candidate                                           | Exact orchestrator candidate head, unpublished artifact delivery, version/commit/digest, dependency and lockfile, mapping/durable-gate results, and artifact/package-pin or host rollback procedure.                                                                 |
+| Human approval of the exact package artifact and consumer candidate                                           | Exact orchestrator candidate head, artifact delivery, version/commit/digest, dependency and lockfile, mapping/durable-gate results, and artifact/package-pin or host rollback procedure.                                                                             |
 | One-way orchestrator cutover                                                                                  | Authorization for the one-way orchestrator cutover and removal of replaced legacy execution paths.                                                                                                                                                                   |
 
 Until the relevant decision is approved, its roadmap responsibility is blocked rather than partially passed.

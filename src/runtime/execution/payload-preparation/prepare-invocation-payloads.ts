@@ -177,13 +177,9 @@ const appendSchemaFilePayload = (
     !request.outputResourcePlan.needsResultSchemaFile
   )
     return rejected();
-  state.files.push(
-    preparedFile(
-      'result-schema',
-      scratchPath(request.outputResourcePlan, 'result-schema.json'),
-      request.resultSchemaBytes,
-    ),
-  );
+  const path = scratchPath(request.outputResourcePlan, 'result-schema.json');
+  state.argumentsOut.push(path);
+  state.files.push(preparedFile('result-schema', path, request.resultSchemaBytes));
   return appended();
 };
 

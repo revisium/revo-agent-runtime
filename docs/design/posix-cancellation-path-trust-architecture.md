@@ -5,11 +5,15 @@ Scope: provider-neutral policy boundary and next-stage architecture for POSIX ca
 Baseline: `origin/master` / `c0c64139986305b9d7072be19bbc9fe5f0a7843c`
 Input: approved `docs/design/posix-cancellation-path-trust-analysis.md`
 
+> Historical architecture artifact: current-state statements below refer only to the pinned baseline. The implementation
+> later completed the provider-neutral root API under ADR-0012 and the B+ handoff under ADR-0013. Provider internals stay
+> private; supported-cell declaration and active-process reconnection remain separate delivery decisions.
+
 This is an architecture-stage artifact. It records a boundary, invariants, integration contracts, decision points, and a developer-stage plan. It does not amend an ADR or specification, create a public API, select a consumer threat model, claim platform/filesystem support, or describe unimplemented behavior as shipped.
 
 ## Compact decision block
 
-**Context:** The consumer constructs workspace and output paths. The package owns one physical invocation, its live process authority, bounded output mechanics within one exact consumer-supplied directory, cancellation/deadline arbitration, reaping, and process-local shutdown. Current source proves private deterministic lifecycle behavior and a candidate-host Linux process slice, but not Darwin process supervision, a real output filesystem implementation, or a public `AgentManager`.
+**Context:** The consumer constructs workspace and output paths. The package owns one physical invocation, its live process authority, bounded output mechanics within one exact consumer-supplied directory, cancellation/deadline arbitration, reaping, and process-local shutdown. At the pinned baseline, source proved private deterministic lifecycle behavior and a candidate-host Linux process slice, but not Darwin process supervision, a real output filesystem implementation, or a public `AgentManager`.
 
 **Problem:** A normalized absolute pathname identifies a name, not a trusted directory object. The accepted target requires exclusive leaf claim and non-replacing result publication while deliberately deferring ancestor symlink, provenance, mount, network-filesystem, and TOCTOU policy. Cancellation and shutdown additionally constrain cleanup: process-group reap must precede file finalization, and the package may remove only its own scratch/temp objects, never consumer evidence.
 
@@ -27,7 +31,7 @@ This is an architecture-stage artifact. It records a boundary, invariants, integ
 
 The following are shipped facts at the baseline:
 
-- the root package export is intentionally empty;
+- at the pinned baseline, the root package export was intentionally empty;
 - private registry, executable-probe, deterministic lifecycle/result, and process-supervision slices exist and are tested;
 - `InvocationLifecycle` has caller/deadline cancellation arbitration over abstract execution, clock, and output ports;
 - `LiveOwnedProcess` holds a private idempotent `terminateAndReap()` capability;
@@ -36,7 +40,7 @@ The following are shipped facts at the baseline:
 
 The following remain target or deferred:
 
-- the public `AgentManager` and its root export;
+- at the pinned baseline, the public `AgentManager` and its root export;
 - a real invocation-files implementation for leaf claim, scratch, logs, events, and `result.json`;
 - complete active-state, cancellation, deadline, and shutdown composition;
 - ancestor trust/provenance policy;

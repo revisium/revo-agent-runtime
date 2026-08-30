@@ -11,8 +11,8 @@ This file is the repository-local contract for coding agents. When this reposito
 - Protected base branch: `master`.
 - Primary local gate: `pnpm verify`.
 - Static analysis: SonarCloud through the repository tooling and workflow committed here.
-- The root package export intentionally has no runtime API yet. Internal definition, registry, and executable-probe slices
-  are implemented and tested; target AgentManager documents are not exports.
+- The root package export is the curated provider-neutral AgentManager API. Provider strategies and internal execution
+  modules remain private.
 
 ## Required reading
 

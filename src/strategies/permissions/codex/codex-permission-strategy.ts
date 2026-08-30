@@ -8,7 +8,6 @@ interface CodexPermissionRequest {
 
 interface CodexPermissionMapping {
   readonly sandboxFlag: `--sandbox=${CodexSandbox}`;
-  readonly approvalFlag: '--ask-for-approval=never';
   readonly config: readonly string[];
 }
 
@@ -27,7 +26,6 @@ export const mapCodexPermissions = (request: CodexPermissionRequest): CodexPermi
       : ['--config', 'sandbox_workspace_write.network_access=false'];
   return copy({
     sandboxFlag: `--sandbox=${request.sandbox}`,
-    approvalFlag: '--ask-for-approval=never',
     config,
   });
 };

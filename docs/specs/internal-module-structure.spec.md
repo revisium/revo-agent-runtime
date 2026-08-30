@@ -1,6 +1,6 @@
 # Internal module structure specification
 
-- Status: Accepted
+- Status: Accepted; historical PR #4 migration completed
 - Version: 1.1.0
 - Accepted: 2026-07-21
 - Baseline: PR #4 head `2a6f3d39fccb6661e6b59806a66d88a5f491ad69`
@@ -11,6 +11,10 @@ interpreted as described in RFC 2119 and BCP 14.
 
 This specification defines the approved internal structure target. It does not create a package export or claim that the
 target structure is present at the baseline commit.
+
+This document preserves the exact PR #4 migration contract. Its empty-root restrictions applied only to that completed
+structural migration. [ADR-0012](../adr/0012-public-agentmanager-after-first-adapter.md) later superseded that delivery gate;
+the current implementation has a curated provider-neutral root API while provider implementations remain private.
 
 ## 1. Scope
 
@@ -327,11 +331,11 @@ A production dependency cycle MUST NOT exist.
 
 ### 3.8 Package boundary
 
-`src/index.ts` MUST remain exactly `export {};` during this migration.
+For the completed PR #4 migration, `src/index.ts` was required to remain exactly `export {};`.
 
 `package.json` MUST continue to declare only the root `.` export.
 
-The migration MUST NOT add a public root export.
+PR #4 was not authorized to add a public root export.
 
 The migration MUST NOT add a public package subpath.
 
@@ -373,7 +377,7 @@ Cycle enforcement MUST run with `import/no-cycle` and `ignoreTypes: false`.
 
 The architecture verification MUST include a negative type-cycle probe.
 
-The package verification MUST prove that the root export remains empty.
+Package verification for PR #4 was required to prove that the root export remained empty.
 
 The package verification MUST prove that package subpath imports are denied.
 

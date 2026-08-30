@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-07-20
 - Related specification: [Internal module structure](../specs/internal-module-structure.spec.md)
+- Root-export timing refined by: [ADR-0012](./0012-public-agentmanager-after-first-adapter.md)
 
 ## Context
 
@@ -28,9 +29,10 @@ side effects, cross-domain deep imports, or broad barrels. Barrel modules and pr
 one behavior remain the only exceptions outside `runtime/spec`. Anonymous variants remain part of their owning exported
 union instead of becoming artificial exported entities.
 
-Keep the package root empty and add no runtime root barrel, package subpath, or public deep-import path. Rename the
-milestone-prefixed fault-code contract to its durable role-based name. The exact structure, import rules, and migration
-mapping are normative in the related specification.
+For the structural migration governed here, keep the package root empty and add no runtime root barrel, package subpath, or
+public deep-import path. ADR-0012 later supersedes only that root-export timing; it does not relax the internal barrel or
+deep-import rules. Rename the milestone-prefixed fault-code contract to its durable role-based name. The exact structure,
+import rules, and migration mapping are normative in the related specification.
 
 ## Alternatives Considered
 

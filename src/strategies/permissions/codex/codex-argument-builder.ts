@@ -30,16 +30,13 @@ export const buildCodexExecArguments = (request: CodexArgumentRequest): readonly
   const outputSchema = bounded('outputSchema', request.outputSchema, 16_384);
   const permissions = mapCodexPermissions(request);
   const args = [
+    '--ask-for-approval=never',
     'exec',
     '--json',
-    '--ephemeral',
-    '--skip-git-repo-check',
+    ...(outputSchema === undefined ? [] : ['--output-schema', outputSchema]),
     permissions.sandboxFlag,
-    permissions.approvalFlag,
     ...permissions.config,
     ...(model === undefined ? [] : ['--model', model]),
-    ...(outputSchema === undefined ? [] : ['--output-schema', outputSchema]),
-    '--',
     prompt,
   ];
   return Object.freeze([...args]);

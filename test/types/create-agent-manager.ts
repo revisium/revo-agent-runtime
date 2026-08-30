@@ -1,5 +1,8 @@
-import { createAgentManager } from '../../src/application/manager/index.js';
-import type { AgentManager, AgentManagerOptions } from '../../src/runtime/spec/index.js';
+import {
+  createAgentManager,
+  type AgentManager,
+  type AgentManagerOptions,
+} from '../../src/index.js';
 
 type Equal<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
 type Expect<Value extends true> = Value;

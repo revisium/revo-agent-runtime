@@ -1165,7 +1165,7 @@ test('interprets launch template in definition order and maps each permission it
         { kind: 'arguments', arguments: ['/workspace/project'] },
         { kind: 'arguments', arguments: ['gpt-5'] },
         { kind: 'arguments', arguments: ['{"temperature":0}'] },
-        { kind: 'arguments', arguments: ['--sandbox=workspace-write', '--ask-for-approval=never'] },
+        { kind: 'arguments', arguments: ['--sandbox=workspace-write'] },
         {
           kind: 'arguments',
           arguments: ['--config', 'sandbox_workspace_write.network_access=false'],
@@ -1297,7 +1297,7 @@ test('retains resolved prompt stdin and canonical result-schema file payloads be
   expect(execution.startedPreparedLaunches()).toEqual([
     expect.objectContaining({
       preparedPayloads: {
-        arguments: ['exec'],
+        arguments: ['exec', '/outputs/invocation/.scratch/result-schema.json'],
         stdin: new TextEncoder().encode('Return JSON.'),
         files: [
           {

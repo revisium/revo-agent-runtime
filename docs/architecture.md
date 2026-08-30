@@ -2,17 +2,20 @@
 
 ## Purpose and status
 
-`@revisium/revo-agent-runtime` will expose one process-local `AgentManager` for exact, versioned AI-agent invocations. Native
+`@revisium/revo-agent-runtime` exposes one process-local, provider-neutral `AgentManager` for exact, versioned AI-agent
+invocations. Native
 Codex, native Claude, and ACP will share one registry-access, executable-probing, process, observability, cancellation,
 shutdown/reaping, JSON-result, output-file, and local active-process reconciliation boundary without taking ownership of
 consumer orchestration or durable workflow state.
 
-Private agent discovery and executable probing, plus private deterministic lifecycle/result conformance through fake
-execution and file ports, are implemented and tested. The npm package remains unpublished and the root package export remains
-empty. The complete public AgentManager and real process/filesystem/security/cancellation/shutdown, provider-adapter, and
-public-package work remain target or deferred. The normative public target is [the AgentManager v1 specification](./specs/agent-manager-v1.spec.md).
+Agent discovery, executable probing, deterministic lifecycle/result conformance, and the real local process/filesystem
+composition are implemented and tested. The package root exposes the curated provider-neutral AgentManager API while
+provider adapters and internal ports remain private. The normative public contract is
+[the AgentManager v1 specification](./specs/agent-manager-v1.spec.md).
 The accepted package-private execution target is [ADR-0013](./adr/0013-seal-invocation-intent-before-preregistered-execution-handoff.md)
-and the [B+ execution-handoff specification](./specs/execution-handoff.spec.md); it is not implemented.
+and the [B+ execution-handoff specification](./specs/execution-handoff.spec.md); the implementation provides that handoff.
+Released versions and availability are external release metadata. Supported provider/platform declarations and reconnecting
+to an invocation that was active during a manager-process crash remain separate delivery decisions.
 
 ## Consumer flow
 
@@ -45,7 +48,7 @@ and the [B+ execution-handoff specification](./specs/execution-handoff.spec.md);
     active-state, publication, and retained-authority owners under their operation-owned bounds. Unresolved process cleanup
     prohibits same-domain replacement; output and active-state uncertainty retain only their affected id/path/row obligations.
 12. The consumer decides replacement in a safe domain, active-row selection, retry, workflow, gate, indexing, retention, and
-    recovery policy. None of this target sequence is a shipped support claim.
+    recovery policy. This implemented sequence does not by itself declare production stability or a supported execution cell.
 
 ## Target production structure
 
@@ -154,11 +157,11 @@ Tests mirror behavior rather than production folders:
 
 ```text
 test/
-├── unit/          # current private definition, registry, probe, lifecycle, and tooling behavior
-├── contract/      # current private deterministic lifecycle/result conformance; future public-runtime contract
-├── integration/   # introduced only with process/filesystem/consumer behavior
-├── package/       # current empty root entrypoint and metadata proof
-└── support/       # current narrow definition/probe fakes and lifecycle-conformance support
+├── unit/          # definition, registry, probe, lifecycle, and tooling behavior
+├── contract/      # deterministic public manager lifecycle/result conformance
+├── integration/   # real process/filesystem/consumer behavior
+├── package/       # curated root entrypoint, declarations, and metadata proof
+└── support/       # narrow definition/probe fakes and lifecycle-conformance support
 ```
 
 ## Dependency direction
