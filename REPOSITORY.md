@@ -18,10 +18,9 @@ Use this order when sources disagree:
 5. `docs/architecture.md` explains current architecture and target dependency direction.
 6. `README.md` is the consumer-facing summary and MUST NOT claim unimplemented behavior is available.
 
-The current root export is intentionally empty. Internal definition, registry, executable-probe, and deterministic
-lifecycle/result slices are implemented and tested, but remain private. The AgentManager v1 specification is a draft target,
-not a shipped API. Its first platform/filesystem implementation and evidence target is Linux with a local `ext4` filesystem;
-macOS requires later native evidence, and Windows is outside the MVP. This sequence is not a shipped support claim.
+The root export contains the curated provider-neutral AgentManager factory, error, and consumer contract types. Provider
+strategies, registry internals, execution ports, and testing helpers remain private. The first platform/filesystem evidence
+target is Linux with a local `ext4` filesystem; macOS requires later native evidence, and Windows is outside the MVP.
 
 ## Ownership boundary
 
@@ -110,9 +109,8 @@ expose claims, leases, host ids, or consumer database types. Consumers depend on
 
 ## Public surface
 
-Public entrypoints exist only when declared in `package.json`. The bootstrap exposes an intentionally empty root. The
-target AgentManager API will enter the root only when behavior tests, type-surface tests, declaration checks, packed-consumer
-validation, and README examples pass together.
+Public entrypoints exist only when declared in `package.json`. The root exposes the provider-neutral AgentManager API only
+when behavior tests, type-surface tests, declaration checks, packed-consumer validation, and README examples pass together.
 
 A `/testing` entrypoint is deferred until a demonstrated external consumer needs stable conformance fixtures. Provider or
 strategy subpaths require a separate public-API decision; internal folder layout never creates an export.

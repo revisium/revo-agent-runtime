@@ -7,8 +7,8 @@ import * as packageEntry from '../../src/index.js';
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
-test('bootstrap entry point has no accidental public API', () => {
-  expect(Object.keys(packageEntry)).toEqual([]);
+test('root entry point exposes only the curated AgentManager API', () => {
+  expect(Object.keys(packageEntry)).toEqual(['createAgentManager', 'AgentManagerError']);
 });
 
 test('package metadata declares the intended package and explicit root export', async () => {

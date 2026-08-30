@@ -12,20 +12,18 @@
 </div>
 
 > [!IMPORTANT]
-> This repository is in bootstrap. Private agent discovery and executable probing, together with private deterministic
-> lifecycle/result conformance, are implemented and tested. The npm package is not published and its root export is
-> intentionally empty. The API below, the complete public AgentManager, real process/filesystem/security/cancellation/shutdown
-> mechanics, provider adapters, and public-package work remain target or deferred rather than available code.
+> The package root exposes the curated provider-neutral AgentManager API. Provider strategies, execution internals, and
+> testing helpers remain private; registry availability and released versions are described by npm release metadata.
 
 ## About
 
-`@revisium/revo-agent-runtime` will execute one exact native command-line or ACP agent invocation and expose its lifecycle,
+`@revisium/revo-agent-runtime` executes one exact native command-line or ACP agent invocation and exposes its lifecycle,
 bounded redacted events, files, cancellation, shutdown, usage, typed failures, and schema-validated JSON result through one
 framework-independent `AgentManager`.
 
 ## Quick start
 
-This target-only example assumes the consumer owns a complete versioned definition and result schema. See the
+This example assumes the consumer owns a complete versioned definition and result schema. See the
 [expanded consumer example](./docs/examples/consumer.md) for the definition and environment setup.
 
 ```ts
@@ -54,7 +52,7 @@ const unsubscribe = manager.subscribe({}, (event) => {
 
 const handle = await manager.start({
   invocationId: attempt.id,
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: 'definition-v1' },
   prompt: 'Implement issue #42 and return the requested JSON object.',
   workspace: { directory: workspace.path },
   parameters: { model: 'gpt-5' },
@@ -81,9 +79,9 @@ await manager.shutdown('Consumer is stopping');
   `raw-final-response.txt`, and `result.json` under `output.directory`.
 - Target execution completes deterministic preparation before a preregistered exclusive output claim. A spawned process keeps
   I/O paused through identity capture and the initial active-state save; acceptance then precedes one-use coordinator/I/O
-  activation. The current code has not shipped this B+ handoff.
-- Eligible `raw-final-response.txt` and `result.json` are separate non-replacing publications. Their target ordering and
-  failure precedence do not claim current implementation.
+  activation. The implementation provides this B+ handoff; supported provider and platform declarations remain separate.
+- Eligible `raw-final-response.txt` and `result.json` are separate non-replacing publications with deterministic ordering and
+  failure precedence.
 - The consumer provisions the existing parent of `output.directory` and warrants trusted stable ancestors until every package
   filesystem operation for the start has settled; the manager creates only the absent final leaf.
 - `result()` waits for the terminal result; `getResult()` retrieves a retained result after completion.
@@ -115,7 +113,7 @@ Non-exhaustive conceptual excerpt:
 ```json
 {
   "id": "codex",
-  "version": "1.0.0",
+  "version": "definition-v1",
   "protocol": {
     "driver": "native/stdio-v1",
     "resultParser": "codex-jsonl/v1",
@@ -127,10 +125,10 @@ Non-exhaustive conceptual excerpt:
 The complete definition set is supplied at construction and sealed. V1 has no runtime registration, latest-version lookup,
 or fallback selection; construct a new manager for a new definition set.
 
-## Complete target API
+## Public API
 
-This is the complete consumer surface. Supporting types and exact behavior are normative in the
-[AgentManager v1 draft specification](./docs/specs/agent-manager-v1.spec.md).
+This is the consumer surface. Supporting types and exact behavior are described in the
+[AgentManager v1 specification](./docs/specs/agent-manager-v1.spec.md).
 
 ```ts
 export declare function createAgentManager(options: AgentManagerOptions): AgentManager;
@@ -172,7 +170,7 @@ The package owns:
 - native and ACP process lifecycle, lifecycle-only events, files, structured results, cancellation, shutdown, and reaping;
 - local process fingerprints, active-state notifications, and cleanup of consumer-supplied active snapshots;
 - package-owned protocol, result-parser, and permission strategies;
-- target-only sealed preclaim preparation, preregistered claim/preparation/start ownership, paused-I/O acceptance, one duplex
+- sealed preclaim preparation, preregistered claim/preparation/start ownership, paused-I/O acceptance, one duplex
   coordinator, and capability-authenticated terminal publication;
 - bounds and redaction before subscriber delivery or file writes.
 
@@ -189,8 +187,8 @@ The consumer owns:
 
 - [AgentManager v1 specification](./docs/specs/agent-manager-v1.spec.md) — exact target types, lifecycle, files, errors, and
   invariants.
-- [B+ execution handoff specification](./docs/specs/execution-handoff.spec.md) — accepted, not-yet-implemented package-private
-  preparation, supervision, and publication contract; it creates no public export.
+- [B+ execution handoff specification](./docs/specs/execution-handoff.spec.md) — accepted package-private preparation,
+  supervision, and publication contract; it adds no provider-specific public surface.
 - [Internal module structure](./docs/specs/internal-module-structure.spec.md) — accepted internal layering and module rules;
   it does not create a public export.
 - [Architecture](./docs/architecture.md) — implementation structure, dependency direction, and ownership boundaries.
@@ -225,6 +223,12 @@ pnpm verify
 | `pnpm verify`              | Run the complete local CI gate                             |
 | `pnpm ci:local:sonar`      | Verify, analyze with Sonar, and inspect open branch issues |
 
+## Release automation
+
+The Release Train workflow computes the standard SemVer transitions and defaults to a read-only dry run. SemVer tags run the
+complete verification gate before a public npm publish authenticated by OIDC; prerelease tags do not create GitHub Releases.
+See [VERIFICATION.md](./VERIFICATION.md) for the exact release gates.
+
 ## SonarCloud
 
 Copy `.env.sonar.example` to an ignored `.env.sonar`, provide `SONAR_TOKEN`, and run `pnpm ci:local:sonar`. Alternatively,
@@ -234,7 +238,7 @@ Quality Gate and fail when open Sonar issues remain.
 ## Package contract
 
 The package is ESM-only, uses explicit exports, emits declarations, and ships only `dist`, `README.md`, `LICENSE`, and
-package metadata. The bootstrap entrypoint stays empty until a public AgentManager responsibility is implemented and tested.
+package metadata. Its single root entrypoint exposes only the curated provider-neutral AgentManager contract.
 
 ## License
 

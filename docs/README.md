@@ -3,12 +3,13 @@
 ## Target contract
 
 - [AgentManager v1 specification](./specs/agent-manager-v1.spec.md) — normative draft public API, initialization, local
-  process recovery, lifecycle, shutdown, results, events, files, bounds, errors, and invariants. It is not implemented yet.
+  process recovery, lifecycle, shutdown, results, events, files, bounds, errors, and invariants. The implementation
+  root-exports its provider-neutral manager surface.
 - [Internal module structure specification](./specs/internal-module-structure.spec.md) — accepted internal ownership,
   layering, barrels, and architecture-enforcement rules. It does not add a package export.
 - [B+ execution handoff specification](./specs/execution-handoff.spec.md) — accepted package-private target for sealed
-  preparation, preregistered ownership, paused-I/O supervision, and terminal publication. It is not implemented and does not
-  add a public export.
+  preparation, preregistered ownership, paused-I/O supervision, and terminal publication. The implementation provides it
+  behind the provider-neutral root API; it adds no provider-specific public surface.
 - [Internal definition canonical-byte adapter specification](./specs/definition-canonical-bytes.spec.md) — accepted target
   for the private RFC 8785 canonical-byte boundary; it does not add a package export or describe shipped behavior.
 - [Consumer-schema profile specification](./specs/consumer-schema-profile.spec.md) — accepted target for bounded consumer-schema
@@ -49,6 +50,6 @@
 - [Verification contract](../VERIFICATION.md) — executable local and remote quality gates.
 - [Review contract](../REVIEW.md) — blocking review conditions and expected evidence.
 
-The root package export is still intentionally empty. Internal definition, registry, executable-probe, and private
-deterministic lifecycle/result slices are implemented and tested, while target documents do not create a public API. Only
-implemented source, tests, declarations, and declared package exports describe available runtime behavior.
+The root package export contains the curated provider-neutral AgentManager API. Internal strategy, registry, execution, and
+testing modules remain private. Only implemented source, tests, declarations, and declared package exports describe
+available runtime behavior.

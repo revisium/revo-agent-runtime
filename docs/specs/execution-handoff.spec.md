@@ -3,14 +3,15 @@
 - Status: Accepted
 - Version: 1.0.0
 - Accepted: 2026-08-19
-- Implementation: Not implemented
+- Implementation: Implemented behind the provider-neutral root API
 - Target: private contracts of `@revisium/revo-agent-runtime`
 - Architecture decision: B+ sealed intent, preregistered claim authority, attested resources, and one-use execution consume
 - Related decision: [ADR-0013](../adr/0013-seal-invocation-intent-before-preregistered-execution-handoff.md)
 
 The key words MUST, MUST NOT, SHOULD, SHOULD NOT, MAY, REQUIRED, and OPTIONAL in this document are to be interpreted as described in RFC 2119 and BCP 14.
 
-This document specifies target behavior. It does not claim that the behavior, a public root export, a provider adapter, or a supported platform/filesystem cell is shipped.
+This document specifies implemented package-private behavior. Implemented source and tests remain the exact truth; this
+status does not claim another provider or a supported platform/filesystem cell.
 
 The [AgentManager v1 specification](../specs/agent-manager-v1.spec.md) exclusively owns the target public API. This B+ specification refines only package-private implementation contracts and MUST NOT add, remove, rename, or reinterpret a public field, fault, lifecycle state, or support claim.
 
@@ -2154,7 +2155,9 @@ Missing filesystem, provider, credential, CI, Sonar, or native-host evidence MUS
 
 ## 24. Decision and implementation status
 
-ADR-0013 and this package-private contract are accepted. Product code does not yet implement this contract. Root export, npm publication, supported-cell declaration, Native Codex compatibility, and later-provider compatibility remain separate gates.
+ADR-0013 and this package-private contract are accepted and implemented. The provider-neutral root API is present;
+supported-cell declaration and later-provider compatibility remain separate gates. Native
+Codex compatibility is established only by its exact adapter tests and evidence, not by this specification alone.
 
 ## 25. Residual risks
 

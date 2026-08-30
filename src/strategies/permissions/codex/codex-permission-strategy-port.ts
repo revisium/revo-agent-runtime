@@ -62,7 +62,7 @@ const argumentsFor = (
   request: CodexPermissionRequestShape,
 ): readonly string[] | undefined => {
   const mapped = mapCodexPermissions(request);
-  if (name === 'mode') return Object.freeze([mapped.sandboxFlag, mapped.approvalFlag]);
+  if (name === 'mode') return Object.freeze([mapped.sandboxFlag]);
   if (name === 'network') return mapped.config;
   return undefined;
 };

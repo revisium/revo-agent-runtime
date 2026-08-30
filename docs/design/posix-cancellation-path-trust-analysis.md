@@ -5,6 +5,10 @@ Scope: filesystem path trust and consumer-owned output-ancestor rules for provid
 Baseline: `origin/master` / `c0c64139986305b9d7072be19bbc9fe5f0a7843c`
 Worktree: `/home/egor/work/dev/revo/revo-agent-runtime/.worktrees/posix-cancellation-deadlines-shutdown`
 
+> Historical analysis: its baseline observations, including the then-empty root, describe only the pinned commit above.
+> The implementation later completed the provider-neutral root API under ADR-0012 and the B+ handoff under ADR-0013.
+> Supported-cell declaration and active-process reconnection remain separate delivery decisions.
+
 ## Compact decision frame
 
 **Context:** The package is invocation-scoped. The consumer constructs workspace/output paths; the package owns bounded local POSIX process reconciliation and conflict-safe recording inside one exact consumer-supplied output directory.
@@ -50,7 +54,8 @@ Worktree: `/home/egor/work/dev/revo/revo-agent-runtime/.worktrees/posix-cancella
 
 ### Intentionally disabled or deferred
 
-- The root runtime API is intentionally empty: `src/index.ts:1`; `REPOSITORY.md:19-21`, `REPOSITORY.md:88-95`.
+- At the pinned baseline, the root runtime API was intentionally empty: `src/index.ts:1`; `REPOSITORY.md:19-21`,
+  `REPOSITORY.md:88-95`. ADR-0012 later superseded that delivery gate.
 - Real process/filesystem/security/cancellation/shutdown and the public AgentManager remain incomplete as a package-level claim. The current integration lane is candidate-host evidence only: `docs/testing.md:57-64`.
 - Ancestor filesystem trust/provenance and supported platform/filesystem cells are explicitly deferred: `docs/specs/agent-manager-v1.spec.md:1236-1248`; `docs/adr/0008-real-mechanics-supervision-boundary.md:46-49`.
 - Source has only a logical output port (`prepare`, terminal-result recording, event recording), not a real filesystem output implementation: `src/runtime/execution/execution-ports.ts:5-20`. A scoped source/test search found no production `result.json`, `.scratch`, leaf-claim, realpath, or symlink implementation. Therefore the filesystem target is documented, not shipped.

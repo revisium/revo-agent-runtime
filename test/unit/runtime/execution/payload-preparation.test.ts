@@ -64,7 +64,7 @@ test('routes prompt stdin and result schema file delivery outside argv without m
   expect(prepared).toEqual({
     status: 'prepared',
     payloads: {
-      arguments: ['exec'],
+      arguments: ['exec', '/outputs/invocation/.scratch/result-schema.json'],
       stdin: new TextEncoder().encode('Return JSON.'),
       files: [
         {

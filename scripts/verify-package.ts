@@ -61,9 +61,13 @@ const validateContents = (manifest: PackManifest): void => {
 const runtimeConsumer = `
 import assert from 'node:assert/strict';
 
-import * as packageEntry from '@revisium/revo-agent-runtime';
+import {
+  AgentManagerError,
+  createAgentManager,
+} from '@revisium/revo-agent-runtime';
 
-assert.deepEqual(Object.keys(packageEntry), []);
+assert.equal(typeof createAgentManager, 'function');
+assert.equal(typeof AgentManagerError, 'function');
 
 await assert.rejects(
   import('@revisium/revo-agent-runtime/dist/index.js'),
@@ -72,10 +76,120 @@ await assert.rejects(
 `;
 
 const typeConsumer = `
-import * as packageEntry from '@revisium/revo-agent-runtime';
+import { createAgentManager } from '@revisium/revo-agent-runtime';
+import type {
+  ActiveInvocationSnapshot,
+  ActiveInvocationState,
+  ActiveInvocationStateSink,
+  ActiveProcessIdentity,
+  ActiveStateOperationContext,
+  AgentArgumentTemplate,
+  AgentCommittedOutputFiles,
+  AgentDefinitionContract,
+  AgentDefinitionInput,
+  AgentDescriptor,
+  AgentEvent,
+  AgentEventBase,
+  AgentEventFilter,
+  AgentEventListener,
+  AgentExecutionPin,
+  AgentFault,
+  AgentFaultCode,
+  AgentInvocationCancelled,
+  AgentInvocationFailed,
+  AgentInvocationFilter,
+  AgentInvocationHandle,
+  AgentManager,
+  AgentManagerLimits,
+  AgentManagerOptions,
+  AgentInvocationResult,
+  AgentInvocationResultBase,
+  AgentInvocationSnapshot,
+  AgentInvocationStatus,
+  AgentInvocationSucceeded,
+  AgentInvocationTimedOut,
+  AgentLaunchEvidence,
+  AgentOutputFiles,
+  AgentProbeAvailable,
+  AgentProbeResult,
+  AgentProbeUnavailable,
+  AgentProcessExit,
+  AgentRawResponseDiagnostic,
+  AgentRef,
+  AgentResultLookup,
+  AgentStartContext,
+  AgentTerminalStatus,
+  AgentUsage,
+  AgentValidationDetails,
+  AgentValidationDiagnostic,
+  AgentVersionProbe,
+  CancelInvocationResult,
+  JsonObject,
+  JsonPrimitive,
+  JsonSchema202012,
+  JsonValue,
+  StartAgentInvocation,
+  Unsubscribe,
+} from '@revisium/revo-agent-runtime';
 
-const resolvedEntry: typeof packageEntry = packageEntry;
-void resolvedEntry;
+const managerFactory: (options: AgentManagerOptions) => AgentManager = createAgentManager;
+type CompletePublicTypeSurface = readonly [
+  ActiveInvocationSnapshot,
+  ActiveInvocationState,
+  ActiveInvocationStateSink,
+  ActiveProcessIdentity,
+  ActiveStateOperationContext,
+  AgentArgumentTemplate,
+  AgentCommittedOutputFiles,
+  AgentDefinitionContract,
+  AgentDefinitionInput,
+  AgentDescriptor,
+  AgentEvent,
+  AgentEventBase,
+  AgentEventFilter,
+  AgentEventListener,
+  AgentExecutionPin,
+  AgentFault,
+  AgentFaultCode,
+  AgentInvocationCancelled,
+  AgentInvocationFailed,
+  AgentInvocationFilter,
+  AgentInvocationHandle,
+  AgentInvocationResult,
+  AgentInvocationResultBase,
+  AgentInvocationSnapshot,
+  AgentInvocationStatus,
+  AgentInvocationSucceeded,
+  AgentInvocationTimedOut,
+  AgentLaunchEvidence,
+  AgentManager,
+  AgentManagerLimits,
+  AgentManagerOptions,
+  AgentOutputFiles,
+  AgentProbeAvailable,
+  AgentProbeResult,
+  AgentProbeUnavailable,
+  AgentProcessExit,
+  AgentRawResponseDiagnostic,
+  AgentRef,
+  AgentResultLookup,
+  AgentStartContext,
+  AgentTerminalStatus,
+  AgentUsage,
+  AgentValidationDetails,
+  AgentValidationDiagnostic,
+  AgentVersionProbe,
+  CancelInvocationResult,
+  JsonObject,
+  JsonPrimitive,
+  JsonSchema202012,
+  JsonValue,
+  StartAgentInvocation,
+  Unsubscribe,
+];
+declare const surface: CompletePublicTypeSurface;
+void managerFactory;
+void surface;
 `;
 
 const consumerTsconfig = {
@@ -139,6 +253,9 @@ try {
   const installedPackage = packagePath(consumerNodeModules, '@revisium/revo-agent-runtime');
   await mkdir(installedPackage, { recursive: true });
   execFileSync('tar', ['-xzf', tarball, '-C', installedPackage, '--strip-components=1']);
+  await linkPackage(join(root, 'node_modules'), consumerNodeModules, 'ajv');
+  await linkPackage(join(root, 'node_modules'), consumerNodeModules, 'canonicalize');
+  await linkPackage(join(root, 'node_modules'), consumerNodeModules, 'zod');
   await linkPackage(join(root, 'node_modules'), consumerNodeModules, '@types/node');
 
   await writeFile(

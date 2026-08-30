@@ -12,7 +12,7 @@ test('maps generic mode and network template items through the codex permission 
     }),
   ).toEqual({
     status: 'mapped',
-    arguments: ['--sandbox=workspace-write', '--ask-for-approval=never'],
+    arguments: ['--sandbox=workspace-write'],
   });
   expect(
     CodexPermissionStrategy.map({
@@ -88,7 +88,7 @@ test('maps explicitly admitted danger-full-access and denies it otherwise', () =
     }),
   ).toEqual({
     status: 'mapped',
-    arguments: ['--sandbox=danger-full-access', '--ask-for-approval=never'],
+    arguments: ['--sandbox=danger-full-access'],
   });
 
   expect(

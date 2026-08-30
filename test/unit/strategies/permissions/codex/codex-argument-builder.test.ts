@@ -6,7 +6,6 @@ import { mapCodexPermissions } from '../../../../../src/strategies/permissions/c
 test('maps bounded Codex permissions and arguments deterministically', () => {
   expect(mapCodexPermissions({ sandbox: 'workspace-write', network: 'enabled' })).toEqual({
     sandboxFlag: '--sandbox=workspace-write',
-    approvalFlag: '--ask-for-approval=never',
     config: ['--config', 'sandbox_workspace_write.network_access=true'],
   });
   expect(
@@ -18,19 +17,16 @@ test('maps bounded Codex permissions and arguments deterministically', () => {
       outputSchema: '{"type":"object"}',
     }),
   ).toEqual([
+    '--ask-for-approval=never',
     'exec',
     '--json',
-    '--ephemeral',
-    '--skip-git-repo-check',
+    '--output-schema',
+    '{"type":"object"}',
     '--sandbox=read-only',
-    '--ask-for-approval=never',
     '--config',
     'sandbox_workspace_write.network_access=false',
     '--model',
     'o3',
-    '--output-schema',
-    '{"type":"object"}',
-    '--',
     'hello',
   ]);
 });

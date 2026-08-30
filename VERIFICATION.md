@@ -40,7 +40,7 @@ profile diagnostic while accepting the ESM-only package. The gate includes:
 | Typecheck    | `corepack pnpm typecheck`           | No TypeScript diagnostics                                                  |
 | Lint         | `corepack pnpm lint`                | No warnings, errors, or unused suppressions                                |
 | Tests        | `corepack pnpm test`                | Every currently owned Vitest lane passes                                   |
-| Package test | `corepack pnpm test:package`        | Empty bootstrap root and package metadata tests pass                       |
+| Package test | `corepack pnpm test:package`        | Curated root API and package metadata tests pass                           |
 | Architecture | `corepack pnpm verify:architecture` | Positive graph and all three representative negative probes pass           |
 | Coverage     | `corepack pnpm test:cov`            | Tests and v8 thresholds pass; `coverage/lcov.info` is generated            |
 | Build        | `corepack pnpm build`               | ESM JavaScript, source maps, declarations, and declaration maps in `dist/` |
@@ -55,13 +55,13 @@ Run these when their surface changes:
 - GitHub workflows: `actionlint`.
 - Shell scripts: `bash -n scripts/*.sh`.
 - Package artifact or release workflow: `corepack pnpm verify:package`; use a temporary directory for any additional manual
-  tarball inspection.
+  tarball inspection. A registry-safe dry run may use `npm publish --dry-run` against that temporary package only.
 - Dependency changes: `corepack pnpm audit --prod`; inspect lockfile changes and install-script policy.
 - Public API changes: add runtime behavior tests where applicable, type-surface tests, package export checks, and README examples.
 - Architecture-boundary or `.oxlintrc.architecture.json` changes: run `corepack pnpm verify:architecture` and confirm the
   committed harness still proves layer, consumer-private-import, and cycle violations fail non-zero.
 - Target API documentation changes: reconcile ADRs, `docs/specs/agent-manager-v1.spec.md`, `docs/architecture.md`, README,
-  repository/review contracts, and testing policy. Do not claim draft exports exist.
+  repository/review contracts, and testing policy. Describe only implemented exports and verified behavior.
 - Documentation or configuration changes: rerun `corepack pnpm format:check` and check links and commands against current scripts.
 
 Do not commit artifacts created only for verification. Use a temporary directory for tarballs.
@@ -92,7 +92,8 @@ After push, verify the same head commit:
 - GitHub Actions `CI / verify` completed successfully.
 - Sonar PR Quality Gate and open-issue inspection ran when `SONAR_TOKEN` was available.
 - Required review conversations have zero unresolved valid findings.
-- Manual release validation produces an artifact without publishing it.
+- Release Train dry runs validate the requested transition without pushing.
+- SemVer tag publication runs the full verification command and uses npm Trusted Publishing through OIDC.
 
 Do not merge, publish npm packages, create releases, or modify protected branches without the corresponding explicit approval.
 

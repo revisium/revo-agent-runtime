@@ -11,6 +11,10 @@ t_exec-adapter-02-child-environment-capture-architecture.md) was written to `cov
 vitest's coverage-v8 `clean: true` reportsDirectory wipe on a later `pnpm test:cov`/`pnpm verify` run. Both files
 were moved/reconstructed into `docs/design/` before this v2 edit. Do not write artifacts under `coverage/` again. -->
 
+<!-- Historical plan: its missing/partial markers and empty-root statements describe only the pinned analysis baseline.
+The planned private slices and provider-neutral root API were later completed under ADR-0013 and ADR-0012. Codex remains an
+internal provider; supported-cell declaration and active-process reconnection remain separate delivery decisions. -->
+
 # t_exec-adapter-01 — Next provider-neutral execution slice: pre-spawn security substrate (v2)
 
 - Role: analyst (analysis-only; no implementation; no file outside `docs/design/` touched by this role)
@@ -461,7 +465,7 @@ runtime/execution (existing: InvocationInputSnapshot, execution-ports, lifecycle
    Native Codex adapter conformance + supported-cell closure [M]
         |
         v
-   public root export (ADR-0012) [M] -> src/index.ts stays `export {}`
+   public root export (ADR-0012) [M at this historical baseline] -> src/index.ts stayed `export {}`
 ```
 
 Node legend unchanged from v1: `[S]` shipped+tested (in this worktree, uncommitted) · `[M]` missing/target ·
@@ -688,7 +692,7 @@ Specifically:
 | Real-process / live-Codex proof              | **Not required.** All four parts are pure — no spawn, no filesystem, no clock, no real provider.                                                                                  | —                                                                                     | Not applicable                                    |
 | Typecheck                                    | Strict TypeScript 7, no `any`, no assertion, no `@ts-ignore`                                                                                                                      | `corepack pnpm typecheck`                                                             | Required                                          |
 | Architecture / module-structure proof (RED7) | One export per behavior leaf; `.js` specifiers; barrel discipline; no forbidden edge; expected-file list and type pins updated for all three new domains                          | `corepack pnpm verify:architecture` and `corepack pnpm run test:unit`                 | Required                                          |
-| Package / export proof                       | Root export remains exactly `export {}`; no new subpath; no deep import                                                                                                           | `corepack pnpm run test:package` and `corepack pnpm run verify:package`               | Required (must show no change)                    |
+| Package / export proof                       | At this historical baseline, root export stayed exactly `export {}`; no new subpath; no deep import                                                                               | `corepack pnpm run test:package` and `corepack pnpm run verify:package`               | Required (must show no change)                    |
 | Coverage                                     | v8 thresholds (80/90/90/90) on every new leaf                                                                                                                                     | `corepack pnpm run test:cov`                                                          | Required                                          |
 | Format                                       | Oxfmt                                                                                                                                                                             | `corepack pnpm run format:check`                                                      | Required                                          |
 | Lint                                         | Type-aware Oxlint, zero warnings, no unused suppressions                                                                                                                          | `corepack pnpm run lint`                                                              | Required                                          |
@@ -881,7 +885,7 @@ from `PreparedLaunch` plus this slice's child-environment/secret-registration/re
 
 No implementation, production code, test, export, package metadata, README claim, canonical roadmap/ADR/spec/
 architecture edit, commit, push, PR, publication, or external-service change was made by this analyst role. No
-public API was added or altered (`src/index.ts` remains `export {};`, unverified change confirmed by the green
+public API was added or altered at that historical baseline (`src/index.ts` stayed `export {};`, unverified change confirmed by the green
 `verify:package` run in §1.5, not by a new edit). No provider-support, platform-support, or supported-cell claim was
 made or implied. No canonical contract was changed; every canonical decision referenced above was cited, not
 modified. Every command run this session was read-only (typecheck, lint, format-check, test lanes, coverage,

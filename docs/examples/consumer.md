@@ -1,8 +1,4 @@
-# Expanded target consumer example
-
-> [!IMPORTANT]
-> This example describes the draft AgentManager v1 target. The root package export is still empty; implemented definition,
-> registry, and executable-probe slices remain private.
+# Expanded consumer example
 
 The consumer stores and supplies complete versioned definitions. Definitions are JSON data, but every selected protocol
 driver, result parser, and permission strategy is package code. The normative fields and limits are defined by the
@@ -11,22 +7,22 @@ driver, result parser, and permission strategy is package code. The normative fi
 ## Complete Codex definition
 
 ```ts
-import type { AgentDefinition } from '@revisium/revo-agent-runtime';
+import type { AgentDefinitionInput } from '@revisium/revo-agent-runtime';
 
 export const codexDefinition = {
   schemaVersion: 'agent-definition/v1',
   id: 'codex',
-  version: '1.0.0',
+  version: 'definition-v1',
   displayName: 'Codex CLI',
   description: 'Runs one Codex invocation through the native JSONL protocol.',
   launch: {
     command: 'codex',
     args: [
+      { kind: 'literal', value: '--ask-for-approval=never' },
       { kind: 'literal', value: 'exec' },
       { kind: 'literal', value: '--json' },
       { kind: 'literal', value: '--output-schema' },
       { kind: 'result-schema-file' },
-      { kind: 'literal', value: '--sandbox' },
       { kind: 'permission', name: 'mode' },
       { kind: 'permission', name: 'network' },
       { kind: 'literal', value: '--model' },
@@ -81,9 +77,8 @@ export const codexDefinition = {
   },
   constraints: {
     platforms: ['darwin', 'linux'],
-    executableVersion: '>=1.0.0',
   },
-} as const satisfies AgentDefinition;
+} as const satisfies AgentDefinitionInput;
 
 export const roleResultSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
@@ -126,7 +121,7 @@ const stopOne = manager.subscribe({ invocationId: attempt.id }, (event) =>
 const handle = await manager.start(
   {
     invocationId: attempt.id,
-    agent: { id: 'codex', version: '1.0.0' },
+    agent: { id: 'codex', version: 'definition-v1' },
     prompt: 'Implement issue #42 and return the requested JSON object.',
     workspace: { directory: workspace.path },
     parameters: { model: 'gpt-5' },
@@ -159,6 +154,10 @@ stopOne();
 stopAll();
 await manager.shutdown('Consumer is stopping');
 ```
+
+The definition `version` is a consumer-managed immutable definition identifier, not the executable version. The
+`launch.versionProbe` always reports the executable version. A consumer that owns a tested executable compatibility policy
+may additionally set `constraints.executableVersion`; the runtime does not infer that policy from the definition version.
 
 The consumer provisions the output directory's existing parent and warrants trusted stable ancestors until terminal
 filesystem quiescence; the output leaf itself must not exist before `start()`. The manager creates no output ancestors and
