@@ -23,7 +23,7 @@ const startOwnedProcess = async (
     buffer: false,
     cwd: launch.cwd,
     detached: true,
-    env: { ...(launch.environment ?? {}) },
+    env: launch.environment ?? {},
     extendEnv: false,
     shell: false,
     stdio: 'pipe',

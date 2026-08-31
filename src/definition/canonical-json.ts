@@ -48,14 +48,9 @@ const invalidJson = (): never => {
 
 const hasPairedSurrogates = (value: string): boolean => {
   for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index);
-    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
-      const trailing = value.charCodeAt(index + 1);
-      if (!(trailing >= 0xdc00 && trailing <= 0xdfff)) return false;
-      index += 1;
-      continue;
-    }
-    if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) return false;
+    const codePoint = value.codePointAt(index);
+    if (codePoint === undefined || (codePoint >= 0xd800 && codePoint <= 0xdfff)) return false;
+    if (codePoint > 0xffff) index += 1;
   }
   return true;
 };

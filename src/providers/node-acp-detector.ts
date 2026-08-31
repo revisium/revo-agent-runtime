@@ -1,7 +1,6 @@
 import type { AgentDefinitionInput } from '../contracts/agent-definition.js';
 import type { AgentDetector, AgentDetectorContext } from '../contracts/discovery.js';
-import type { NodePackageEntrypointPolicy } from '../discovery/platform.js';
-import type { DiscoveryPlatform } from '../discovery/platform.js';
+import type { DiscoveryPlatform, NodePackageEntrypointPolicy } from '../discovery/platform.js';
 import { systemOverrideUnavailable, unavailableModels } from './provider-diagnostics.js';
 
 export interface NodeAcpProviderPolicy {

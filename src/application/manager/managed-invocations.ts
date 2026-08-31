@@ -148,12 +148,12 @@ export class ManagedInvocations {
     );
     if (
       processDrainage.some((outcome) => outcome.status === 'cleanup_uncertain') ||
-      stateDrainage.some((outcome) => outcome === 'unknown') ||
+      stateDrainage.includes('unknown') ||
       this.unresolvedPreacceptance.size > 0 ||
       this.terminalizationFailures.size > 0
     )
       return false;
-    await Promise.all([...this.finalizations.values()]);
+    await Promise.all(this.finalizations.values());
     return this.pending.size === 0 && this.active.size === 0;
   }
 

@@ -1,5 +1,8 @@
-import type { AgentDetector, AgentDetectorContext } from '../../contracts/discovery.js';
-import type { DiscoverAgentsOptions } from '../../contracts/discovery.js';
+import type {
+  AgentDetector,
+  AgentDetectorContext,
+  DiscoverAgentsOptions,
+} from '../../contracts/discovery.js';
 import type { DiscoveryPlatform } from '../../discovery/platform.js';
 import { systemOverrideUnavailable, unavailableModels } from '../provider-diagnostics.js';
 import { cursorAcpDefinition, cursorPackagePolicy } from './definition.js';

@@ -1,7 +1,6 @@
 import { AgentManagerError, type AgentStartContext } from '../../contracts/manager.js';
 import type { CapturedEnvironment } from '../../execution/invocation/environment.js';
-import type { ClaimedInvocationOutput } from '../../execution/output/claim.js';
-import type { OutputClaimPlatform } from '../../execution/output/claim.js';
+import type { ClaimedInvocationOutput, OutputClaimPlatform } from '../../execution/output/claim.js';
 import type { ExecutablePreflight } from '../../execution/probe/executable-preflight.js';
 import {
   executablePreflightError,

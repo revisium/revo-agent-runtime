@@ -4,8 +4,7 @@ import type {
   AgentDetectorContext,
   AgentDetectorResult,
 } from '../contracts/discovery.js';
-import type { DiscoveryPlatform } from '../discovery/platform.js';
-import type { SystemExecutableProbe } from '../discovery/platform.js';
+import type { DiscoveryPlatform, SystemExecutableProbe } from '../discovery/platform.js';
 import { unavailableModels, systemOverrideUnavailable } from './provider-diagnostics.js';
 
 export interface SystemAcpProviderPolicy {

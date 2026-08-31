@@ -64,6 +64,8 @@ interface ResultPublication {
   readonly rawPublished: boolean;
 }
 
+const defaultResultPublication = Object.freeze({ committed: true, rawPublished: true });
+
 const outputFiles = (
   request: StartAgentInvocation,
   outcome: ExecutionOutcome,
@@ -152,10 +154,7 @@ export const buildInvocationResult = (
   outcome: ExecutionOutcome,
   evidence: ExecutionEvidence,
   timing: InvocationResultTiming,
-  publication: ResultPublication = {
-    committed: true,
-    rawPublished: true,
-  },
+  publication: ResultPublication = defaultResultPublication,
 ): AgentInvocationResult => {
   const base = baseResult(request, pin, outcome, evidence, timing);
   try {

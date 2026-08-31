@@ -1,6 +1,9 @@
 import type { AgentDetector, AgentDetectorContext } from '../contracts/discovery.js';
-import type { BridgePackagePolicy } from '../discovery/platform.js';
-import { defaultSystemExecutableProbe, type DiscoveryPlatform } from '../discovery/platform.js';
+import {
+  defaultSystemExecutableProbe,
+  type BridgePackagePolicy,
+  type DiscoveryPlatform,
+} from '../discovery/platform.js';
 import { acpDefinition } from './acp-definition.js';
 import {
   bundledBridgeUnavailable,

@@ -39,7 +39,7 @@ export const collectBounded = (
       const available = Math.max(0, limit - retained);
       if (bytes.byteLength > available) overflowed = true;
       if (available > 0) {
-        const kept = bytes.slice(0, available);
+        const kept = bytes.subarray(0, available);
         chunks.push(kept);
         retained += kept.byteLength;
       }

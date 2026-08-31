@@ -13,14 +13,23 @@ export interface ProtocolObservation {
   result(outcome: ProtocolOutcome): ExecutionOutcome;
 }
 
+type ProtocolObservationOptions = {
+  readonly maxRawResponseBytes: number;
+  readonly resultSchema: Readonly<Record<string, unknown>>;
+  readonly secrets: readonly string[];
+  readonly usage: boolean;
+};
+
+const defaultProtocolObservationOptions = Object.freeze({
+  maxRawResponseBytes: 1_048_576,
+  resultSchema: {},
+  secrets: [],
+  usage: false,
+});
+
 export const observeProtocol = (
   activity: () => void,
-  options: {
-    readonly maxRawResponseBytes: number;
-    readonly resultSchema: Readonly<Record<string, unknown>>;
-    readonly secrets: readonly string[];
-    readonly usage: boolean;
-  } = { maxRawResponseBytes: 1_048_576, resultSchema: {}, secrets: [], usage: false },
+  options: ProtocolObservationOptions = defaultProtocolObservationOptions,
 ): ProtocolObservation => {
   let usage: AgentUsage | undefined;
   const capture = createRawResponseCapture({

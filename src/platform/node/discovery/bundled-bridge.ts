@@ -132,7 +132,7 @@ export const resolveBundledBridge = (
   if (manifestPath === undefined) return { available: false, reason: 'package_unavailable' };
 
   const manifest = readManifest(manifestPath);
-  if (manifest === undefined || manifest.name !== policy.bridgeName) {
+  if (manifest?.name !== policy.bridgeName) {
     return { available: false, reason: 'manifest_invalid' };
   }
   const packageRoot = realpathSync(dirname(manifestPath));
