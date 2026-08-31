@@ -127,6 +127,24 @@ const assignCopy = (
   });
 };
 
+const copyScalar = (source: unknown, assign: (value: JsonValue) => void): boolean => {
+  if (source === null || typeof source === 'boolean') {
+    assign(source);
+    return true;
+  }
+  if (typeof source === 'string') {
+    if (!hasPairedSurrogates(source)) return invalidJson();
+    assign(source);
+    return true;
+  }
+  if (typeof source === 'number') {
+    if (!Number.isFinite(source)) return invalidJson();
+    assign(source);
+    return true;
+  }
+  return false;
+};
+
 const enterContainer = (
   frame: EnterFrame,
   source: object,
@@ -179,21 +197,13 @@ export function inspectAndCopyPlainJson(value: unknown): JsonInspection {
     nodes += 1;
     depth = Math.max(depth, frame.depth);
     const { source } = frame;
-    if (source === null || typeof source === 'boolean') {
-      assignCopy(frame.target, frame.targetKey, source, assignRoot);
+    if (
+      copyScalar(source, (nextValue) =>
+        assignCopy(frame.target, frame.targetKey, nextValue, assignRoot),
+      )
+    )
       continue;
-    }
-    if (typeof source === 'string') {
-      if (!hasPairedSurrogates(source)) return invalidJson();
-      assignCopy(frame.target, frame.targetKey, source, assignRoot);
-      continue;
-    }
-    if (typeof source === 'number') {
-      if (!Number.isFinite(source)) return invalidJson();
-      assignCopy(frame.target, frame.targetKey, source, assignRoot);
-      continue;
-    }
-    if (typeof source === 'object') {
+    if (typeof source === 'object' && source !== null) {
       enterContainer(frame, source, activeContainers, frames, assignRoot);
       continue;
     }

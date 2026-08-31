@@ -53,6 +53,12 @@ const encodedJsonBytes = (value: JsonScalar): number | undefined => {
   return String(Object.is(value, -0) ? 0 : value).length;
 };
 
+const isJsonScalar = (value: unknown): value is JsonScalar =>
+  value === null ||
+  typeof value === 'boolean' ||
+  typeof value === 'number' ||
+  typeof value === 'string';
+
 const plainPrototype = (value: object): boolean => {
   const prototype = Reflect.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
@@ -101,6 +107,56 @@ const assign = (
   });
 };
 
+const snapshotScalar = (task: SnapshotTask, reserve: (next: number) => void): boolean => {
+  if (!isJsonScalar(task.source)) return false;
+  const scalarBytes = encodedJsonBytes(task.source);
+  if (scalarBytes === undefined) throw new TypeError('Invalid plain JSON scalar.');
+  reserve(scalarBytes);
+  assign(task.parent, task.key, task.source);
+  return true;
+};
+
+const queueArraySnapshot = (
+  task: SnapshotTask,
+  source: readonly unknown[],
+  tasks: Task[],
+  reserve: (next: number) => void,
+): void => {
+  const values = denseArrayValues(source);
+  if (values === undefined) throw new TypeError('Invalid plain JSON array.');
+  reserve(2 + Math.max(0, values.length - 1));
+  const target: PlainJson[] = [];
+  assign(task.parent, task.key, target);
+  tasks.push({ container: target, source });
+  for (let index = values.length - 1; index >= 0; index -= 1)
+    tasks.push({
+      key: String(index),
+      parent: target,
+      source: values[index],
+    });
+};
+
+const queueObjectSnapshot = (
+  task: SnapshotTask,
+  source: object,
+  tasks: Task[],
+  reserve: (next: number) => void,
+): void => {
+  const entries = dataEntries(source);
+  if (entries === undefined) throw new TypeError('Invalid plain JSON object.');
+  reserve(2 + Math.max(0, entries.length - 1));
+  const target: Record<string, PlainJson> = {};
+  assign(task.parent, task.key, target);
+  tasks.push({ container: target, source });
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const [key, value] = entries[index]!;
+    const keyBytes = encodedJsonBytes(key);
+    if (keyBytes === undefined) throw new TypeError('Invalid plain JSON key.');
+    reserve(keyBytes + 1);
+    tasks.push({ key, parent: target, source: value });
+  }
+};
+
 export const snapshotPlainJson = (source: unknown, maximumBytes: number): PlainJson => {
   if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1)
     throw new TypeError('Invalid plain JSON byte limit.');
@@ -125,51 +181,17 @@ export const snapshotPlainJson = (source: unknown, maximumBytes: number): PlainJ
     nodes += 1;
     if (nodes > maximumSnapshotNodes)
       throw new TypeError('Plain JSON exceeds its structural limit.');
-    if (
-      task.source === null ||
-      typeof task.source === 'boolean' ||
-      typeof task.source === 'number' ||
-      typeof task.source === 'string'
-    ) {
-      const scalarBytes = encodedJsonBytes(task.source);
-      if (scalarBytes === undefined) throw new TypeError('Invalid plain JSON scalar.');
-      reserve(scalarBytes);
-      assign(task.parent, task.key, task.source);
-      continue;
-    }
-    if (typeof task.source !== 'object' || active.has(task.source))
+    if (snapshotScalar(task, reserve)) continue;
+    if (typeof task.source !== 'object' || task.source === null || active.has(task.source))
       throw new TypeError('Invalid plain JSON value.');
     active.add(task.source);
 
     if (Array.isArray(task.source)) {
-      const values = denseArrayValues(task.source);
-      if (values === undefined) throw new TypeError('Invalid plain JSON array.');
-      reserve(2 + Math.max(0, values.length - 1));
-      const target: PlainJson[] = [];
-      assign(task.parent, task.key, target);
-      tasks.push({ container: target, source: task.source });
-      for (let index = values.length - 1; index >= 0; index -= 1)
-        tasks.push({
-          key: String(index),
-          parent: target,
-          source: values[index],
-        });
+      queueArraySnapshot(task, task.source, tasks, reserve);
       continue;
     }
 
-    const entries = dataEntries(task.source);
-    if (entries === undefined) throw new TypeError('Invalid plain JSON object.');
-    reserve(2 + Math.max(0, entries.length - 1));
-    const target: Record<string, PlainJson> = {};
-    assign(task.parent, task.key, target);
-    tasks.push({ container: target, source: task.source });
-    for (let index = entries.length - 1; index >= 0; index -= 1) {
-      const [key, value] = entries[index]!;
-      const keyBytes = encodedJsonBytes(key);
-      if (keyBytes === undefined) throw new TypeError('Invalid plain JSON key.');
-      reserve(keyBytes + 1);
-      tasks.push({ key, parent: target, source: value });
-    }
+    queueObjectSnapshot(task, task.source, tasks, reserve);
   }
   return root.value!;
 };

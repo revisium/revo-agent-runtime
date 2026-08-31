@@ -73,41 +73,68 @@ const hasAcyclicReferences = (references: readonly Reference[]): boolean => {
   return [...edges.keys()].every((pointer) => colors.get(pointer) !== undefined || visit(pointer));
 };
 
+type SchemaLocationVisitor = (
+  value: JsonValue | undefined,
+  pointer: string,
+  root: boolean,
+) => boolean;
+
+const validSchemaObject = (value: JsonObject, root: boolean): boolean => {
+  if ((root && value.$schema !== dialect) || (!root && value.$schema !== undefined)) return false;
+  return !Object.keys(value).some((key) => !allowedKeywords.has(key));
+};
+
+const validSchemaReference = (
+  value: JsonObject,
+  pointer: string,
+  root: boolean,
+  references: Reference[],
+): boolean => {
+  const reference = value.$ref;
+  if (reference === undefined) return true;
+  if (typeof reference !== 'string') return false;
+  const permittedSiblings = root ? new Set(['$schema', '$ref', '$defs']) : new Set(['$ref']);
+  if (Object.keys(value).some((key) => !permittedSiblings.has(key))) return false;
+  const target = pointerFromReference(reference);
+  if (target === undefined) return false;
+  references.push({ source: pointer, target });
+  return true;
+};
+
+const visitSchemaChildren = (
+  value: JsonObject,
+  pointer: string,
+  visit: SchemaLocationVisitor,
+): boolean => {
+  for (const key of ['$defs', 'properties']) {
+    const members = value[key];
+    if (members === undefined) continue;
+    if (!isJsonObject(members)) return false;
+    for (const [name, member] of Object.entries(members)) {
+      if (!visit(member, `${pointer}/${pointerToken(key)}/${pointerToken(name)}`, false))
+        return false;
+    }
+  }
+  for (const key of ['additionalProperties', 'items']) {
+    const member = value[key];
+    if (member !== undefined && !visit(member, `${pointer}/${pointerToken(key)}`, false))
+      return false;
+  }
+  return true;
+};
+
 const validateSchemaLocations = (schema: JsonObject): boolean => {
   const locations = new Set<string>();
   const references: Reference[] = [];
-  const visit = (value: JsonValue | undefined, pointer: string, root: boolean): boolean => {
+  const visit: SchemaLocationVisitor = (value, pointer, root): boolean => {
     if (!isSchemaLocation(value)) return false;
     locations.add(pointer);
     if (typeof value === 'boolean') return true;
-    if ((root && value.$schema !== dialect) || (!root && value.$schema !== undefined)) return false;
-    if (Object.keys(value).some((key) => !allowedKeywords.has(key))) return false;
-
-    const reference = value.$ref;
-    if (reference !== undefined) {
-      if (typeof reference !== 'string') return false;
-      const permittedSiblings = root ? new Set(['$schema', '$ref', '$defs']) : new Set(['$ref']);
-      if (Object.keys(value).some((key) => !permittedSiblings.has(key))) return false;
-      const target = pointerFromReference(reference);
-      if (target === undefined) return false;
-      references.push({ source: pointer, target });
-    }
-
-    for (const key of ['$defs', 'properties']) {
-      const members = value[key];
-      if (members === undefined) continue;
-      if (!isJsonObject(members)) return false;
-      for (const [name, member] of Object.entries(members)) {
-        if (!visit(member, `${pointer}/${pointerToken(key)}/${pointerToken(name)}`, false))
-          return false;
-      }
-    }
-    for (const key of ['additionalProperties', 'items']) {
-      const member = value[key];
-      if (member !== undefined && !visit(member, `${pointer}/${pointerToken(key)}`, false))
-        return false;
-    }
-    return true;
+    return (
+      validSchemaObject(value, root) &&
+      validSchemaReference(value, pointer, root, references) &&
+      visitSchemaChildren(value, pointer, visit)
+    );
   };
 
   if (!visit(schema, '', true)) return false;
