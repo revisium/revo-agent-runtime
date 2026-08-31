@@ -1,2 +1,5 @@
 allowBuilds:
-  esbuild: false # tsx uses the platform package; no install script is required
+  esbuild: false
+minimumReleaseAgeExclude:
+  - tsx@4.23.13
+  - zod@4.5.4

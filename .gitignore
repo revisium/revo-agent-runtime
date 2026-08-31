@@ -1,12 +1,9 @@
 node_modules/
 dist/
 coverage/
-.revisium-actions/
 .architecture-probe-*/
-.sonar/
-*.tgz
-.DS_Store
+.package-proof-*/
+.agents/local.*
 .env
 .env.*
-!.env*.example
-*.log
+!.env.example

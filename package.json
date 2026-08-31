@@ -1,7 +1,7 @@
 {
   "name": "@revisium/revo-agent-runtime",
-  "version": "0.0.0",
-  "description": "Portable, invocation-scoped agent execution runtime for Revo.",
+  "version": "0.2.0-alpha.0",
+  "description": "Protocol-neutral agent execution runtime for Revo.",
   "homepage": "https://github.com/revisium/revo-agent-runtime#readme",
   "bugs": {
     "url": "https://github.com/revisium/revo-agent-runtime/issues"
@@ -13,8 +13,9 @@
   },
   "files": [
     "dist",
+    "LICENSE",
     "README.md",
-    "LICENSE"
+    "THIRD_PARTY_NOTICES.md"
   ],
   "type": "module",
   "sideEffects": false,
@@ -31,48 +32,57 @@
     "provenance": true
   },
   "scripts": {
-    "clean": "rm -rf dist coverage",
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "oxlint --type-aware --type-check --deny-warnings --report-unused-disable-directives .",
+    "build": "node --import tsx scripts/clean-build.ts && tsc -p tsconfig.build.json",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
-    "test:unit": "vitest run test/unit",
-    "test:contract": "vitest run test/contract",
-    "test:integration": "vitest run test/integration",
+    "lint": "oxlint --type-aware --type-check --deny-warnings --report-unused-disable-directives .",
+    "smoke:discover": "node --import tsx test/smoke/discover.ts",
+    "smoke:agent": "node --import tsx test/smoke/agent.ts",
+    "smoke:configuration": "node --import tsx test/smoke/configuration.ts",
+    "smoke:recovery": "node --import tsx test/smoke/recovery.ts",
+    "test:unit": "vitest run --passWithNoTests test/unit",
+    "test:contract": "vitest run --passWithNoTests test/contract",
+    "test:integration": "vitest run --passWithNoTests test/integration",
     "test:package": "vitest run test/package",
-    "test:architecture": "node --import tsx scripts/verify-architecture.ts",
     "test": "pnpm run test:unit && pnpm run test:contract && pnpm run test:integration && pnpm run test:package",
     "test:cov": "vitest run --coverage",
-    "verify:architecture": "pnpm run test:architecture",
-    "verify:private-agent-discovery-and-executable-probing:dependencies": "node --import tsx scripts/verify-private-agent-discovery-and-executable-probing-dependencies.ts",
-    "verify:private-agent-discovery-and-executable-probing:advisories": "node --import tsx scripts/verify-private-agent-discovery-and-executable-probing-advisories.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify:architecture": "node --import tsx scripts/verify-architecture.ts",
+    "verify:dead-exports": "knip --exports --no-progress",
+    "verify:lock": "pnpm install --frozen-lockfile",
+    "verify:negative": "node --import tsx scripts/verify-negative-evidence.ts",
     "verify:package": "pnpm run build && publint && node --import tsx scripts/verify-package.ts",
-    "verify": "pnpm run format:check && pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run test:cov && pnpm run verify:architecture && pnpm run verify:package",
+    "verify": "pnpm run verify:lock && pnpm run format:check && pnpm run typecheck && pnpm run lint && pnpm run verify:dead-exports && pnpm run test && pnpm run test:cov && pnpm run verify:negative && pnpm run verify:architecture && pnpm run verify:package",
     "sonar:local": "bash scripts/sonar-local.sh",
     "sonar:issues:local": "bash scripts/sonar-issues-local.sh",
     "ci:local:sonar": "bash scripts/ci-local-sonar.sh",
     "prepack": "pnpm run build"
   },
   "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "0.70.0",
+    "@agentclientprotocol/codex-acp": "1.7.0",
+    "@agentclientprotocol/sdk": "1.4.0",
     "ajv": "8.20.0",
-    "canonicalize": "3.0.0",
-    "zod": "4.4.3"
+    "canonicalize": "4.0.0",
+    "execa": "10.0.1",
+    "which": "7.0.0",
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "0.18.5",
     "@types/node": "24.13.3",
-    "@vitest/coverage-v8": "4.1.9",
-    "oxfmt": "0.58.0",
-    "oxlint": "1.73.0",
-    "oxlint-tsgolint": "0.24.0",
-    "publint": "0.3.21",
-    "tsx": "4.23.1",
+    "@vitest/coverage-v8": "4.1.11",
+    "knip": "6.33.0",
+    "oxfmt": "0.65.0",
+    "oxlint": "1.80.0",
+    "oxlint-tsgolint": "7.0.2001",
+    "publint": "0.3.24",
+    "tsx": "4.23.13",
     "typescript": "7.0.2",
-    "vitest": "4.1.9"
+    "vitest": "4.1.11"
   },
   "engines": {
-    "node": ">=24.11.1 <25"
+    "node": ">=24.15.0 <25"
   },
   "packageManager": "pnpm@11.13.0"
 }
