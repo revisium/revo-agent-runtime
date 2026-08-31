@@ -60,6 +60,10 @@ interface NodeDiscoveryPlatformDependencies {
   readonly resolveSystemExecutable: typeof resolveSystemExecutable;
 }
 
+const defaultNodeDiscoveryPlatformDependencies: NodeDiscoveryPlatformDependencies = Object.freeze({
+  resolveSystemExecutable,
+});
+
 const nodeExecutableName = (hostPlatform: NodeJS.Platform): string => {
   if (hostPlatform === 'win32') return 'node.exe';
   return 'node';
@@ -95,7 +99,7 @@ const resolveAdjacentNodePackageFor = async (
 
 export const createNodeDiscoveryPlatform = (
   hostPlatform: NodeJS.Platform = process.platform,
-  dependencies: NodeDiscoveryPlatformDependencies = { resolveSystemExecutable },
+  dependencies: NodeDiscoveryPlatformDependencies = defaultNodeDiscoveryPlatformDependencies,
 ): DiscoveryPlatform =>
   Object.freeze({
     probeSystemExecutable,
