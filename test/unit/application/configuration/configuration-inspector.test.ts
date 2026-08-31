@@ -1,6 +1,22 @@
 import { expect, test } from 'vitest';
 
+import { normalizeAcpConfiguration } from '../../../../src/configuration/catalog.js';
+import { validateAgentDefinition } from '../../../../src/definition/index.js';
+import {
+  createConfigurationInspector,
+  type ConfigurationInspectionRequest,
+} from '../../../../src/execution/configuration/inspector.js';
+import type {
+  OwnedProcess,
+  ProcessCleanupOutcome,
+  ProcessSpawner,
+} from '../../../../src/execution/process/port.js';
+import type { ProtocolConfigurationDriver } from '../../../../src/protocol/configuration-driver.js';
+import { agentDefinition } from '../../../support/builders/agent-definition.js';
+import { processIdentity } from '../../../support/builders/process-identity.js';
 import { configurationInspectionStory } from '../../../support/stories/configuration-inspection.js';
+
+const never = <T>(): Promise<T> => new Promise(() => undefined);
 
 test.each([
   [
@@ -99,4 +115,123 @@ test('reports cancellation and timeout while protocol opening remains pending', 
   await expect(configurationInspectionStory().protocolHangs().execute()).resolves.toMatchObject({
     status: 'timed_out',
   });
+});
+
+test('starts closing an opened session before a queued cancellation microtask', async () => {
+  const controller = new AbortController();
+  const events: string[] = [];
+  controller.signal.addEventListener('abort', () => events.push('aborted'), { once: true });
+  const session = {
+    catalog: normalizeAcpConfiguration([
+      {
+        currentValue: 'fixture-model',
+        id: 'model',
+        name: 'Model',
+        options: [{ name: 'Fixture model', value: 'fixture-model' }],
+        type: 'select' as const,
+      },
+    ]),
+    close: async () => {
+      events.push('closed');
+    },
+  };
+  const opening = Promise.resolve(session);
+  const scheduleCancellationInAddedGap = (): void => {
+    queueMicrotask(() => {
+      void opening.then(() =>
+        queueMicrotask(() => queueMicrotask(() => queueMicrotask(() => controller.abort()))),
+      );
+    });
+  };
+  const protocol: ProtocolConfigurationDriver = {
+    inspect: () => {
+      scheduleCancellationInAddedGap();
+      return opening;
+    },
+  };
+  const process: OwnedProcess = {
+    completion: never(),
+    identity: processIdentity(),
+    terminateAndReap: async () => ({
+      exit: { exitCode: 0, signal: null },
+      status: 'confirmed' as const,
+    }),
+    transport: {
+      input: new WritableStream<Uint8Array>(),
+      output: new ReadableStream<Uint8Array>(),
+    },
+  };
+  const processes: ProcessSpawner = { start: async () => process };
+  const inspector = createConfigurationInspector(processes, protocol, () => undefined);
+  const request: ConfigurationInspectionRequest = {
+    definition: validateAgentDefinition(agentDefinition()).definition,
+    environment: {},
+    idleTimeoutMs: 1_000,
+    launch: { executable: '/fixture/agent', reportedVersion: '1.0.0' },
+    maxOutputBytes: 1_024,
+    redactionSecrets: [],
+    signal: controller.signal,
+    wallClockTimeoutMs: 1_000,
+    workspace: '/fixture/workspace',
+  };
+
+  const outcome = await inspector.inspect(request);
+
+  expect(events).toEqual(['closed', 'aborted']);
+  expect(outcome).toMatchObject({ status: 'completed' });
+});
+
+test('keeps the deadline active until a failed opening process is reaped', async () => {
+  const controller = new AbortController();
+  let processSignal: AbortSignal | undefined;
+  let resolveCleanup!: (outcome: ProcessCleanupOutcome) => void;
+  let resolveCleanupStarted!: () => void;
+  const cleanup = new Promise<ProcessCleanupOutcome>((resolve) => {
+    resolveCleanup = resolve;
+  });
+  const cleanupStarted = new Promise<void>((resolve) => {
+    resolveCleanupStarted = resolve;
+  });
+  const process: OwnedProcess = {
+    completion: never(),
+    identity: processIdentity(),
+    terminateAndReap: async () => {
+      resolveCleanupStarted();
+      return cleanup;
+    },
+    transport: {
+      input: new WritableStream<Uint8Array>(),
+      output: new ReadableStream<Uint8Array>(),
+    },
+  };
+  const processes: ProcessSpawner = {
+    start: async (_launch, signal) => {
+      processSignal = signal;
+      return process;
+    },
+  };
+  const protocol: ProtocolConfigurationDriver = {
+    inspect: async () => {
+      throw new Error('fixture opening failure');
+    },
+  };
+  const inspector = createConfigurationInspector(processes, protocol, () => undefined);
+  const outcomePromise = inspector.inspect({
+    definition: validateAgentDefinition(agentDefinition()).definition,
+    environment: {},
+    idleTimeoutMs: 1_000,
+    launch: { executable: '/fixture/agent', reportedVersion: '1.0.0' },
+    maxOutputBytes: 1_024,
+    redactionSecrets: [],
+    signal: controller.signal,
+    wallClockTimeoutMs: 1_000,
+    workspace: '/fixture/workspace',
+  });
+
+  await cleanupStarted;
+  controller.abort();
+  expect(processSignal?.aborted).toBe(true);
+  resolveCleanup({ exit: { exitCode: 0, signal: null }, status: 'confirmed' });
+
+  await expect(outcomePromise).resolves.toMatchObject({ status: 'failed' });
 });

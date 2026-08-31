@@ -46,26 +46,39 @@ const failed = (reason: ResultFailureReason, evidence?: RawResponseEvidence): No
     ...(evidence === undefined ? {} : { evidence, rawResponse: evidence.diagnostic }),
   });
 
+interface JsonScanState {
+  depth: number;
+  escaped: boolean;
+  quoted: boolean;
+}
+
+const scanJsonCharacter = (
+  state: JsonScanState,
+  character: string,
+  index: number,
+): number | undefined => {
+  if (state.quoted) {
+    if (state.escaped) state.escaped = false;
+    else if (character === '\\') state.escaped = true;
+    else if (character === '"') state.quoted = false;
+    return undefined;
+  }
+  if (character === '"') state.quoted = true;
+  else if (character === '{' || character === '[') state.depth += 1;
+  else if (character === '}' || character === ']') {
+    state.depth -= 1;
+    if (state.depth === 0) return index + 1;
+  }
+  return undefined;
+};
+
 const topLevelObjectEnd = (text: string): number | undefined => {
   const start = text.search(/\S/);
   if (start < 0 || text[start] !== '{') return undefined;
-  let depth = 0;
-  let quoted = false;
-  let escaped = false;
+  const state: JsonScanState = { depth: 0, escaped: false, quoted: false };
   for (let index = start; index < text.length; index += 1) {
-    const character = text[index];
-    if (quoted) {
-      if (escaped) escaped = false;
-      else if (character === '\\') escaped = true;
-      else if (character === '"') quoted = false;
-      continue;
-    }
-    if (character === '"') quoted = true;
-    else if (character === '{' || character === '[') depth += 1;
-    else if (character === '}' || character === ']') {
-      depth -= 1;
-      if (depth === 0) return index + 1;
-    }
+    const end = scanJsonCharacter(state, text.charAt(index), index);
+    if (end !== undefined) return end;
   }
   return undefined;
 };

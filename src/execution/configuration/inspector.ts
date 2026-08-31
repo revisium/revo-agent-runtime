@@ -46,8 +46,82 @@ type OpeningOutcome =
   | Readonly<{ readonly status: 'failed' | 'process_exited' }>
   | Readonly<{ readonly status: ConfigurationDeadlineOutcome }>;
 
+type OpenedOpening = Extract<OpeningOutcome, { readonly status: 'opened' }>;
+
+interface OpeningAttempt {
+  readonly opening: ReturnType<ProtocolConfigurationDriver['inspect']>;
+  readonly completion: Promise<OpeningOutcome>;
+}
+
 const cleanupConfirmed = async (process: OwnedProcess): Promise<boolean> =>
   (await process.terminateAndReap()).status === 'confirmed';
+
+const primaryLaunch = (
+  request: ConfigurationInspectionRequest,
+  args: readonly string[],
+): {
+  readonly args: readonly string[];
+  readonly command: string;
+  readonly cwd: string;
+  readonly environment: Readonly<Record<string, string>>;
+} => ({
+  args,
+  command: request.launch.executable,
+  cwd: request.workspace,
+  environment: request.environment,
+});
+
+const primaryStartFailure = (
+  error: unknown,
+  deadline: ConfigurationDeadline,
+): ConfigurationInspectionOutcome => {
+  if (error instanceof ProcessStartError && error.cleanup === 'uncertain')
+    return Object.freeze({ status: 'cleanup_uncertain' });
+  return Object.freeze({ status: deadline.current() ?? 'failed' });
+};
+
+const inspectOpening = (
+  protocol: ProtocolConfigurationDriver,
+  request: ConfigurationInspectionRequest,
+  process: OwnedProcess,
+  deadline: ConfigurationDeadline,
+): OpeningAttempt => {
+  const opening = protocol.inspect({
+    activity: deadline.activity,
+    definition: request.definition,
+    transport: process.transport,
+    workspace: request.workspace,
+  });
+  const completion: Promise<OpeningOutcome> = Promise.race([
+    opening.then(
+      (session) => Object.freeze({ session, status: 'opened' as const }),
+      () => Object.freeze({ status: 'failed' as const }),
+    ),
+    process.completion.then(() => Object.freeze({ status: 'process_exited' as const })),
+    deadline.completion().then((status) => Object.freeze({ status })),
+  ]);
+  return { completion, opening };
+};
+
+const prepareUnopenedOpening = (
+  first: Exclude<OpeningOutcome, OpenedOpening>,
+  opening: ReturnType<ProtocolConfigurationDriver['inspect']>,
+): 'failed' | 'cancelled' | 'timed_out' => {
+  void opening.then((late) => late.close()).catch(() => undefined);
+  return first.status === 'process_exited' ? 'failed' : first.status;
+};
+
+const closeSession = (
+  session: Awaited<ReturnType<ProtocolConfigurationDriver['inspect']>>,
+  deadline: ConfigurationDeadline,
+): Promise<'closed' | 'failed' | ConfigurationDeadlineOutcome> =>
+  Promise.race([
+    session.close().then(
+      () => 'closed' as const,
+      () => 'failed' as const,
+    ),
+    deadline.completion(),
+  ]);
 
 const fallbackInspection = async (
   processes: ProcessSpawner,
@@ -113,49 +187,19 @@ const runInspection = async (
   try {
     let process: OwnedProcess;
     try {
-      process = await processes.start(
-        {
-          args,
-          command: request.launch.executable,
-          cwd: request.workspace,
-          environment: request.environment,
-        },
-        deadline.signal,
-      );
+      process = await processes.start(primaryLaunch(request, args), deadline.signal);
     } catch (error) {
-      if (error instanceof ProcessStartError && error.cleanup === 'uncertain')
-        return Object.freeze({ status: 'cleanup_uncertain' });
-      return Object.freeze({ status: deadline.current() ?? 'failed' });
+      return primaryStartFailure(error, deadline);
     }
     deadline.activity();
-    const opening = protocol.inspect({
-      activity: deadline.activity,
-      definition: request.definition,
-      transport: process.transport,
-      workspace: request.workspace,
-    });
-    const first: OpeningOutcome = await Promise.race([
-      opening.then(
-        (session) => Object.freeze({ session, status: 'opened' as const }),
-        () => Object.freeze({ status: 'failed' as const }),
-      ),
-      process.completion.then(() => Object.freeze({ status: 'process_exited' as const })),
-      deadline.completion().then((status) => Object.freeze({ status })),
-    ]);
+    const attempt = inspectOpening(protocol, request, process, deadline);
+    const first = await attempt.completion;
     if (first.status !== 'opened') {
-      void opening.then((late) => late.close()).catch(() => undefined);
-      const status = first.status === 'process_exited' ? 'failed' : first.status;
-      return (await cleanupConfirmed(process))
-        ? Object.freeze({ status })
-        : Object.freeze({ status: 'cleanup_uncertain' });
+      const status = prepareUnopenedOpening(first, attempt.opening);
+      if (!(await cleanupConfirmed(process))) return Object.freeze({ status: 'cleanup_uncertain' });
+      return Object.freeze({ status });
     }
-    const close = await Promise.race([
-      first.session.close().then(
-        () => 'closed' as const,
-        () => 'failed' as const,
-      ),
-      deadline.completion(),
-    ]);
+    const close = await closeSession(first.session, deadline);
     if (!(await cleanupConfirmed(process))) return Object.freeze({ status: 'cleanup_uncertain' });
     if (close !== 'closed') return Object.freeze({ status: close === 'failed' ? 'failed' : close });
     const fallback = fallbackFor(request.definition.id);
