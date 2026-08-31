@@ -8,6 +8,10 @@ Protocol-neutral discovery and supervised ACP v1 agent execution for Node.js.
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![ACP v1](https://img.shields.io/badge/ACP-v1-6E56CF)
 ![MIT](https://img.shields.io/badge/license-MIT-22C55E)
+[![CI](https://github.com/revisium/revo-agent-runtime/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/revisium/revo-agent-runtime/actions/workflows/ci.yml?query=branch%3Amaster)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=revisium_revo-agent-runtime&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=revisium_revo-agent-runtime)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=revisium_revo-agent-runtime&metric=coverage)](https://sonarcloud.io/summary/new_code?id=revisium_revo-agent-runtime)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=revisium_revo-agent-runtime&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=revisium_revo-agent-runtime)
 
 </div>
 
@@ -22,6 +26,8 @@ repository development uses pnpm 11.13.0 through Corepack.
 ```bash
 corepack pnpm install --frozen-lockfile
 ```
+
+The public API is exposed from the package root; deep imports are unsupported.
 
 The caller owns definition persistence and active-state storage. The runtime
 accepts definitions returned by discovery or supplied from the caller's store;
