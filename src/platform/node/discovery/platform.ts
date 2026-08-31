@@ -88,7 +88,8 @@ const resolveAdjacentNodePackageFor = async (
 ): Promise<AdjacentNodePackage | undefined> => {
   if (signal?.aborted) return undefined;
   const candidate = override ?? (await dependencies.resolveSystemExecutable(policy.command));
-  if (candidate === undefined || signal?.aborted) return undefined;
+  if (candidate === undefined) return undefined;
+  if (signal?.aborted) return undefined;
   return resolveAdjacentNodePackage(policy, candidate, nodeExecutableName(hostPlatform));
 };
 

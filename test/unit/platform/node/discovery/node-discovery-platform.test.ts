@@ -193,3 +193,17 @@ test('discards an adjacent package candidate cancelled during lookup', async () 
 
   await expect(lookup).resolves.toBeUndefined();
 });
+
+test('discards an adjacent package lookup without a candidate', async () => {
+  const platform = createNodeDiscoveryPlatform('linux', {
+    resolveSystemExecutable: async () => undefined,
+  });
+
+  await expect(
+    platform.resolveAdjacentNodePackage(
+      { command: 'fixture-agent', entrypointName: 'index.js', launcherName: 'cursor-agent' },
+      undefined,
+      undefined,
+    ),
+  ).resolves.toBeUndefined();
+});
