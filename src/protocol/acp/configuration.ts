@@ -53,6 +53,15 @@ interface SelectionState {
   readonly options: readonly acp.SessionConfigOption[];
 }
 
+interface SelectionContext {
+  readonly requester: AcpConfigurationRequester;
+  readonly sessionId: string;
+  readonly compatibility: AcpConfigurationCompatibility | undefined;
+  readonly legacyCompatibility: AcpConfigurationCompatibility['applyLegacy'];
+  readonly selection: AgentConfigurationSelection;
+  readonly initialRevision: string;
+}
+
 const applyStableSelection = async (
   requester: AcpConfigurationRequester,
   sessionId: string,
@@ -69,12 +78,7 @@ const applyStableSelection = async (
 };
 
 const applySelections = async (
-  requester: AcpConfigurationRequester,
-  sessionId: string,
-  compatibility: AcpConfigurationCompatibility | undefined,
-  legacyCompatibility: AcpConfigurationCompatibility['applyLegacy'],
-  selection: AgentConfigurationSelection,
-  initialRevision: string,
+  context: SelectionContext,
   remaining: readonly [string, boolean | string][],
   state: SelectionState,
 ): Promise<NormalizedAcpConfiguration> => {
@@ -82,22 +86,26 @@ const applySelections = async (
   if (next === undefined) return state.catalog;
   const [configId, value] = next;
   const option = state.catalog.options.find((candidate) => candidate.id === configId);
-  if (!selectable(option, value)) throw selectionError(selection.catalogRevision, initialRevision);
+  if (!selectable(option, value))
+    throw selectionError(context.selection.catalogRevision, context.initialRevision);
   const options =
-    legacyCompatibility === undefined
-      ? await applyStableSelection(requester, sessionId, configId, value, compatibility)
-      : await legacyCompatibility(requester, sessionId, state.options, configId, value);
+    context.legacyCompatibility === undefined
+      ? await applyStableSelection(
+          context.requester,
+          context.sessionId,
+          configId,
+          value,
+          context.compatibility,
+        )
+      : await context.legacyCompatibility(
+          context.requester,
+          context.sessionId,
+          state.options,
+          configId,
+          value,
+        );
   const catalog = normalizeAcpConfiguration(options);
-  return applySelections(
-    requester,
-    sessionId,
-    compatibility,
-    legacyCompatibility,
-    selection,
-    initialRevision,
-    remaining.slice(1),
-    { catalog, options },
-  );
+  return applySelections(context, remaining.slice(1), { catalog, options });
 };
 
 export const applyAcpConfiguration = async (
@@ -122,12 +130,14 @@ export const applyAcpConfiguration = async (
   const catalog = normalizeAcpConfiguration(protocolOptions);
   if (selection === undefined) return catalog;
   return applySelections(
-    requester,
-    session.sessionId,
-    compatibility,
-    legacyCompatibility,
-    selection,
-    catalog.catalogRevision,
+    {
+      requester,
+      sessionId: session.sessionId,
+      compatibility,
+      legacyCompatibility,
+      selection,
+      initialRevision: catalog.catalogRevision,
+    },
     Object.entries(selection.selections),
     { catalog, options: protocolOptions },
   );

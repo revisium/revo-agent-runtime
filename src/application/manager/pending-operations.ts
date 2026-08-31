@@ -8,7 +8,7 @@ class TrackedPendingOperation implements PendingOperation {
   readonly quiescence: Promise<void>;
   private cancellationRequested = false;
   private finished = false;
-  private cancelOperation: () => void;
+  private readonly cancelOperation: () => void;
   private readonly resolveQuiescence: () => void;
 
   constructor(

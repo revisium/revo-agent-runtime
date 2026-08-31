@@ -5,7 +5,7 @@ interface TerminalEvidence {
   readonly usage?: AgentUsage;
 }
 
-type TerminalCandidate =
+export type ExecutionOutcome =
   | Readonly<
       {
         readonly status: 'succeeded';
@@ -22,8 +22,6 @@ type TerminalCandidate =
     >
   | Readonly<{ readonly status: 'cancelled' } & TerminalEvidence>
   | Readonly<{ readonly status: 'timed_out' } & TerminalEvidence>;
-
-export type ExecutionOutcome = TerminalCandidate;
 
 export class TerminalArbiter {
   private readonly candidate: Promise<ExecutionOutcome>;

@@ -56,6 +56,11 @@ const resolveSystemOverride = async (
 const resolveSystemExecutable = async (command: string): Promise<string | undefined> =>
   (await which(command, { nothrow: true })) ?? undefined;
 
+const nodeExecutableName = (hostPlatform: NodeJS.Platform): string => {
+  if (hostPlatform === 'win32') return 'node.exe';
+  return 'node';
+};
+
 const resolveNodePackageEntrypointFor = async (
   hostPlatform: NodeJS.Platform,
   policy: NodePackageEntrypointPolicy,
@@ -77,9 +82,8 @@ const resolveAdjacentNodePackageFor = async (
 ): Promise<AdjacentNodePackage | undefined> => {
   if (signal?.aborted) return undefined;
   const candidate = override ?? (await resolveSystemExecutable(policy.command));
-  return candidate === undefined || signal?.aborted
-    ? undefined
-    : resolveAdjacentNodePackage(policy, candidate, hostPlatform === 'win32' ? 'node.exe' : 'node');
+  if (candidate === undefined || signal?.aborted) return undefined;
+  return resolveAdjacentNodePackage(policy, candidate, nodeExecutableName(hostPlatform));
 };
 
 export const createNodeDiscoveryPlatform = (
