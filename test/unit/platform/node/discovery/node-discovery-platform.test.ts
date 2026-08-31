@@ -179,12 +179,17 @@ test('resolves an explicit adjacent Windows Node package and honors cancellation
 
 test('discards an adjacent package candidate cancelled during lookup', async () => {
   const controller = new AbortController();
-  const lookup = createNodeDiscoveryPlatform('linux').resolveAdjacentNodePackage(
-    { command: process.execPath, entrypointName: 'index.js', launcherName: 'cursor-agent' },
+  const platform = createNodeDiscoveryPlatform('linux', {
+    resolveSystemExecutable: async () => {
+      controller.abort();
+      return '/fixture/candidate';
+    },
+  });
+  const lookup = platform.resolveAdjacentNodePackage(
+    { command: 'fixture-agent', entrypointName: 'index.js', launcherName: 'cursor-agent' },
     undefined,
     controller.signal,
   );
-  queueMicrotask(() => controller.abort());
 
   await expect(lookup).resolves.toBeUndefined();
 });

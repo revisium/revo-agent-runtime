@@ -56,6 +56,10 @@ const resolveSystemOverride = async (
 const resolveSystemExecutable = async (command: string): Promise<string | undefined> =>
   (await which(command, { nothrow: true })) ?? undefined;
 
+interface NodeDiscoveryPlatformDependencies {
+  readonly resolveSystemExecutable: typeof resolveSystemExecutable;
+}
+
 const nodeExecutableName = (hostPlatform: NodeJS.Platform): string => {
   if (hostPlatform === 'win32') return 'node.exe';
   return 'node';
@@ -66,9 +70,10 @@ const resolveNodePackageEntrypointFor = async (
   policy: NodePackageEntrypointPolicy,
   override: string | undefined,
   signal: AbortSignal | undefined,
+  dependencies: NodeDiscoveryPlatformDependencies,
 ): Promise<string | undefined> => {
   if ((hostPlatform === 'win32' && override === undefined) || signal?.aborted) return undefined;
-  const candidate = override ?? (await resolveSystemExecutable(policy.command));
+  const candidate = override ?? (await dependencies.resolveSystemExecutable(policy.command));
   return candidate === undefined || signal?.aborted
     ? undefined
     : resolveNodePackageEntrypoint(policy, candidate);
@@ -79,15 +84,17 @@ const resolveAdjacentNodePackageFor = async (
   policy: AdjacentNodePackagePolicy,
   override: string | undefined,
   signal: AbortSignal | undefined,
+  dependencies: NodeDiscoveryPlatformDependencies,
 ): Promise<AdjacentNodePackage | undefined> => {
   if (signal?.aborted) return undefined;
-  const candidate = override ?? (await resolveSystemExecutable(policy.command));
+  const candidate = override ?? (await dependencies.resolveSystemExecutable(policy.command));
   if (candidate === undefined || signal?.aborted) return undefined;
   return resolveAdjacentNodePackage(policy, candidate, nodeExecutableName(hostPlatform));
 };
 
 export const createNodeDiscoveryPlatform = (
   hostPlatform: NodeJS.Platform = process.platform,
+  dependencies: NodeDiscoveryPlatformDependencies = { resolveSystemExecutable },
 ): DiscoveryPlatform =>
   Object.freeze({
     probeSystemExecutable,
@@ -95,14 +102,14 @@ export const createNodeDiscoveryPlatform = (
       policy: AdjacentNodePackagePolicy,
       override: string | undefined,
       signal: AbortSignal | undefined,
-    ) => resolveAdjacentNodePackageFor(hostPlatform, policy, override, signal),
+    ) => resolveAdjacentNodePackageFor(hostPlatform, policy, override, signal, dependencies),
     resolveBundledBridge,
     resolveNodePackageEntrypoint: (
       policy: NodePackageEntrypointPolicy,
       override: string | undefined,
       signal: AbortSignal | undefined,
-    ) => resolveNodePackageEntrypointFor(hostPlatform, policy, override, signal),
-    resolveSystemExecutable,
+    ) => resolveNodePackageEntrypointFor(hostPlatform, policy, override, signal, dependencies),
+    resolveSystemExecutable: dependencies.resolveSystemExecutable,
     resolveSystemOverride,
   });
 
