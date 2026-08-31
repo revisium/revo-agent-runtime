@@ -185,6 +185,30 @@ test('propagates a supplied signal and does not run a detector after it is abort
   expect(calls).toBe(1);
 });
 
+test('does not run a detector when selection aborts its supplied signal', async () => {
+  const controller = new AbortController();
+  let calls = 0;
+  const aborting: AgentDetector = {
+    get id() {
+      controller.abort();
+      return 'aborting';
+    },
+    detect: async () => {
+      calls += 1;
+      return { candidates: [], diagnostics: [] };
+    },
+  };
+
+  const result = await discoverAgents({
+    detectors: [aborting],
+    includeBuiltInDetectors: false,
+    signal: controller.signal,
+  });
+
+  expect(calls).toBe(0);
+  expect(result).toEqual({ definitions: [], diagnostics: [], modelObservations: [] });
+});
+
 test('reports credential-free model enumeration as unavailable without a model call', async () => {
   const result = await discoverAgents({ detectors: [], includeBuiltInDetectors: true });
 

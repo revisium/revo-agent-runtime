@@ -72,106 +72,158 @@ interface DetectorRun {
   readonly result: unknown;
 }
 
+interface DiscoveryState {
+  readonly definitions: AgentDiscoveryResult['definitions'][number][];
+  readonly diagnostics: AgentDiscoveryResult['diagnostics'][number][];
+  readonly modelObservations: ModelObservation[];
+  readonly identities: Map<string, Set<string>>;
+}
+
+interface CandidateRecord extends Record<string, unknown> {
+  readonly definition: unknown;
+  readonly models: readonly DiscoveredAgentModel[];
+}
+
+const isCandidateRecord = (value: unknown): value is CandidateRecord =>
+  isRecord(value) && Array.isArray(value.models) && 'definition' in value;
+
+const selectDetectors = (
+  detectors: readonly AgentDetector[],
+  disabled: ReadonlySet<string>,
+): readonly AgentDetector[] => {
+  return [...detectors]
+    .filter((detector) => !disabled.has(detector.id))
+    .sort((left, right) => compareUtf8(left.id, right.id));
+};
+
+const runDetector = async (detector: AgentDetector, signal: AbortSignal): Promise<DetectorRun> => {
+  try {
+    return Object.freeze({
+      detector,
+      failed: false,
+      result: await detector.detect(Object.freeze({ signal })),
+    });
+  } catch {
+    return Object.freeze({ detector, failed: true, result: undefined });
+  }
+};
+
+const runSelectedDetectors = async (
+  detectors: readonly AgentDetector[],
+  signal: AbortSignal,
+): Promise<readonly DetectorRun[]> =>
+  Promise.all(detectors.map((detector) => runDetector(detector, signal)));
+
+const newDiscoveryState = (): DiscoveryState => ({
+  definitions: [],
+  diagnostics: [],
+  modelObservations: [],
+  identities: new Map(),
+});
+
+const appendModelObservation = (
+  detectorId: string,
+  definitionIndex: number,
+  models: readonly DiscoveredAgentModel[],
+  defaultModelId: string | undefined,
+  state: DiscoveryState,
+): void => {
+  if (models.length === 0) return;
+  state.modelObservations.push(
+    Object.freeze({
+      detectorId,
+      definitionIndex,
+      models,
+      ...(defaultModelId !== undefined && models.some(({ id }) => id === defaultModelId)
+        ? { defaultModelId }
+        : {}),
+    }),
+  );
+};
+
+const appendCandidate = (
+  detectorId: string,
+  candidate: CandidateRecord,
+  state: DiscoveryState,
+): void => {
+  const definition = validateAgentDefinition(candidate.definition).definition;
+  const models = normalizedModels(candidate.models);
+  const knownVersions = state.identities.get(definition.id);
+  if (knownVersions?.has(definition.version) === true) {
+    state.diagnostics.push(
+      diagnosticFor(detectorId, {
+        code: 'duplicate_definition',
+        message: 'Detector returned a duplicate exact agent definition.',
+        severity: 'warning',
+      }),
+    );
+    return;
+  }
+  if (knownVersions === undefined)
+    state.identities.set(definition.id, new Set([definition.version]));
+  else knownVersions.add(definition.version);
+  const definitionIndex = state.definitions.length;
+  state.definitions.push(definition);
+  const defaultModelId =
+    typeof candidate.defaultModelId === 'string' ? candidate.defaultModelId.trim() : undefined;
+  appendModelObservation(detectorId, definitionIndex, models, defaultModelId, state);
+};
+
+const processCandidate = (detectorId: string, candidate: unknown, state: DiscoveryState): void => {
+  if (!isCandidateRecord(candidate)) {
+    state.diagnostics.push(malformedDefinition(detectorId));
+    return;
+  }
+  try {
+    appendCandidate(detectorId, candidate, state);
+  } catch {
+    state.diagnostics.push(malformedDefinition(detectorId));
+  }
+};
+
+const processDetectorResult = (
+  detectorId: string,
+  result: unknown,
+  state: DiscoveryState,
+): void => {
+  if (!isRecord(result) || !Array.isArray(result.diagnostics) || !Array.isArray(result.candidates))
+    throw new TypeError('Malformed detector result');
+  for (const diagnostic of result.diagnostics) {
+    if (!isDiagnostic(diagnostic)) throw new TypeError('Malformed detector diagnostic');
+    state.diagnostics.push(diagnosticFor(detectorId, diagnostic));
+  }
+  for (const candidate of result.candidates) processCandidate(detectorId, candidate, state);
+};
+
+const processDetectorRun = (run: DetectorRun, state: DiscoveryState): void => {
+  if (run.failed) {
+    state.diagnostics.push(detectorFailure(run.detector.id));
+    return;
+  }
+  try {
+    processDetectorResult(run.detector.id, run.result, state);
+  } catch {
+    state.diagnostics.push(detectorFailure(run.detector.id));
+  }
+};
+
+const freezeDiscoveryState = (state: DiscoveryState): AgentDiscoveryResult =>
+  Object.freeze({
+    definitions: Object.freeze(state.definitions),
+    diagnostics: Object.freeze(state.diagnostics),
+    modelObservations: Object.freeze(state.modelObservations),
+  });
+
 export const runDetectors = async (
   detectors: readonly AgentDetector[],
   options: DiscoverAgentsOptions,
 ): Promise<AgentDiscoveryResult> => {
   const disabled = new Set(options.disabledDetectorIds ?? []);
   const signal = options.signal ?? new AbortController().signal;
-  const selected = [...detectors]
-    .filter((detector) => !disabled.has(detector.id))
-    .sort((left, right) => compareUtf8(left.id, right.id));
-  const definitions: AgentDiscoveryResult['definitions'][number][] = [];
-  const diagnostics: AgentDiscoveryResult['diagnostics'][number][] = [];
-  const modelObservations: ModelObservation[] = [];
-  const identities = new Map<string, Set<string>>();
+  const selected = selectDetectors(detectors, disabled);
   const active = signal.aborted ? [] : selected;
-  const detectorRuns: readonly DetectorRun[] = await Promise.all(
-    active.map(async (detector): Promise<DetectorRun> => {
-      try {
-        return Object.freeze({
-          detector,
-          failed: false,
-          result: await detector.detect(Object.freeze({ signal })),
-        });
-      } catch {
-        return Object.freeze({ detector, failed: true, result: undefined });
-      }
-    }),
-  );
-
-  for (const { detector, failed, result } of detectorRuns) {
-    if (failed) {
-      diagnostics.push(detectorFailure(detector.id));
-      continue;
-    }
-    try {
-      if (
-        !isRecord(result) ||
-        !Array.isArray(result.diagnostics) ||
-        !Array.isArray(result.candidates)
-      )
-        throw new TypeError('Malformed detector result');
-      for (const diagnostic of result.diagnostics) {
-        if (!isDiagnostic(diagnostic)) throw new TypeError('Malformed detector diagnostic');
-        diagnostics.push(diagnosticFor(detector.id, diagnostic));
-      }
-      for (const candidate of result.candidates) {
-        if (
-          !isRecord(candidate) ||
-          !Array.isArray(candidate.models) ||
-          !('definition' in candidate)
-        ) {
-          diagnostics.push(malformedDefinition(detector.id));
-          continue;
-        }
-        try {
-          const definition = validateAgentDefinition(candidate.definition).definition;
-          const models = normalizedModels(candidate.models);
-          const knownVersions = identities.get(definition.id);
-          if (knownVersions?.has(definition.version) === true) {
-            diagnostics.push(
-              diagnosticFor(detector.id, {
-                code: 'duplicate_definition',
-                message: 'Detector returned a duplicate exact agent definition.',
-                severity: 'warning',
-              }),
-            );
-            continue;
-          }
-          if (knownVersions === undefined)
-            identities.set(definition.id, new Set([definition.version]));
-          else knownVersions.add(definition.version);
-          const definitionIndex = definitions.length;
-          definitions.push(definition);
-          const defaultModelId =
-            typeof candidate.defaultModelId === 'string'
-              ? candidate.defaultModelId.trim()
-              : undefined;
-          if (models.length > 0) {
-            modelObservations.push(
-              Object.freeze({
-                detectorId: detector.id,
-                definitionIndex,
-                models,
-                ...(defaultModelId !== undefined && models.some(({ id }) => id === defaultModelId)
-                  ? { defaultModelId }
-                  : {}),
-              }),
-            );
-          }
-        } catch {
-          diagnostics.push(malformedDefinition(detector.id));
-        }
-      }
-    } catch {
-      diagnostics.push(detectorFailure(detector.id));
-    }
-  }
-
-  return Object.freeze({
-    definitions: Object.freeze(definitions),
-    diagnostics: Object.freeze(diagnostics),
-    modelObservations: Object.freeze(modelObservations),
-  });
+  const detectorRuns = await runSelectedDetectors(active, signal);
+  const state = newDiscoveryState();
+  for (const detectorRun of detectorRuns) processDetectorRun(detectorRun, state);
+  return freezeDiscoveryState(state);
 };
