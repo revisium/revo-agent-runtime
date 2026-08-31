@@ -27,16 +27,16 @@ const inspectUntil = async (
   tracked: Promise<unknown>[],
 ): Promise<Inspected> => {
   const controller = new AbortController();
-  let operation: Promise<
-    Awaited<ReturnType<RecoveredProcessInspector['inspectAndReconcileRecoveredProcess']>>
-  >;
-  try {
-    operation = Promise.resolve(
-      inspector.inspectAndReconcileRecoveredProcess(snapshot.process, controller.signal),
-    );
-  } catch {
-    return { status: 'failed' };
-  }
+  const operation = (async () => {
+    try {
+      return await inspector.inspectAndReconcileRecoveredProcess(
+        snapshot.process,
+        controller.signal,
+      );
+    } catch {
+      throw new Error('Active-state recovery inspection failed.');
+    }
+  })();
   tracked.push(operation.catch(() => undefined));
   let timer!: ReturnType<typeof setTimeout>;
   const timeout = new Promise<'deadline'>((resolve) => {

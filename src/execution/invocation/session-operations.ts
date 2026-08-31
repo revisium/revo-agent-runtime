@@ -4,11 +4,9 @@ const delay = (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 const settle = (operation: () => Promise<void>): Promise<void> => {
-  try {
-    return operation().catch(() => undefined);
-  } catch {
-    return Promise.resolve();
-  }
+  return Promise.resolve()
+    .then(operation)
+    .catch(() => undefined);
 };
 
 export const cancelProtocolSession = (session: ProtocolSession): void => {

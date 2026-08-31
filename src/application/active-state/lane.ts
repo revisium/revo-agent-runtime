@@ -31,11 +31,11 @@ const settleBy = async (operation: Promise<void>, deadline: number): Promise<Set
   return settlement;
 };
 
-const invokeSink = (mutation: SinkMutation, signal: AbortSignal): Promise<void> => {
+const invokeSink = async (mutation: SinkMutation, signal: AbortSignal): Promise<void> => {
   try {
-    return Promise.resolve(mutation(signal));
+    await mutation(signal);
   } catch {
-    return Promise.reject(new Error('Active-state sink operation failed.'));
+    throw new Error('Active-state sink operation failed.');
   }
 };
 

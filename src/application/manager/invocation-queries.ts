@@ -191,8 +191,11 @@ export class InvocationQueries {
       Object.freeze({ result, snapshot: completedSnapshot(active, result, finishedAt) }),
     );
     while (this.completed.size > this.capacity) {
-      const oldest = [...this.completed.values()].reduce((previous, current) =>
-        compareCompletedRecords(current, previous) < 0 ? current : previous,
+      const first = this.completed.values().next().value!;
+      const oldest = [...this.completed.values()].reduce(
+        (previous, current) =>
+          compareCompletedRecords(current, previous) < 0 ? current : previous,
+        first,
       );
       this.completed.delete(oldest.snapshot.invocationId);
     }
