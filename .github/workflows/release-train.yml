@@ -43,7 +43,7 @@ jobs:
       action: ${{ inputs.action }}
       dry_run: ${{ inputs.dry_run }}
       base_branch: master
-      node_version: 24.11.1
+      node_version: 24.18.0
       package_manager: pnpm
       install_command: pnpm install --frozen-lockfile
       validate_command: pnpm verify

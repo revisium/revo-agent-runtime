@@ -1,79 +1,26 @@
-# Revo Agent Runtime Repository
+# Revo Agent Runtime 2
 
-This file is the repository-local contract for coding agents. When this repository is checked out inside the Revisium workspace, the workspace canonical agent playbook also applies. This file wins for concrete commands, package constraints, and repository policy.
+This repository implements the current public contract in
+[docs/API.md](./docs/API.md). Public symbols are changed only by an approved
+task, and the package exposes only its root entrypoint.
 
-## Repository facts
+Before editing, read `REPOSITORY.md`, `VERIFICATION.md`, `REVIEW.md`, the
+relevant current API or architecture document, and `package.json`.
 
-- Package: `@revisium/revo-agent-runtime`.
-- Package manager: pnpm 11.13.0 through Corepack.
-- Runtime: Node.js `>=24.11.1 <25`.
-- Language: strict TypeScript 7, ESM, and NodeNext module resolution.
-- Protected base branch: `master`.
-- Primary local gate: `pnpm verify`.
-- Static analysis: SonarCloud through the repository tooling and workflow committed here.
-- The root package export is the curated provider-neutral AgentManager API. Provider strategies and internal execution
-  modules remain private.
-
-## Required reading
-
-Before editing, inspect:
-
-1. `README.md` for the public package status and supported commands.
-2. `REPOSITORY.md` for source-of-truth order, ownership boundaries, and dependency direction.
-3. `docs/README.md`, the relevant architecture document or ADR, and the normative spec for the touched target behavior.
-4. `VERIFICATION.md` for exact required, conditional, and remote gates.
-5. `REVIEW.md` for the review blockers.
-6. `package.json`, the export map, and the relevant source and tests.
-
-When architecture, specifications, or ADRs are added, treat their declared source-of-truth order as authoritative instead of inferring behavior from neighboring repositories.
-
-## Working rules
-
-- Keep changes scoped to the approved request and preserve unrelated work.
-- Do not commit directly to `master`.
-- Do not push, create or update a pull request, merge, publish npm packages, or mutate external services without the corresponding approval.
-- Run targeted checks while iterating and the complete `pnpm verify` gate before handoff or publication.
-- After a push, inspect CI, Sonar findings when accessible, and unresolved review threads. Do not treat a top-level green status as proof that issue-level findings are clear.
-- Record missing credentials or provider access as skipped or blocked, never as passed.
-
-## Engineering rules
-
-- Start behavior changes with a failing test. Prefer contract and observable-behavior tests over implementation-detail assertions.
-- Use the smallest sufficient implementation. Add abstractions only for an existing boundary, variation, or test seam.
-- Keep each unit at one abstraction level and give it one bounded responsibility.
-- Keep business decisions separate from process, filesystem, network, provider, and presentation mechanics.
-- Keep the package invocation-scoped. Agent selection, execution planning, workspace allocation, durable retry, workflow
-  persistence, active-row storage/loading, recovery policy, path construction, retention, and pipeline transitions remain
-  consumer responsibilities. The package owns only bounded local POSIX reconciliation of snapshots the consumer supplies.
-- Keep protocol and provider SDK types behind package-owned adapters. Public contracts must remain provider-neutral and JSON-compatible where they cross a durable boundary.
-- Bound and redact events, terminal output, diagnostics, and artifacts before they reach consumer sinks.
-- Never pass wholesale `process.env`; inherit only named values and register invocation secrets with streaming redaction
-  before spawn.
-- Treat inherited and explicit variable values as nonsecret; reject credential-like names outside the secrets map.
-- Defensively canonicalize and copy definition and invocation JSON. Do not retain caller-owned mutable containers.
-- Atomically claim a non-existing output leaf and publish `result.json` without replacement. Never adopt, overwrite, suffix,
-  rotate, delete consumer evidence, or derive a consumer directory hierarchy; cleanup is limited to manager-owned scratch
-  and temp paths.
-- Treat native command-line runners and ACP as adapters to one invocation contract, not independent execution paths.
-- Do not add a dependency on orchestrator, DBOS, Prisma, Nest, GraphQL, MCP, or `@revisium/revo-scripts`.
-- Model expected failures explicitly with typed results or errors. Never swallow errors silently.
-- Preserve strict types. Do not use `any`, `@ts-ignore`, broad casts, unchecked assertions, or weaker public types to bypass a failing gate.
-- Reject or bound externally supplied collections, strings, artifacts, and payloads at their owning boundary.
-- Prefer names, types, and decomposition over explanatory comments. Comments are reserved for non-obvious invariants, compatibility constraints, protocols, or lifecycle hazards.
-- A quality-rule exception must be narrow and identify its owner, rationale, and expiry or removal condition.
-- Do not introduce dependency cycles, deep imports around the export map, or multiple public paths to the same contract.
-- Runtime code must not depend on test helpers, generated output, build scripts, or repository tooling.
-- Generated files, fixtures, coverage, and build output must stay outside production quality metrics without hiding owned production source.
-
-## Public package contract
-
-- Public entrypoints are declared explicitly in `package.json`; filesystem layout alone never makes a module public.
-- Public TypeScript changes require runtime tests where behavior exists, type-surface coverage, declaration validation,
-  packed-consumer validation, export validation, and updated README examples.
-- Keep ESM-only behavior intentional. Do not add CommonJS compatibility, root barrels, fallback exports, or duplicate entrypoints without an approved compatibility requirement.
-- Runtime dependencies require a demonstrated package responsibility and dependency-DAG review.
-- Do not publish from a local machine or add publishing credentials to repository files.
-
-## Verification
-
-Follow `VERIFICATION.md`. If it conflicts with scripts or CI, report the mismatch and use the safest current command set until the contract is corrected. Never claim an unexecuted gate passed.
+- Work on a feature branch and validate locally before opening a pull request.
+  CI runs the frozen install, full verification, and configured Sonar checks on
+  pushes and pull requests. Do not publish or mutate authentication state; run
+  a live provider only when the approved task or route selects its smoke gate,
+  using the existing launch context and never performing login or credential
+  changes.
+- Start behavior work with a readable failing test, make the smallest green
+  change, then follow the authoritative iteration delivery sequence in
+  `VERIFICATION.md` before `corepack pnpm verify`.
+- Keep source bounded and provider-neutral. Runtime source cannot import tests,
+  scripts, generated output, or concrete protocol dependencies outside their
+  owning adapter boundary.
+- Preserve the approved root API and do not scaffold future module directories
+  before their first behavior slice.
+- Leave implementation changes uncommitted after local gates and review. The
+  integrator commits, pushes, and opens the pull request; remote CI and Sonar
+  must pass on that pushed commit before merge.

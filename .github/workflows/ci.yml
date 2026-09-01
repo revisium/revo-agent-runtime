@@ -60,5 +60,5 @@ jobs:
           SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
 
       - name: Inspect Sonar open issues
-        if: ${{ env.SONAR_TOKEN != '' && github.event_name == 'pull_request' }}
+        if: ${{ always() && !cancelled() && env.SONAR_TOKEN != '' && github.event_name == 'pull_request' }}
         run: pnpm sonar:issues:local

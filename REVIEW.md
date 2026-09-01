@@ -1,115 +1,22 @@
-# Review Contract
+# Review contract
 
-Use this checklist for human, bot, and agent review. Findings should cite the concrete file and line, identify the violated contract, explain the risk, and propose the smallest sufficient correction.
+Block a change when it:
 
-## Blocking findings
+- adds runtime behavior, public exports, or speculative module directories
+  before their planned slice;
+- changes the target API without reconciling `docs/API.md`;
+- weakens strict TypeScript, type-aware lint, architecture, package, or
+  lockfile checks;
+- leaves an invalid negative fixture in the worktree or stops running it;
+- lets production source import tests, scripts, generated output, Node/ACP from
+  future contracts, concrete adapters from application/execution, application
+  from discovery, or otherwise violates the directed dependency map enforced
+  by the architecture gate;
+- uses floating dependency ranges, peer/optional bridge dependencies, a global
+  bridge requirement, implicit `latest`, credentials, or machine-local paths;
+- claims a local, remote, live, or package gate passed without command evidence.
 
-Block the change when any of the following applies:
-
-- Behavior or public type changes are not covered by tests at the appropriate boundary.
-- Package exports, declarations, README examples, and implementation describe different public surfaces.
-- Runtime code selects runners, models, profiles, workspaces, retry policy, or pipeline transitions instead of executing a resolved invocation.
-- Public contracts expose provider SDK, orchestrator, DBOS, Prisma, Nest, GraphQL, MCP, Kubernetes, claim/lease, host, or
-  playbook-owned types.
-- Initialization is repeatable, performs process work before whole-input structural/duplicate validation, lets one row block
-  independent valid rows, silently prunes unknown/mismatched pins, lacks operation/total timeouts, or does not fail closed on
-  inspection/termination/sink uncertainty.
-- Active snapshots contain results, terminal history, prompts, credentials, environment, output paths, or consumer workflow
-  data; or the package reads a database instead of accepting consumer-loaded rows and a `save`/`remove` sink.
-- A POSIX invocation that reaches `running` returns a handle before bounded fingerprint capture and active-state save;
-  capture/save failure leaves a known process untracked; cancellation of an invocation with a saved `running` row signals
-  before attempting the bounded `cancelling` save; a sink outage prevents live kill/reap; or removal failure changes
-  invocation result semantics.
-- Recovery signals by persisted PID/process-group id alone, accepts a fingerprint derived from caller-controlled data,
-  signals or removes a live identity mismatch, treats consumer selection as package-proven ownership, signals after uncertain
-  inspection, or claims descendant cleanup after the identity-matched leader is gone.
-- Leader exit removes active state or finalizes before the owned group is confirmed descendant-free; unconfirmed group
-  cleanup produces a terminal result, prunes the row, or omits typed `process_cleanup_failed` evidence.
-- Shutdown before/during initialization can admit work, hang beyond the initialization deadline, or resolve without settling
-  every recovery process already signalled.
-- Lifecycle events, terminal streams, diagnostics, or artifacts can grow without an explicit bound or reach a sink before
-  redaction; or an event carries output, diagnostics, files, or a full result instead of lifecycle notification only.
-- A malformed or unterminated built-in redaction candidate can exceed per-channel carry, emit more than one replacement,
-  persist an unredacted tail, or fail an otherwise valid invocation instead of discarding through its safe delimiter/end.
-- The manager registry can mutate after construction, performs implicit latest/fallback lookup, or execution rereads it
-  after snapshotting an exact definition digest.
-- A live accepted invocation can deliver zero or multiple process-local terminal events, omit the completed record before
-  delivery, or make the terminal result unavailable or inconsistent through handle, lookup, and wait paths. The event itself
-  is only an availability notification.
-- Shutdown is not idempotent/concurrency-safe, admits a racing start outside its drain set, resolves without confirmed
-  invocation/probe kill and reap, clears listeners before terminal delivery, rejects because an invocation failed, performs
-  an independent completed-record clear/eviction pass, bypasses normal bounded FIFO, or deletes consumer output directories.
-- Unconfirmed kill/reap does not reject the shared completion with bounded/redacted non-retryable
-  `revo.agent.shutdown_failed`, a later shutdown observes a different settlement, or an affected invocation is falsely
-  completed instead of remaining active, or consumer guidance permits same-domain replacement before cleanup resolves.
-- A closed or shutdown-failed manager accepts a new start/probe/subscription, makes registry/state reads or existing handles
-  unusable, or reports closure with anything other than the stable bounded `revo.agent.manager_closed` fault.
-- Late recording failure strands result waiters, recursively retries a failed result commit, claims a missing `result.json`
-  exists, mutates a successfully committed result after terminal-event append failure, or treats filesystem exactly-once as
-  guaranteed.
-- Successful output can be text, a JSON primitive/array, or a JSON object that was not validated against the consumer's
-  draft 2020-12 schema.
-- Completed records or subscriber queues are unbounded, active work can be evicted, or eviction/unknown semantics disagree
-  across manager methods.
-- Output recording adopts an existing leaf, allows two concurrent owners, replaces `result.json`, depends on unsupported
-  atomic-link behavior without failing closed, deletes evidence, or omits bounded raw-response diagnostics.
-- Output recording creates a missing ancestor, proceeds through a missing or non-directory parent, relies on normalization,
-  realpath, or containment as hostile-ancestor protection, or lets the consumer release its trusted stable-ancestor warranty
-  before every package filesystem operation for the start has settled.
-- An output claim is dispatched before its attempt is registered for bounded settlement/quiescence and shutdown drainage, or
-  a timeout does not retain the identical authentic claim guard through late reconciliation.
-- A deterministic caller, definition, binding, permission, environment, workspace, schema, platform, probe, or prospective-
-  bound failure first appears after output claim.
-- Output preparation mutates the claimed leaf before its authentic publication/cleanup authority is registered, or a
-  rejection/unknown settlement loses that identical authority before filesystem quiescence.
-- An authority-bearing carrier is accepted structurally, for the wrong invocation, after transfer, or more than once.
-- Raw child bytes can reach a parser, evidence object, fault, event, result, completed record, file destination, or callback
-  before the applicable independent redaction front.
-- Stdout/stderr pumping or callbacks begin before sole-coordinator registration and one-use activation, or protocol data is
-  buffered before its deferred destination binds.
-- A parser competes for terminal completion, multiple terminal authorities exist, exact parser reasons collapse, or raw-
-  response eligibility exceeds ADR-0003's extraction/parsing/schema-validation partition.
-- A process-start attempt is not registered before spawn dispatch, spawn failure carries live authority, or a post-spawn
-  rejection lacks confirmed cleanup or the authentic retained cleanup owner.
-- Cleanup uncertainty reaches a terminal commit, eligible raw evidence or `result.json` is replaced, scratch/output
-  precedence drifts, or terminal publication reparses the response.
-- Fixed private claim, preparation, duplex, protocol, parser, cleanup, preview, event, or probe bounds are missing; required
-  public relations drift; or `initializationTimeoutMs` is used as a general shutdown deadline.
-- Migration retains an old/new execution overload, alias, dual publication authority, eager/paused I/O path, or second
-  completion/normalization path.
-- Definitions or accepted requests retain caller-owned JSON containers instead of canonical package-owned snapshots.
-- Argument-template delivery is incoherent, generic parameters do not use exact own-property/canonical JSON rules, expansion
-  is nondeterministic/unbounded, CLI flags are implicit, or missing values are silently omitted.
-- `.scratch` is outside the invocation directory, weakly protected, cleaned before reap, silently retained after controlled
-  cleanup failure, or treated as package-owned durable recovery state.
-- A child inherits wholesale `process.env`, environment keys overlap, secret values are not registered with streaming
-  redaction before spawn, credential-like names enter nonsecret inherit/variables, or unredacted carry buffers survive
-  finalization.
-- Version probing uses regex extraction, accepts non-strict SemVer or non-AND range syntax, leaves output unbounded, fails to
-  kill and reap on timeout, is not required/fresh immediately before output claim and invocation spawn, or lets an
-  unsupported platform claim output or spawn.
-- Limit validation omits active-operation/initialization minima and relationship, per-invocation <= manager relationships,
-  idle <= wall, total argv, or terminal reservation.
-- Native command-line and ACP adapters return incompatible outcome or observability contracts.
-- A deep import, broad root barrel, dependency cycle, or reverse dependency bypasses the intended package DAG.
-- Architecture configuration changes do not include a passing positive graph and temporary representative negative probes.
-- New code uses `any`, `@ts-ignore`, an unchecked assertion, silent error swallowing, or an unbounded external payload.
-- System mechanics and business decisions are mixed into an unreadable unit.
-- A speculative abstraction or compatibility fallback is introduced without an approved requirement.
-- Runtime source depends on tests, fixtures, generated output, build scripts, or repository tooling.
-- A lint, format, type, test, coverage, package, or workflow failure is suppressed instead of fixed.
-- A quality exception lacks an owner, rationale, and expiry or removal condition.
-- Required verification is skipped without a concrete reason and residual-risk statement.
-- CI, Sonar, or review threads contain unresolved valid findings.
-- A release change can publish without an explicit release approval gate.
-
-## Expected evidence
-
-- `pnpm verify` passed on the reviewed head.
-- Conditional checks from `VERIFICATION.md` were run or marked not applicable.
-- CI passed on the same commit.
-- Sonar Quality Gate and issue-level results were inspected when provider access was available.
-- The packed artifact contains only the declared public files.
-- ATTW, package-content validation, isolated ESM and strict TypeScript consumers, and deep-import denial use one exact
-  package tarball created with an isolated temporary npm cache.
-- Documentation changed whenever the public package contract changed.
+Apply the authoritative iteration delivery sequence in `VERIFICATION.md`; review
+for readable reader-facing tests, one bounded responsibility per unit, the
+smallest sufficient change, and a clean feature-branch pull-request handoff
+with local and CI evidence.

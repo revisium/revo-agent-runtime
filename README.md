@@ -1,245 +1,139 @@
 <div align="center">
 
-# @revisium/revo-agent-runtime
+# Revo Agent Runtime
 
-**A portable runtime and process-local manager for exact, versioned AI-agent invocations.**
+Protocol-neutral discovery and supervised ACP v1 agent execution for Node.js.
 
-[![CI](https://github.com/revisium/revo-agent-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/revisium/revo-agent-runtime/actions/workflows/ci.yml)
+![Node.js 24](https://img.shields.io/badge/Node.js-24-5FA04E?logo=nodedotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![ACP v1](https://img.shields.io/badge/ACP-v1-6E56CF)
+![MIT](https://img.shields.io/badge/license-MIT-22C55E)
+[![CI](https://github.com/revisium/revo-agent-runtime/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/revisium/revo-agent-runtime/actions/workflows/ci.yml?query=branch%3Amaster)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=revisium_revo-agent-runtime&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=revisium_revo-agent-runtime)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=revisium_revo-agent-runtime&metric=coverage)](https://sonarcloud.io/summary/new_code?id=revisium_revo-agent-runtime)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=revisium_revo-agent-runtime&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=revisium_revo-agent-runtime)
 
 </div>
 
-> [!IMPORTANT]
-> The package root exposes the curated provider-neutral AgentManager API. Provider strategies, execution internals, and
-> testing helpers remain private; registry availability and released versions are described by npm release metadata.
+## Status and installation
 
-## About
+The package metadata is prepared for the public alpha release
+(`0.2.0-alpha.0`) with npm provenance. This migration pull request does not
+publish the package; install dependencies from this repository while release
+publication remains deferred. Runtime requires Node.js `>=24.15.0 <25`;
+repository development uses pnpm 11.13.0 through Corepack.
 
-`@revisium/revo-agent-runtime` executes one exact native command-line or ACP agent invocation and exposes its lifecycle,
-bounded redacted events, files, cancellation, shutdown, usage, typed failures, and schema-validated JSON result through one
-framework-independent `AgentManager`.
+```bash
+corepack pnpm install --frozen-lockfile
+```
 
-## Quick start
+The public API is exposed from the package root; deep imports are unsupported.
 
-This example assumes the consumer owns a complete versioned definition and result schema. See the
-[expanded consumer example](./docs/examples/consumer.md) for the definition and environment setup.
+The caller owns definition persistence and active-state storage. The runtime
+accepts definitions returned by discovery or supplied from the caller's store;
+it never persists either collection.
+
+## Discover available definitions
 
 ```ts
-import { createAgentManager } from '@revisium/revo-agent-runtime';
+import { discoverAgents } from '@revisium/revo-agent-runtime';
 
-import { codexDefinition, roleResultSchema } from './agents/codex.js';
+const discovery = await discoverAgents();
+console.log(discovery.definitions.map(({ id, version }) => `${id}@${version}`));
+console.log(discovery.diagnostics);
+```
 
+Definitions are ready to register when discovery can verify their local launch
+shape; they do not prove provider authentication or prompt readiness.
+
+## Create, initialize, and subscribe
+
+```ts
+import { createAgentManager, discoverAgents } from '@revisium/revo-agent-runtime';
+
+const { definitions } = await discoverAgents();
 const manager = createAgentManager({
-  definitions: [codexDefinition],
+  definitions,
   activeStateSink: {
-    save: (snapshot, context) => activeInvocationRepository.save(snapshot, context),
-    remove: (invocationId, context) => activeInvocationRepository.remove(invocationId, context),
+    save: (snapshot, context) => activeStateStore.save(snapshot, context),
+    remove: (invocationId, context) => activeStateStore.remove(invocationId, context),
   },
 });
 
-await manager.initialize(await activeInvocationRepository.listForLocalManager());
-
-const unsubscribe = manager.subscribe({}, (event) => {
-  if (event.type === 'invocation.finished') {
-    const lookup = manager.getResult(event.invocationId);
-    if (lookup.state === 'completed') {
-      consumeResult(lookup.result);
-    }
-  }
-});
-
-const handle = await manager.start({
-  invocationId: attempt.id,
-  agent: { id: 'codex', version: 'definition-v1' },
-  prompt: 'Implement issue #42 and return the requested JSON object.',
-  workspace: { directory: workspace.path },
-  parameters: { model: 'gpt-5' },
-  permissions: { mode: 'workspace-write', network: false },
-  result: { schema: roleResultSchema },
-  output: { directory: attempt.agentOutputDirectory },
-});
-
-// Optional: stop the agent process through the same lifecycle contract.
-// await handle.cancel('Pipeline cancelled');
-
-const result = await handle.result();
-const lateLookup = manager.getResult(handle.invocationId);
-
-consumeResult(result, lateLookup);
-unsubscribe();
-await manager.shutdown('Consumer is stopping');
+await manager.initialize(await activeStateStore.list());
+const unsubscribe = manager.subscribe({}, (event) => eventSink.publish(event));
 ```
 
-- `subscribe({})` observes future events for every invocation; filter by `invocationId` for one.
-- Events are lifecycle-only. `invocation.finished` signals that `getResult()` can read the terminal result; streams and
-  diagnostics are not event payloads.
-- The manager records bounded redacted `events.ndjson`, `stdout.log`, `stderr.log`, optional failure-only
-  `raw-final-response.txt`, and `result.json` under `output.directory`.
-- Target execution completes deterministic preparation before a preregistered exclusive output claim. A spawned process keeps
-  I/O paused through identity capture and the initial active-state save; acceptance then precedes one-use coordinator/I/O
-  activation. The implementation provides this B+ handoff; supported provider and platform declarations remain separate.
-- Eligible `raw-final-response.txt` and `result.json` are separate non-replacing publications with deterministic ordering and
-  failure precedence.
-- The consumer provisions the existing parent of `output.directory` and warrants trusted stable ancestors until every package
-  filesystem operation for the start has settled; the manager creates only the absent final leaf.
-- `result()` waits for the terminal result; `getResult()` retrieves a retained result after completion.
-- `cancel()` stops one invocation; `shutdown()` closes the manager and drains every accepted invocation.
-- Success is a top-level JSON object validated against the supplied draft 2020-12 schema. There is no text-success result.
+The listener receives only lifecycle events: accepted, started, cancelling, and
+finished. A finished event means the immutable result is available.
 
-The consumer owns the active-row repository and loads rows before initialization. The runtime writes only `running` or
-`cancelling` process snapshots, bounds state operations/initialization, and cleans up identity-matched non-reconnectable
-local POSIX processes after restart. See
-[ADR-0006](./docs/adr/0006-consumer-backed-active-invocation-recovery.md) for fingerprint and group-kill rules; active rows
-never contain results or history.
-
-## Data-driven agents
-
-Agents are versioned JSON data validated against the `AgentDefinition` schema. A definition chooses launch arguments,
-delivery, parameter and permission schemas, capabilities, and package-owned execution strategies.
-
-Definitions may select only protocol drivers, result parsers, and permission strategies implemented by this package. Adding
-an agent is data-only when those strategies already support it. A new protocol, parser, or permission behavior requires
-package code, conformance tests, and a new package release.
-
-```text
-AgentDefinition = data
-protocol/parser/permission strategy = package code
-```
-
-Non-exhaustive conceptual excerpt:
-
-```json
-{
-  "id": "codex",
-  "version": "definition-v1",
-  "protocol": {
-    "driver": "native/stdio-v1",
-    "resultParser": "codex-jsonl/v1",
-    "permissionStrategy": "codex-cli/v1"
-  }
-}
-```
-
-The complete definition set is supplied at construction and sealed. V1 has no runtime registration, latest-version lookup,
-or fallback selection; construct a new manager for a new definition set.
-
-## Public API
-
-This is the consumer surface. Supporting types and exact behavior are described in the
-[AgentManager v1 specification](./docs/specs/agent-manager-v1.spec.md).
+## Inspect configuration and select a model
 
 ```ts
-export declare function createAgentManager(options: AgentManagerOptions): AgentManager;
+const agent = manager.listAgents()[0];
+if (agent === undefined) throw new Error('No discovered agent is available.');
 
-export declare class AgentManagerError extends Error {
-  readonly fault: AgentFault;
-}
+const catalog = await manager.inspectConfiguration({
+  agent: agent.agent,
+  workspace: { directory: workspaceDirectory },
+});
 
-export interface AgentManager {
-  listAgents(): readonly AgentDescriptor[];
-  getAgent(agent: AgentRef): AgentDescriptor | undefined;
-  initialize(snapshots: readonly ActiveInvocationSnapshot[]): Promise<void>;
-  probeAgent(agent: AgentRef): Promise<AgentProbeResult>;
-
-  subscribe(filter: AgentEventFilter, listener: AgentEventListener): Unsubscribe;
-
-  start(request: StartAgentInvocation, context?: AgentStartContext): Promise<AgentInvocationHandle>;
-  listInvocations(filter?: AgentInvocationFilter): readonly AgentInvocationSnapshot[];
-  getInvocation(invocationId: string): AgentInvocationSnapshot | undefined;
-  getResult(invocationId: string): AgentResultLookup;
-  waitForResult(invocationId: string): Promise<AgentInvocationResult>;
-  cancel(invocationId: string, reason?: string): Promise<CancelInvocationResult>;
-  shutdown(reason?: string): Promise<void>;
-}
-
-export interface AgentInvocationHandle {
-  readonly invocationId: string;
-  readonly pin: AgentExecutionPin;
-  result(): Promise<AgentInvocationResult>;
-  cancel(reason?: string): Promise<CancelInvocationResult>;
-}
+const configuration =
+  catalog.model === undefined
+    ? undefined
+    : {
+        catalogRevision: catalog.catalogRevision,
+        selections: { [catalog.model.optionId]: catalog.model.currentModel },
+      };
 ```
 
-## Responsibility boundary
+Catalogs are immutable, session-scoped snapshots. `start()` validates selections
+again in its fresh session, so stale or unavailable values fail before a prompt.
 
-The package owns:
+## Start and read a structured result
 
-- immutable definition validation, exact registry reads, fresh executable/version preflight, and execution pins;
-- native and ACP process lifecycle, lifecycle-only events, files, structured results, cancellation, shutdown, and reaping;
-- local process fingerprints, active-state notifications, and cleanup of consumer-supplied active snapshots;
-- package-owned protocol, result-parser, and permission strategies;
-- sealed preclaim preparation, preregistered claim/preparation/start ownership, paused-I/O acceptance, one duplex
-  coordinator, and capability-authenticated terminal publication;
-- bounds and redaction before subscriber delivery or file writes.
+```ts
+const handle = await manager.start({
+  agent: agent.agent,
+  configuration,
+  invocationId: crypto.randomUUID(),
+  output: { directory: outputDirectory },
+  parameters: {},
+  permissions: {},
+  prompt: 'Return exactly {"ok": true}.',
+  result: {
+    schema: {
+      additionalProperties: false,
+      properties: { ok: { const: true, type: 'boolean' } },
+      required: ['ok'],
+      type: 'object',
+    },
+  },
+  workspace: { directory: workspaceDirectory },
+});
 
-The consumer owns:
-
-- definition storage and rollout plus exact agent, model, prompt, workspace, permission, and result-schema selection;
-- invocation ids and any run/step/attempt model, scheduling, retry, pipeline, gate, or product verdict;
-- active-row storage/loading, DBOS, distributed coordination, output path construction and parent provisioning, the trusted
-  stable-ancestor warranty through terminal filesystem quiescence, durable result/history indexing, retention, recovery
-  policy, and user-facing log projection;
-- credential selection, billing, Git, GitHub, and other deterministic system operations.
-
-## Documentation
-
-- [AgentManager v1 specification](./docs/specs/agent-manager-v1.spec.md) — exact target types, lifecycle, files, errors, and
-  invariants.
-- [B+ execution handoff specification](./docs/specs/execution-handoff.spec.md) — accepted package-private preparation,
-  supervision, and publication contract; it adds no provider-specific public surface.
-- [Internal module structure](./docs/specs/internal-module-structure.spec.md) — accepted internal layering and module rules;
-  it does not create a public export.
-- [Architecture](./docs/architecture.md) — implementation structure, dependency direction, and ownership boundaries.
-- [Expanded consumer example](./docs/examples/consumer.md) — complete target definition and invocation setup.
-- [ADRs and documentation index](./docs/README.md) — accepted decisions and repository policies.
-- [Testing](./docs/testing.md) — proof layers and required implementation coverage.
-
-## Requirements
-
-- Node.js 24 (`>=24.11.1 <25`)
-- pnpm 11.13.0 through Corepack
-- Docker only for the local SonarCloud parity check
-
-## Development
-
-```bash
-corepack enable
-pnpm install --frozen-lockfile
-pnpm verify
+const result = await handle.result();
+if (result.status === 'succeeded') console.log(result.value.ok); // true
 ```
 
-| Command                    | Purpose                                                    |
-| -------------------------- | ---------------------------------------------------------- |
-| `pnpm format:check`        | Verify formatting                                          |
-| `pnpm lint`                | Run type-aware Oxlint and TypeScript diagnostics           |
-| `pnpm test`                | Run every currently owned Vitest lane                      |
-| `pnpm test:architecture`   | Prove allowed boundaries and representative violations     |
-| `pnpm test:cov`            | Run tests with v8 coverage                                 |
-| `pnpm build`               | Build ESM JavaScript and TypeScript declarations           |
-| `pnpm verify:package`      | Validate the exact tarball, types, ESM, and denied imports |
-| `pnpm verify:architecture` | Run the committed architecture verification harness        |
-| `pnpm verify`              | Run the complete local CI gate                             |
-| `pnpm ci:local:sonar`      | Verify, analyze with Sonar, and inspect open branch issues |
+Expected execution failures resolve to a terminal result. Construction and
+pre-acceptance failures throw `AgentManagerError`.
 
-## Release automation
+## Cancel and shut down
 
-The Release Train workflow computes the standard SemVer transitions and defaults to a read-only dry run. SemVer tags run the
-complete verification gate before a public npm publish authenticated by OIDC; prerelease tags do not create GitHub Releases.
-See [VERIFICATION.md](./VERIFICATION.md) for the exact release gates.
+```ts
+await handle.cancel('The caller no longer needs this result.');
+unsubscribe();
+await manager.shutdown();
+```
 
-## SonarCloud
+Cancellation is idempotent. Shutdown drains owned work and confirms cleanup
+before it resolves.
 
-Copy `.env.sonar.example` to an ignored `.env.sonar`, provide `SONAR_TOKEN`, and run `pnpm ci:local:sonar`. Alternatively,
-set `SONAR_ENV_FILE=/absolute/path/to/.env.sonar`. CI runs verification before analysis; pull requests also wait for the
-Quality Gate and fail when open Sonar issues remain.
+## Further reading
 
-## Package contract
-
-The package is ESM-only, uses explicit exports, emits declarations, and ships only `dist`, `README.md`, `LICENSE`, and
-package metadata. Its single root entrypoint exposes only the curated provider-neutral AgentManager contract.
-
-## License
-
-[MIT](LICENSE) © Revisium
+- [API](./docs/API.md)
+- [Architecture](./docs/ARCHITECTURE.md)
+- [Providers](./docs/PROVIDERS.md)
+- [Roadmap](./docs/ROADMAP.md)
+- [Third-party bridge notices](./THIRD_PARTY_NOTICES.md)
