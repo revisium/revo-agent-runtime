@@ -77,6 +77,10 @@ provider-owned definition data, not a reason to couple provider folders.
 The staged `contracts/session` hierarchy owns session API, event, interaction,
 lifecycle, persistence, and request declarations. Its package-private
 continuation envelope is intentionally absent from both public export barrels.
+`application/session/boundary` owns descriptor-safe copying and decoding of
+untrusted session values; `application/session/policy` independently owns
+identifier, capability, and limit decisions. Portable digest consumers depend
+on `execution/security/digest/port`, never on Node crypto.
 
 ## Enforced structural rules
 
