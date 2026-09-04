@@ -193,6 +193,7 @@ describe('session request boundaries', () => {
     },
     { requestId: 'req', response: { extra: true, kind: 'input', outcome: 'cancelled' } },
     { requestId: 'req', response: { kind: 'unknown', outcome: 'unknown' } },
+    { requestId: 'req', response: { kind: 'input', outcome: 'unknown' } },
     { extra: true, requestId: 'req', response: { kind: 'input', outcome: 'declined' } },
   ])('rejects another invalid interaction shape %#', (input) => {
     expect(() => decodeRespondAgentSessionRequest(input, limits)).toThrow(AgentManagerError);

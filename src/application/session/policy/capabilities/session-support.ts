@@ -22,7 +22,7 @@ const unsupported = (): never => {
 };
 
 const exactKeys = (value: Readonly<JsonObject>, expected: readonly string[]): boolean => {
-  const keys = Object.keys(value).sort();
+  const keys = Object.keys(value).sort((left, right) => left.localeCompare(right));
   return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
 };
 
@@ -32,7 +32,13 @@ const booleanObject = (
 ): Readonly<Record<string, boolean>> => {
   if (!isJsonObject(value)) return unsupported();
   const object = value;
-  if (!exactKeys(object, [...keys].sort()) || keys.some((key) => typeof object[key] !== 'boolean'))
+  if (
+    !exactKeys(
+      object,
+      [...keys].sort((left, right) => left.localeCompare(right)),
+    ) ||
+    keys.some((key) => typeof object[key] !== 'boolean')
+  )
     return unsupported();
   const result: Record<string, boolean> = {};
   for (const key of keys) result[key] = Boolean(object[key]);

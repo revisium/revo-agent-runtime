@@ -1,3 +1,4 @@
+import type { JsonObject } from '../../../../contracts/agent-definition.js';
 import { AgentManagerError } from '../../../../contracts/manager.js';
 import type {
   AgentSessionInputValue,
@@ -38,10 +39,8 @@ const inputValue = (value: unknown): AgentSessionInputValue => {
   return Object.freeze(strings);
 };
 
-const response = (value: unknown): AgentSessionInteractiveResponse => {
-  if (!isJsonObject(value) || typeof value.kind !== 'string' || typeof value.outcome !== 'string')
-    return invalid();
-  if (value.kind === 'permission' && value.outcome === 'selected') {
+const permissionResponse = (value: Readonly<JsonObject>): AgentSessionInteractiveResponse => {
+  if (value.outcome === 'selected') {
     if (
       !hasExactJsonKeys(value, ['kind', 'optionId', 'outcome']) ||
       typeof value.optionId !== 'string' ||
@@ -50,21 +49,33 @@ const response = (value: unknown): AgentSessionInteractiveResponse => {
       return invalid();
     return Object.freeze({ kind: 'permission', optionId: value.optionId, outcome: 'selected' });
   }
-  if (value.kind === 'permission' && value.outcome === 'denied') {
+  if (value.outcome === 'denied') {
     if (!hasExactJsonKeys(value, ['kind', 'outcome'])) return invalid();
     return Object.freeze({ kind: 'permission', outcome: 'denied' });
   }
-  if (value.kind === 'input' && value.outcome === 'submitted') {
+  return invalid();
+};
+
+const inputResponse = (value: Readonly<JsonObject>): AgentSessionInteractiveResponse => {
+  if (value.outcome === 'submitted') {
     if (!hasExactJsonKeys(value, ['kind', 'outcome', 'values']) || !isJsonObject(value.values))
       return invalid();
     const values: Record<string, AgentSessionInputValue> = {};
     for (const [key, answer] of Object.entries(value.values)) values[key] = inputValue(answer);
     return Object.freeze({ kind: 'input', outcome: 'submitted', values: Object.freeze(values) });
   }
-  if (value.kind === 'input' && (value.outcome === 'declined' || value.outcome === 'cancelled')) {
+  if (value.outcome === 'declined' || value.outcome === 'cancelled') {
     if (!hasExactJsonKeys(value, ['kind', 'outcome'])) return invalid();
     return Object.freeze({ kind: 'input', outcome: value.outcome });
   }
+  return invalid();
+};
+
+const response = (value: unknown): AgentSessionInteractiveResponse => {
+  if (!isJsonObject(value) || typeof value.kind !== 'string' || typeof value.outcome !== 'string')
+    return invalid();
+  if (value.kind === 'permission') return permissionResponse(value);
+  if (value.kind === 'input') return inputResponse(value);
   return invalid();
 };
 
