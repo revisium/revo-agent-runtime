@@ -74,15 +74,22 @@ provider-owned definition data, not a reason to couple provider folders.
 | `platform/node/output`            | Durable, non-replacing filesystem claim and publication                                                     | Output ports; Node filesystem APIs                                       |
 | `platform/node/probe`             | Bounded executable resolution/version observation                                                           | Probe and process ports; Execa and Node APIs                             |
 
+The staged `contracts/session` hierarchy owns session API, event, interaction,
+lifecycle, persistence, and request declarations. Its package-private
+continuation envelope is intentionally absent from both public export barrels.
+
 ## Enforced structural rules
 
-`pnpm verify:architecture` checks the real source tree and representative
-negative fixtures. It rejects flat application/execution roots, retired private
-paths, provider policy in discovery/shared provider code, cross-provider
-imports, oversized production modules and reader-facing tests, forbidden layer
-direction, concrete ACP inside application/execution, Node ownership inside
-application, cycles, and private package exports. TypeScript rejects unused
-locals/parameters, while pinned Knip rejects dead exports.
+`pnpm verify:architecture` runs dependency-cruiser against the real source
+graph. The declarative layer manifest rejects forbidden dependency direction;
+additional rules reject cycles, unresolved or out-of-source imports,
+development dependencies in production, Node ownership in contracts and
+application, process spawning in the core, concrete ACP dependencies in
+portable protocol ports, root-entrypoint imports from lower layers,
+cross-provider imports, and exposure of the private continuation envelope.
+TypeScript rejects unused locals/parameters, while pinned Knip rejects dead
+exports. Code layout and readability remain ordinary design/review concerns,
+not a second custom source parser.
 
 `pnpm verify:package` additionally seeds a stale compiled artifact, proves that
 the build removes it, and validates the exact current packed inventory, ESM/type

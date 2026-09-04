@@ -13,6 +13,10 @@ await assert.rejects(
   (error) => error instanceof Error && 'code' in error && error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED',
 );
 await assert.rejects(
+  import('${packageName}/dist/contracts/session.js'),
+  (error) => error instanceof Error && 'code' in error && error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED',
+);
+await assert.rejects(
   import('${packageName}/test/support/fake-native-protocol-driver.js'),
   (error) => error instanceof Error && 'code' in error && error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED',
 );

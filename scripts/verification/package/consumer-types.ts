@@ -31,4 +31,9 @@ const selection: AgentConfigurationSelection = { selections: { model: 'provider/
 void selection;
 declare const catalog: AgentConfigurationCatalog;
 void catalog;
+
+// @ts-expect-error Session declarations stay out of the shipped root until the facade works.
+type PrematureAgentSession = import('${packageName}').AgentSession;
+declare const prematureAgentSession: PrematureAgentSession;
+void prematureAgentSession;
 `;

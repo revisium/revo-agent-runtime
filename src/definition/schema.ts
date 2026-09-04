@@ -54,6 +54,22 @@ const argumentTemplateSchema = z.discriminatedUnion('kind', [
   }),
 ]);
 
+const sessionCapabilitySchema = z.strictObject({
+  multiTurn: z.literal(true),
+  resume: z.enum(['none', 'native']),
+  interactions: z.strictObject({
+    permission: z.boolean(),
+    input: z.boolean(),
+  }),
+  updates: z.strictObject({
+    message: z.literal(true),
+    progress: z.boolean(),
+    tool: z.boolean(),
+    plan: z.boolean(),
+    usage: z.boolean(),
+  }),
+});
+
 const agentDefinitionSchema = z.strictObject({
   schemaVersion: z.literal('agent-definition/v1'),
   id: boundedString(1, runtimeLimits.agentIdentityBytes),
@@ -87,6 +103,7 @@ const agentDefinitionSchema = z.strictObject({
     cancellation: z.boolean(),
     structuredResult: z.literal(true),
     usage: z.boolean(),
+    session: sessionCapabilitySchema.exactOptional(),
   }),
   constraints: z
     .strictObject({

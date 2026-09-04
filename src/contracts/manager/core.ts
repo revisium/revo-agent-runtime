@@ -99,7 +99,30 @@ export interface AgentFault {
     | 'revo.agent.result_invalid_json'
     | 'revo.agent.result_not_object'
     | 'revo.agent.result_schema_mismatch'
-    | 'revo.agent.strategy_unsupported';
+    | 'revo.agent.strategy_unsupported'
+    | 'revo.agent.session_state_unavailable'
+    | 'revo.agent.session_unsupported'
+    | 'revo.agent.session_duplicate'
+    | 'revo.agent.session_unknown'
+    | 'revo.agent.session_closed'
+    | 'revo.agent.session_busy'
+    | 'revo.agent.session_capacity'
+    | 'revo.agent.session_identity_capacity'
+    | 'revo.agent.session_backpressure'
+    | 'revo.agent.turn_duplicate'
+    | 'revo.agent.turn_incomplete'
+    | 'revo.agent.interaction_unknown'
+    | 'revo.agent.interaction_conflict'
+    | 'revo.agent.interaction_invalid'
+    | 'revo.agent.checkpoint_invalid'
+    | 'revo.agent.resume_token_invalid'
+    | 'revo.agent.resume_token_consumed'
+    | 'revo.agent.continuation_pin_mismatch'
+    | 'revo.agent.checkpoint_unsupported'
+    | 'revo.agent.continuation_too_large'
+    | 'revo.agent.event_conflict'
+    | 'revo.agent.event_sink_failed'
+    | 'revo.agent.session_output_too_large';
   readonly message: string;
   readonly details?: JsonObject;
   readonly phase:
@@ -111,7 +134,13 @@ export interface AgentFault {
     | 'running'
     | 'shutdown'
     | 'collecting_result'
-    | 'finalizing';
+    | 'finalizing'
+    | 'session_opening'
+    | 'session_running'
+    | 'session_delivery'
+    | 'session_checkpointing'
+    | 'session_recovery'
+    | 'session_terminal';
   readonly retryable: boolean;
 }
 
