@@ -9,8 +9,7 @@ export const reduceOpeningTimer = (
 ): SessionTransition => {
   const timer = state.timers.find(({ timerId }) => timerId === command.timerId);
   if (
-    timer === undefined ||
-    timer.generation !== command.generation ||
+    timer?.generation !== command.generation ||
     timer.kind !== command.kind ||
     (timer.kind !== 'opening' && timer.kind !== 'wall_clock')
   )

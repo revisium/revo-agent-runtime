@@ -14,7 +14,7 @@ type EventOutcome = Extract<SessionCommand, { readonly type: `event.${string}` }
 
 export const reduceTurnEvent = (state: RunningState, command: EventOutcome): SessionTransition => {
   const inFlight = state.events.inFlight;
-  if (inFlight === undefined || inFlight.correlation.effectId !== command.correlation.effectId)
+  if (inFlight?.correlation.effectId !== command.correlation.effectId)
     return unchangedTransition(state);
   if (command.type !== 'event.applied' && command.type !== 'event.timed_out_then_applied')
     return failActiveSession(state, command.fault);

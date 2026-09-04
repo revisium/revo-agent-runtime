@@ -27,13 +27,13 @@ export const projectSessionSnapshot = (state: SessionState): AgentSessionSnapsho
     state.status === 'hibernating' ||
     state.status === 'closing' ||
     state.status === 'cancelling';
-  const activeTurnId =
-    state.status === 'running'
-      ? state.turn.turnId
-      : (state.status === 'closing' || state.status === 'cancelling') &&
-          state.progress.stage === 'settling_turn'
-        ? state.progress.turn.turnId
-        : undefined;
+  let activeTurnId: string | undefined;
+  if (state.status === 'running') activeTurnId = state.turn.turnId;
+  else if (
+    (state.status === 'closing' || state.status === 'cancelling') &&
+    state.progress.stage === 'settling_turn'
+  )
+    activeTurnId = state.progress.turn.turnId;
   return {
     acceptedAt: state.acceptedAt,
     ...(activeTurnId === undefined ? {} : { activeTurnId }),

@@ -1,5 +1,4 @@
-import type { SessionTimerState } from '../../model/session-state.js';
-import type { SessionState } from '../../model/session-state.js';
+import type { SessionState, SessionTimerState } from '../../model/session-state.js';
 import { appendEffect, nextEffectCorrelation, type SessionTransition } from '../transition.js';
 
 export const scheduleOpeningTimer = <State extends SessionState>(

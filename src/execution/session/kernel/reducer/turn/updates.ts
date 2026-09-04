@@ -71,16 +71,13 @@ export const reduceProviderUpdate = (
     return unchangedTransition(state);
   const event = updateEvent(state, command);
   if (event === undefined) return unchangedTransition(state);
-  const turn =
-    command.type === 'provider.message_delta'
-      ? {
-          ...state.turn,
-          message: { ...state.turn.message, content: state.turn.message.content + command.content },
-          status: 'streaming' as const,
-        }
-      : command.type === 'provider.usage'
-        ? { ...state.turn, status: 'streaming' as const, usage: command.usage }
-        : { ...state.turn, status: 'streaming' as const };
+  let turn = { ...state.turn, status: 'streaming' as const };
+  if (command.type === 'provider.message_delta')
+    turn = {
+      ...turn,
+      message: { ...turn.message, content: turn.message.content + command.content },
+    };
+  else if (command.type === 'provider.usage') turn = { ...turn, usage: command.usage };
   return resetTurnInactivity(
     queueSessionEvent(
       {

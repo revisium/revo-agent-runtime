@@ -44,7 +44,7 @@ export const reduceTerminalEventOutcome = (
 ): SessionTransition => {
   if (state.progress.stage !== 'publishing_event') return unchangedTransition(state);
   const inFlight = state.events.inFlight;
-  if (inFlight === undefined || inFlight.correlation.effectId !== command.correlation.effectId)
+  if (inFlight?.correlation.effectId !== command.correlation.effectId)
     return unchangedTransition(state);
   if (command.type !== 'event.applied' && command.type !== 'event.timed_out_then_applied') {
     const failed = {

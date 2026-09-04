@@ -98,8 +98,7 @@ export const acknowledgeSessionEvent = <State extends SessionState>(
   correlation: EffectCorrelation,
 ): EventAcknowledgement<State> | undefined => {
   const inFlight = state.events.inFlight;
-  if (inFlight === undefined || inFlight.correlation.effectId !== correlation.effectId)
-    return undefined;
+  if (inFlight?.correlation.effectId !== correlation.effectId) return undefined;
   const cursor = eventCursor(inFlight.event);
   const [next, ...remaining] = state.events.pending;
   if (next === undefined)

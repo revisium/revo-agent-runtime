@@ -1,3 +1,4 @@
+import type { AgentSessionTurnOutcome } from '../../../../../contracts/session/lifecycle/result.js';
 import type { PublicSessionCommand } from '../../command/public.js';
 import type { TimerCommand } from '../../command/timer.js';
 import type { SessionState, TerminalIntent } from '../../model/session-state.js';
@@ -37,12 +38,10 @@ export const settleRunningSession = (
   state: RunningSession,
   intent: Exclude<TerminalIntent, { readonly outcome: 'closed' }>,
 ): SessionTransition<TerminalizingSession> => {
-  const turnOutcome =
-    intent.outcome === 'timed_out'
-      ? ({ status: 'timed_out' } as const)
-      : intent.outcome === 'failed'
-        ? ({ error: intent.error, status: 'failed' } as const)
-        : ({ status: 'interrupted' } as const);
+  let turnOutcome: AgentSessionTurnOutcome;
+  if (intent.outcome === 'timed_out') turnOutcome = { status: 'timed_out' };
+  else if (intent.outcome === 'failed') turnOutcome = { error: intent.error, status: 'failed' };
+  else turnOutcome = { status: 'interrupted' };
   if (state.turn.status === 'settling') {
     const turn =
       state.turn.progress.stage === 'awaiting_provider'
@@ -164,8 +163,7 @@ export const failActiveSession = (
 export const reduceTimer = (state: ActiveSession, command: TimerCommand): SessionTransition => {
   const timer = state.timers.find(({ timerId }) => timerId === command.timerId);
   if (
-    timer === undefined ||
-    timer.generation !== command.generation ||
+    timer?.generation !== command.generation ||
     timer.kind !== command.kind ||
     (timer.kind !== 'idle' && timer.kind !== 'wall_clock')
   )

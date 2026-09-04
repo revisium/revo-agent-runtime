@@ -7,12 +7,12 @@ import {
   reduceProcessOutcome,
   reduceProviderOpenOutcome,
 } from './opening/stages.js';
-import { createOpeningSessionState, type OpeningState } from './opening/state.js';
+import type { OpeningState } from './opening/state.js';
 import { reduceOpeningTimer } from './opening/timeouts.js';
 import type { SessionTransition } from './transition.js';
 import { unchangedTransition } from './transition.js';
 
-export { createOpeningSessionState };
+export { createOpeningSessionState } from './opening/state.js';
 
 export const reduceOpeningSession = (
   state: OpeningState,
