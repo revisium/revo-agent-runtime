@@ -108,14 +108,19 @@ test('normalizes every provider update into its public event', () => {
   }
 });
 
-test('defers interaction requests to the interaction reducer', () => {
+test('routes interaction requests outside generic update normalization', () => {
   const { correlation, state } = streamingTurn();
   const transition = reduceSession(state, {
     ...observed,
     correlation,
+    providerResourceId: 'provider_01',
     request: { kind: 'input', message: 'Choose', questions: [], requestId: 'request_01' },
     scope: { kind: 'turn', turnId: 'turn_01' },
     type: 'provider.interaction_requested',
   });
-  expect(transition).toEqual({ effects: [], state });
+  expect(transition.state).toMatchObject({
+    interactions: [{ request: { requestId: 'request_01' }, stage: 'publishing' }],
+    turn: { status: 'awaiting_interaction' },
+  });
+  expect(effectOf(transition, 'event.append').event.type).toBe('interaction.requested');
 });

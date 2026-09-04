@@ -20,6 +20,7 @@ export const createOpeningSessionState = (command: OpeningCommand): OpeningState
     epoch: command.call.epoch,
     events: { ...(previousCursor === undefined ? {} : { cursor: previousCursor }), pending: [] },
     incarnationId: opening.incarnationId,
+    idleTimerGeneration: 0,
     interactions: [],
     limits: opening.limits,
     ...(opening.metadata === undefined ? {} : { metadata: opening.metadata }),

@@ -1,6 +1,7 @@
 import type { AgentFault } from '../../../../../contracts/manager/core.js';
 import type { PublicSessionCommand } from '../../command/public.js';
 import type { SessionState, TerminalIntent } from '../../model/session-state.js';
+import { clearAllTimers } from '../timer/all.js';
 import { appendEffect, nextEffectCorrelation, type SessionTransition } from '../transition.js';
 
 export type ActiveSession = Extract<SessionState, { readonly status: 'idle' | 'running' }>;
@@ -20,22 +21,7 @@ export const timerFault = (kind: 'idle' | 'wall_clock'): AgentFault => ({
 
 export const clearSessionTimers = (
   transition: SessionTransition<TerminalizingSession>,
-): SessionTransition<TerminalizingSession> => {
-  let result: SessionTransition<TerminalizingSession> = {
-    effects: transition.effects,
-    state: { ...transition.state, timers: [] },
-  };
-  for (const timer of transition.state.timers) {
-    const correlation = nextEffectCorrelation(result.state);
-    result = appendEffect(result, {
-      correlation,
-      generation: timer.generation,
-      timerId: timer.timerId,
-      type: 'timer.cancel',
-    });
-  }
-  return result;
-};
+): SessionTransition<TerminalizingSession> => clearAllTimers(transition);
 
 export const beginTerminalCleanup = (
   state: ActiveSession,

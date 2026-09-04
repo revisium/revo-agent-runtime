@@ -152,6 +152,7 @@ const providerCommands = {
   'provider.interaction_requested': {
     correlation,
     ...commandTime,
+    providerResourceId: 'provider_01',
     request: {
       action: { kind: 'execute' },
       kind: 'permission',

@@ -1,13 +1,13 @@
 import type { AgentSessionEvent } from '../../../../../contracts/session/events/event.js';
 import type { ProviderCommand } from '../../command/provider.js';
 import type { SessionState } from '../../model/session-state.js';
+import { resetInactivity } from '../timer/inactivity.js';
 import {
   nextSessionEventId,
   queueSessionEvent,
   type SessionTransition,
   unchangedTransition,
 } from '../transition.js';
-import { resetTurnInactivity } from './timing.js';
 
 type RunningState = Extract<SessionState, { readonly status: 'running' }>;
 
@@ -78,7 +78,7 @@ export const reduceProviderUpdate = (
       message: { ...turn.message, content: turn.message.content + command.content },
     };
   else if (command.type === 'provider.usage') turn = { ...turn, usage: command.usage };
-  return resetTurnInactivity(
+  return resetInactivity(
     queueSessionEvent(
       {
         ...state,

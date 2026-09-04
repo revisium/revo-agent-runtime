@@ -43,6 +43,7 @@ interface ProviderPlanCommand extends ProviderCommandBase<TurnEffectCorrelation>
 
 interface ProviderInteractionRequestedCommand extends ProviderCommandBase {
   readonly type: 'provider.interaction_requested';
+  readonly providerResourceId: string;
   readonly scope: AgentSessionInteractionScope;
   readonly request: AgentSessionInteractiveRequest;
 }

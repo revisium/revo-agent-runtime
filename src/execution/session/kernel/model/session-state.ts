@@ -51,6 +51,7 @@ interface SessionStateBase {
   readonly outputDirectory: string;
   readonly metadata?: Readonly<JsonObject>;
   readonly usage: AgentSessionUsage;
+  readonly idleTimerGeneration: number;
   readonly nextEffectSequence: number;
   readonly nextEventSequence: number;
   readonly events: SessionEventDelivery;
@@ -91,19 +92,27 @@ interface CheckpointingSessionState extends ActiveSessionStateBase {
   readonly callId: string;
   readonly checkpointId: string;
   readonly progress: CheckpointProgress;
+  readonly terminalAfterCheckpoint?: Exclude<TerminalIntent, { readonly outcome: 'closed' }>;
 }
 
 export type HibernationProgress =
   | { readonly stage: 'capturing'; readonly correlation: EffectCorrelation }
-  | { readonly stage: 'publishing'; readonly resumeToken: AgentSessionResumeToken }
   | {
-      readonly stage:
-        | 'closing_provider'
-        | 'cleaning_process'
-        | 'removing_state'
-        | 'publishing_output';
+      readonly stage: 'publishing';
+      readonly resumeToken: AgentSessionResumeToken;
+      readonly finishedAt: string;
+      readonly output: AgentSessionOutputPublication;
+    }
+  | {
+      readonly stage: 'closing_provider' | 'cleaning_process';
       readonly resumeToken: AgentSessionResumeToken;
       readonly correlation: EffectCorrelation;
+    }
+  | {
+      readonly stage: 'removing_state' | 'publishing_output';
+      readonly resumeToken: AgentSessionResumeToken;
+      readonly correlation: EffectCorrelation;
+      readonly finishedAt: string;
     };
 
 interface HibernatingSessionState extends ActiveSessionStateBase {

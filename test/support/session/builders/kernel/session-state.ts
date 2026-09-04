@@ -32,6 +32,7 @@ export const idleSessionState = (): Extract<SessionState, { readonly status: 'id
     pending: [],
   },
   incarnationId: 'incarnation_01',
+  idleTimerGeneration: 1,
   interactions: [],
   limits,
   nextEffectSequence: 10,

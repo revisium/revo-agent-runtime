@@ -6,6 +6,7 @@ import type { AgentSessionInteractiveResponse } from '../../../../contracts/sess
 import type { EffectCorrelation } from './identity.js';
 
 interface InteractionStateBase {
+  readonly providerResourceId: string;
   readonly scope: AgentSessionInteractionScope;
   readonly request: AgentSessionInteractiveRequest;
 }
