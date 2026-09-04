@@ -5,7 +5,13 @@
     "perf": "warn",
     "suspicious": "error"
   },
-  "ignorePatterns": [".revisium-actions/**", "coverage/**", "dist/**", "node_modules/**"],
+  "ignorePatterns": [
+    ".dependency-cruiser.cjs",
+    ".revisium-actions/**",
+    "coverage/**",
+    "dist/**",
+    "node_modules/**"
+  ],
   "options": {
     "typeAware": true,
     "typeCheck": true
@@ -21,5 +27,39 @@
     "typescript/no-unsafe-member-access": "error",
     "typescript/no-unsafe-return": "error",
     "typescript/switch-exhaustiveness-check": "error"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["**/src/contracts/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^(?:node:|@agentclientprotocol/)",
+                "message": "Public contracts are portable leaves and cannot depend on Node or ACP."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/src/{application,execution}/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(?:^|/)(?:protocols|acp)(?:/|$)|^@agentclientprotocol/",
+                "message": "Application and execution use package-private ports, never concrete protocol adapters."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

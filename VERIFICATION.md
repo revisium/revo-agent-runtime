@@ -26,8 +26,8 @@ hide mechanics, never expected behavior. This section is authoritative; see
 It validates the frozen lockfile, formatting, strict typechecking, type-aware
 lint, compiler-level unused locals/parameters, Knip dead exports, the
 unit/contract/integration/package Vitest lanes, V8 coverage,
-deliberate negative format/type/package-export evidence, architecture positive
-and negative fixtures, build, Publint, ATTW, and an isolated packed consumer.
+deliberate negative format/type/package-export evidence, the manifest-derived
+dependency graph, build, Publint, ATTW, and an isolated packed consumer.
 
 The unit, contract, and integration lanes accept no tests only until a behavior
 slice owns them. The package lane proves that only the planned root entrypoint
