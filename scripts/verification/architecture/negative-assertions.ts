@@ -44,6 +44,10 @@ export const expectRuleFailure = (module: SourceModule, rule: string): void => {
   );
 };
 
+export const expectRuleSuccess = (module: SourceModule): void => {
+  assert.doesNotThrow(() => validateLayerImports(module));
+};
+
 export const expectStructureFailure = (modules: readonly SourceModule[], rule: string): void => {
   assert.throws(
     () => validateDomainStructure(modules),

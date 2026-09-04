@@ -4,8 +4,14 @@ import { join } from 'node:path';
 import { validateLayerImports } from './layers.js';
 import { runArchitectureLint } from './negative-assertions.js';
 import { runNegativeArchitectureProbes } from './negative-probes.js';
+import { validateSessionLayout } from './probes/layout/session.js';
+import {
+  validateSessionArchitectureEntrypoint,
+  validateSessionProductionSize,
+  validateSessionReaderFacingTestSize,
+} from './probes/size/session.js';
 import { validateRuntimeBoundaries } from './runtime-boundaries.js';
-import { collectSourceModules } from './source-modules.js';
+import { collectLayoutModules, collectSourceModules } from './source-modules.js';
 import {
   validateDomainStructure,
   validateAcceptanceStructure,
@@ -19,6 +25,13 @@ const root = process.cwd();
 const sourceModules = await collectSourceModules(root, join(root, 'src'));
 const testModules = await collectSourceModules(root, join(root, 'test'));
 const verificationModules = await collectSourceModules(root, join(root, 'scripts/verification'));
+const sessionLayoutModules = (
+  await Promise.all(
+    ['src', 'test', 'scripts/verification'].map((directory) =>
+      collectLayoutModules(root, join(root, directory)),
+    ),
+  )
+).flat();
 const acceptanceModules = [
   ...(await collectSourceModules(root, join(root, 'scripts'))),
   ...testModules,
@@ -30,11 +43,18 @@ await Promise.all(
     validateVerificationEntrypoint(path, await readFile(join(root, path), 'utf8'));
   }),
 );
+validateSessionArchitectureEntrypoint(
+  'scripts/verify-architecture.ts',
+  await readFile(join(root, 'scripts/verify-architecture.ts'), 'utf8'),
+);
 
 validateDomainStructure(sourceModules);
 validateReaderFacingTestStructure(testModules);
 validateAcceptanceStructure(acceptanceModules);
 validateVerificationModuleStructure(verificationModules);
+validateSessionLayout(sessionLayoutModules);
+validateSessionProductionSize(sourceModules);
+validateSessionReaderFacingTestSize(testModules);
 if (typeof packageJson !== 'object' || packageJson === null || !('exports' in packageJson)) {
   throw new Error('package.json must declare the root export map.');
 }

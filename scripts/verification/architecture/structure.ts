@@ -3,6 +3,12 @@ import {
   providerNameExpression,
   providerPathExpression,
 } from '../shared/providers.js';
+import {
+  validateBaseProductionSize,
+  validateBaseReaderFacingTestSize,
+  validateBaseVerificationSize,
+} from './probes/size/base.js';
+import { validateSessionVerifierSize } from './probes/size/session.js';
 import { importSpecifiers, type SourceModule } from './source-modules.js';
 
 const packageExportMap = (value: unknown): value is { readonly '.': unknown } =>
@@ -49,10 +55,7 @@ const retiredFlatModules = Object.freeze([
   'src/protocol/acp.ts',
 ]);
 
-export const productionLineLimit = 360;
-export const readerFacingTestLineLimit = 250;
-const verificationEntrypointLineLimit = 120;
-const verificationModuleLineLimit = 280;
+export { validateVerificationEntrypoint } from './probes/size/base.js';
 
 export const validateDomainStructure = (modules: readonly SourceModule[]): void => {
   const paths = new Set(modules.map(({ path }) => path));
@@ -71,11 +74,6 @@ export const validateDomainStructure = (modules: readonly SourceModule[]): void 
       throw new Error(`[node-discovery-adapter] ${module.path}`);
     if (/^src\/(?:application|execution)\/[^/]+\.ts$/.test(module.path))
       throw new Error(`[flat-feature-root] ${module.path}`);
-    if (
-      !module.path.startsWith('src/contracts/') &&
-      module.source.split('\n').length > productionLineLimit
-    )
-      throw new Error(`[oversized-module] ${module.path}`);
     if (module.path.startsWith('src/discovery/') && providerNameExpression.test(module.source))
       throw new Error(`[provider-policy-in-discovery] ${module.path}`);
   }
@@ -100,6 +98,7 @@ export const validateDomainStructure = (modules: readonly SourceModule[]): void 
       }
     }
   }
+  validateBaseProductionSize(modules);
 };
 
 export const validateReaderFacingTestStructure = (modules: readonly SourceModule[]): void => {
@@ -108,12 +107,8 @@ export const validateReaderFacingTestStructure = (modules: readonly SourceModule
       throw new Error(`[flat-test-lane] ${module.path}`);
     if (/^test\/support\/[^/]+\.ts$/.test(module.path))
       throw new Error(`[flat-test-support] ${module.path}`);
-    if (
-      module.path.endsWith('.test.ts') &&
-      module.source.split('\n').length > readerFacingTestLineLimit
-    )
-      throw new Error(`[oversized-reader-test] ${module.path}`);
   }
+  validateBaseReaderFacingTestSize(modules);
 };
 
 export const validateAcceptanceStructure = (modules: readonly SourceModule[]): void => {
@@ -140,16 +135,7 @@ export const validateAcceptanceStructure = (modules: readonly SourceModule[]): v
   }
 };
 
-export const validateVerificationEntrypoint = (path: string, source: string): void => {
-  if (source.split('\n').length > verificationEntrypointLineLimit) {
-    throw new Error(`[oversized-verification-entrypoint] ${path}`);
-  }
-};
-
 export const validateVerificationModuleStructure = (modules: readonly SourceModule[]): void => {
-  for (const module of modules) {
-    if (module.source.split('\n').length > verificationModuleLineLimit) {
-      throw new Error(`[oversized-verification-module] ${module.path}`);
-    }
-  }
+  validateBaseVerificationSize(modules);
+  validateSessionVerifierSize(modules);
 };

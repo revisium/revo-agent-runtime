@@ -6,16 +6,17 @@ export interface SourceModule {
   readonly source: string;
 }
 
-export const collectSourceModules = async (
+const collectModules = async (
   root: string,
   directory: string,
+  include: (path: string) => boolean,
 ): Promise<readonly SourceModule[]> => {
   const entries = await readdir(directory, { withFileTypes: true });
   const nested = await Promise.all(
     entries.map(async (entry): Promise<readonly SourceModule[]> => {
       const path = join(directory, entry.name);
-      if (entry.isDirectory()) return collectSourceModules(root, path);
-      if (!entry.isFile() || !entry.name.endsWith('.ts') || entry.name.endsWith('.d.ts')) return [];
+      if (entry.isDirectory()) return collectModules(root, path, include);
+      if (!entry.isFile() || !include(path)) return [];
 
       return [
         {
@@ -28,6 +29,17 @@ export const collectSourceModules = async (
 
   return nested.flat();
 };
+
+export const collectSourceModules = async (
+  root: string,
+  directory: string,
+): Promise<readonly SourceModule[]> =>
+  collectModules(root, directory, (path) => path.endsWith('.ts') && !path.endsWith('.d.ts'));
+
+export const collectLayoutModules = async (
+  root: string,
+  directory: string,
+): Promise<readonly SourceModule[]> => collectModules(root, directory, () => true);
 
 export const importSpecifiers = (source: string): readonly string[] =>
   [
