@@ -5,6 +5,7 @@ import type {
   AgentSessionHibernateResult,
 } from '../../../../contracts/session/lifecycle/checkpoint.js';
 import type {
+  AgentSessionTurnResult,
   CancelAgentSessionResult,
   CancelAgentSessionTurnResult,
   CloseAgentSessionResult,
@@ -14,6 +15,7 @@ import type { EffectCorrelation } from '../model/identity.js';
 type PublicCallResolution =
   | { readonly kind: 'session_ready' }
   | { readonly kind: 'turn_ready'; readonly turnId: string }
+  | { readonly kind: 'turn_result'; readonly result: AgentSessionTurnResult }
   | { readonly kind: 'interaction'; readonly result: RespondAgentSessionResult }
   | { readonly kind: 'checkpoint'; readonly checkpoint: AgentSessionCheckpoint }
   | { readonly kind: 'hibernate'; readonly result: AgentSessionHibernateResult }

@@ -74,6 +74,7 @@ void missingCorrelation;
 // @ts-expect-error Every asynchronous outcome repeats its originating correlation.
 const missingOutcomeCorrelation: EffectOutcomeCommand = {
   observedAt: '2026-03-21T00:00:00.000Z',
+  observedAtMs: 1_000,
   type: 'provider.prompt.accepted',
 };
 void missingOutcomeCorrelation;

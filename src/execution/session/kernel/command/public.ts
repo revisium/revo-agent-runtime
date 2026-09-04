@@ -1,11 +1,13 @@
+import type { JsonObject } from '../../../../contracts/agent-definition.js';
 import type { RespondAgentSessionRequest } from '../../../../contracts/session/interaction/response.js';
 import type { SendAgentSessionInput } from '../../../../contracts/session/requests/send.js';
 import type { PublicCallCorrelation, TurnPublicCallCorrelation } from '../model/identity.js';
-import type { SessionOpeningDescriptor, SessionOpeningRequest } from '../model/session-state.js';
+import type { SessionOpeningDescriptor, SessionOpeningRequest } from '../model/opening-state.js';
 
 interface PublicCommandBase {
   readonly call: PublicCallCorrelation;
   readonly observedAt: string;
+  readonly observedAtMs: number;
 }
 
 type OpeningDescriptor<Kind extends SessionOpeningRequest['kind']> = Omit<
@@ -28,6 +30,8 @@ interface ResumeSessionCommand extends PublicCommandBase {
 interface SendTurnCommand extends Omit<PublicCommandBase, 'call'> {
   readonly type: 'turn.send';
   readonly call: TurnPublicCallCorrelation;
+  readonly resultCallId: string;
+  readonly metadata?: Readonly<JsonObject>;
   readonly input: SendAgentSessionInput;
 }
 

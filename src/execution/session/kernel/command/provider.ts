@@ -9,6 +9,7 @@ import type { EffectCorrelation, TurnEffectCorrelation } from '../model/identity
 interface ProviderCommandBase<Correlation extends EffectCorrelation = EffectCorrelation> {
   readonly correlation: Correlation;
   readonly observedAt: string;
+  readonly observedAtMs: number;
 }
 
 interface ProviderMessageDeltaCommand extends ProviderCommandBase<TurnEffectCorrelation> {

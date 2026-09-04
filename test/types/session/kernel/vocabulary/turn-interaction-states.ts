@@ -7,7 +7,12 @@ const correlation = {
   sessionId: 'session_01',
   turnId: 'turn_01',
 } as const;
-const turn = { prompt: 'continue', turnId: 'turn_01' } as const;
+const turn = {
+  handleCallId: 'send_01',
+  prompt: 'continue',
+  resultCallId: 'turn_result_01',
+  turnId: 'turn_01',
+} as const;
 const activeTurn = {
   ...turn,
   correlation,
@@ -30,7 +35,11 @@ const turns = {
   prompting: { ...activeTurn, status: 'prompting' },
   streaming: { ...activeTurn, status: 'streaming' },
   awaiting_interaction: { ...activeTurn, status: 'awaiting_interaction' },
-  settling: { ...activeTurn, outcome: { status: 'completed' }, status: 'settling' },
+  settling: {
+    ...activeTurn,
+    progress: { outcome: { status: 'completed' }, stage: 'publishing_completion' },
+    status: 'settling',
+  },
   completed: {
     ...turn,
     result: { message: { content: 'done', role: 'assistant' }, status: 'completed' },

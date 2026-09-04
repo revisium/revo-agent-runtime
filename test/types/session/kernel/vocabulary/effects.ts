@@ -5,7 +5,7 @@ import type {
 import type { AgentSessionEvent } from '../../../../../src/contracts/session/events/event.js';
 import type { ActiveAgentSessionSnapshot } from '../../../../../src/contracts/session/persistence/active-state.js';
 import type { SessionEffect } from '../../../../../src/execution/session/kernel/effect/session-effect.js';
-import type { SessionOpeningDescriptor } from '../../../../../src/execution/session/kernel/model/session-state.js';
+import type { SessionOpeningDescriptor } from '../../../../../src/execution/session/kernel/model/opening-state.js';
 
 declare const opening: SessionOpeningDescriptor;
 declare const event: AgentSessionEvent;

@@ -9,6 +9,8 @@ import type { TurnEffectCorrelation } from './identity.js';
 
 interface TurnStateBase {
   readonly turnId: string;
+  readonly handleCallId: string;
+  readonly resultCallId: string;
   readonly prompt: string;
   readonly metadata?: Readonly<JsonObject>;
 }
@@ -37,9 +39,18 @@ interface AwaitingInteractionTurnState extends ActiveTurnStateBase {
   readonly correlation: TurnEffectCorrelation;
 }
 
+type SettlingTurnProgress =
+  | {
+      readonly stage: 'awaiting_provider';
+      readonly cancellationCorrelation: TurnEffectCorrelation;
+      readonly outcome: AgentSessionTurnOutcome;
+    }
+  | { readonly stage: 'publishing_completion'; readonly outcome: AgentSessionTurnOutcome };
+
 interface SettlingTurnState extends ActiveTurnStateBase {
   readonly status: 'settling';
-  readonly outcome: AgentSessionTurnOutcome;
+  readonly correlation: TurnEffectCorrelation;
+  readonly progress: SettlingTurnProgress;
 }
 
 interface CompletedTurnState extends TurnStateBase {
@@ -47,24 +58,19 @@ interface CompletedTurnState extends TurnStateBase {
   readonly result: Extract<AgentSessionTurnResult, { readonly status: 'completed' }>;
 }
 
-type IncompleteTurnResult = Extract<
-  AgentSessionTurnResult,
-  { readonly status: 'cancelled' | 'timed_out' | 'interrupted' }
->;
-
 interface CancelledTurnState extends TurnStateBase {
   readonly status: 'cancelled';
-  readonly result: IncompleteTurnResult & { readonly status: 'cancelled' };
+  readonly result: { readonly status: 'cancelled' };
 }
 
 interface TimedOutTurnState extends TurnStateBase {
   readonly status: 'timed_out';
-  readonly result: IncompleteTurnResult & { readonly status: 'timed_out' };
+  readonly result: { readonly status: 'timed_out' };
 }
 
 interface InterruptedTurnState extends TurnStateBase {
   readonly status: 'interrupted';
-  readonly result: IncompleteTurnResult & { readonly status: 'interrupted' };
+  readonly result: { readonly status: 'interrupted' };
 }
 
 interface FailedTurnState extends TurnStateBase {

@@ -17,44 +17,11 @@ import type {
   AgentSessionOutputPublication,
   AgentSessionUsage,
 } from '../../../../contracts/session/lifecycle/result.js';
-import type {
-  AgentSessionLimits,
-  OpenAgentSession,
-} from '../../../../contracts/session/requests/open.js';
-import type { ResumeAgentSession } from '../../../../contracts/session/requests/resume.js';
+import type { AgentSessionLimits } from '../../../../contracts/session/requests/open.js';
 import type { EffectCorrelation } from './identity.js';
 import type { InteractionState } from './interaction-state.js';
+import type { OpeningProgress } from './opening-state.js';
 import type { ActiveTurnState, TerminalTurnState } from './turn-state.js';
-
-interface SessionLaunchEnvironment {
-  readonly inherit: readonly string[];
-  readonly variables: Readonly<Record<string, string>>;
-  readonly secrets: Readonly<Record<string, string>>;
-}
-
-interface ProviderContinuation {
-  readonly format: string;
-  readonly data: Readonly<JsonObject>;
-}
-
-export type SessionOpeningRequest =
-  | { readonly kind: 'fresh'; readonly request: OpenAgentSession }
-  | {
-      readonly kind: 'resume';
-      readonly request: ResumeAgentSession;
-      readonly continuation: ProviderContinuation;
-    };
-
-export interface SessionOpeningDescriptor {
-  readonly incarnationId: string;
-  readonly pin: AgentExecutionPin;
-  readonly request: SessionOpeningRequest;
-  readonly environment?: SessionLaunchEnvironment;
-  readonly limits: Required<AgentSessionLimits>;
-  readonly usageBaseline: AgentSessionUsage;
-  readonly acceptedAt: string;
-  readonly streamId: string;
-}
 
 interface SessionEventDelivery {
   readonly cursor?: AgentSessionEventCursor;
@@ -79,6 +46,7 @@ interface SessionStateBase {
   readonly pin: AgentExecutionPin;
   readonly limits: Required<AgentSessionLimits>;
   readonly acceptedAt: string;
+  readonly acceptedAtMs: number;
   readonly streamId: string;
   readonly outputDirectory: string;
   readonly metadata?: Readonly<JsonObject>;
@@ -90,42 +58,9 @@ interface SessionStateBase {
   readonly timers: readonly SessionTimerState[];
 }
 
-export type OpeningProgress =
-  | { readonly stage: 'publishing_accepted'; readonly opening: SessionOpeningDescriptor }
-  | {
-      readonly stage: 'preparing';
-      readonly opening: SessionOpeningDescriptor;
-      readonly correlation: EffectCorrelation;
-    }
-  | {
-      readonly stage: 'starting_process';
-      readonly preparationId: string;
-      readonly correlation: EffectCorrelation;
-    }
-  | {
-      readonly stage: 'saving_process';
-      readonly preparationId: string;
-      readonly processResourceId: string;
-      readonly process: ActiveProcessIdentity;
-      readonly correlation: EffectCorrelation;
-    }
-  | {
-      readonly stage: 'opening_provider';
-      readonly preparationId: string;
-      readonly processResourceId: string;
-      readonly process: ActiveProcessIdentity;
-      readonly correlation: EffectCorrelation;
-    }
-  | {
-      readonly stage: 'publishing_opened';
-      readonly processResourceId: string;
-      readonly process: ActiveProcessIdentity;
-      readonly providerResourceId: string;
-      readonly capabilities: AgentSessionCapabilities;
-    };
-
 interface OpeningSessionState extends SessionStateBase {
   readonly status: 'opening';
+  readonly callId: string;
   readonly progress: OpeningProgress;
 }
 
@@ -179,14 +114,18 @@ interface HibernatingSessionState extends ActiveSessionStateBase {
   readonly progress: HibernationProgress;
 }
 
-type TerminalIntent =
+export type TerminalIntent =
   | { readonly outcome: 'closed'; readonly reason?: string }
   | { readonly outcome: 'cancelled'; readonly reason?: string }
-  | { readonly outcome: 'timed_out'; readonly error: AgentFault }
+  | {
+      readonly outcome: 'timed_out';
+      readonly timeout: 'idle_timeout' | 'wall_clock_timeout';
+      readonly error: AgentFault;
+    }
   | { readonly outcome: 'failed'; readonly error: AgentFault };
 
 export type TerminalProgress =
-  | { readonly stage: 'settling_turn' }
+  | { readonly stage: 'settling_turn'; readonly turn: ActiveTurnState }
   | { readonly stage: 'closing_provider'; readonly correlation: EffectCorrelation }
   | { readonly stage: 'cleaning_process'; readonly correlation: EffectCorrelation }
   | { readonly stage: 'removing_state'; readonly correlation: EffectCorrelation }
@@ -208,6 +147,7 @@ interface CancellingSessionState extends ActiveSessionStateBase {
 }
 
 interface TerminalSessionStateBase extends SessionStateBase {
+  readonly openedAt?: string;
   readonly finishedAt: string;
   readonly output?: AgentSessionOutputPublication;
 }
