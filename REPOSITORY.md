@@ -26,6 +26,11 @@ Production source must not depend on tests, fixtures, scripts, generated output,
 or repository tooling. Concrete Codex and Claude bridges are direct production
 dependencies, but are not imported until their behavior slice.
 
+`architecture/layers.json` is the executable dependency map. Dependency Cruiser
+enforces that map, cycles, provider isolation, portable contracts, and private
+session boundaries; TypeScript, Oxlint, and package checks cover complementary
+source and publication constraints.
+
 ## Local workflow
 
 Development uses feature branches and pull requests; CI verifies pushes and

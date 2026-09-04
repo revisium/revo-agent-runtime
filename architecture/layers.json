@@ -1,0 +1,247 @@
+{
+  "schemaVersion": "revo-agent-runtime-layers/v1",
+  "sourceRoot": "src",
+  "rootModule": "src/index.ts",
+  "layers": [
+    {
+      "name": "contracts-session-envelope",
+      "pattern": "^src/contracts/session/continuation/envelope\\.ts$",
+      "dependencies": ["contracts", "contracts-session"]
+    },
+    {
+      "name": "contracts-session",
+      "pattern": "^src/contracts/session(?:\\.ts|/(?!continuation/envelope\\.ts$).+)$",
+      "dependencies": ["contracts"]
+    },
+    {
+      "name": "contracts",
+      "pattern": "^src/contracts/(?!session(?:\\.ts|/)).+",
+      "dependencies": []
+    },
+    {
+      "name": "configuration",
+      "pattern": "^src/configuration/",
+      "dependencies": ["contracts", "definition"]
+    },
+    {
+      "name": "definition",
+      "pattern": "^src/definition/",
+      "dependencies": ["contracts"]
+    },
+    {
+      "name": "discovery",
+      "pattern": "^src/discovery/",
+      "dependencies": ["contracts", "definition", "platform", "providers"]
+    },
+    {
+      "name": "providers",
+      "pattern": "^src/providers/",
+      "dependencies": [
+        "contracts",
+        "configuration",
+        "definition",
+        "discovery",
+        "execution",
+        "protocol"
+      ]
+    },
+    {
+      "name": "application-session-boundary",
+      "pattern": "^src/application/session/boundary/",
+      "dependencies": [
+        "contracts",
+        "contracts-session",
+        "contracts-session-envelope",
+        "definition",
+        "execution-security-digest-port"
+      ]
+    },
+    {
+      "name": "application-session-policy",
+      "pattern": "^src/application/session/policy/",
+      "dependencies": ["contracts", "contracts-session", "definition"]
+    },
+    {
+      "name": "application-session-management",
+      "pattern": "^src/application/session/management/",
+      "dependencies": [
+        "application-session-boundary",
+        "application-session-policy",
+        "contracts",
+        "contracts-session",
+        "session-runtime-dispatch"
+      ]
+    },
+    {
+      "name": "application-session-handles",
+      "pattern": "^src/application/session/handles/",
+      "dependencies": [
+        "contracts",
+        "contracts-session",
+        "session-kernel-public-command",
+        "session-runtime-dispatch"
+      ]
+    },
+    {
+      "name": "application",
+      "pattern": "^src/application/(?!session/).+",
+      "dependencies": [
+        "application-session-management",
+        "contracts",
+        "definition",
+        "execution",
+        "execution-process-port"
+      ]
+    },
+    {
+      "name": "session-kernel-effects",
+      "pattern": "^src/execution/session/kernel/effect/",
+      "dependencies": ["contracts", "contracts-session", "session-kernel"]
+    },
+    {
+      "name": "session-kernel-public-command",
+      "pattern": "^src/execution/session/kernel/command/public\\.ts$",
+      "dependencies": ["contracts", "contracts-session", "session-kernel"]
+    },
+    {
+      "name": "session-kernel",
+      "pattern": "^src/execution/session/kernel/(?!effect/|command/public\\.ts$).+",
+      "dependencies": [
+        "contracts",
+        "contracts-session",
+        "session-kernel-effects",
+        "session-kernel-public-command"
+      ]
+    },
+    {
+      "name": "session-runtime-dispatch",
+      "pattern": "^src/execution/session/runtime/actor/port\\.ts$",
+      "dependencies": ["contracts-session", "session-kernel-public-command"]
+    },
+    {
+      "name": "session-runtime-identity-port",
+      "pattern": "^src/execution/session/runtime/primitives/identity\\.ts$",
+      "dependencies": ["contracts", "contracts-session"]
+    },
+    {
+      "name": "session-runtime-outcome-port",
+      "pattern": "^src/execution/session/runtime/effects/outcomes\\.ts$",
+      "dependencies": ["contracts-session", "session-kernel-effects"]
+    },
+    {
+      "name": "session-runtime",
+      "pattern": "^src/execution/session/runtime/(?!(?:actor/port|primitives/identity|effects/outcomes)\\.ts$).+",
+      "dependencies": [
+        "contracts-session",
+        "session-kernel",
+        "session-kernel-effects",
+        "session-kernel-public-command",
+        "session-runtime-dispatch",
+        "session-runtime-identity-port",
+        "session-runtime-outcome-port"
+      ]
+    },
+    {
+      "name": "session-interpreter",
+      "pattern": "^src/execution/session/interpreter/",
+      "dependencies": [
+        "contracts",
+        "contracts-session",
+        "contracts-session-envelope",
+        "execution-process-port",
+        "execution-security-digest-port",
+        "execution-session-output-port",
+        "protocol-session",
+        "session-kernel-effects",
+        "session-runtime-identity-port",
+        "session-runtime-outcome-port"
+      ]
+    },
+    {
+      "name": "execution-process-port",
+      "pattern": "^src/execution/process/port\\.ts$",
+      "dependencies": ["contracts"]
+    },
+    {
+      "name": "execution-security-digest-port",
+      "pattern": "^src/execution/security/digest/port\\.ts$",
+      "dependencies": ["contracts"]
+    },
+    {
+      "name": "execution-session-output-port",
+      "pattern": "^src/execution/output/session/publication\\.ts$",
+      "dependencies": ["contracts", "contracts-session"]
+    },
+    {
+      "name": "execution",
+      "pattern": "^src/execution/(?!(?:session/|process/port\\.ts$|security/digest/port\\.ts$|output/session/publication\\.ts$)).+",
+      "dependencies": [
+        "configuration",
+        "contracts",
+        "definition",
+        "execution-process-port",
+        "protocol"
+      ]
+    },
+    {
+      "name": "protocol-session",
+      "pattern": "^src/protocol/session/",
+      "dependencies": ["configuration", "contracts"]
+    },
+    {
+      "name": "protocol-acp-session",
+      "pattern": "^src/protocol/acp/session/",
+      "dependencies": ["configuration", "contracts", "protocol", "protocol-session"]
+    },
+    {
+      "name": "protocol",
+      "pattern": "^src/protocol/(?!session/|acp/session/).+",
+      "dependencies": ["configuration", "contracts"]
+    },
+    {
+      "name": "platform-session-output",
+      "pattern": "^src/platform/node/output/session/",
+      "dependencies": ["execution", "execution-session-output-port", "platform"]
+    },
+    {
+      "name": "platform-session-primitives",
+      "pattern": "^src/platform/node/session/primitives/",
+      "dependencies": ["session-runtime-identity-port"]
+    },
+    {
+      "name": "platform-security-digest",
+      "pattern": "^src/platform/node/security/digest\\.ts$",
+      "dependencies": ["execution-security-digest-port"]
+    },
+    {
+      "name": "platform",
+      "pattern": "^src/platform/(?!(?:node/output/session/|node/session/primitives/|node/security/digest\\.ts$)).+",
+      "dependencies": ["discovery", "execution", "execution-process-port"]
+    },
+    {
+      "name": "root",
+      "pattern": "^src/index\\.ts$",
+      "dependencies": [
+        "application",
+        "application-session-boundary",
+        "application-session-handles",
+        "application-session-management",
+        "application-session-policy",
+        "contracts",
+        "contracts-session",
+        "discovery",
+        "execution",
+        "execution-process-port",
+        "execution-security-digest-port",
+        "execution-session-output-port",
+        "platform",
+        "platform-security-digest",
+        "platform-session-output",
+        "platform-session-primitives",
+        "protocol",
+        "protocol-acp-session",
+        "providers"
+      ]
+    }
+  ]
+}
