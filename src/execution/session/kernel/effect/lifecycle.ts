@@ -5,7 +5,8 @@ import type {
 import type { AgentSessionEventCursor } from '../../../../contracts/session/events/event.js';
 import type { AgentSessionUsage } from '../../../../contracts/session/lifecycle/result.js';
 import type { EffectCorrelation } from '../model/identity.js';
-import type { SessionOpeningDescriptor, SessionTimerState } from '../model/session-state.js';
+import type { SessionOpeningDescriptor } from '../model/opening-state.js';
+import type { SessionTimerState } from '../model/session-state.js';
 
 interface PrepareSessionOpeningEffect {
   readonly type: 'opening.prepare';

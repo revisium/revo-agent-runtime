@@ -8,6 +8,7 @@ interface TimerFiredCommand {
   readonly kind: SessionTimerState['kind'];
   readonly generation: number;
   readonly firedAt: string;
+  readonly firedAtMs: number;
 }
 
 export type TimerCommand = TimerFiredCommand;

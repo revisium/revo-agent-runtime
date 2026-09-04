@@ -21,6 +21,7 @@ type Outcome<
     type: Type;
     correlation: Correlation;
     observedAt: string;
+    observedAtMs: number;
   } & Payload
 >;
 

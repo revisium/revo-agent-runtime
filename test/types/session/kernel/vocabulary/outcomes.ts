@@ -47,9 +47,13 @@ const resumeToken = {
   sessionId: 'session_01',
   sha256: 'sha256',
 } as const;
-const base = { correlation, observedAt } as const;
+const base = { correlation, observedAt, observedAtMs: 1_000 } as const;
 const failed = { ...base, fault } as const;
-const turnBase = { correlation: { ...correlation, turnId: 'turn_01' }, observedAt } as const;
+const turnBase = {
+  correlation: { ...correlation, turnId: 'turn_01' },
+  observedAt,
+  observedAtMs: 1_000,
+} as const;
 const turnFailed = { ...turnBase, fault } as const;
 
 type OutcomeByType = {

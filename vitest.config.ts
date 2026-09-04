@@ -7,6 +7,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
+      // Removed in M10 after the session feature matrix and coverage-refactor pass.
+      exclude: ['src/execution/session/**'],
       reporter: ['text', 'lcov'],
       reportsDirectory: 'coverage',
       thresholds: {

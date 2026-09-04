@@ -4,10 +4,10 @@ import type {
   InteractionResponseDelivery,
   InteractionState,
 } from '../../../../../../src/execution/session/kernel/model/interaction-state.js';
+import type { OpeningProgress } from '../../../../../../src/execution/session/kernel/model/opening-state.js';
 import type {
   CheckpointProgress,
   HibernationProgress,
-  OpeningProgress,
   SessionState,
   TerminalProgress,
 } from '../../../../../../src/execution/session/kernel/model/session-state.js';
@@ -59,6 +59,8 @@ const openingStages = [
   'saving_process',
   'opening_provider',
   'publishing_opened',
+  'cleaning_process',
+  'removing_state',
 ] satisfies readonly OpeningProgress['stage'][];
 
 const checkpointStages = [
@@ -107,7 +109,7 @@ test('freezes exact state discriminant inventories', () => {
   expect(sessionStatuses).toHaveLength(13);
   expect(turnStatuses).toHaveLength(10);
   expect(interactionStages).toEqual(['publishing', 'ready', 'responding']);
-  expect(openingStages).toHaveLength(6);
+  expect(openingStages).toHaveLength(8);
   expect(checkpointStages).toEqual(['capturing', 'publishing']);
   expect(hibernationStages).toHaveLength(6);
   expect(terminalStages).toHaveLength(6);

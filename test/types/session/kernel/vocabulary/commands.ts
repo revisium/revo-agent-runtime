@@ -1,9 +1,10 @@
 import type { ProviderCommand } from '../../../../../src/execution/session/kernel/command/provider.js';
 import type { PublicSessionCommand } from '../../../../../src/execution/session/kernel/command/public.js';
 import type { TimerCommand } from '../../../../../src/execution/session/kernel/command/timer.js';
-import type { SessionOpeningDescriptor } from '../../../../../src/execution/session/kernel/model/session-state.js';
+import type { SessionOpeningDescriptor } from '../../../../../src/execution/session/kernel/model/opening-state.js';
 
 const observedAt = '2026-03-21T00:00:00.000Z';
+const commandTime = { observedAt, observedAtMs: 1_000 } as const;
 const call = { callId: 'call_01', epoch: 1, sessionId: 'session_01' } as const;
 const turnCall = { ...call, turnId: 'turn_01' } as const;
 const correlation = { effectId: 'effect_01', epoch: 1, sessionId: 'session_01' } as const;
@@ -32,6 +33,7 @@ const launch = {
 } as const;
 const openingBase = {
   acceptedAt: observedAt,
+  acceptedAtMs: 1_000,
   environment: { inherit: ['PATH'], secrets: {}, variables: {} },
   incarnationId: 'incarnation_01',
   limits,
@@ -75,31 +77,37 @@ type PublicCommandByType = {
 };
 
 const publicCommands = {
-  'session.open': { call, observedAt, opening: freshOpening, type: 'session.open' },
-  'session.resume': { call, observedAt, opening: resumeOpening, type: 'session.resume' },
+  'session.open': { call, ...commandTime, opening: freshOpening, type: 'session.open' },
+  'session.resume': { call, ...commandTime, opening: resumeOpening, type: 'session.resume' },
   'turn.send': {
     call: turnCall,
     input: { prompt: 'continue', turnId: 'turn_01' },
-    observedAt,
+    ...commandTime,
+    resultCallId: 'turn_result_01',
     type: 'turn.send',
   },
   'interaction.respond': {
     call,
     input: { requestId: 'request_01', response: { kind: 'input', outcome: 'declined' } },
-    observedAt,
+    ...commandTime,
     type: 'interaction.respond',
   },
-  'turn.cancel': { call: turnCall, observedAt, turnId: 'turn_01', type: 'turn.cancel' },
+  'turn.cancel': { call: turnCall, ...commandTime, turnId: 'turn_01', type: 'turn.cancel' },
   'session.checkpoint': {
     call,
     checkpointId: 'checkpoint_01',
-    observedAt,
+    ...commandTime,
     type: 'session.checkpoint',
   },
-  'session.hibernate': { call, observedAt, resumeTokenId: 'token_01', type: 'session.hibernate' },
-  'session.close': { call, observedAt, type: 'session.close' },
-  'session.cancel': { call, observedAt, type: 'session.cancel' },
-  'manager.shutdown': { call, observedAt, type: 'manager.shutdown' },
+  'session.hibernate': {
+    call,
+    ...commandTime,
+    resumeTokenId: 'token_01',
+    type: 'session.hibernate',
+  },
+  'session.close': { call, ...commandTime, type: 'session.close' },
+  'session.cancel': { call, ...commandTime, type: 'session.cancel' },
+  'manager.shutdown': { call, ...commandTime, type: 'manager.shutdown' },
 } satisfies PublicCommandByType;
 
 type ProviderCommandByType = {
@@ -110,26 +118,26 @@ const providerCommands = {
   'provider.message_delta': {
     content: 'Hello',
     correlation: turnCorrelation,
-    observedAt,
+    ...commandTime,
     type: 'provider.message_delta',
   },
   'provider.message_completed': {
     contentBytes: 5,
     contentSha256: 'sha256',
     correlation: turnCorrelation,
-    observedAt,
+    ...commandTime,
     type: 'provider.message_completed',
   },
   'provider.progress': {
     correlation: turnCorrelation,
     message: 'Working',
-    observedAt,
+    ...commandTime,
     type: 'provider.progress',
   },
   'provider.tool': {
     correlation: turnCorrelation,
     kind: 'read',
-    observedAt,
+    ...commandTime,
     status: 'completed',
     title: 'Read file',
     toolCallId: 'tool_01',
@@ -138,12 +146,12 @@ const providerCommands = {
   'provider.plan': {
     correlation: turnCorrelation,
     items: [{ itemId: 'item_01', status: 'pending', title: 'Check' }],
-    observedAt,
+    ...commandTime,
     type: 'provider.plan',
   },
   'provider.interaction_requested': {
     correlation,
-    observedAt,
+    ...commandTime,
     request: {
       action: { kind: 'execute' },
       kind: 'permission',
@@ -155,7 +163,7 @@ const providerCommands = {
   },
   'provider.usage': {
     correlation: turnCorrelation,
-    observedAt,
+    ...commandTime,
     type: 'provider.usage',
     usage: { inputTokens: 1, scope: 'session_cumulative' },
   },
@@ -164,6 +172,7 @@ const providerCommands = {
 const timer = {
   correlation,
   firedAt: observedAt,
+  firedAtMs: 1_000,
   generation: 1,
   kind: 'wall_clock',
   timerId: 'timer_01',

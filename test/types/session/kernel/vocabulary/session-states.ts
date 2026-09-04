@@ -2,10 +2,8 @@ import type {
   ActiveProcessIdentity,
   AgentFault,
 } from '../../../../../src/contracts/manager/core.js';
-import type {
-  SessionState,
-  SessionOpeningDescriptor,
-} from '../../../../../src/execution/session/kernel/model/session-state.js';
+import type { SessionOpeningDescriptor } from '../../../../../src/execution/session/kernel/model/opening-state.js';
+import type { SessionState } from '../../../../../src/execution/session/kernel/model/session-state.js';
 
 declare const opening: SessionOpeningDescriptor;
 
@@ -28,6 +26,7 @@ const limits = {
 } as const;
 const common = {
   acceptedAt: '2026-03-21T00:00:00.000Z',
+  acceptedAtMs: 1_000,
   epoch: 1,
   events: { pending: [] },
   incarnationId: 'incarnation_01',
@@ -85,12 +84,23 @@ type StateByStatus = {
 };
 
 const states = {
-  opening: { ...common, progress: { opening, stage: 'publishing_accepted' }, status: 'opening' },
+  opening: {
+    ...common,
+    callId: 'call_01',
+    progress: { opening, stage: 'publishing_accepted' },
+    status: 'opening',
+  },
   idle: { ...active, status: 'idle' },
   running: {
     ...active,
     status: 'running',
-    turn: { prompt: 'continue', status: 'starting', turnId: 'turn_01' },
+    turn: {
+      handleCallId: 'send_01',
+      prompt: 'continue',
+      resultCallId: 'turn_result_01',
+      status: 'starting',
+      turnId: 'turn_01',
+    },
   },
   checkpointing: {
     ...active,
