@@ -25,6 +25,22 @@ interface AgentVersionProbe {
   readonly timeoutMs: number;
 }
 
+export interface AgentDefinitionSessionCapabilities {
+  readonly multiTurn: true;
+  readonly resume: 'none' | 'native';
+  readonly interactions: {
+    readonly permission: boolean;
+    readonly input: boolean;
+  };
+  readonly updates: {
+    readonly message: true;
+    readonly progress: boolean;
+    readonly tool: boolean;
+    readonly plan: boolean;
+    readonly usage: boolean;
+  };
+}
+
 export interface AgentDefinition {
   readonly schemaVersion: 'agent-definition/v1';
   readonly id: string;
@@ -52,6 +68,7 @@ export interface AgentDefinition {
     readonly cancellation: boolean;
     readonly structuredResult: true;
     readonly usage: boolean;
+    readonly session?: AgentDefinitionSessionCapabilities;
   };
   readonly constraints?: {
     readonly platforms?: readonly ('darwin' | 'linux' | 'win32')[];
