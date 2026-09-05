@@ -56,8 +56,7 @@ export class PublicCallRegistry {
   #settle(callId: string, settlement: PublicCallSettlement): boolean {
     if (!this.#calls.has(callId)) return false;
     const remaining = [callId];
-    for (let index = 0; index < remaining.length; index += 1) {
-      const nextId = remaining[index]!;
+    for (const nextId of remaining) {
       const call = this.#calls.get(nextId);
       if (call === undefined) continue;
       this.#calls.delete(nextId);
