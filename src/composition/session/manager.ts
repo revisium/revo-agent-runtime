@@ -1,8 +1,7 @@
 import { createSessionOpeningPreparer } from '../../application/session/admission/preparer.js';
 import type { AgentSessionComposer } from '../../application/session/management/composition.js';
 import { createManagedAgentSessionController } from '../../application/session/management/managed-sessions.js';
-import type { OutputClaimPlatform } from '../../execution/output/claim.js';
-import type { ClaimedInvocationOutput } from '../../execution/output/claim.js';
+import type { ClaimedInvocationOutput, OutputClaimPlatform } from '../../execution/output/claim.js';
 import type { SessionOutputPublicationTarget } from '../../execution/output/session/publication.js';
 import type { ExecutablePreflight } from '../../execution/probe/executable-preflight.js';
 import type { ProcessSpawner, RecoveredProcessInspector } from '../../execution/process/port.js';

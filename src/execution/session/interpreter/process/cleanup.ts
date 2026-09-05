@@ -1,5 +1,4 @@
-import type { AgentFault } from '../../../../contracts/manager/core.js';
-import type { ActiveProcessIdentity } from '../../../../contracts/manager/core.js';
+import type { ActiveProcessIdentity, AgentFault } from '../../../../contracts/manager/core.js';
 import type { ProcessCleanupOutcome } from '../../../process/port.js';
 import type { SessionEffect } from '../../kernel/effect/session-effect.js';
 import type { SessionEffectOutput } from '../../runtime/effects/outcomes.js';
