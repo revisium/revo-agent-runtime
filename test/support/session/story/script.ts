@@ -25,6 +25,8 @@ interface AgentStoryTurn {
 }
 
 export interface AgentSessionStoryOptions {
+  readonly processStartBarrier?: string;
+  readonly openingSteps?: readonly AgentStoryTurnStep[];
   readonly checkpoint?: Readonly<JsonObject>;
   readonly checkpoints?: readonly Readonly<JsonObject>[];
   readonly replies?: readonly string[];
@@ -81,7 +83,7 @@ export const createStoryProtocolScript = (
     openings: openings.map((kind) => ({
       kind,
       outcome: { capabilities, status: 'opened' as const },
-      steps: [],
+      steps: turnSteps({ steps: options.openingSteps ?? [] }),
     })),
     prompts: turns.map((turn) => ({
       outcome: turn.outcome ?? { status: 'completed' },

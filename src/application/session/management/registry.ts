@@ -7,9 +7,14 @@ import type {
 } from '../../../contracts/session/lifecycle/snapshot.js';
 import type { SessionCommandRuntime } from '../../../execution/session/runtime/actor/port.js';
 import type { EffectiveAgentSessionManagerLimits } from '../policy/limits/resolve.js';
+import {
+  resolveAgentSessionLimits,
+  type EffectiveAgentSessionLimits,
+} from '../policy/limits/resolve.js';
 import { sessionManagerError } from './errors.js';
 
 export interface ManagedSessionEntry {
+  readonly limits: EffectiveAgentSessionLimits;
   readonly sessionId: string;
   readonly epoch: number;
   readonly runtime: SessionCommandRuntime;
@@ -52,12 +57,18 @@ export class ManagedSessionRegistry {
       (terminal.status !== 'hibernated' || terminal.resumeToken.resumeTokenId !== resumeTokenId)
     )
       throw sessionManagerError('revo.agent.session_duplicate', 'The session cannot be resumed.');
+    const epoch = this.#claim(sessionId);
     this.#usedResumeTokens.add(resumeTokenId);
-    return this.#claim(sessionId);
+    return epoch;
   }
 
-  register(sessionId: string, epoch: number, runtime: SessionCommandRuntime): void {
-    this.#active.set(sessionId, { epoch, runtime, sessionId });
+  register(
+    sessionId: string,
+    epoch: number,
+    runtime: SessionCommandRuntime,
+    limits: EffectiveAgentSessionLimits = resolveAgentSessionLimits(undefined),
+  ): void {
+    this.#active.set(sessionId, { epoch, runtime, sessionId, limits });
     this.#epochs.set(sessionId, epoch);
     this.#terminal.delete(sessionId);
   }
@@ -68,8 +79,12 @@ export class ManagedSessionRegistry {
   }
 
   get(sessionId: string): AgentSession | undefined {
+    return this.entry(sessionId)?.handle;
+  }
+
+  entry(sessionId: string): ManagedSessionEntry | undefined {
     this.reconcile(sessionId);
-    return this.#active.get(sessionId)?.handle;
+    return this.#active.get(sessionId);
   }
 
   runtime(sessionId: string): SessionCommandRuntime | undefined {

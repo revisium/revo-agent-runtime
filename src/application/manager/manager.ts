@@ -80,6 +80,7 @@ export const createAgentManager = (
     validated.sessions === undefined || services.sessionComposer === undefined
       ? undefined
       : services.sessionComposer.create({
+          redactionSecrets: validated.redaction.secrets,
           agents: catalog.list(),
           definitions,
           options: validated.sessions,

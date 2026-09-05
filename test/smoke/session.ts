@@ -137,7 +137,7 @@ try {
     formatSessionSmokeEvidence(
       await runSessionCancellationScenario({
         cancelDelayMs: 10,
-        definition: fakeAcpDefinition({ mode: 'hang', session: true }),
+        definition: fakeAcpDefinition({ mode: 'session-cancellation' }),
         outputDirectory: join(directory, 'fake-cancellation'),
         workspaceDirectory: directory,
       }),

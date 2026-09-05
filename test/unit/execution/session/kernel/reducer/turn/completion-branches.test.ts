@@ -6,9 +6,9 @@ import type { SessionState } from '../../../../../../../src/execution/session/ke
 import { reduceSession } from '../../../../../../../src/execution/session/kernel/reducer/reduce.js';
 import {
   finishTurn,
-  projectTurnResult,
   reducePromptOutcome,
 } from '../../../../../../../src/execution/session/kernel/reducer/turn/completion.js';
+import { projectTurnResult } from '../../../../../../../src/execution/session/kernel/reducer/turn/result.js';
 import {
   beginProviderPrompt,
   startTurn,
@@ -162,6 +162,11 @@ test('a failed cancellation operation overrides the provisional turn outcome', (
   });
   expect(effectOf(transition.effects, 'event.append').event).toMatchObject({
     outcome: { error: fault, status: 'failed' },
+  });
+  expect(transition.state).toMatchObject({
+    status: 'cancelling',
+    intent: { outcome: 'failed', error: fault },
+    progress: { stage: 'settling_turn' },
   });
 });
 

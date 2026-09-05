@@ -137,7 +137,7 @@ it('maps failed interaction delivery to a stable provider fault', async () => {
   });
 });
 
-it('cancels a registered prompt, publishes cancellation, and closes the provider', async () => {
+it('cancels and closes a provider without synthesizing prompt completion', async () => {
   const { driver, resources } = await setup({
     cancellations: [{ status: 'requested' }],
     closes: [{ status: 'closed' }],
@@ -173,12 +173,7 @@ it('cancels a registered prompt, publishes cancellation, and closes the provider
     'prompt.cancel',
     'session.close',
   ]);
-  expect(recorded.outcomes).toEqual([
-    expect.objectContaining({
-      outcome: { status: 'cancelled' },
-      type: 'provider.prompt.completed',
-    }),
-  ]);
+  expect(recorded.outcomes).toEqual([]);
   expect(resources.providers.get('provider-1')).toBeUndefined();
 });
 

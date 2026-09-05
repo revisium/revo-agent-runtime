@@ -42,6 +42,7 @@ type ProcessStartedPayload = {
 };
 
 type ProcessStartOutcome =
+  | Outcome<'process.exited', { readonly processResourceId: string; readonly fault: AgentFault }>
   | Outcome<'process.started', ProcessStartedPayload>
   | FaultOutcome<'process.failed'>
   | FaultOutcome<'process.timed_out'>

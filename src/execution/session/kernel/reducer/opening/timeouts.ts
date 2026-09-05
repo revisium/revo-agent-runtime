@@ -1,7 +1,7 @@
 import type { TimerCommand } from '../../command/timer.js';
 import { unchangedTransition, type SessionTransition } from '../transition.js';
 import { beginOpeningProcessCleanup, failOpeningBeforeProcess } from './failure.js';
-import type { OpeningState } from './state.js';
+import { openingCleanupInProgress, type OpeningState } from './state.js';
 
 export const reduceOpeningTimer = (
   state: OpeningState,
@@ -9,6 +9,7 @@ export const reduceOpeningTimer = (
 ): SessionTransition => {
   const timer = state.timers.find(({ timerId }) => timerId === command.timerId);
   if (
+    openingCleanupInProgress(state) ||
     timer?.generation !== command.generation ||
     timer.kind !== command.kind ||
     (timer.kind !== 'opening' && timer.kind !== 'wall_clock')

@@ -44,7 +44,11 @@ export class ManagedSessionOpeningBuilder {
     context?: AgentSessionLaunchContext,
   ): PreparedManagedSessionOpening {
     const request = decodeOpenAgentSession(input);
-    const launch = captureSessionLaunchContext(context, process.env);
+    const launch = captureSessionLaunchContext(
+      context,
+      this.options.hostEnvironment?.() ?? {},
+      this.options.redactionSecrets,
+    );
     const id = sessionId(request.sessionId);
     const pin = pinOf(this.catalog.require(request.agent));
     const limits = resolveAgentSessionLimits(request.limits);
@@ -80,7 +84,11 @@ export class ManagedSessionOpeningBuilder {
     context?: AgentSessionLaunchContext,
   ): PreparedManagedSessionOpening {
     const request = decodeResumeAgentSession(input);
-    const launch = captureSessionLaunchContext(context, process.env);
+    const launch = captureSessionLaunchContext(
+      context,
+      this.options.hostEnvironment?.() ?? {},
+      this.options.redactionSecrets,
+    );
     const pin = pinOf(this.catalog.requirePin(inspectResumeTokenPin(request.token)));
     const limits = resolveAgentSessionLimits(request.limits);
     const decoded = decodeResumeToken(
@@ -113,6 +121,9 @@ export class ManagedSessionOpeningBuilder {
           },
           streamId: this.options.nextIdentity('stream'),
           usageBaseline: decoded.envelope.usageBaseline,
+          ...(decoded.envelope.acceptedTurnIds === undefined
+            ? {}
+            : { acceptedTurnIds: decoded.envelope.acceptedTurnIds }),
         },
         type: 'session.resume',
       },

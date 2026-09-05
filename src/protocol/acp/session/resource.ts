@@ -12,6 +12,7 @@ import type {
   ObservedSessionProtocolPromptRequest,
   SessionProtocolPrompt,
   SessionProtocolSession,
+  SessionProtocolObserver,
 } from '../../session/port/session.js';
 import { normalizeAcpUsage } from '../usage.js';
 import { AcpSessionInteractionBroker } from './interaction/broker.js';
@@ -41,9 +42,8 @@ export interface AcpSessionResourceOptions {
   readonly context: acp.ClientContext;
   readonly providerSessionId: string;
   readonly release: () => void;
-  readonly setObserver: (
-    observer: ObservedSessionProtocolPromptRequest['observer'] | undefined,
-  ) => void;
+  readonly flushUpdates: () => Promise<void>;
+  readonly setObserver: (observer: SessionProtocolObserver | undefined) => void;
 }
 
 export class AcpSessionResource implements SessionProtocolSession {
@@ -58,7 +58,11 @@ export class AcpSessionResource implements SessionProtocolSession {
         prompt: [{ text: request.prompt, type: 'text' }],
         sessionId: this.options.providerSessionId,
       })
-      .then(promptOutcome, () => ({
+      .then(async (response) => {
+        await this.options.flushUpdates();
+        return promptOutcome(response);
+      })
+      .catch(() => ({
         failure: protocolFailure('ACP prompt transport failed.'),
         status: 'failed' as const,
       }))

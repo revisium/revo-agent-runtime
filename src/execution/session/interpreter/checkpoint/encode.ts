@@ -38,6 +38,10 @@ const invalid = (): never => {
   throw new SessionCheckpointEncodingError();
 };
 
+const requireSecretFree = (value: string, secrets: readonly string[]): void => {
+  if (secrets.some((secret) => secret.length > 0 && value.includes(secret))) invalid();
+};
+
 const isJsonObject = (value: unknown): value is JsonObject =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -58,19 +62,20 @@ const containerOf = (value: unknown, secrets: readonly string[]): object | undef
     return undefined;
   }
   if (typeof value === 'string') {
-    if (secrets.some((secret) => secret.length > 0 && value.includes(secret))) return invalid();
+    requireSecretFree(value, secrets);
     return undefined;
   }
   if (typeof value !== 'object') return invalid();
   return value;
 };
 
-const objectValues = (value: object): readonly unknown[] => {
+const objectValues = (value: object, secrets: readonly string[]): readonly unknown[] => {
   const prototype: unknown = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) return invalid();
   const values: unknown[] = [];
   for (const key of Reflect.ownKeys(value)) {
     if (typeof key !== 'string' || forbiddenKeys.has(key.toLowerCase())) return invalid();
+    requireSecretFree(key, secrets);
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (descriptor?.enumerable !== true || !Object.hasOwn(descriptor, 'value')) return invalid();
     values.push(descriptor.value);
@@ -78,8 +83,8 @@ const objectValues = (value: object): readonly unknown[] => {
   return values;
 };
 
-const containerValues = (value: object): readonly unknown[] => {
-  if (!Array.isArray(value)) return objectValues(value);
+const containerValues = (value: object, secrets: readonly string[]): readonly unknown[] => {
+  if (!Array.isArray(value)) return objectValues(value, secrets);
   if (Object.getPrototypeOf(value) !== Array.prototype) return invalid();
   return value;
 };
@@ -98,7 +103,7 @@ const inspectData = (source: unknown, secrets: readonly string[]): Readonly<Json
     if (container === undefined) continue;
     if (seen.has(container)) return invalid();
     seen.add(container);
-    for (const child of containerValues(container))
+    for (const child of containerValues(container, secrets))
       pending.push({ depth: current.depth + 1, value: child });
   }
   try {
@@ -130,15 +135,20 @@ const base64Url = (bytes: Uint8Array): string => {
 };
 
 export const encodeSessionContinuation = (options: {
+  readonly acceptedTurnIds?: readonly string[];
   readonly continuation: SessionProtocolContinuation;
   readonly maxBytes: number;
   readonly secrets: readonly string[];
   readonly usageBaseline: AgentSessionUsage;
 }): string => {
+  const format = safeString(options.continuation.format);
+  requireSecretFree(format, options.secrets);
+  for (const turnId of options.acceptedTurnIds ?? []) requireSecretFree(turnId, options.secrets);
   const envelope: AgentSessionContinuationEnvelope = {
+    ...(options.acceptedTurnIds === undefined ? {} : { acceptedTurnIds: options.acceptedTurnIds }),
     provider: {
       data: inspectData(options.continuation.data, options.secrets),
-      format: safeString(options.continuation.format),
+      format,
     },
     schemaVersion: 'agent-session-continuation-envelope/v1',
     usageBaseline: options.usageBaseline,

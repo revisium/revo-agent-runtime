@@ -4,6 +4,7 @@ import type { SessionEffect } from '../../../kernel/effect/session-effect.js';
 import type { SessionEffectOutput } from '../../../runtime/effects/outcomes.js';
 import type { SessionMessageStream } from '../../event/message-stream.js';
 import type { SessionObservationClock } from '../../shared/observation/clock.js';
+import { redactSessionValue } from '../../shared/value/redacted.js';
 import type { ProviderSessionResource } from '../opening/resources.js';
 import { mapProtocolInteraction } from '../updates.js';
 
@@ -54,8 +55,15 @@ export const publishTurnUsage = async (
 
 export const publishTurnUpdate = async (
   context: TurnUpdateContext,
-  update: SessionProtocolUpdate,
+  incoming: SessionProtocolUpdate,
 ): Promise<void> => {
+  const update =
+    incoming.type === 'message.delta'
+      ? incoming
+      : redactSessionValue(
+          incoming,
+          context.provider.preparation.opening.environment?.secrets ?? [],
+        );
   const observed = base(context);
   switch (update.type) {
     case 'message.delta':

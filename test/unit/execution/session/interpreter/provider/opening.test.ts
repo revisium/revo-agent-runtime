@@ -39,7 +39,7 @@ const protocolInteraction = {
   type: 'interaction.requested' as const,
 };
 
-const runOpening = async (mode: 'fresh' | 'resume') => {
+const runOpening = async (mode: 'fresh' | 'resume', withSecrets = true) => {
   const driver = createControllableSessionProtocolDriver({
     openings: [
       {
@@ -111,7 +111,7 @@ const runOpening = async (mode: 'fresh' | 'resume') => {
     throw new Error('Missing opening interpreter');
   const opening = {
     ...sessionOpeningCommand(mode).opening,
-    environment: { secrets: ['secret'], values: { token: 'secret' } },
+    ...(withSecrets ? { environment: { secrets: ['secret'], values: { token: 'secret' } } } : {}),
   };
   prepare.execute(
     {
@@ -148,6 +148,15 @@ const runOpening = async (mode: 'fresh' | 'resume') => {
 };
 
 describe('provider opening interpreters', () => {
+  it('delivers opening interaction text without an environment snapshot', async () => {
+    const { output } = await runOpening('fresh', false);
+    expect(output.updates).toContainEqual(
+      expect.objectContaining({
+        type: 'provider.interaction_requested',
+        request: protocolInteraction.request,
+      }),
+    );
+  });
   it('prepares output, starts a process, opens fresh and publishes an opening interaction', async () => {
     const result = await runOpening('fresh');
 

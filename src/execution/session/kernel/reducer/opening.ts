@@ -1,4 +1,5 @@
 import type { SessionCommand } from '../command/session-command.js';
+import { cancelOpening } from './opening/control.js';
 import { reduceOpeningEvent, startOpening } from './opening/events.js';
 import { reduceOpeningCleanup } from './opening/failure.js';
 import {
@@ -19,6 +20,8 @@ export const reduceOpeningSession = (
   state: OpeningState,
   command: SessionCommand,
 ): SessionTransition => {
+  if (command.type === 'session.cancel' || command.type === 'manager.shutdown')
+    return cancelOpening(state, command);
   if (command.type === 'session.open' || command.type === 'session.resume')
     return startOpening(state, command);
   if (command.type === 'timer.fired') return reduceOpeningTimer(state, command);

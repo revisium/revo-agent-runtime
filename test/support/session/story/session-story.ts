@@ -4,6 +4,9 @@ import { createManagedAgentSessions } from '../../../../src/application/session/
 import type { AgentDescriptor } from '../../../../src/contracts/manager.js';
 import type {
   AgentSessionEvent,
+  AgentSession,
+  AgentSessionLaunchContext,
+  AgentSessionLimits,
   AgentSessionResumeToken,
   AgentSessions,
 } from '../../../../src/contracts/session.js';
@@ -18,6 +21,7 @@ import {
   createControllableSessionProtocolDriver,
   type FakeSessionProtocolCall,
 } from '../fakes/protocol/driver.js';
+import { StoryProcesses } from './processes.js';
 import { createStoryProtocolScript, type AgentSessionStoryOptions } from './script.js';
 
 const capabilities = {
@@ -33,7 +37,15 @@ const protocolCapabilities = {
 
 export interface AgentSessionStory {
   readonly sessions: AgentSessions;
-  open(sessionId: string): ReturnType<AgentSessions['open']>;
+  open(
+    sessionId: string,
+    options?: {
+      readonly limits?: AgentSessionLimits;
+      readonly context?: AgentSessionLaunchContext;
+    },
+  ): ReturnType<AgentSessions['open']>;
+  close(session: AgentSession): Promise<void>;
+  completeEmptySessions(sessionIds: readonly string[]): Promise<void>;
   resume(token: AgentSessionResumeToken): ReturnType<AgentSessions['resume']>;
   events(): readonly AgentSessionEvent[];
   eventTypes(): readonly AgentSessionEvent['type'][];
@@ -44,6 +56,9 @@ export interface AgentSessionStory {
   releaseAgent(barrier: string): void;
   activeProcesses(): number;
   maximumActiveProcesses(): number;
+  retainedPreparations(): number;
+  retainedProviders(): number;
+  exitAgent(): void;
 }
 
 const descriptorFrom = (definition: ReturnType<typeof validateAgentDefinition>): AgentDescriptor =>
@@ -78,8 +93,7 @@ export const createAgentSessionStory = (options: AgentSessionStoryOptions): Agen
   const digest = {
     digest: (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex'),
   };
-  let activeProcesses = 0;
-  let maximumActiveProcesses = 0;
+  const processes = new StoryProcesses(driver.barriers, options.processStartBarrier);
   let resourceIdentity = 0;
   const composition = composeSessionInterpreters({
     activeStateSink: {
@@ -123,35 +137,11 @@ export const createAgentSessionStory = (options: AgentSessionStoryOptions): Agen
         },
       }),
     },
-    spawner: {
-      start: async () => {
-        activeProcesses += 1;
-        maximumActiveProcesses = Math.max(maximumActiveProcesses, activeProcesses);
-        let cleaned = false;
-        return {
-          completion: new Promise<never>(() => undefined),
-          identity: {
-            fingerprint: `fake-process-${resourceIdentity}`,
-            pid: 42 + resourceIdentity,
-            processGroupId: 42 + resourceIdentity,
-            startedAt: clock.now().iso,
-          },
-          terminateAndReap: async () => {
-            if (!cleaned) activeProcesses -= 1;
-            cleaned = true;
-            return { exit: { exitCode: 0, signal: null }, status: 'confirmed' };
-          },
-          transport: {
-            input: new WritableStream<Uint8Array>(),
-            output: new ReadableStream<Uint8Array>({
-              start: (controller) => controller.close(),
-            }),
-          },
-        };
-      },
-    },
+    spawner: processes,
   });
   const actorFactory = new SessionActorFactory({
+    release: (identity) =>
+      composition.resources.preparations.release({ ...identity, effectId: 'release' }),
     clock,
     dispatcher: new SessionEffectDispatcher(composition.interpreters),
     reducer: reduceSession,
@@ -178,20 +168,49 @@ export const createAgentSessionStory = (options: AgentSessionStoryOptions): Agen
     permissions: {},
     workspace: { directory: '/workspace' },
   } as const;
-  return Object.freeze({
-    activeProcesses: () => activeProcesses,
+  const story: AgentSessionStory = {
+    close: async (session) => {
+      await session.close();
+      await story.settle();
+    },
+    completeEmptySessions: async (sessionIds) => {
+      const complete = async (sessionId: string): Promise<void> => {
+        const session = await story.open(sessionId);
+        await story.close(session);
+      };
+      for (const sessionId of sessionIds) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- exercises sequential lifetimes in one manager
+        await complete(sessionId);
+      }
+    },
+    exitAgent: () => processes.exit(),
+    activeProcesses: () => processes.active,
     events: () => Object.freeze([...events]),
     eventTypes: () => Object.freeze(events.map(({ type }) => type)),
-    maximumActiveProcesses: () => maximumActiveProcesses,
-    open: (sessionId: string) =>
-      sessions.open({
-        ...launch,
-        agent: { id: 'fake-session-agent', version: '1' },
-        ...(options.eventSinkTimeoutMs === undefined
-          ? {}
-          : { limits: { eventSinkTimeoutMs: options.eventSinkTimeoutMs } }),
-        sessionId,
-      }),
+    maximumActiveProcesses: () => processes.maximum,
+    retainedProviders: () => composition.resources.providers.size,
+    retainedPreparations: () =>
+      runtimes.filter(
+        ({ state }) =>
+          composition.resources.preparations.forSession({
+            effectId: 'inspection',
+            epoch: state.epoch,
+            sessionId: state.sessionId,
+          }) !== undefined,
+      ).length,
+    open: (sessionId, opening = {}) =>
+      sessions.open(
+        {
+          ...launch,
+          agent: { id: 'fake-session-agent', version: '1' },
+          ...(options.eventSinkTimeoutMs === undefined
+            ? {}
+            : { limits: { eventSinkTimeoutMs: options.eventSinkTimeoutMs } }),
+          ...(opening.limits === undefined ? {} : { limits: opening.limits }),
+          sessionId,
+        },
+        opening.context,
+      ),
     providerCalls: () => Object.freeze([...driver.calls]),
     providerCallTypes: () => Object.freeze(driver.calls.map(({ type }) => type)),
     releaseAgent: (barrier: string) => driver.barriers.release(barrier),
@@ -201,5 +220,6 @@ export const createAgentSessionStory = (options: AgentSessionStoryOptions): Agen
     },
     sessions,
     waitForAgent: (barrier: string) => driver.barriers.reached(barrier),
-  });
+  };
+  return Object.freeze(story);
 };

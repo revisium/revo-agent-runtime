@@ -2,7 +2,7 @@ import type { CancelAgentSessionTurnResult } from '../../../../../contracts/sess
 import type { PublicSessionCommand } from '../../command/public.js';
 import type { SessionState } from '../../model/session-state.js';
 import { appendEffect, nextEffectCorrelation, type SessionTransition } from '../transition.js';
-import { projectTurnResult } from './completion.js';
+import { projectTurnResult } from './result.js';
 
 type RunningState = Extract<SessionState, { readonly status: 'running' }>;
 type CancelTurnCommand = Extract<PublicSessionCommand, { readonly type: 'turn.cancel' }>;

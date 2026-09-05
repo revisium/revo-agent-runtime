@@ -18,12 +18,17 @@ export interface CapturedSessionLaunchContext {
 export const captureSessionLaunchContext = (
   context: AgentSessionLaunchContext | undefined,
   hostEnvironment: Readonly<Record<string, string | undefined>>,
+  redactionSecrets: readonly string[] = [],
 ): CapturedSessionLaunchContext => {
   if (context?.signal?.aborted)
     throw contextError('revo.agent.cancelled', 'Session opening was cancelled.');
   try {
+    const captured = captureEnvironment(context?.environment, hostEnvironment);
     return Object.freeze({
-      environment: captureEnvironment(context?.environment, hostEnvironment),
+      environment: Object.freeze({
+        values: captured.values,
+        secrets: Object.freeze([...new Set([...captured.secrets, ...redactionSecrets])]),
+      }),
       ...(context?.signal === undefined ? {} : { signal: context.signal }),
     });
   } catch {

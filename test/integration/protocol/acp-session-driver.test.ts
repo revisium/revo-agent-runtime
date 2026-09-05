@@ -7,6 +7,7 @@ import type { SessionProtocolUpdate } from '../../../src/protocol/session/model/
 import type { SessionProtocolOpeningResult } from '../../../src/protocol/session/port/opening.js';
 import type { SessionProtocolObserver } from '../../../src/protocol/session/port/session.js';
 import { agentDefinition } from '../../support/builders/agent-definition.js';
+import { transportPair } from '../../support/session/fakes/acp/transport.js';
 
 const definition = validateAgentDefinition(
   agentDefinition({
@@ -28,15 +29,6 @@ const protocolCapabilities = {
   sessionCapabilities: { close: {}, resume: {} },
 } as const;
 
-const transportPair = () => {
-  const clientToAgent = new TransformStream<Uint8Array, Uint8Array>();
-  const agentToClient = new TransformStream<Uint8Array, Uint8Array>();
-  return {
-    agent: acp.ndJsonStream(agentToClient.writable, clientToAgent.readable),
-    client: { input: clientToAgent.writable, output: agentToClient.readable },
-  };
-};
-
 const observer = (updates: SessionProtocolUpdate[]): SessionProtocolObserver => ({
   update: async (value) => {
     updates.push(value);
@@ -50,6 +42,67 @@ const openedSession = (
   if (result.status !== 'opened') throw new Error('Expected an opened ACP session.');
   return result;
 };
+
+test.each([false, true])(
+  'prompt completion waits for preceding ACP updates (coalesced: %s)',
+  async (coalescedUpdates) => {
+    const pair = transportPair({ coalescedUpdates });
+    const delivering = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const agentConnection = acp
+      .agent({ name: 'backpressure-agent' })
+      .onRequest(acp.methods.agent.initialize, () => ({ protocolVersion: acp.PROTOCOL_VERSION }))
+      .onRequest(acp.methods.agent.session.new, () => ({ sessionId: 'backpressure-session' }))
+      .onRequest(acp.methods.agent.session.prompt, async ({ client, params }) => {
+        await client.notify(acp.methods.client.session.update, {
+          sessionId: params.sessionId,
+          update: {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: 'complete reply' },
+          },
+        });
+        return { stopReason: 'end_turn' };
+      })
+      .connect(pair.agent);
+    const opening = createAcpSessionProtocolDriver().openFresh({
+      definition,
+      kind: 'fresh',
+      parameters: {},
+      permissions: {},
+      transport: pair.client,
+      workspace: '/workspace',
+      observer: observer([]),
+    });
+    const opened = openedSession(await opening.completion);
+    const delivered: SessionProtocolUpdate[] = [];
+    let completed = false;
+    const prompt = opened.session.prompt({
+      prompt: 'Reply.',
+      observer: {
+        update: async (update) => {
+          delivering.resolve();
+          await release.promise;
+          delivered.push(update);
+        },
+      },
+    });
+    void prompt.completion.then(() => {
+      completed = true;
+    });
+    try {
+      await delivering.promise;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(completed).toBe(false);
+      release.resolve();
+      await expect(prompt.completion).resolves.toMatchObject({ status: 'completed' });
+      expect(delivered).toEqual([{ type: 'message.delta', content: 'complete reply' }]);
+    } finally {
+      release.resolve();
+      await opened.session.close();
+      agentConnection.close();
+    }
+  },
+);
 
 test('ACP session driver keeps one provider session across turns and bridges permission', async () => {
   let remembered = '';

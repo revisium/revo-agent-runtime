@@ -33,6 +33,7 @@ export class SessionOutputCollector {
   readonly #retainedLimit: number;
   #retainedBytes = 0;
   #result: CollectedSessionOutput | undefined;
+  #disposed = false;
 
   constructor(maxBytes: number, secrets: readonly string[]) {
     if (!Number.isSafeInteger(maxBytes) || maxBytes < truncationMarker.byteLength * 2 + 1)
@@ -50,7 +51,17 @@ export class SessionOutputCollector {
     this.#write(this.#stderr, bytes);
   }
 
+  dispose(): void {
+    this.#disposed = true;
+    this.#stdout.redaction.dispose();
+    this.#stderr.redaction.dispose();
+    this.#stdout.parts.length = 0;
+    this.#stderr.parts.length = 0;
+    this.#result = undefined;
+  }
+
   finalize(): CollectedSessionOutput {
+    if (this.#disposed) throw new Error('Session output has been released.');
     if (this.#result !== undefined) return this.#result;
     this.#retain(this.#stdout, this.#stdout.redaction.flush());
     this.#retain(this.#stderr, this.#stderr.redaction.flush());
@@ -70,7 +81,7 @@ export class SessionOutputCollector {
   }
 
   #write(channel: OutputChannel, bytes: Uint8Array): void {
-    if (this.#result !== undefined) return;
+    if (this.#disposed || this.#result !== undefined) return;
     this.#retain(channel, channel.redaction.feed(bytes));
   }
 

@@ -34,6 +34,7 @@ const providerCommands = [
 ] satisfies readonly ProviderCommand['type'][];
 
 const effectOutcomes = [
+  'process.exited',
   'opening.preparation.succeeded',
   'opening.preparation.rejected',
   'opening.preparation.failed',
@@ -108,7 +109,7 @@ const exactInventories = [
 test('freezes exact command and effect inventories', () => {
   expect(publicCommands).toHaveLength(10);
   expect(providerCommands).toHaveLength(7);
-  expect(effectOutcomes).toHaveLength(39);
+  expect(effectOutcomes).toHaveLength(40);
   expect(timerCommands).toEqual(['timer.fired']);
   expect(effects).toHaveLength(17);
   expect(exactInventories).toEqual([true, true, true, true, true]);

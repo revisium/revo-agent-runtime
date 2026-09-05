@@ -21,8 +21,8 @@ import { boundAcpInput } from '../frame-boundary.js';
 import { AcpSessionFrameCapture } from '../session-frame-capture.js';
 import { acpSessionClientCapabilities, negotiateAcpSessionCapabilities } from './capabilities.js';
 import { AcpSessionInteractionBroker } from './interaction/broker.js';
-import { deliverAcpSessionUpdate } from './mapping/updates.js';
 import { AcpSessionResource } from './resource.js';
+import { AcpSessionUpdateDelivery } from './update-delivery.js';
 
 const maxAcpFrameBytes = 1_048_576;
 
@@ -92,15 +92,21 @@ const openAcpSession = (
   let providerSessionId: string | undefined;
   let settled = false;
   const declared = declaredCapabilities(request);
-  const belongsToSession = (sessionId: string | undefined): boolean =>
+  const belongsToSession = (sessionId: unknown): boolean =>
     providerSessionId !== undefined && sessionId === providerSessionId;
   const broker = new AcpSessionInteractionBroker(() => observer, declared.interactions);
+  const updates = new AcpSessionUpdateDelivery(() => observer);
   const stream = acp.ndJsonStream(
     request.transport.input,
     boundAcpInput(request.transport.output, maxAcpFrameBytes, frames.observe),
   );
   const connection = acp
     .client({ name: 'revo-agent-runtime' })
+    // Register updates first: SDK request-handler dispatch yields between handlers.
+    // Admission must precede a following prompt response; delivery is fenced separately.
+    .onNotification(acp.methods.client.session.update, async ({ params }) => {
+      if (belongsToSession(params.sessionId)) await updates.deliver(params.update);
+    })
     .onRequest(acp.methods.client.session.requestPermission, ({ params }) =>
       belongsToSession(params.sessionId)
         ? broker.permission(params)
@@ -113,10 +119,6 @@ const openAcpSession = (
         ? broker.elicitation(params)
         : { action: 'cancel' },
     )
-    .onNotification(acp.methods.client.session.update, async ({ params }) => {
-      if (!belongsToSession(params.sessionId)) return;
-      await deliverAcpSessionUpdate(observer, params.update);
-    })
     .connectWith(stream, async (context) => {
       const initialized = await context.request(acp.methods.agent.initialize, {
         clientCapabilities: acpSessionClientCapabilities(),
@@ -171,10 +173,12 @@ const openAcpSession = (
         closeSupported: initialized.agentCapabilities?.sessionCapabilities?.close != null,
         context,
         providerSessionId,
-        release: released.resolve,
+        flushUpdates: () => updates.whenIdle(),
         setObserver: (next) => {
+          if (next !== undefined) updates.startTurn();
           observer = next;
         },
+        release: released.resolve,
       });
       settled = true;
       completion.resolve({ capabilities, session: resource, status: 'opened' });

@@ -1,8 +1,7 @@
 import type { TurnCompletedEvent } from '../../../../../contracts/session/events/event.js';
-import type { AgentSessionTurnResult } from '../../../../../contracts/session/lifecycle/result.js';
 import type { SessionCommand } from '../../command/session-command.js';
 import type { SessionState } from '../../model/session-state.js';
-import type { TerminalTurnState } from '../../model/turn-state.js';
+import { clearSessionTimers, terminalizingState } from '../terminal/state.js';
 import { resetInactivity } from '../timer/inactivity.js';
 import {
   appendEffect,
@@ -12,6 +11,7 @@ import {
   type SessionTransition,
   unchangedTransition,
 } from '../transition.js';
+import { projectTurnResult, terminalTurn } from './result.js';
 
 type RunningState = Extract<SessionState, { readonly status: 'running' }>;
 type PromptOutcome = Extract<SessionCommand, { readonly type: `provider.prompt.${string}` }>;
@@ -42,23 +42,20 @@ const publishTurnCompletion = (
   turn: Exclude<RunningState['turn'], { readonly status: 'starting' }>,
   command: PromptOutcome,
   outcome: TurnCompletedEvent['outcome'],
-): SessionTransition => {
+): SessionTransition<RunningState> => {
   const usage = outcome.status === 'completed' ? (outcome.usage ?? state.usage) : state.usage;
-  return resetInactivity(
-    queueSessionEvent(
-      {
-        ...state,
-        turn: {
-          ...turn,
-          progress: { outcome, stage: 'publishing_completion' },
-          status: 'settling',
-          usage,
-        },
+  return queueSessionEvent(
+    {
+      ...state,
+      turn: {
+        ...turn,
+        progress: { outcome, stage: 'publishing_completion' },
+        status: 'settling',
         usage,
       },
-      completedEvent(state, command, outcome),
-    ),
-    command.observedAtMs,
+      usage,
+    },
+    completedEvent(state, command, outcome),
   );
 };
 
@@ -73,11 +70,27 @@ export const reducePromptOutcome = (
       cancellation.cancellationCorrelation.effectId === command.correlation.effectId;
     if (!matchesPrompt(state, command) && !matchesCancellation) return unchangedTransition(state);
     if (command.type === 'provider.prompt.accepted') return unchangedTransition(state);
-    const outcome =
-      matchesCancellation && command.type !== 'provider.prompt.completed'
-        ? ({ error: command.fault, status: 'failed' } as const)
-        : cancellation.outcome;
-    return publishTurnCompletion(state, state.turn, command, outcome);
+    if (matchesCancellation && command.type !== 'provider.prompt.completed') {
+      const published = publishTurnCompletion(state, state.turn, command, {
+        error: command.fault,
+        status: 'failed',
+      });
+      return clearSessionTimers({
+        effects: published.effects,
+        state: terminalizingState(
+          published.state,
+          { error: command.fault, outcome: 'failed' },
+          {
+            stage: 'settling_turn',
+            turn: published.state.turn,
+          },
+        ),
+      });
+    }
+    return resetInactivity(
+      publishTurnCompletion(state, state.turn, command, cancellation.outcome),
+      command.observedAtMs,
+    );
   }
   if (state.turn.status === 'starting' || !matchesPrompt(state, command))
     return unchangedTransition(state);
@@ -93,49 +106,10 @@ export const reducePromptOutcome = (
     command.type === 'provider.prompt.completed'
       ? command.outcome
       : ({ error: command.fault, status: 'failed' } as const);
-  return publishTurnCompletion(state, state.turn, command, outcome);
-};
-
-export const projectTurnResult = (
-  turn: Extract<RunningState['turn'], { readonly status: 'settling' }>,
-): AgentSessionTurnResult => {
-  if (turn.progress.stage !== 'publishing_completion')
-    throw new Error('Cannot project an unsettled turn result.');
-  if (turn.progress.outcome.status === 'completed')
-    return {
-      message: turn.message,
-      status: 'completed',
-      ...(turn.usage === undefined ? {} : { usage: turn.usage }),
-    };
-  if (turn.progress.outcome.status === 'failed') return turn.progress.outcome;
-  return { status: turn.progress.outcome.status };
-};
-
-// oxlint-disable-next-line typescript/consistent-return -- the checked discriminated union is exhaustive
-const terminalTurn = (
-  turn: Extract<RunningState['turn'], { readonly status: 'settling' }>,
-  result: AgentSessionTurnResult,
-): TerminalTurnState => {
-  const {
-    correlation: _correlation,
-    message: _message,
-    progress: _progress,
-    status: _status,
-    usage: _usage,
-    ...base
-  } = turn;
-  switch (result.status) {
-    case 'completed':
-      return { ...base, result, status: 'completed' };
-    case 'failed':
-      return { ...base, result, status: 'failed' };
-    case 'cancelled':
-      return { ...base, result: { status: 'cancelled' }, status: 'cancelled' };
-    case 'interrupted':
-      return { ...base, result: { status: 'interrupted' }, status: 'interrupted' };
-    case 'timed_out':
-      return { ...base, result: { status: 'timed_out' }, status: 'timed_out' };
-  }
+  return resetInactivity(
+    publishTurnCompletion(state, state.turn, command, outcome),
+    command.observedAtMs,
+  );
 };
 
 export const finishTurn = (

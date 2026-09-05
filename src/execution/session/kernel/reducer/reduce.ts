@@ -3,6 +3,9 @@ import type { SessionState } from '../model/session-state.js';
 import { reduceCheckpointSession } from './checkpoint.js';
 import { reduceInteractionSession } from './interaction.js';
 import { reduceOpeningSession } from './opening.js';
+import { reduceProcessExit } from './process/exit.js';
+import { cleanupUnownedProcess } from './process/late-start.js';
+import { settleInactiveCommand } from './public/settlement.js';
 import { reduceActiveTerminal, reduceTerminalizing } from './terminal.js';
 import {
   appendEffect,
@@ -20,8 +23,8 @@ const belongsToSession = (state: SessionState, command: SessionCommand): boolean
   );
 };
 
-export const reduceSession: SessionReducer = (state: SessionState, command: SessionCommand) => {
-  if (!belongsToSession(state, command)) return unchangedTransition(state);
+const reduceCurrentSession: SessionReducer = (state: SessionState, command: SessionCommand) => {
+  if (command.type === 'process.exited') return reduceProcessExit(state, command);
   if (command.type === 'process.late_started') {
     const correlation = nextEffectCorrelation(state);
     return appendEffect(unchangedTransition(state), {
@@ -52,4 +55,13 @@ export const reduceSession: SessionReducer = (state: SessionState, command: Sess
   if (state.status === 'idle' || state.status === 'running')
     return reduceTurnSession(state, command);
   return unchangedTransition(state);
+};
+
+export const reduceSession: SessionReducer = (state, command) => {
+  if (!belongsToSession(state, command)) return unchangedTransition(state);
+  const transition = reduceCurrentSession(state, command);
+  if (command.type === 'process.started') return cleanupUnownedProcess(transition, command);
+  if ('call' in command && transition.state === state && transition.effects.length === 0)
+    return settleInactiveCommand(state, command);
+  return transition;
 };

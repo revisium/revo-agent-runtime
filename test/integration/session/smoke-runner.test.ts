@@ -63,13 +63,13 @@ test('session smoke proves hot multi-turn continuity and confirmed cleanup', asy
   });
 });
 
-test('session smoke cancels one bounded active turn and confirms cleanup', async () => {
+test('session smoke cancels an active turn, runs a new turn, and confirms cleanup', async () => {
   const directory = await fixtureDirectory();
 
   await expect(
     runSessionCancellationScenario({
       cancelDelayMs: 10,
-      definition: fakeAcpDefinition({ mode: 'hang', session: true }),
+      definition: fakeAcpDefinition({ mode: 'session-cancellation' }),
       outputDirectory: join(directory, 'output'),
       workspaceDirectory: directory,
     }),
@@ -77,5 +77,6 @@ test('session smoke cancels one bounded active turn and confirms cleanup', async
     cleanup: 'confirmed',
     providerId: 'codex',
     status: 'cancelled',
+    nextTurnStatus: 'completed',
   });
 });

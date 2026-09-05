@@ -121,6 +121,24 @@ const emitProcessSettlement = async (
     processResourceId,
     type: settlement.phase === 'initial' ? 'process.started' : 'process.late_started',
   });
+  const observeExit = (): void => {
+    if (options.resources.processes.get(processResourceId) !== settlement.value) return;
+    const now = options.clock.now();
+    output.outcome({
+      type: 'process.exited',
+      correlation: effect.correlation,
+      processResourceId,
+      observedAt: now.iso,
+      observedAtMs: now.milliseconds,
+      fault: {
+        code: 'revo.agent.protocol_failed',
+        message: 'The session provider process exited.',
+        phase: 'session_running',
+        retryable: false,
+      },
+    });
+  };
+  void settlement.value.completion.then(observeExit, observeExit);
 };
 
 const emitProcessFailure = (

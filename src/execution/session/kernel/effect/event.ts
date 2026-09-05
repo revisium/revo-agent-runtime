@@ -6,6 +6,7 @@ interface AppendSessionEventEffect {
   readonly type: 'event.append';
   readonly correlation: EffectCorrelation;
   readonly event: AgentSessionEvent;
+  readonly redactionSecrets?: readonly string[];
   readonly expected: AgentSessionEventAppendPrecondition;
   readonly maxBytes: number;
   readonly timeoutMs: number;

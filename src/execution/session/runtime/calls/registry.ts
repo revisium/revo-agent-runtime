@@ -1,4 +1,5 @@
 import type { PublicCallResolution, PublicCallSettlement } from '../actor/port.js';
+import { ownedFrozenValue } from '../resources/owned.js';
 
 export type { PublicCallSettlement } from '../actor/port.js';
 
@@ -41,11 +42,11 @@ export class PublicCallRegistry {
   }
 
   resolve(callId: string, resolution: PublicCallResolution): boolean {
-    return this.#settle(callId, { resolution, state: 'resolved' });
+    return this.#settle(callId, ownedFrozenValue({ resolution, state: 'resolved' as const }));
   }
 
   reject(callId: string, fault: AgentFault): boolean {
-    return this.#settle(callId, { fault, state: 'rejected' });
+    return this.#settle(callId, ownedFrozenValue({ fault, state: 'rejected' as const }));
   }
 
   whenEmpty(): Promise<void> {

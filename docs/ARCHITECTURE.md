@@ -100,6 +100,21 @@ effect correlations, inspect mailbox state, or retain provider resources. The
 root imports the session composition boundary; it does not import the kernel,
 runtime, or interpreter implementation directly.
 
+Session management delegates ID-addressed opening/ready controls to
+`management/controls`; it does not duplicate the handle command translation in
+the lifecycle controller. The pure reducer owns command settlement, accepted
+turn identities, and process-exit transitions. Shared terminal-turn projection
+lives in `kernel/reducer/turn/result`, while running and terminalizing flows
+keep their separate orchestration. Prompt interpreters observe real provider
+completion; control-operation deadlines never double as whole-turn deadlines.
+
+Host-environment capture is injected at the root composition boundary.
+Actor construction does not retain its original opening descriptor, and
+terminal quiescence releases preparation/output resources. Immutable graph
+ownership is a portable runtime resource primitive reused by interpreter
+boundaries. Presentation redaction belongs to interpreter egress; the initial
+event effect explicitly carries its opening policy before a preparation exists.
+
 ## Enforced structural rules
 
 `pnpm verify:architecture` runs dependency-cruiser against the real source

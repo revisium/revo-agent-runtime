@@ -7,6 +7,7 @@ import type { SessionOpeningCommand, SessionRuntimeFactory } from './port.js';
 import { SessionActor } from './session-actor.js';
 
 export interface SessionActorFactoryOptions {
+  readonly release?: (session: { readonly sessionId: string; readonly epoch: number }) => void;
   readonly reducer: SessionReducer;
   readonly dispatcher: SessionEffectDispatcher;
   readonly clock?: SessionClock;
@@ -17,6 +18,7 @@ export class SessionActorFactory implements SessionRuntimeFactory {
 
   create(initialState: SessionState): SessionActor {
     return new SessionActor({
+      ...(this.options.release === undefined ? {} : { release: this.options.release }),
       clock: this.options.clock ?? systemSessionClock,
       dispatcher: this.options.dispatcher,
       initialState,

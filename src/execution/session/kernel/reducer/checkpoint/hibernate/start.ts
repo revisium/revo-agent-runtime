@@ -67,6 +67,7 @@ export const startHibernation = (
     {
       correlation,
       cursor: nextSessionEventCursor(state),
+      ...(state.acceptedTurnIds === undefined ? {} : { acceptedTurnIds: state.acceptedTurnIds }),
       kind: 'hibernate',
       maxBytes: state.limits.maxCheckpointBytes,
       pin: state.pin,

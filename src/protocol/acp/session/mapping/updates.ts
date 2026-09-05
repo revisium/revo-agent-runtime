@@ -19,8 +19,11 @@ const planItems = (entries: readonly acp.PlanEntry[]) =>
     Object.freeze({ itemId: `item_${index + 1}`, status: entry.status, title: entry.content }),
   );
 
+type ToolUpdate = Extract<SessionProtocolUpdate, { readonly type: 'tool' }>;
+
 export const mapAcpSessionUpdate = (
   update: acp.SessionUpdate,
+  tools: Map<string, ToolUpdate> = new Map(),
 ): SessionProtocolUpdate | undefined => {
   if (
     update.sessionUpdate === 'agent_message_chunk' &&
@@ -28,22 +31,25 @@ export const mapAcpSessionUpdate = (
     update.content.text.length > 0
   )
     return Object.freeze({ content: update.content.text, type: 'message.delta' });
-  if (update.sessionUpdate === 'tool_call')
-    return Object.freeze({
-      kind: toolKind(update.kind),
-      status: toolStatus(update.status),
-      title: update.title,
+  if (
+    update.sessionUpdate === 'tool_call' ||
+    (update.sessionUpdate === 'tool_call_update' &&
+      (update.title != null || update.status != null || update.kind != null))
+  ) {
+    const previous =
+      update.sessionUpdate === 'tool_call_update' ? tools.get(update.toolCallId) : undefined;
+    const mapped: ToolUpdate = Object.freeze({
+      kind: toolKind(update.kind ?? previous?.kind),
+      status: update.status == null ? (previous?.status ?? 'started') : toolStatus(update.status),
+      title: update.title ?? previous?.title ?? update.toolCallId,
       toolCallId: update.toolCallId,
       type: 'tool',
     });
-  if (update.sessionUpdate === 'tool_call_update' && update.title != null)
-    return Object.freeze({
-      kind: toolKind(update.kind),
-      status: toolStatus(update.status),
-      title: update.title,
-      toolCallId: update.toolCallId,
-      type: 'tool',
-    });
+    tools.delete(update.toolCallId);
+    tools.set(update.toolCallId, mapped);
+    if (tools.size > 1_024) tools.delete(tools.keys().next().value!);
+    return mapped;
+  }
   if (update.sessionUpdate === 'plan')
     return Object.freeze({ items: Object.freeze(planItems(update.entries)), type: 'plan' });
   return undefined;
@@ -52,8 +58,9 @@ export const mapAcpSessionUpdate = (
 export const deliverAcpSessionUpdate = async (
   observer: SessionProtocolObserver | undefined,
   update: acp.SessionUpdate,
+  tools?: Map<string, ToolUpdate>,
 ): Promise<void> => {
-  const mapped = mapAcpSessionUpdate(update);
+  const mapped = mapAcpSessionUpdate(update, tools);
   if (mapped === undefined || observer === undefined) return;
   await observer.update(mapped);
 };

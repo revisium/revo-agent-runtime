@@ -325,6 +325,33 @@ test('an opened-event failure cleans both provider process and durable state', (
   });
 });
 
+test.each(['event.failed', 'event.unknown'] as const)(
+  'late %s cannot finalize an opening whose process cleanup is pending',
+  (type) => {
+    const provider = openingProvider();
+    const opened = reduceSession(provider.state, {
+      ...base(effectOf(provider, 'provider.open')),
+      capabilities: sessionCapabilities,
+      providerResourceId: 'provider_01',
+      type: 'provider.opened',
+    });
+    const cancelled = reduceSession(opened.state, {
+      call: { callId: 'cancel', epoch: 1, sessionId: 'session_01' },
+      observedAt: outcomeTime,
+      observedAtMs: outcomeTimeMs,
+      type: 'session.cancel',
+    });
+
+    const late = reduceSession(cancelled.state, {
+      ...base(effectOf(opened, 'event.append')),
+      fault,
+      type,
+    });
+
+    expect(late).toEqual({ effects: [], state: cancelled.state });
+  },
+);
+
 test('opening state preserves optional metadata', () => {
   const command = sessionOpeningCommand();
   const withMetadata = {

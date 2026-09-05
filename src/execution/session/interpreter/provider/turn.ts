@@ -7,11 +7,6 @@ import type { SessionEffectOutput } from '../../runtime/effects/outcomes.js';
 import { SessionMessageStream } from '../event/message-stream.js';
 import type { SessionEffectHandler } from '../shared/effect/handler.js';
 import type { SessionObservationClock } from '../shared/observation/clock.js';
-import { settleOperation } from '../shared/operation/settlement.js';
-import {
-  systemSessionOperationTimer,
-  type SessionOperationTimer,
-} from '../shared/operation/timer.js';
 import { protocolFault } from './fault.js';
 import type { SessionInterpreterResources } from './opening/resources.js';
 import {
@@ -27,7 +22,6 @@ interface TurnOptions {
   readonly clock: SessionObservationClock;
   readonly digest: Sha256Digest;
   readonly resources: SessionInterpreterResources;
-  readonly timer?: SessionOperationTimer;
 }
 
 const observed = (options: TurnOptions) => {
@@ -103,22 +97,24 @@ const promptProvider = async (
     correlation: effect.correlation,
     type: 'provider.prompt.accepted',
   });
-  const settlement = await settleOperation({
-    onTimeout: () => requestCancellation(prompt, 'Provider prompt timed out.'),
-    operation: prompt.completion,
-    timeoutMs: effect.timeoutMs,
-    timer: options.timer ?? systemSessionOperationTimer,
-  });
+  const resource = options.resources.prompts.get(effect.providerResourceId, effect.input.turnId)!;
+  const outcome = await Promise.race([
+    prompt.completion.catch((): SessionProtocolPromptOutcome => ({
+      status: 'failed',
+      failure: {
+        code: 'transport_failed',
+        message: 'Provider prompt failed.',
+        retryable: false,
+      },
+    })),
+    resource.stopped.then((): SessionProtocolPromptOutcome => ({ status: 'interrupted' })),
+  ]);
   options.resources.prompts.take(
     effect.providerResourceId,
     effect.input.turnId,
     effect.correlation.effectId,
   );
-  if (settlement.state !== 'fulfilled' || settlement.phase !== 'initial') {
-    emitFailure(effect, output, options, true);
-    return;
-  }
-  await emitCompletion(context, settlement.value, options);
+  await emitCompletion(context, outcome, options);
 };
 
 const emitCompletion = async (
@@ -147,27 +143,19 @@ const emitCompletion = async (
     });
     return;
   }
-  emitFailure(context.effect, context.output, options, false, outcome.failure);
+  emitFailure(context.effect, context.output, options, outcome.failure);
 };
 
 const emitFailure = (
   effect: PromptEffect,
   output: SessionEffectOutput,
   options: TurnOptions,
-  timedOut = false,
   failure?: Parameters<typeof protocolFault>[0],
 ): void => {
   output.outcome({
     ...observed(options),
     correlation: effect.correlation,
-    fault: timedOut
-      ? {
-          code: 'revo.agent.timeout',
-          message: 'Provider prompt timed out.',
-          phase: 'session_running',
-          retryable: false,
-        }
-      : protocolFault(failure, 'session_running'),
-    type: timedOut ? 'provider.prompt.timed_out' : 'provider.prompt.failed',
+    fault: protocolFault(failure, 'session_running'),
+    type: 'provider.prompt.failed',
   });
 };

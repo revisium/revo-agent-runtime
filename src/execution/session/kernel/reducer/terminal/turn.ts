@@ -1,6 +1,5 @@
 import type { TurnCompletedEvent } from '../../../../../contracts/session/events/event.js';
 import type { SessionCommand } from '../../command/session-command.js';
-import type { TerminalTurnState } from '../../model/turn-state.js';
 import {
   acknowledgeSessionEvent,
   appendEffect,
@@ -10,7 +9,7 @@ import {
   type SessionTransition,
   unchangedTransition,
 } from '../transition.js';
-import { projectTurnResult } from '../turn/completion.js';
+import { projectTurnResult, terminalTurn } from '../turn/result.js';
 import { beginProviderPrompt } from '../turn/start.js';
 import { settleRunningSession } from './control.js';
 import { beginTerminalResourceCleanup, type TerminalizingSession } from './state.js';
@@ -61,30 +60,6 @@ const publishCompletion = (
   );
 };
 
-const terminalTurn = (
-  turn: Extract<
-    Extract<TerminalizingSession['progress'], { readonly stage: 'settling_turn' }>['turn'],
-    { readonly status: 'settling' }
-  >,
-): TerminalTurnState => {
-  const result = projectTurnResult(turn);
-  const {
-    correlation: _correlation,
-    message: _message,
-    progress: _progress,
-    status: _status,
-    usage: _usage,
-    ...base
-  } = turn;
-  if (result.status === 'completed') return { ...base, result, status: 'completed' };
-  if (result.status === 'failed') return { ...base, result, status: 'failed' };
-  if (result.status === 'cancelled')
-    return { ...base, result: { status: 'cancelled' }, status: 'cancelled' };
-  if (result.status === 'timed_out')
-    return { ...base, result: { status: 'timed_out' }, status: 'timed_out' };
-  return { ...base, result: { status: 'interrupted' }, status: 'interrupted' };
-};
-
 const reduceTerminalTurnEvent = (
   state: TerminalizingSession,
   command: EventOutcome,
@@ -127,7 +102,7 @@ const reduceTerminalTurnEvent = (
       effects: acknowledged.transition.effects,
       state: {
         ...acknowledged.transition.state,
-        lastTurn: terminalTurn(turn),
+        lastTurn: terminalTurn(turn, result),
         progress: { correlation: nextEffectCorrelation(state), stage: 'closing_provider' },
       },
     },

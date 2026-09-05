@@ -8,6 +8,7 @@ import {
   systemSessionOperationTimer,
   type SessionOperationTimer,
 } from '../shared/operation/timer.js';
+import { redactSessionValue } from '../shared/value/redacted.js';
 import { snapshotSessionEvent } from './encode.js';
 
 interface EventDeliveryClock {
@@ -25,6 +26,7 @@ export const createEventAppendInterpreter = (options: {
   readonly sink: AgentSessionEventSink;
   readonly clock: EventDeliveryClock;
   readonly timer?: SessionOperationTimer;
+  readonly secrets?: (correlation: EventAppendEffect['correlation']) => readonly string[];
 }): SessionEffectHandler<'event.append'> => ({
   type: 'event.append',
   execute: (candidate, output): void => {
@@ -42,13 +44,16 @@ const deliverEvent = async (
     readonly sink: AgentSessionEventSink;
     readonly clock: EventDeliveryClock;
     readonly timer?: SessionOperationTimer;
+    readonly secrets?: (correlation: EventAppendEffect['correlation']) => readonly string[];
   },
 ): Promise<void> => {
   const controller = new AbortController();
   let operation: ReturnType<AgentSessionEventSink['append']>;
   try {
-    operation = options.sink.append(snapshotSessionEvent(effect.event, effect.maxBytes), {
-      expected: effect.expected,
+    const secrets = effect.redactionSecrets ?? options.secrets?.(effect.correlation) ?? [];
+    const event = redactSessionValue(effect.event, secrets);
+    operation = options.sink.append(snapshotSessionEvent(event, effect.maxBytes), {
+      expected: redactSessionValue(effect.expected, secrets),
       signal: controller.signal,
     });
   } catch {

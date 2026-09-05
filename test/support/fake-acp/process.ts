@@ -18,6 +18,7 @@ let closeCalls = 0;
 let cancelCalls = 0;
 let configurationOptions: acp.SessionConfigOption[] = [];
 let remembered = '';
+let pendingSessionPrompt: ReturnType<typeof Promise.withResolvers<acp.PromptResponse>> | undefined;
 
 const configurationState = async (): Promise<string | undefined> => {
   if (configurationStateFile === undefined) return undefined;
@@ -176,6 +177,8 @@ acp
   .onNotification(acp.methods.agent.session.cancel, async () => {
     cancelReceived = true;
     cancelCalls += 1;
+    pendingSessionPrompt?.resolve({ stopReason: 'cancelled' });
+    pendingSessionPrompt = undefined;
     await writeTrace();
   })
   .onRequest(acp.methods.agent.session.prompt, async (context) => {
@@ -216,6 +219,24 @@ acp
       await sendUpdates(3);
     }
     if (mode === 'hang') return new Promise<never>(() => undefined);
+    if (mode === 'session-cancellation') {
+      if (
+        context.params.prompt.some(
+          (block) => block.type === 'text' && block.text.startsWith('Do not use tools.'),
+        )
+      ) {
+        await context.client.notify(acp.methods.client.session.update, {
+          sessionId: context.params.sessionId,
+          update: {
+            content: { type: 'text', text: 'Acknowledged.' },
+            sessionUpdate: 'agent_message_chunk',
+          },
+        });
+        return { stopReason: 'end_turn' };
+      }
+      pendingSessionPrompt = Promise.withResolvers<acp.PromptResponse>();
+      return pendingSessionPrompt.promise;
+    }
     if (mode === 'session') {
       const prompt = context.params.prompt.find((block) => block.type === 'text');
       if (remembered.length === 0 && prompt?.type === 'text') remembered = prompt.text;

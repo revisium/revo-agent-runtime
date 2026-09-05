@@ -18,6 +18,7 @@ export const fakeAcpAgentDefinition = (
   capabilities: {
     cancellation: true,
     ...(options.mode === 'session' ||
+    options.mode === 'session-cancellation' ||
     options.mode === 'session-interactions' ||
     options.session === true
       ? {

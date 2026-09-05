@@ -2,6 +2,16 @@ import { expect, it } from 'vitest';
 
 import { SessionOutputCollector } from '../../../../../../src/execution/session/interpreter/output/collect.js';
 
+it('release is idempotent, drops retained output, and refuses later publication', () => {
+  const collector = new SessionOutputCollector(1_024, ['secret']);
+  collector.writeStdout(new TextEncoder().encode('secret buffered data'));
+  collector.finalize();
+  collector.dispose();
+  collector.dispose();
+  collector.writeStdout(new TextEncoder().encode('late output'));
+  expect(() => collector.finalize()).toThrow('Session output has been released.');
+});
+
 it('shares one byte budget, marks truncation, and finalizes exactly once', () => {
   const collector = new SessionOutputCollector(80, []);
   collector.writeStdout(new TextEncoder().encode('a'.repeat(100)));

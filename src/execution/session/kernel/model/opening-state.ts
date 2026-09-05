@@ -28,6 +28,7 @@ export type SessionOpeningRequest =
     };
 
 export interface SessionOpeningDescriptor {
+  readonly acceptedTurnIds?: readonly string[];
   readonly incarnationId: string;
   readonly pin: AgentExecutionPin;
   readonly request: SessionOpeningRequest;

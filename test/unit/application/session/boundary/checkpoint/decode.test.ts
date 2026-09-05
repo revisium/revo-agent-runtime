@@ -48,6 +48,35 @@ const signedWithPayload = (payload: string) => {
 };
 
 describe('resume token boundary', () => {
+  test.each([
+    null,
+    'turn',
+    ['same', 'same'],
+    [''],
+    [7],
+    ['x'.repeat(257)],
+    Array.from({ length: 10_001 }, (_, index) => `turn-${index}`),
+  ])('rejects an invalid accepted-turn ledger %#', (acceptedTurnIds) => {
+    const payload = encodeContinuationPayload({ ...envelope, acceptedTurnIds });
+    expect(() => decodeResumeToken(signedWithPayload(payload), pin, digest, 1_048_576)).toThrow(
+      AgentManagerError,
+    );
+  });
+
+  test('owns the accepted-turn ledger without increasing the provider payload node allowance', () => {
+    const payload = encodeContinuationPayload({ ...envelope, acceptedTurnIds: ['turn-1'] });
+    const decoded = decodeResumeToken(signedWithPayload(payload), pin, digest, 1_048_576);
+    expect(decoded.envelope.acceptedTurnIds).toEqual(['turn-1']);
+    expect(Object.isFrozen(decoded.envelope.acceptedTurnIds)).toBe(true);
+    const oversized = encodeContinuationPayload({
+      ...envelope,
+      provider: { format: 'acp/v1', data: { items: Array.from({ length: 4_097 }, () => 0) } },
+    });
+    expect(() => decodeResumeToken(signedWithPayload(oversized), pin, digest, 1_048_576)).toThrow(
+      AgentManagerError,
+    );
+  });
+
   test('verifies, owns, freezes, and derives the full journal predecessor', () => {
     const input = token();
     const decoded = decodeResumeToken(input, pin, digest, 1_048_576);
