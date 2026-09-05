@@ -1,5 +1,4 @@
 import { AgentManagerError, type ActiveInvocationStateSink } from '../../contracts/manager.js';
-import type { AgentSessionManagerOptions } from '../../contracts/session/api/manager.js';
 import type { AgentSessionEventSink } from '../../contracts/session/events/sink.js';
 import type { ActiveAgentSessionStateSink } from '../../contracts/session/persistence/active-state.js';
 import {
@@ -8,6 +7,7 @@ import {
   DuplicateAgentDefinitionError,
 } from '../../definition/index.js';
 import { fault } from '../faults/agent-faults.js';
+import type { NormalizedAgentSessionManagerOptions } from '../session/management/composition.js';
 import { resolveAgentSessionManagerLimits } from '../session/policy/limits/resolve.js';
 import { LimitValidationError, managerLimits } from './limits.js';
 
@@ -23,7 +23,7 @@ const isActiveSessionStateSink = (value: unknown): value is ActiveAgentSessionSt
 const isSessionEventSink = (value: unknown): value is AgentSessionEventSink =>
   isRecord(value) && typeof value.append === 'function';
 
-const sessionOptions = (value: unknown): AgentSessionManagerOptions | undefined => {
+const sessionOptions = (value: unknown): NormalizedAgentSessionManagerOptions | undefined => {
   if (value === undefined) return undefined;
   if (
     !isRecord(value) ||

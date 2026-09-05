@@ -2,6 +2,15 @@ import { expect, test } from 'vitest';
 
 import type { SessionEffect } from '../../../../../../../src/execution/session/kernel/effect/session-effect.js';
 import { reduceSession } from '../../../../../../../src/execution/session/kernel/reducer/reduce.js';
+import {
+  reduceCleanupOutcome,
+  reduceRemovalOutcome,
+} from '../../../../../../../src/execution/session/kernel/reducer/terminal/lifecycle.js';
+import {
+  finishTerminal,
+  reduceTerminalEventOutcome,
+} from '../../../../../../../src/execution/session/kernel/reducer/terminal/publication.js';
+import type { TerminalizingSession } from '../../../../../../../src/execution/session/kernel/reducer/terminal/state.js';
 import type { SessionTransition } from '../../../../../../../src/execution/session/kernel/reducer/transition.js';
 import { idleSessionState } from '../../../../../../support/session/builders/kernel/session-state.js';
 
@@ -137,4 +146,107 @@ test('terminal event delivery failure publishes output and rejects graceful clos
   });
   expect(transition.state.status).toBe('failed');
   expect(effectOf(transition, 'public.reject')).toMatchObject({ callId: 'close_01' });
+});
+
+test('terminal lifecycle reducers ignore stale stages and correlations', () => {
+  const cleaning = closing();
+  const cleaningState = cleaning.state as TerminalizingSession;
+  const cleanup = effectOf(cleaning, 'process.cleanup');
+  const confirmed = {
+    ...observed,
+    correlation: cleanup.correlation,
+    type: 'process.cleanup.confirmed',
+  } as const;
+  const wrongCleanupStage = {
+    ...cleaningState,
+    progress: { correlation: cleanup.correlation, stage: 'removing_state' as const },
+  };
+  expect(reduceCleanupOutcome(wrongCleanupStage, confirmed)).toEqual({
+    effects: [],
+    state: wrongCleanupStage,
+  });
+  expect(
+    reduceCleanupOutcome(cleaningState, {
+      ...confirmed,
+      correlation: { ...cleanup.correlation, effectId: 'stale' },
+    }),
+  ).toEqual({ effects: [], state: cleaningState });
+
+  const removal = removing();
+  const removalState = removal.state as TerminalizingSession;
+  const remove = effectOf(removal, 'persistence.remove');
+  const applied = {
+    ...observed,
+    correlation: remove.correlation,
+    result: { state: 'applied' },
+    type: 'persistence.applied',
+  } as const;
+  expect(reduceRemovalOutcome(cleaningState, applied)).toEqual({
+    effects: [],
+    state: cleaningState,
+  });
+  expect(
+    reduceRemovalOutcome(removalState, {
+      ...applied,
+      correlation: { ...remove.correlation, effectId: 'stale' },
+    }),
+  ).toEqual({ effects: [], state: removalState });
+
+  const event = publishingEvent();
+  const eventState = event.state as TerminalizingSession;
+  const append = effectOf(event, 'event.append');
+  const eventApplied = {
+    ...observed,
+    correlation: append.correlation,
+    result: { state: 'appended' },
+    type: 'event.applied',
+  } as const;
+  expect(reduceTerminalEventOutcome(removalState, eventApplied)).toEqual({
+    effects: [],
+    state: removalState,
+  });
+  expect(
+    reduceTerminalEventOutcome(eventState, {
+      ...eventApplied,
+      correlation: { ...append.correlation, effectId: 'stale' },
+    }),
+  ).toEqual({ effects: [], state: eventState });
+
+  const output = publishingOutput();
+  const outputState = output.state as TerminalizingSession;
+  const publication = effectOf(output, 'output.publish');
+  const published = {
+    ...observed,
+    correlation: publication.correlation,
+    output: {
+      files: {
+        directory: '/output',
+        manifest: 'session.json',
+        stderr: 'stderr.log',
+        stdout: 'stdout.log',
+      },
+      state: 'published',
+    },
+    type: 'output.published',
+  } as const;
+  expect(finishTerminal(eventState, published)).toEqual({ effects: [], state: eventState });
+  expect(
+    finishTerminal(outputState, {
+      ...published,
+      correlation: { ...publication.correlation, effectId: 'stale' },
+    }),
+  ).toEqual({ effects: [], state: outputState });
+});
+
+test('a terminal event conflict becomes a failed output publication', () => {
+  const started = publishingEvent();
+  const transition = reduceSession(started.state, {
+    ...observed,
+    correlation: effectOf(started, 'event.append').correlation,
+    result: { state: 'conflict' },
+    type: 'event.applied',
+  });
+  expect(effectOf(transition, 'output.publish')).toMatchObject({
+    publication: { status: 'failed' },
+  });
 });

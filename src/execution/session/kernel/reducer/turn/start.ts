@@ -66,10 +66,18 @@ export const startTurn = (state: IdleState, command: SendTurnCommand): SessionTr
   );
 };
 
-export const beginProviderPrompt = (
+export function beginProviderPrompt(
+  state: RunningState,
+  transition: SessionTransition<RunningState>,
+): SessionTransition<RunningState>;
+export function beginProviderPrompt(
   state: RunningState,
   transition: SessionTransition,
-): SessionTransition => {
+): SessionTransition;
+export function beginProviderPrompt(
+  state: RunningState,
+  transition: SessionTransition,
+): SessionTransition {
   if (state.turn.status !== 'starting' || transition.state.status !== 'running') return transition;
   const turn = state.turn;
   const correlation = nextEffectCorrelation(transition.state, turn.turnId);
@@ -106,4 +114,4 @@ export const beginProviderPrompt = (
     type: 'public.resolve',
   });
   return result;
-};
+}

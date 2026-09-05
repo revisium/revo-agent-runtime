@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 
 import type { SessionEffect } from '../../../../../../../src/execution/session/kernel/effect/session-effect.js';
+import { reduceCheckpointCapture } from '../../../../../../../src/execution/session/kernel/reducer/checkpoint/capture.js';
 import { reduceSession } from '../../../../../../../src/execution/session/kernel/reducer/reduce.js';
 import type { SessionTransition } from '../../../../../../../src/execution/session/kernel/reducer/transition.js';
 import { idleSessionState } from '../../../../../../support/session/builders/kernel/session-state.js';
@@ -79,6 +80,27 @@ test('rejects a captured checkpoint with the wrong reserved cursor', () => {
   });
   expect(transition.state.status).toBe('idle');
   expect(effectOf(transition, 'public.reject').fault.code).toBe('revo.agent.checkpoint_invalid');
+});
+
+test('ignores a checkpoint capture outcome with a stale correlation', () => {
+  const started = reduceSession(idleSessionState(), {
+    ...observed,
+    call: { callId: 'checkpoint_call_01', epoch: 1, sessionId: 'session_01' },
+    checkpointId: 'checkpoint_01',
+    type: 'session.checkpoint',
+  });
+  if (started.state.status !== 'checkpointing' || started.state.progress.stage !== 'capturing')
+    throw new Error('Expected checkpoint capture.');
+  const command = {
+    ...observed,
+    correlation: { ...started.state.progress.correlation, effectId: 'stale' },
+    fault,
+    type: 'checkpoint.failed',
+  } as const;
+  expect(reduceCheckpointCapture(started.state, command)).toEqual({
+    effects: [],
+    state: started.state,
+  });
 });
 
 test('restores the idle session after a token capture failure', () => {

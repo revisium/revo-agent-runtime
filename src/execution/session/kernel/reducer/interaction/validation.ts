@@ -113,7 +113,6 @@ export const validInteractionResponse = (
   request: AgentSessionInteractiveRequest,
   response: AgentSessionInteractiveResponse,
 ): boolean => {
-  if (request.kind !== response.kind) return false;
   if (request.kind === 'permission') {
     if (response.kind !== 'permission') return false;
     return (

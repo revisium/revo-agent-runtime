@@ -39,17 +39,17 @@ const completedEvent = (
 
 const publishTurnCompletion = (
   state: RunningState,
+  turn: Exclude<RunningState['turn'], { readonly status: 'starting' }>,
   command: PromptOutcome,
   outcome: TurnCompletedEvent['outcome'],
 ): SessionTransition => {
-  if (state.turn.status === 'starting') return unchangedTransition(state);
   const usage = outcome.status === 'completed' ? (outcome.usage ?? state.usage) : state.usage;
   return resetInactivity(
     queueSessionEvent(
       {
         ...state,
         turn: {
-          ...state.turn,
+          ...turn,
           progress: { outcome, stage: 'publishing_completion' },
           status: 'settling',
           usage,
@@ -77,7 +77,7 @@ export const reducePromptOutcome = (
       matchesCancellation && command.type !== 'provider.prompt.completed'
         ? ({ error: command.fault, status: 'failed' } as const)
         : cancellation.outcome;
-    return publishTurnCompletion(state, command, outcome);
+    return publishTurnCompletion(state, state.turn, command, outcome);
   }
   if (state.turn.status === 'starting' || !matchesPrompt(state, command))
     return unchangedTransition(state);
@@ -93,7 +93,7 @@ export const reducePromptOutcome = (
     command.type === 'provider.prompt.completed'
       ? command.outcome
       : ({ error: command.fault, status: 'failed' } as const);
-  return publishTurnCompletion(state, command, outcome);
+  return publishTurnCompletion(state, state.turn, command, outcome);
 };
 
 export const projectTurnResult = (
@@ -111,6 +111,7 @@ export const projectTurnResult = (
   return { status: turn.progress.outcome.status };
 };
 
+// oxlint-disable-next-line typescript/consistent-return -- the checked discriminated union is exhaustive
 const terminalTurn = (
   turn: Extract<RunningState['turn'], { readonly status: 'settling' }>,
   result: AgentSessionTurnResult,
@@ -135,7 +136,6 @@ const terminalTurn = (
     case 'timed_out':
       return { ...base, result: { status: 'timed_out' }, status: 'timed_out' };
   }
-  throw new Error('Unsupported terminal turn result.');
 };
 
 export const finishTurn = (

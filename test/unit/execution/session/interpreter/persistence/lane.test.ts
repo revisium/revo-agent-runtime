@@ -61,6 +61,20 @@ describe('serialized active session state lane', () => {
     );
   });
 
+  it('ignores effects outside each persistence discriminant', () => {
+    const result = recordingSessionEffectOutput();
+    const interpreters = createActiveStateInterpreters({
+      clock,
+      sink: {
+        remove: async () => ({ state: 'applied' }),
+        save: async () => ({ state: 'applied' }),
+      },
+    });
+    interpreters.remove.execute(saveEffect, result.output);
+    interpreters.save.execute(removeEffect, result.output);
+    expect(result.outcomes).toEqual([]);
+  });
+
   it('gates later saves and coalesces an acknowledged duplicate removal', async () => {
     const save = vi.fn<ActiveAgentSessionStateSink['save']>(async () => ({ state: 'applied' }));
     const remove = vi.fn<ActiveAgentSessionStateSink['remove']>(async () => ({ state: 'applied' }));

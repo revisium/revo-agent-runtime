@@ -21,6 +21,7 @@ const baseEvent = (state: RunningState, command: ProviderCommand) => ({
   turnId: state.turn.turnId,
 });
 
+// oxlint-disable-next-line typescript/consistent-return -- the checked provider command union is exhaustive
 const updateEvent = (
   state: RunningState,
   command: ProviderCommand,
@@ -55,7 +56,6 @@ const updateEvent = (
     case 'provider.interaction_requested':
       return undefined;
   }
-  return undefined;
 };
 
 export const reduceProviderUpdate = (

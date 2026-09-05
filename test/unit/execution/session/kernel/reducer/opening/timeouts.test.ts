@@ -97,3 +97,36 @@ test('wall deadline after durable process save cleans and removes active state',
   transition = reduceSession(transition.state, timer('wall_clock'));
   expect(transition.state).toMatchObject({ progress: { afterCleanup: 'remove_state' } });
 });
+
+test('timeout while the owned process is being saved preserves cleanup uncertainty', () => {
+  const command = sessionOpeningCommand();
+  let transition = reduceSession(createOpeningSessionState(command), command);
+  const accepted = effectOf(transition, 'event.append');
+  transition = reduceSession(transition.state, {
+    correlation: accepted.correlation,
+    observedAt: outcomeTime,
+    observedAtMs: outcomeTimeMs,
+    result: { state: 'appended' },
+    type: 'event.applied',
+  });
+  const preparation = effectOf(transition, 'opening.prepare');
+  transition = reduceSession(transition.state, {
+    correlation: preparation.correlation,
+    observedAt: outcomeTime,
+    observedAtMs: outcomeTimeMs,
+    preparationId: 'preparation_01',
+    type: 'opening.preparation.succeeded',
+  });
+  const start = effectOf(transition, 'process.start');
+  transition = reduceSession(transition.state, {
+    correlation: start.correlation,
+    observedAt: outcomeTime,
+    observedAtMs: outcomeTimeMs,
+    process: sessionProcess,
+    processResourceId: 'process_01',
+    type: 'process.started',
+  });
+  expect(reduceSession(transition.state, timer('opening')).state).toMatchObject({
+    progress: { afterCleanup: 'uncertain', stage: 'cleaning_process' },
+  });
+});

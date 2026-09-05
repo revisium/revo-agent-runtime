@@ -58,3 +58,20 @@ not an authentication check. A live provider requires its executable, provider
 setup, authentication, network access, and any account-specific prerequisites
 in the caller's environment. The runtime does not perform login, account
 switching, installation, or credential management.
+
+## Session smoke checks
+
+`pnpm smoke:session` runs deterministic fake-provider continuity, cancellation,
+permission, and structured multi-select scenarios. Set
+`REVO_LIVE_SESSION_SMOKE` to `codex`, `claude`, or `opencode` to exercise one
+installed provider, or to `all` for the maintained three-provider matrix:
+
+```sh
+REVO_LIVE_SESSION_SMOKE=all pnpm smoke:session
+```
+
+The live check proves two turns use one hot provider session, verifies the
+remembered nonce, cancels an in-flight turn, confirms active-state cleanup, and
+reports native resume as either passed or unsupported. It deliberately uses an
+explicit catalog-backed model for Codex, Claude, and OpenCode so a changing
+provider default cannot silently change the test.

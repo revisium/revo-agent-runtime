@@ -119,3 +119,49 @@ test('rejects a second turn and graceful close while a turn is active', () => {
     fault: { code: 'revo.agent.session_busy' },
   });
 });
+
+test('ignores cancellation for another turn identity', () => {
+  const { state } = promptingTurn();
+  const command = {
+    call: { callId: 'cancel_01', epoch: 1, sessionId: 'session_01', turnId: 'turn_01' },
+    observedAt,
+    observedAtMs: 2_002,
+    turnId: 'turn_other',
+    type: 'turn.cancel',
+  } as const;
+  expect(reduceSession(state, command)).toEqual({ effects: [], state });
+  expect(
+    reduceSession(state, {
+      ...command,
+      call: { ...command.call, turnId: 'turn_other' },
+      turnId: 'turn_01',
+    }),
+  ).toEqual({ effects: [], state });
+});
+
+test('coalesces cancellation during turn admission and provider settlement', () => {
+  const sent = reduceSession(idleSessionState(), {
+    call: { callId: 'send_01', epoch: 1, sessionId: 'session_01', turnId: 'turn_01' },
+    input: { prompt: 'Continue', turnId: 'turn_01' },
+    observedAt,
+    observedAtMs: 2_000,
+    resultCallId: 'result_01',
+    type: 'turn.send',
+  });
+  const cancel = {
+    call: { callId: 'cancel_01', epoch: 1, sessionId: 'session_01', turnId: 'turn_01' },
+    observedAt,
+    observedAtMs: 2_002,
+    turnId: 'turn_01',
+    type: 'turn.cancel',
+  } as const;
+  expect(effectOf(reduceSession(sent.state, cancel), 'public.resolve')).toMatchObject({
+    resolution: { kind: 'cancel_turn', result: { state: 'requested' } },
+  });
+
+  const { state } = promptingTurn();
+  const settling = reduceSession(state, cancel);
+  expect(effectOf(reduceSession(settling.state, cancel), 'public.resolve')).toMatchObject({
+    resolution: { kind: 'cancel_turn', result: { state: 'requested' } },
+  });
+});

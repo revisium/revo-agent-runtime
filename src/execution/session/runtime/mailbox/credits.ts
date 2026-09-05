@@ -16,7 +16,22 @@ const providerUpdateTypes: ReadonlySet<string> = new Set([
   'provider.usage',
 ]);
 
-export const requiresOutcomeCredit = (effect: SessionEffect): boolean => {
+type NoCreditEffect = Extract<
+  SessionEffect,
+  {
+    readonly type:
+      | 'provider.turn.cancel'
+      | 'provider.close'
+      | 'timer.schedule'
+      | 'timer.cancel'
+      | 'public.resolve'
+      | 'public.reject';
+  }
+>;
+type OutcomeEffect = Exclude<SessionEffect, NoCreditEffect>;
+
+// oxlint-disable-next-line typescript/consistent-return -- the checked effect union is exhaustive
+export const requiresOutcomeCredit = (effect: SessionEffect): effect is OutcomeEffect => {
   switch (effect.type) {
     case 'opening.prepare':
     case 'process.start':
@@ -38,7 +53,6 @@ export const requiresOutcomeCredit = (effect: SessionEffect): boolean => {
     case 'public.reject':
       return false;
   }
-  return false;
 };
 
 export const isEffectOutcomeCommand = (
@@ -60,7 +74,8 @@ export const commandAdmission = (command: SessionCommand): MailboxAdmissionOptio
   return { lane: 'reserved' };
 };
 
-const matchesOutcomeFamily = (effect: SessionEffect, outcome: EffectOutcomeCommand): boolean => {
+// oxlint-disable-next-line typescript/consistent-return -- the checked outcome effect union is exhaustive
+const matchesOutcomeFamily = (effect: OutcomeEffect, outcome: EffectOutcomeCommand): boolean => {
   switch (effect.type) {
     case 'opening.prepare':
       return outcome.type.startsWith('opening.preparation.');
@@ -89,15 +104,7 @@ const matchesOutcomeFamily = (effect: SessionEffect, outcome: EffectOutcomeComma
       return outcome.type.startsWith('process.cleanup.');
     case 'output.publish':
       return outcome.type.startsWith('output.');
-    case 'provider.turn.cancel':
-    case 'provider.close':
-    case 'timer.schedule':
-    case 'timer.cancel':
-    case 'public.resolve':
-    case 'public.reject':
-      return false;
   }
-  return false;
 };
 
 const matchesCorrelation = (effect: SessionEffect, outcome: EffectOutcomeCommand): boolean =>
@@ -107,7 +114,7 @@ const matchesCorrelation = (effect: SessionEffect, outcome: EffectOutcomeCommand
   effect.correlation.turnId === outcome.correlation.turnId;
 
 export class OutcomeCreditLedger {
-  readonly #effects = new Map<string, SessionEffect>();
+  readonly #effects = new Map<string, OutcomeEffect>();
 
   get size(): number {
     return this.#effects.size;

@@ -263,6 +263,37 @@ acp
         },
       });
     }
+    if (mode === 'session-interactions') {
+      await context.client.request(acp.methods.client.session.requestPermission, {
+        options: [
+          { kind: 'allow_once', name: 'Allow fixture action', optionId: 'allow-fixture' },
+          { kind: 'reject_once', name: 'Reject fixture action', optionId: 'reject-fixture' },
+        ],
+        sessionId: context.params.sessionId,
+        toolCall: {
+          kind: 'execute',
+          status: 'pending',
+          title: 'Run fixture action',
+          toolCallId: 'fixture-tool-call',
+        },
+      });
+      await context.client.request(acp.methods.client.elicitation.create, {
+        message: 'Choose fixture deliverables.',
+        mode: 'form',
+        requestedSchema: {
+          properties: {
+            tasks: {
+              items: { enum: ['tests', 'docs'], type: 'string' },
+              maxItems: 2,
+              type: 'array',
+            },
+          },
+          required: ['tasks'],
+          type: 'object',
+        },
+        sessionId: context.params.sessionId,
+      });
+    }
     if (mode === 'permission-request' || mode === 'permission-without-rejection') {
       await context.client.request(acp.methods.client.session.requestPermission, {
         options:

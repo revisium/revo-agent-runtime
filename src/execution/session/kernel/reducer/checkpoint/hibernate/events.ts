@@ -61,8 +61,8 @@ export const reduceHibernationEvent = (
       },
     );
   }
-  const acknowledged = acknowledgeSessionEvent(state, command.correlation);
-  if (acknowledged?.event.type !== 'session.hibernated') return unchangedTransition(state);
+  const acknowledged = acknowledgeSessionEvent(state, command.correlation)!;
+  if (acknowledged.event.type !== 'session.hibernated') return acknowledged.transition;
   const terminal = completedHibernation(acknowledged.transition.state, state.progress);
   return appendEffect(
     { effects: acknowledged.transition.effects, state: terminal },

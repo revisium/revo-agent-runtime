@@ -20,10 +20,10 @@ type EventOutcome = Extract<SessionCommand, { readonly type: `event.${string}` }
 
 const publishCompletion = (
   state: TerminalizingSession,
+  progress: Extract<TerminalizingSession['progress'], { readonly stage: 'settling_turn' }>,
   command: PromptOutcome,
 ): SessionTransition => {
-  if (state.progress.stage !== 'settling_turn') return unchangedTransition(state);
-  const turn = state.progress.turn;
+  const turn = progress.turn;
   if (turn.status !== 'settling' || turn.progress.stage !== 'awaiting_provider')
     return unchangedTransition(state);
   const matchesPrompt = turn.correlation.effectId === command.correlation.effectId;
@@ -111,7 +111,6 @@ const reduceTerminalTurnEvent = (
       effects: acknowledged.transition.effects,
       state: running,
     });
-    if (prompted.state.status !== 'running') return acknowledged.transition;
     if (intent.outcome === 'closed') return acknowledged.transition;
     const settled = settleRunningSession(prompted.state, intent);
     return { effects: [...prompted.effects, ...settled.effects], state: settled.state };
@@ -156,7 +155,7 @@ export const reduceTerminalTurn = (
     command.type === 'provider.prompt.rejected' ||
     command.type === 'provider.prompt.timed_out'
   )
-    return publishCompletion(state, command);
+    return publishCompletion(state, state.progress, command);
   if (
     command.type === 'event.applied' ||
     command.type === 'event.failed' ||

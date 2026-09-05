@@ -30,6 +30,13 @@
   },
   "overrides": [
     {
+      "files": ["**/test/**/*.ts"],
+      "rules": {
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-type-assertion": "off"
+      }
+    },
+    {
       "files": ["**/src/contracts/**/*.ts"],
       "rules": {
         "no-restricted-imports": [

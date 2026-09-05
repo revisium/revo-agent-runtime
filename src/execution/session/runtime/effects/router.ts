@@ -110,6 +110,7 @@ export class SessionEffectOutputController implements SessionEffectOutput {
   }
 }
 
+// oxlint-disable-next-line typescript/consistent-return -- the checked effect union is exhaustive
 export const failedEffectOutcome = (
   effect: SessionEffect,
   observed: ReturnType<SessionClock['now']>,
@@ -158,5 +159,4 @@ export const failedEffectOutcome = (
     case 'public.reject':
       return undefined;
   }
-  return undefined;
 };

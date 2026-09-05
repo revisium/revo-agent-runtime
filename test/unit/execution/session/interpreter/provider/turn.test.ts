@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, test } from 'vitest';
 
 import { validateAgentDefinition } from '../../../../../../src/definition/index.js';
 import { SessionOutputCollector } from '../../../../../../src/execution/session/interpreter/output/collect.js';
@@ -109,7 +109,7 @@ it('streams normalized updates in order and restores cumulative usage', async ()
   ]);
   const recorded = recordingSessionEffectOutput();
   createProviderTurnInterpreter({ clock, digest, resources }).execute(
-    promptEffect,
+    { ...promptEffect, input: { ...promptEffect.input, metadata: { source: 'test' } } },
     recorded.output,
   );
   await flushMicrotasks(24);
@@ -140,6 +140,25 @@ it('streams normalized updates in order and restores cumulative usage', async ()
       usage: { inputTokens: 13, outputTokens: 2, scope: 'session_cumulative', totalTokens: 15 },
     },
   });
+});
+
+it('flushes a buffered message fragment before publishing completion', async () => {
+  const { resources } = await prepare([
+    {
+      outcome: { status: 'completed' },
+      steps: [{ type: 'update', value: { content: 'sec', type: 'message.delta' } }],
+    },
+  ]);
+  const recorded = recordingSessionEffectOutput();
+  createProviderTurnInterpreter({ clock, digest, resources }).execute(
+    promptEffect,
+    recorded.output,
+  );
+  await flushMicrotasks(16);
+  expect(recorded.updates).toEqual([
+    expect.objectContaining({ content: '[REDACTED]', type: 'provider.message_delta' }),
+    expect.objectContaining({ type: 'provider.message_completed' }),
+  ]);
 });
 
 it('awaits mailbox backpressure before asking the fake for its next update', async () => {
@@ -178,4 +197,167 @@ it('awaits mailbox backpressure before asking the fake for its next update', asy
   driver.barriers.release('after-first');
   await flushMicrotasks(12);
   expect(outcomes.at(-1)?.type).toBe('provider.prompt.completed');
+});
+
+test('ignores unrelated effects and fails when the provider resource is absent', async () => {
+  const resources = createSessionInterpreterResources();
+  const recorded = recordingSessionEffectOutput();
+  const interpreter = createProviderTurnInterpreter({ clock, digest, resources });
+  interpreter.execute({ type: 'other' } as never, recorded.output);
+  expect(recorded.outcomes).toEqual([]);
+
+  interpreter.execute(promptEffect, recorded.output);
+  await flushMicrotasks(4);
+  expect(recorded.outcomes.at(-1)).toMatchObject({ type: 'provider.prompt.failed' });
+});
+
+test('contains invalid metadata and synchronously throwing prompt creation', async () => {
+  const first = await prepare([]);
+  const invalid = recordingSessionEffectOutput();
+  createProviderTurnInterpreter({ clock, digest, resources: first.resources }).execute(
+    { ...promptEffect, input: { ...promptEffect.input, metadata: [] } } as never,
+    invalid.output,
+  );
+  await flushMicrotasks(4);
+  expect(invalid.outcomes.at(-1)).toMatchObject({ type: 'provider.prompt.failed' });
+
+  const second = await prepare([]);
+  const provider = second.resources.providers.get('provider-1')!;
+  provider.session.prompt = () => {
+    throw new Error('prompt failed');
+  };
+  const thrown = recordingSessionEffectOutput();
+  createProviderTurnInterpreter({ clock, digest, resources: second.resources }).execute(
+    promptEffect,
+    thrown.output,
+  );
+  await flushMicrotasks(4);
+  expect(thrown.outcomes.at(-1)).toMatchObject({ type: 'provider.prompt.failed' });
+});
+
+test('cancels and rejects a duplicate provider turn resource', async () => {
+  const { driver, resources } = await prepare([{ outcome: { status: 'completed' }, steps: [] }]);
+  resources.prompts.register('provider-1', 'turn-1', {
+    effectId: 'existing',
+    prompt: {
+      cancel: async () => ({ status: 'requested' }),
+      completion: new Promise<never>(() => undefined),
+    },
+  });
+  const recorded = recordingSessionEffectOutput();
+  createProviderTurnInterpreter({ clock, digest, resources }).execute(
+    promptEffect,
+    recorded.output,
+  );
+  await flushMicrotasks(12);
+  expect(driver.calls.some(({ type }) => type === 'prompt.cancel')).toBe(true);
+  expect(recorded.outcomes.at(-1)).toMatchObject({ type: 'provider.prompt.failed' });
+});
+
+test.each([
+  [
+    { status: 'completed' as const },
+    { outcome: { status: 'completed' }, type: 'provider.prompt.completed' },
+  ],
+  [
+    { status: 'cancelled' as const },
+    { outcome: { status: 'cancelled' }, type: 'provider.prompt.completed' },
+  ],
+  [
+    { status: 'interrupted' as const },
+    { outcome: { status: 'interrupted' }, type: 'provider.prompt.completed' },
+  ],
+  [
+    {
+      failure: { code: 'transport_failed' as const, message: 'failed', retryable: false },
+      status: 'failed' as const,
+    },
+    { type: 'provider.prompt.failed' },
+  ],
+] as const)('maps terminal provider prompt outcome %#', async (outcome, expected) => {
+  const { resources } = await prepare([{ outcome, steps: [] }]);
+  const recorded = recordingSessionEffectOutput();
+  createProviderTurnInterpreter({ clock, digest, resources }).execute(
+    promptEffect,
+    recorded.output,
+  );
+  await flushMicrotasks(16);
+  expect(recorded.outcomes.at(-1)).toMatchObject(expected);
+});
+
+test('times out a provider prompt and requests bounded cancellation', async () => {
+  const { driver, resources } = await prepare([
+    { outcome: { status: 'completed' }, steps: [{ barrier: 'never', type: 'wait' }] },
+  ]);
+  const immediateTimer = {
+    schedule: (_milliseconds: number, callback: () => void) => {
+      queueMicrotask(callback);
+      return { cancel: () => undefined };
+    },
+  };
+  const recorded = recordingSessionEffectOutput();
+  createProviderTurnInterpreter({ clock, digest, resources, timer: immediateTimer }).execute(
+    promptEffect,
+    recorded.output,
+  );
+  await flushMicrotasks(16);
+  expect(driver.calls.some(({ type }) => type === 'prompt.cancel')).toBe(true);
+  expect(recorded.outcomes.at(-1)).toMatchObject({ type: 'provider.prompt.timed_out' });
+});
+
+test('publishes tool, plan, and turn-scoped interaction updates', async () => {
+  const { resources } = await prepare([
+    {
+      outcome: { status: 'completed' },
+      steps: [
+        {
+          type: 'update',
+          value: {
+            kind: 'edit',
+            status: 'completed',
+            title: 'Edit',
+            toolCallId: 'tool-1',
+            type: 'tool',
+          },
+        },
+        {
+          type: 'update',
+          value: {
+            items: [{ itemId: 'item-1', status: 'completed', title: 'Done' }],
+            type: 'plan',
+          },
+        },
+        {
+          type: 'update',
+          value: {
+            request: {
+              action: { kind: 'read' },
+              kind: 'permission',
+              options: [],
+              requestId: 'request-1',
+            },
+            type: 'interaction.requested',
+          },
+        },
+        { type: 'update', value: { type: 'message.completed' } },
+        { type: 'update', value: { type: 'message.completed' } },
+      ],
+    },
+  ]);
+  const recorded = recordingSessionEffectOutput();
+  createProviderTurnInterpreter({ clock, digest, resources }).execute(
+    promptEffect,
+    recorded.output,
+  );
+  await flushMicrotasks(20);
+  expect(recorded.updates.map(({ type }) => type)).toEqual([
+    'provider.tool',
+    'provider.plan',
+    'provider.interaction_requested',
+    'provider.message_completed',
+  ]);
+  expect(recorded.updates[2]).toMatchObject({
+    scope: { kind: 'turn', turnId: 'turn-1' },
+    type: 'provider.interaction_requested',
+  });
 });

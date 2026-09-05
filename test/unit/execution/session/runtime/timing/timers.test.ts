@@ -74,6 +74,7 @@ describe('declarative session timers', () => {
 
     timers.reconcile(declaration(1));
     timers.reconcile(declaration(2, 3_000));
+    clock.tasks[0]?.run();
     timers.reconcile({ ...declaration(2), timers: [] });
     clock.advanceTo(4_000);
 
@@ -81,5 +82,25 @@ describe('declarative session timers', () => {
     expect(clock.tasks.every(({ cancelled }) => cancelled)).toBe(true);
     expect(commands).toEqual([]);
     expect(timers.size).toBe(0);
+  });
+
+  test('replaces declarations when any identity field changes', () => {
+    const clock = new ManualClock();
+    const timers = new SessionTimerRegistry(clock, () => undefined);
+    timers.reconcile(declaration(1));
+    timers.reconcile({
+      ...declaration(1),
+      timers: [{ ...declaration(1).timers[0]!, deadlineMs: 2_100 }],
+    });
+    timers.reconcile({
+      ...declaration(1),
+      timers: [{ ...declaration(1).timers[0]!, kind: 'wall_clock' }],
+    });
+    timers.reconcile({
+      ...declaration(1),
+      timers: [{ ...declaration(1).timers[0]!, timerId: 'wall' }],
+    });
+    expect(clock.tasks).toHaveLength(4);
+    timers.cancelAll();
   });
 });

@@ -74,8 +74,7 @@ export class SessionTimerRegistry {
   }
 
   #cancel(timerId: string): void {
-    const armed = this.#armed.get(timerId);
-    if (armed === undefined) return;
+    const armed = this.#armed.get(timerId)!;
     this.#armed.delete(timerId);
     armed.task.cancel();
   }

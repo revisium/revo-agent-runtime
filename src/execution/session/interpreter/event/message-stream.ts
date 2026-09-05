@@ -37,8 +37,9 @@ const utf8Chunks = (bytes: Uint8Array, maximum: number): readonly string[] => {
   const chunks: string[] = [];
   for (let offset = 0; offset < bytes.byteLength;) {
     let end = Math.min(offset + maximum, bytes.byteLength);
-    while (end < bytes.byteLength && end > offset && (bytes[end]! & 0xc0) === 0x80) end -= 1;
-    if (end === offset) throw new SessionMessageLimitError();
+    while (end < bytes.byteLength && end > offset && (bytes[end]! & 0xc0) === 0x80) {
+      end -= 1;
+    }
     chunks.push(decoder.decode(bytes.subarray(offset, end)));
     offset = end;
   }

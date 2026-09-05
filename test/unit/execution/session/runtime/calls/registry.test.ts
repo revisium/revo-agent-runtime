@@ -67,4 +67,31 @@ describe('public call registry', () => {
 
     expect(empty).toBe(true);
   });
+
+  test('returns the existing promise and validates alias ownership', async () => {
+    const registry = new PublicCallRegistry();
+    const original = registry.register('same');
+    expect(registry.register('same')).toBe(original);
+    expect(registry.alias('same', 'same')).toBe(true);
+    expect(registry.alias('missing', 'same')).toBe(false);
+    expect(registry.alias('same', 'missing')).toBe(false);
+    registry.resolve('same', { kind: 'session_ready' });
+    await expect(original).resolves.toMatchObject({ state: 'resolved' });
+  });
+
+  test('skips a follower that settled independently before its leader', async () => {
+    const registry = new PublicCallRegistry();
+    const leader = registry.register('leader');
+    const follower = registry.register('follower');
+    registry.alias('follower', 'leader');
+    registry.resolve('follower', { kind: 'session_ready' });
+    registry.resolve('leader', { kind: 'shutdown_complete' });
+
+    await expect(follower).resolves.toMatchObject({
+      resolution: { kind: 'session_ready' },
+    });
+    await expect(leader).resolves.toMatchObject({
+      resolution: { kind: 'shutdown_complete' },
+    });
+  });
 });

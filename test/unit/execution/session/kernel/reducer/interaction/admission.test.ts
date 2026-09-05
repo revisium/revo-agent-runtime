@@ -118,3 +118,25 @@ test('ignores an interaction from a stale provider turn', () => {
 
   expect(transition).toEqual({ effects: [], state });
 });
+
+test('ignores an interaction after the provider turn starts settling', () => {
+  const streaming = streamingSessionState();
+  const state: SessionState = {
+    ...streaming,
+    turn: {
+      ...streaming.turn,
+      progress: { outcome: { status: 'completed' }, stage: 'publishing_completion' },
+      status: 'settling',
+    },
+  };
+  const transition = reduceSession(state, {
+    ...observed,
+    correlation: streaming.turn.correlation,
+    providerResourceId: 'provider_01',
+    request: permission('request_late'),
+    scope: { kind: 'turn', turnId: streaming.turn.turnId },
+    type: 'provider.interaction_requested',
+  });
+
+  expect(transition).toEqual({ effects: [], state });
+});

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, test, vi } from 'vitest';
 
 import type { OwnedProcess } from '../../../../../../src/execution/process/port.js';
 import { createProcessStartInterpreter } from '../../../../../../src/execution/session/interpreter/provider/opening/process.js';
@@ -93,3 +93,105 @@ it('registers a process that appears after the reconciliation window for kernel 
   ]);
   expect(resources.processes.get('must-not-register')).toBe(late.process);
 });
+
+it('contains a process rejection after the reconciliation window', async () => {
+  const pending = Promise.withResolvers<OwnedProcess>();
+  const resources = createSessionInterpreterResources();
+  registerProtocolSession(resources, session);
+  const recorded = recordingSessionEffectOutput();
+  createProcessStartInterpreter({
+    clock,
+    identities: { next: () => 'must-not-register' },
+    resources,
+    spawner: { start: () => pending.promise },
+  }).execute(effect, recorded.output);
+  await vi.advanceTimersByTimeAsync(20);
+  pending.reject(new Error('late spawn failure'));
+  await flushMicrotasks(8);
+  expect(recorded.outcomes).toEqual([expect.objectContaining({ type: 'process.timed_out' })]);
+});
+
+test('ignores unrelated effects and fails when preparation is missing', async () => {
+  const resources = createSessionInterpreterResources();
+  const recorded = recordingSessionEffectOutput();
+  const interpreter = createProcessStartInterpreter({
+    clock,
+    identities: { next: () => 'process-1' },
+    resources,
+    spawner: { start: async () => ownedProcess().process },
+  });
+  interpreter.execute({ type: 'other' } as never, recorded.output);
+  expect(recorded.outcomes).toEqual([]);
+  interpreter.execute(effect, recorded.output);
+  await flushMicrotasks(6);
+  expect(recorded.outcomes.at(-1)).toMatchObject({ type: 'process.failed' });
+});
+
+test.each(['throw', 'reject'] as const)('contains process spawner %s failure', async (mode) => {
+  const resources = createSessionInterpreterResources();
+  registerProtocolSession(resources, session);
+  const recorded = recordingSessionEffectOutput();
+  createProcessStartInterpreter({
+    clock,
+    identities: { next: () => 'process-1' },
+    resources,
+    spawner: {
+      start: () => {
+        if (mode === 'throw') throw new Error('spawn failed');
+        return Promise.reject(new Error('spawn failed'));
+      },
+    },
+  }).execute(effect, recorded.output);
+  await flushMicrotasks(8);
+  expect(recorded.outcomes.at(-1)).toMatchObject({ type: 'process.failed' });
+});
+
+test('starts and registers a process while wiring bounded stdout and stderr collection', async () => {
+  const resources = createSessionInterpreterResources();
+  const preparation = registerProtocolSession(resources, session);
+  const started = ownedProcess();
+  const start = vi.fn<
+    NonNullable<Parameters<typeof createProcessStartInterpreter>[0]['spawner']['start']>
+  >(async (launch, signal) => {
+    expect(signal.aborted).toBe(false);
+    launch.onStdout?.(new TextEncoder().encode('out'));
+    launch.onStderr?.(new TextEncoder().encode('err'));
+    return started.process;
+  });
+  const recorded = recordingSessionEffectOutput();
+  createProcessStartInterpreter({
+    clock,
+    identities: { next: () => 'process-1' },
+    resources,
+    spawner: { start },
+  }).execute(effect, recorded.output);
+  await flushMicrotasks(8);
+  expect(recorded.outcomes.at(-1)).toMatchObject({
+    processResourceId: 'process-1',
+    type: 'process.started',
+  });
+  const output = preparation.output.finalize();
+  expect(new TextDecoder().decode(output.stdout)).toBe('out');
+  expect(new TextDecoder().decode(output.stderr)).toBe('err');
+});
+
+test.each([false, true])(
+  'terminates a process on resource collision and contains cleanup failure=%s',
+  async (cleanupFails) => {
+    const resources = createSessionInterpreterResources();
+    registerProtocolSession(resources, session);
+    resources.processes.register('process-1', ownedProcess().process);
+    const duplicate = ownedProcess();
+    if (cleanupFails) duplicate.terminateAndReap.mockRejectedValueOnce(new Error('cleanup failed'));
+    const recorded = recordingSessionEffectOutput();
+    createProcessStartInterpreter({
+      clock,
+      identities: { next: () => 'process-1' },
+      resources,
+      spawner: { start: async () => duplicate.process },
+    }).execute(effect, recorded.output);
+    await flushMicrotasks(10);
+    expect(duplicate.terminateAndReap).toHaveBeenCalledOnce();
+    expect(recorded.outcomes.at(-1)).toMatchObject({ type: 'process.failed' });
+  },
+);
