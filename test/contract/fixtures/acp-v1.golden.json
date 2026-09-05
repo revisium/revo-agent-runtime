@@ -23,10 +23,9 @@
       "params": {
         "sessionId": "fake-acp-session",
         "prompt": [
-          { "type": "text", "text": "Return the fake result." },
           {
             "type": "text",
-            "text": "Revo invocation contract (JSON):\n{\"parameters\":{},\"permissions\":{},\"resultSchema\":{\"type\":\"object\"}}\nHonor the parameters and permission constraints. Return exactly one JSON object matching resultSchema, without markdown or surrounding text."
+            "text": "Return the fake result.\n\nRevo invocation contract (JSON):\n{\"parameters\":{},\"permissions\":{},\"resultSchema\":{\"type\":\"object\"}}\nHonor the parameters and permission constraints. Return exactly one JSON object matching resultSchema, without markdown or surrounding text."
           }
         ]
       }
@@ -62,6 +61,6 @@
     { "jsonrpc": "2.0", "id": 2, "result": { "stopReason": "end_turn" } },
     { "jsonrpc": "2.0", "id": 3, "result": {} }
   ],
-  "promptSha256": "2c7913409e34faa1d9ed35844e7f965641af2d2f04496ba4a88e79a4ee5f98dd",
+  "promptSha256": "574e53fb90fbe7f1d1ce25f352cbed5ff52a4ed0056b0bc24b345988c41df5d5",
   "resultChunkSha256": "0c0c3cd3202c54c692e5cdfaf948462dd7cec2fe0f6bf0e5b1c3576cf62f34ee"
 }
