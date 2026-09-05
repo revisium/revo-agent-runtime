@@ -5,7 +5,6 @@ import type {
 } from '../../contracts/configuration.js';
 import {
   AgentManagerError,
-  type ActiveInvocationSnapshot,
   type AgentEventFilter,
   type AgentEventListener,
   type AgentInvocationFilter,
@@ -24,10 +23,13 @@ import type { OutputClaimPlatform } from '../../execution/output/claim.js';
 import type { ClaimedInvocationOutputPublisher } from '../../execution/output/publication.js';
 import type { ExecutablePreflight } from '../../execution/probe/executable-preflight.js';
 import type { RecoveredProcessInspector } from '../../execution/process/port.js';
-import { fault, managerError } from '../faults/agent-faults.js';
-import { EffectiveInvocationInputPolicy } from '../invocation/input/effective-invocation-inputs.js';
+import { EffectiveInvocationInputPolicy } from '../admission/effective-inputs.js';
+import { activeStateError, fault, managerError } from '../faults/agent-faults.js';
+import type { AgentSessionComposer } from '../session/management/composition.js';
+import { createUnavailableAgentSessions } from '../session/management/unavailable.js';
 import { AgentCatalog } from './agent-catalog.js';
 import { EventSubscriptions } from './events.js';
+import { decodeManagerInitialization } from './initialization-input.js';
 import { ManagerInitialization } from './initialization.js';
 import { InvocationQueries } from './invocation-queries.js';
 import { ManagedConfigurations } from './managed-configurations.js';
@@ -35,6 +37,7 @@ import { ManagedInvocations } from './managed-invocations.js';
 import { ManagedAgentProbes } from './managed-probes.js';
 import { validateManagerOptions } from './options.js';
 import { PendingOperations } from './pending-operations.js';
+import { createManagerSessionFacade } from './session-facade.js';
 
 export interface ManagerServices {
   readonly configurationInspector: AgentConfigurationInspector;
@@ -43,6 +46,7 @@ export interface ManagerServices {
   readonly outputClaimPlatform: OutputClaimPlatform;
   readonly outputPublisher: ClaimedInvocationOutputPublisher;
   readonly recoveryInspector: RecoveredProcessInspector;
+  readonly sessionComposer?: AgentSessionComposer;
 }
 
 const shutdownError = (): AgentManagerError =>
@@ -70,11 +74,25 @@ export const createAgentManager = (
     services.recoveryInspector,
     validated.limits,
   );
+  if (validated.sessions !== undefined && services.sessionComposer === undefined)
+    throw managerError('revo.agent.internal', 'Session composition is unavailable.');
+  const sessionController =
+    validated.sessions === undefined || services.sessionComposer === undefined
+      ? undefined
+      : services.sessionComposer.create({
+          agents: catalog.list(),
+          definitions,
+          options: validated.sessions,
+        });
+  const managedSessions =
+    sessionController?.sessions ?? createUnavailableAgentSessions(catalog.list());
   let closed = false;
+  let ready = false;
+  let managerInitialization: Promise<void> | undefined;
   let shutdown: Promise<void> | undefined;
 
   const requireReady = (): void => {
-    if (!initialization.ready)
+    if (!ready)
       throw managerError('revo.agent.manager_not_initialized', 'Agent manager is not initialized.');
   };
   const requireOpen = (): void => {
@@ -111,29 +129,70 @@ export const createAgentManager = (
     () => closed,
   );
 
-  const initialize = (snapshots: readonly ActiveInvocationSnapshot[]): Promise<void> => {
+  const initialize = (snapshots: unknown): Promise<void> => {
     if (closed)
       return Promise.reject(managerError('revo.agent.manager_closed', 'Agent manager is closed.'));
-    return initialization.initialize(snapshots);
+    if (managerInitialization !== undefined) return managerInitialization;
+    const input = decodeManagerInitialization(snapshots);
+    if (input === undefined) {
+      const invalid = Promise.reject(activeStateError('manager'));
+      managerInitialization = invalid;
+      void invalid.catch(() => {
+        managerInitialization = undefined;
+      });
+      return invalid;
+    }
+    if (
+      sessionController === undefined &&
+      (!Array.isArray(input.sessions) || input.sessions.length > 0)
+    )
+      return Promise.reject(
+        managerError('revo.agent.session_state_unavailable', 'Session recovery is not configured.'),
+      );
+    const attempt = Promise.all([
+      initialization.initialize(input.invocations),
+      sessionController?.initialize(input.sessions) ?? Promise.resolve(),
+    ]).then(() => {
+      ready = true;
+    });
+    managerInitialization = attempt;
+    void attempt.catch(async () => {
+      await Promise.all([
+        initialization.whenQuiescent(),
+        sessionController?.whenInitializationQuiescent() ?? Promise.resolve(),
+      ]);
+      managerInitialization = undefined;
+    });
+    return attempt;
   };
 
-  const shutdownManager = (): Promise<void> => {
+  const shutdownManager = (reason?: string): Promise<void> => {
     if (shutdown !== undefined) return shutdown;
     closed = true;
     pendingOperations.cancelAll();
     invocations.cancelAll();
-    shutdown = pendingOperations.quiesce().then(async () => {
+    shutdown = Promise.all([
+      pendingOperations.quiesce(),
+      sessionController?.shutdown(reason) ?? Promise.resolve(),
+    ]).then(async () => {
       const invocationsQuiescent = await invocations.quiesce();
       subscriptions.clear();
-      if (!invocationsQuiescent || initialization.unresolved || pendingOperations.size > 0)
+      if (
+        !invocationsQuiescent ||
+        initialization.unresolved ||
+        (!ready && managerInitialization !== undefined) ||
+        pendingOperations.size > 0
+      )
         throw shutdownError();
     });
     return shutdown;
   };
 
+  const sessions = createManagerSessionFacade(managedSessions, { requireOpen, requireReady });
+
   return Object.freeze({
     cancel: async (invocationId: string): Promise<CancelInvocationResult> => {
-      if (!initialization.ready) requireOpen();
+      if (!ready) requireOpen();
       return invocations.cancel(invocationId);
     },
     getAgent: (agent: AgentRef) => catalog.get(agent),
@@ -162,6 +221,7 @@ export const createAgentManager = (
       requireOpen();
       return probes.probe(agent);
     },
+    sessions,
     shutdown: shutdownManager,
     start: async (request: StartAgentInvocation, context?: AgentStartContext) => {
       requireOpen();

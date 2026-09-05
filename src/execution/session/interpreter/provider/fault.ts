@@ -1,4 +1,4 @@
-import type { AgentFault } from '../../../../contracts/manager.js';
+import type { AgentFault } from '../../../../contracts/manager/core.js';
 import type { SessionProtocolFailure } from '../../../../protocol/session/errors/protocol-error.js';
 
 export const protocolFault = (

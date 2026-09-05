@@ -1,4 +1,4 @@
-import type { AgentEvent } from '../../contracts/manager.js';
+import type { AgentEvent } from '../../contracts/manager/events.js';
 
 const encoder = new TextEncoder();
 

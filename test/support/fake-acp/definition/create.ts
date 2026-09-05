@@ -17,6 +17,22 @@ export const fakeAcpAgentDefinition = (
   permissions: { schema: { $schema: schemaDialect, type: 'object' } },
   capabilities: {
     cancellation: true,
+    ...(options.mode === 'session' || options.session === true
+      ? {
+          session: {
+            interactions: { input: false, permission: false },
+            multiTurn: true as const,
+            resume: 'none' as const,
+            updates: {
+              message: true as const,
+              plan: false,
+              progress: false,
+              tool: false,
+              usage: false,
+            },
+          },
+        }
+      : {}),
     structuredResult: true,
     usage: options.usage ?? false,
   },

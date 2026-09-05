@@ -1,4 +1,4 @@
-import { AgentManagerError, type AgentFault } from '../../../contracts/manager.js';
+import { AgentManagerError, type AgentFault } from '../../../contracts/manager/core.js';
 
 export const sessionManagerError = (
   code: AgentFault['code'],

@@ -1,4 +1,4 @@
-import type { ActiveProcessIdentity, AgentExecutionPin } from '../../manager.js';
+import type { ActiveProcessIdentity, AgentExecutionPin } from '../../manager/core.js';
 
 export interface ActiveAgentSessionSnapshot {
   readonly sessionId: string;

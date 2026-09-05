@@ -34,7 +34,7 @@ const launch = {
 const openingBase = {
   acceptedAt: observedAt,
   acceptedAtMs: 1_000,
-  environment: { inherit: ['PATH'], secrets: {}, variables: {} },
+  environment: { secrets: [], values: { PATH: '/usr/bin' } },
   incarnationId: 'incarnation_01',
   limits,
   pin,

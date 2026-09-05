@@ -58,9 +58,16 @@ const manager = createAgentManager({
     save: (snapshot, context) => activeStateStore.save(snapshot, context),
     remove: (invocationId, context) => activeStateStore.remove(invocationId, context),
   },
+  sessions: {
+    activeStateSink: sessionStateStore,
+    eventSink: sessionEventStore,
+  },
 });
 
-await manager.initialize(await activeStateStore.list());
+await manager.initialize({
+  invocations: await activeStateStore.list(),
+  sessions: await sessionStateStore.list(),
+});
 const unsubscribe = manager.subscribe({}, (event) => eventSink.publish(event));
 ```
 
@@ -118,6 +125,30 @@ if (result.status === 'succeeded') console.log(result.value.ok); // true
 
 Expected execution failures resolve to a terminal result. Construction and
 pre-acceptance failures throw `AgentManagerError`.
+
+## Keep a hot multi-turn session
+
+```ts
+const session = await manager.sessions.open({
+  agent: agent.agent,
+  output: { directory: sessionOutputDirectory },
+  parameters: {},
+  permissions: {},
+  sessionId: 'dlg_01',
+  workspace: { directory: workspaceDirectory },
+});
+
+const first = await session.send({ prompt: 'Remember 73.', turnId: 'trn_01' });
+await first.result();
+const second = await session.send({ prompt: 'What number?', turnId: 'trn_02' });
+console.log(await second.result());
+await session.close();
+```
+
+Session events expose assistant messages, tool/plan/usage updates, permission
+choices, and structured questions including multi-select answers. The consumer
+owns the durable event and active-state stores; the runtime owns the hot process
+and drains it during shutdown.
 
 ## Cancel and shut down
 

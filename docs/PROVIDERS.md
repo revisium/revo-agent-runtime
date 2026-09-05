@@ -5,6 +5,13 @@ definition proves its executable boundary only; authentication, account setup,
 session configuration, and prompt success remain provider-owned conditions.
 Discovery never installs or updates a provider CLI.
 
+All built-in ACP definitions currently advertise hot multi-turn sessions,
+permission and structured-input interactions, assistant messages, plans, tool
+activity, and usage. Progress updates are conservatively disabled. Native
+resume is not advertised until a provider path proves a stable continuation
+contract. Actual capabilities are intersected with the provider response when
+the session opens; consumers must use the negotiated session capabilities.
+
 | Provider    | Definition        | Source         | Launch policy                                                                          |
 | ----------- | ----------------- | -------------- | -------------------------------------------------------------------------------------- |
 | Codex       | `codex-acp`       | bundled bridge | Exact pinned bridge; explicit system override is validated with no fallback.           |

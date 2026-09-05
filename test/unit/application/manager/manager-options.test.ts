@@ -1,9 +1,20 @@
 import { expect, test } from 'vitest';
 
 import { invocationLimits } from '../../../../src/application/manager/limits.js';
+import { createAgentManager } from '../../../../src/application/manager/manager.js';
 import { validateManagerOptions } from '../../../../src/application/manager/options.js';
 import { agentDefinition } from '../../../support/builders/agent-definition.js';
+import { managerServices } from '../../../support/builders/manager-services.js';
 import { noOpActiveStateSink } from '../../../support/stories/active-state.js';
+
+const thrownBy = (operation: () => unknown): unknown => {
+  try {
+    operation();
+  } catch (error) {
+    return error;
+  }
+  throw new Error('Expected operation to throw.');
+};
 
 test('invocation deadlines reject a non-object override', () => {
   expect(() =>
@@ -57,4 +68,59 @@ test('applies the exact active-state and initialization deadline policy', () => 
       limits: { activeStateOperationTimeoutMs: 2_000, initializationTimeoutMs: 1_000 },
     }),
   ).toThrow('Agent manager limit is invalid.');
+});
+
+test('validates session sinks and maps session limit failures at construction', () => {
+  const options = {
+    activeStateSink: noOpActiveStateSink,
+    definitions: [agentDefinition()],
+  };
+
+  expect(
+    thrownBy(() =>
+      validateManagerOptions({
+        ...options,
+        sessions: {
+          activeStateSink: {},
+          eventSink: { append: async () => ({ state: 'appended' }) },
+        },
+      }),
+    ),
+  ).toMatchObject({ fault: { code: 'revo.agent.definition_invalid' } });
+  expect(
+    thrownBy(() =>
+      validateManagerOptions({
+        ...options,
+        sessions: {
+          activeStateSink: {
+            remove: async () => ({ state: 'applied' }),
+            save: async () => ({ state: 'applied' }),
+          },
+          eventSink: { append: async () => ({ state: 'appended' }) },
+          limits: { maxActiveSessions: 0 },
+        },
+      }),
+    ),
+  ).toMatchObject({ fault: { code: 'revo.agent.limit_invalid' } });
+});
+
+test('rejects session configuration when concrete composition is absent', () => {
+  expect(
+    thrownBy(() =>
+      createAgentManager(
+        {
+          activeStateSink: noOpActiveStateSink,
+          definitions: [agentDefinition()],
+          sessions: {
+            activeStateSink: {
+              remove: async () => ({ state: 'applied' }),
+              save: async () => ({ state: 'applied' }),
+            },
+            eventSink: { append: async () => ({ state: 'appended' }) },
+          },
+        },
+        managerServices(),
+      ),
+    ),
+  ).toMatchObject({ fault: { code: 'revo.agent.internal' } });
 });

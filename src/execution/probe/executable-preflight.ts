@@ -1,5 +1,5 @@
 import type { AgentDefinition } from '../../contracts/agent-definition.js';
-import type { AgentLaunchEvidence } from '../../contracts/manager.js';
+import type { AgentLaunchEvidence } from '../../contracts/launch.js';
 import type { ExecutableProbePort, ProbeHostPlatform, VersionProbeObservation } from './port.js';
 import { parseVersionOutput, type VersionOutputFailureReason } from './version-output.js';
 

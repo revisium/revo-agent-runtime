@@ -1,4 +1,4 @@
-import type { AgentUsage } from '../../contracts/manager.js';
+import type { AgentUsage } from '../../contracts/manager/invocation.js';
 import type {
   ProtocolObserver,
   ProtocolOutcome,

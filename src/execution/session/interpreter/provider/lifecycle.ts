@@ -63,7 +63,7 @@ const cancelTurn = async (
     settlement.state !== 'fulfilled' ||
     settlement.phase !== 'initial' ||
     settlement.value.status !== 'requested'
-  )
+  ) {
     emitCancellationFailure(
       effect,
       output,
@@ -73,6 +73,16 @@ const cancelTurn = async (
         ? settlement.value.failure
         : undefined,
     );
+    return;
+  }
+  const now = options.clock.now();
+  output.outcome({
+    correlation: effect.correlation,
+    observedAt: now.iso,
+    observedAtMs: now.milliseconds,
+    outcome: { status: 'cancelled' },
+    type: 'provider.prompt.completed',
+  });
 };
 
 const emitCancellationFailure = (

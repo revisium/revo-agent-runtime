@@ -1,5 +1,5 @@
 import type { JsonObject } from '../../../../contracts/agent-definition.js';
-import { AgentManagerError, type AgentExecutionPin } from '../../../../contracts/manager.js';
+import { AgentManagerError, type AgentExecutionPin } from '../../../../contracts/manager/core.js';
 import type {
   AgentSessionEventAppendPrecondition,
   AgentSessionResumeToken,

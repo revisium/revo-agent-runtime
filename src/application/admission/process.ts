@@ -1,5 +1,5 @@
 import type { AgentDefinition } from '../../contracts/agent-definition.js';
-import type { AgentLaunchEvidence } from '../../contracts/manager.js';
+import type { AgentLaunchEvidence } from '../../contracts/launch.js';
 import type { ClaimedInvocationOutput, OutputClaimPlatform } from '../../execution/output/claim.js';
 import { prepareOutputClaim } from '../../execution/output/claim.js';
 import type {
@@ -7,7 +7,7 @@ import type {
   ExecutablePreflightFailure,
 } from '../../execution/probe/executable-preflight.js';
 
-export type InvocationAdmissionPreparation =
+export type ProcessAdmissionPreparation =
   | Readonly<{ readonly status: 'cancelled' }>
   | Readonly<{ readonly status: 'output_uncertain' }>
   | Readonly<{
@@ -24,14 +24,14 @@ export type InvocationAdmissionPreparation =
       readonly launch: AgentLaunchEvidence;
     }>;
 
-export const prepareInvocationAdmission = async (input: {
+export const prepareProcessAdmission = async (input: {
   readonly definition: AgentDefinition;
   readonly executablePreflight: ExecutablePreflight;
   readonly outputClaimPlatform: OutputClaimPlatform;
   readonly outputDirectory: string;
   readonly signal: AbortSignal;
   readonly workspace: string;
-}): Promise<InvocationAdmissionPreparation> => {
+}): Promise<ProcessAdmissionPreparation> => {
   const output = await prepareOutputClaim(input.outputClaimPlatform, {
     outputDirectory: input.outputDirectory,
     workspace: input.workspace,

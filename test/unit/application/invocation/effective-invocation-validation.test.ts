@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 
-import { EffectiveInvocationInputPolicy } from '../../../../src/application/invocation/input/effective-invocation-inputs.js';
+import { EffectiveInvocationInputPolicy } from '../../../../src/application/admission/effective-inputs.js';
 import type {
   AgentDefinitionInput,
   JsonObject,

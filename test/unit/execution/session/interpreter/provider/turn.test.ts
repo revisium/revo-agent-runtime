@@ -51,7 +51,7 @@ const prepare = async (
   const resources = createSessionInterpreterResources();
   const openingDescriptor = {
     ...sessionOpeningCommand().opening,
-    environment: { inherit: [], secrets: { token: 'secret' }, variables: {} },
+    environment: { secrets: ['secret'], values: { token: 'secret' } },
     usageBaseline: { inputTokens: 10, scope: 'session_cumulative' as const, totalTokens: 10 },
   };
   const preparation: PreparedSessionResource = {
@@ -60,6 +60,7 @@ const prepare = async (
     output: new SessionOutputCollector(openingDescriptor.limits.maxOutputBytes, ['secret']),
     prepared: {
       definition: validateAgentDefinition(agentDefinition({ version: '1' })).definition,
+      inputs: { parameters: {}, permissions: {} },
       launch: { args: [], command: 'agent', cwd: '/workspace' },
       output: {
         publish: async () => ({

@@ -1,7 +1,4 @@
-import type {
-  ActiveInvocationSnapshot,
-  ActiveInvocationStateSink,
-} from '../../contracts/manager.js';
+import type { ActiveInvocationStateSink } from '../../contracts/manager.js';
 import type { SealedAgentRegistry } from '../../definition/index.js';
 import type { RecoveredProcessInspector } from '../../execution/process/port.js';
 import { recoverySnapshots } from '../active-state/recovery-snapshots.js';
@@ -17,6 +14,7 @@ interface InitializationLimits {
 export class ManagerInitialization {
   private initialized = false;
   private initialization: Promise<void> | undefined;
+  private quiescence: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly definitions: SealedAgentRegistry,
@@ -25,8 +23,7 @@ export class ManagerInitialization {
     private readonly limits: InitializationLimits,
   ) {}
 
-  initialize(snapshots: readonly ActiveInvocationSnapshot[]): Promise<void> {
-    if (this.initialization !== undefined) return this.initialization;
+  initialize(snapshots: unknown): Promise<void> {
     const parsed = recoverySnapshots(snapshots, this.definitions);
     if (parsed === undefined) return this.rejectInvalidSnapshots();
 
@@ -37,6 +34,7 @@ export class ManagerInitialization {
       this.limits.activeStateOperationTimeoutMs,
       this.limits.initializationTimeoutMs,
     );
+    this.quiescence = recovery.quiescence;
     this.initialization = recovery.result.then(
       () => {
         this.initialized = true;
@@ -49,12 +47,12 @@ export class ManagerInitialization {
     return this.initialization;
   }
 
-  get ready(): boolean {
-    return this.initialized;
-  }
-
   get unresolved(): boolean {
     return !this.initialized && this.initialization !== undefined;
+  }
+
+  whenQuiescent(): Promise<void> {
+    return this.quiescence;
   }
 
   private rejectInvalidSnapshots(): Promise<void> {

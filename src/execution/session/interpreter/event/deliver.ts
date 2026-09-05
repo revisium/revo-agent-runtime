@@ -1,4 +1,4 @@
-import type { AgentFault } from '../../../../contracts/manager.js';
+import type { AgentFault } from '../../../../contracts/manager/core.js';
 import type { AgentSessionEventSink } from '../../../../contracts/session/events/sink.js';
 import type { SessionEffect } from '../../kernel/effect/session-effect.js';
 import type { SessionEffectOutput } from '../../runtime/effects/outcomes.js';

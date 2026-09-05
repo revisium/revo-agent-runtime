@@ -1,4 +1,4 @@
-import type { AgentFault } from '../../../../../contracts/manager.js';
+import type { AgentFault } from '../../../../../contracts/manager/core.js';
 import type { SessionProtocolDriver } from '../../../../../protocol/session/port/driver.js';
 import type {
   SessionProtocolOpening,
@@ -97,8 +97,8 @@ const connectProvider = async (
       ...(input.configuration === undefined ? {} : { configuration: input.configuration }),
       definition: preparation.prepared.definition,
       observer,
-      parameters: input.parameters,
-      permissions: input.permissions,
+      parameters: preparation.prepared.inputs.parameters,
+      permissions: preparation.prepared.inputs.permissions,
       transport: process.transport,
       workspace: input.workspace.directory,
     };

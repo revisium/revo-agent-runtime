@@ -1,6 +1,6 @@
 import type { JsonObject } from '../../../../contracts/agent-definition.js';
 import type { AgentConfigurationSelection } from '../../../../contracts/configuration.js';
-import { AgentManagerError } from '../../../../contracts/manager.js';
+import { AgentManagerError } from '../../../../contracts/manager/core.js';
 import type { AgentSessionLaunchInput } from '../../../../contracts/session.js';
 import { isJsonObject } from '../../../../definition/canonical-json.js';
 import { hasExactJsonKeys, immutableJsonByteLength } from './immutable-json.js';

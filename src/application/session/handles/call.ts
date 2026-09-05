@@ -1,4 +1,4 @@
-import { AgentManagerError } from '../../../contracts/manager.js';
+import { AgentManagerError } from '../../../contracts/manager/core.js';
 import type { PublicSessionCommand } from '../../../execution/session/kernel/command/public.js';
 import type {
   PublicCallResolution,

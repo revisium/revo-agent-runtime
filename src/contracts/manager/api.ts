@@ -1,5 +1,6 @@
 import type { AgentRef } from '../agent-definition.js';
 import type { AgentConfigurationCatalog, InspectAgentConfiguration } from '../configuration.js';
+import type { AgentManagerInitialization, AgentSessions } from '../session/api/manager.js';
 import type { ActiveInvocationSnapshot, AgentDescriptor } from './core.js';
 import type { AgentEventFilter, AgentEventListener, Unsubscribe } from './events.js';
 import type {
@@ -15,13 +16,16 @@ import type {
 } from './invocation.js';
 
 export interface AgentManager {
+  readonly sessions: AgentSessions;
   listAgents(): readonly AgentDescriptor[];
   getAgent(agent: AgentRef): AgentDescriptor | undefined;
   inspectConfiguration(
     request: InspectAgentConfiguration,
     context?: AgentStartContext,
   ): Promise<AgentConfigurationCatalog>;
-  initialize(snapshots: readonly ActiveInvocationSnapshot[]): Promise<void>;
+  initialize(
+    snapshots: readonly ActiveInvocationSnapshot[] | AgentManagerInitialization,
+  ): Promise<void>;
   subscribe(filter: AgentEventFilter, listener: AgentEventListener): Unsubscribe;
   start(request: StartAgentInvocation, context?: AgentStartContext): Promise<AgentInvocationHandle>;
   listInvocations(filter?: AgentInvocationFilter): readonly AgentInvocationSnapshot[];

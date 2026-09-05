@@ -4,7 +4,11 @@ import type {
   AgentConfigurationSelection,
   AgentDefinitionInput,
   AgentDiscoveryResult,
+  AgentManagerInitialization,
+  AgentSession,
+  AgentSessions,
   InspectAgentConfiguration,
+  OpenAgentSession,
 } from '${packageName}';
 
 const definition: AgentDefinitionInput = {
@@ -32,8 +36,18 @@ void selection;
 declare const catalog: AgentConfigurationCatalog;
 void catalog;
 
-// @ts-expect-error Session declarations stay out of the shipped root until the facade works.
-type PrematureAgentSession = import('${packageName}').AgentSession;
-declare const prematureAgentSession: PrematureAgentSession;
-void prematureAgentSession;
+const sessionRequest: OpenAgentSession = {
+  agent: { id: 'agent', version: '1' },
+  output: { directory: '/output/session' },
+  parameters: {},
+  permissions: {},
+  sessionId: 'dlg_consumer',
+  workspace: { directory: '/workspace' },
+};
+declare const sessions: AgentSessions;
+declare const session: AgentSession;
+void sessions.open(sessionRequest);
+void session.send({ prompt: 'Continue.', turnId: 'trn_consumer' });
+const initialization: AgentManagerInitialization = { invocations: [], sessions: [] };
+void initialization;
 `;

@@ -1,5 +1,6 @@
-import type { AgentFault } from '../../../../../contracts/manager.js';
+import type { AgentFault } from '../../../../../contracts/manager/core.js';
 import type { SessionEffect } from '../../../kernel/effect/session-effect.js';
+import type { SessionOpeningPreparer } from '../../../port/opening-preparation.js';
 import type { SessionEffectOutput } from '../../../runtime/effects/outcomes.js';
 import type { SessionRuntimeIdentitySource } from '../../../runtime/primitives/identity.js';
 import { SessionOutputCollector } from '../../output/collect.js';
@@ -10,7 +11,6 @@ import {
   systemSessionOperationTimer,
   type SessionOperationTimer,
 } from '../../shared/operation/timer.js';
-import type { SessionOpeningPreparer } from './preparation.js';
 import type { SessionInterpreterResources } from './resources.js';
 
 type PreparationEffect = Extract<SessionEffect, { readonly type: 'opening.prepare' }>;
@@ -85,7 +85,7 @@ const prepareOpening = async (
     return;
   }
   const preparationId = options.identities.next('preparation');
-  const secrets = Object.values(effect.opening.environment?.secrets ?? {});
+  const secrets = effect.opening.environment?.secrets ?? [];
   const registered = options.resources.preparations.register(preparationId, {
     correlation: effect.correlation,
     opening: effect.opening,

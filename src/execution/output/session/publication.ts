@@ -1,4 +1,4 @@
-import type { AgentExecutionPin } from '../../../contracts/manager.js';
+import type { AgentExecutionPin } from '../../../contracts/manager/core.js';
 import type { AgentSessionEventCursor } from '../../../contracts/session/events/event.js';
 import type { AgentSessionOutputPublication } from '../../../contracts/session/lifecycle/result.js';
 

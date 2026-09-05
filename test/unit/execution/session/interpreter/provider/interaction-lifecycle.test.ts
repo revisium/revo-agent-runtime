@@ -62,6 +62,7 @@ const setup = async (options: {
     output: new SessionOutputCollector(descriptor.limits.maxOutputBytes, []),
     prepared: {
       definition,
+      inputs: { parameters: {}, permissions: {} },
       launch: { args: [], command: 'agent', cwd: '/workspace' },
       output: {
         publish: async () => ({
@@ -136,7 +137,7 @@ it('maps failed interaction delivery to a stable provider fault', async () => {
   });
 });
 
-it('cancels a registered prompt and closes a provider without publishing lifecycle outcomes', async () => {
+it('cancels a registered prompt, publishes cancellation, and closes the provider', async () => {
   const { driver, resources } = await setup({
     cancellations: [{ status: 'requested' }],
     closes: [{ status: 'closed' }],
@@ -172,6 +173,11 @@ it('cancels a registered prompt and closes a provider without publishing lifecyc
     'prompt.cancel',
     'session.close',
   ]);
-  expect(recorded.outcomes).toEqual([]);
+  expect(recorded.outcomes).toEqual([
+    expect.objectContaining({
+      outcome: { status: 'cancelled' },
+      type: 'provider.prompt.completed',
+    }),
+  ]);
   expect(resources.providers.get('provider-1')).toBeUndefined();
 });

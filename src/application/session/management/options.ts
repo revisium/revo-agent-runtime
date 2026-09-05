@@ -1,5 +1,7 @@
-import type { AgentDescriptor } from '../../../contracts/manager.js';
+import type { AgentDescriptor } from '../../../contracts/manager/core.js';
 import type { AgentSessionManagerLimits } from '../../../contracts/session.js';
+import type { ActiveAgentSessionStateSink } from '../../../contracts/session/persistence/active-state.js';
+import type { RecoveredProcessInspector } from '../../../execution/process/port.js';
 import type { SessionRuntimeFactory } from '../../../execution/session/runtime/actor/port.js';
 
 type ManagedSessionIdentityKind = 'call' | 'checkpoint' | 'resume_token' | 'incarnation' | 'stream';
@@ -10,5 +12,7 @@ export interface ManagedAgentSessionsOptions {
   readonly digest: { digest(bytes: Uint8Array): string };
   readonly limits?: AgentSessionManagerLimits;
   readonly nextIdentity: (kind: ManagedSessionIdentityKind) => string;
+  readonly activeStateSink?: ActiveAgentSessionStateSink;
+  readonly recoveryInspector?: RecoveredProcessInspector;
   readonly runtimeFactory: SessionRuntimeFactory;
 }

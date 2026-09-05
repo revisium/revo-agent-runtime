@@ -1,7 +1,12 @@
-import type { AgentDescriptor, AgentExecutionPin } from '../../../contracts/manager.js';
-import type { OpenAgentSession, ResumeAgentSession } from '../../../contracts/session.js';
+import type { AgentDescriptor, AgentExecutionPin } from '../../../contracts/manager/core.js';
+import type {
+  AgentSessionLaunchContext,
+  OpenAgentSession,
+  ResumeAgentSession,
+} from '../../../contracts/session.js';
 import type { SessionOpeningCommand } from '../../../execution/session/runtime/actor/port.js';
 import { decodeResumeToken, inspectResumeTokenPin } from '../boundary/checkpoint/decode.js';
+import { captureSessionLaunchContext } from '../boundary/input/context.js';
 import { decodeOpenAgentSession } from '../boundary/input/open.js';
 import { decodeResumeAgentSession } from '../boundary/input/resume.js';
 import { continuationId, sessionId } from '../policy/identity/identifiers.js';
@@ -34,8 +39,12 @@ export class ManagedSessionOpeningBuilder {
     private readonly registry: ManagedSessionRegistry,
   ) {}
 
-  fresh(input: OpenAgentSession): PreparedManagedSessionOpening {
+  fresh(
+    input: OpenAgentSession,
+    context?: AgentSessionLaunchContext,
+  ): PreparedManagedSessionOpening {
     const request = decodeOpenAgentSession(input);
+    const launch = captureSessionLaunchContext(context, process.env);
     const id = sessionId(request.sessionId);
     const pin = pinOf(this.catalog.require(request.agent));
     const limits = resolveAgentSessionLimits(request.limits);
@@ -50,6 +59,7 @@ export class ManagedSessionOpeningBuilder {
           acceptedAt: observed.iso,
           acceptedAtMs: observed.milliseconds,
           incarnationId: this.options.nextIdentity('incarnation'),
+          environment: launch.environment,
           limits,
           ...(request.metadata === undefined ? {} : { metadata: request.metadata }),
           pin,
@@ -65,8 +75,12 @@ export class ManagedSessionOpeningBuilder {
     };
   }
 
-  resume(input: ResumeAgentSession): PreparedManagedSessionOpening {
+  resume(
+    input: ResumeAgentSession,
+    context?: AgentSessionLaunchContext,
+  ): PreparedManagedSessionOpening {
     const request = decodeResumeAgentSession(input);
+    const launch = captureSessionLaunchContext(context, process.env);
     const pin = pinOf(this.catalog.requirePin(inspectResumeTokenPin(request.token)));
     const limits = resolveAgentSessionLimits(request.limits);
     const decoded = decodeResumeToken(
@@ -88,6 +102,7 @@ export class ManagedSessionOpeningBuilder {
           acceptedAt: observed.iso,
           acceptedAtMs: observed.milliseconds,
           incarnationId: this.options.nextIdentity('incarnation'),
+          environment: launch.environment,
           limits,
           ...(request.metadata === undefined ? {} : { metadata: request.metadata }),
           pin,

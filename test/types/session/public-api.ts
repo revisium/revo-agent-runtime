@@ -14,6 +14,12 @@ import type {
   ResumeAgentSession,
   SendAgentSessionInput,
 } from '../../../src/contracts/session.js';
+import type {
+  AgentSession as RootAgentSession,
+  AgentSessionEventSink as RootAgentSessionEventSink,
+  AgentSessionResumeToken as RootAgentSessionResumeToken,
+  AgentSessions as RootAgentSessions,
+} from '../../../src/index.js';
 
 declare const sessions: AgentSessions;
 declare const session: AgentSession;
@@ -191,11 +197,14 @@ readonlyOpenRequest.sessionId = 'dlg_02';
 // @ts-expect-error Nested public request values are immutable too.
 readonlyOpenRequest.workspace.directory = '/other';
 
-// Session declarations remain package-private until the working facade lands in M9.
-// @ts-expect-error M1 must not expose a non-functional session surface from the root.
-type PrematureRootSession = import('../../../src/index.js').AgentSession;
-declare const prematureRootSession: PrematureRootSession;
-void prematureRootSession;
+declare const rootSession: RootAgentSession;
+declare const rootSessions: RootAgentSessions;
+declare const rootEventSink: RootAgentSessionEventSink;
+declare const rootResumeToken: RootAgentSessionResumeToken;
+void rootSession;
+void rootSessions;
+void rootEventSink;
+void rootResumeToken;
 
 // The continuation envelope is shared internally and absent from the public session barrel.
 // @ts-expect-error Consumers cannot name the private continuation envelope.

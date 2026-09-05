@@ -1,18 +1,17 @@
-import type { AgentDefinition } from '../../../../../contracts/agent-definition.js';
-import type { AgentFault } from '../../../../../contracts/manager.js';
-import type { SessionOutputPublicationTarget } from '../../../../output/session/publication.js';
-import type { ProcessLaunch } from '../../../../process/port.js';
-import type { SessionEffect } from '../../../kernel/effect/session-effect.js';
-
-type SessionOpeningDescriptor = Extract<
-  SessionEffect,
-  { readonly type: 'opening.prepare' }
->['opening'];
+import type { AgentDefinition, JsonObject } from '../../../contracts/agent-definition.js';
+import type { AgentFault } from '../../../contracts/manager/core.js';
+import type { SessionOutputPublicationTarget } from '../../output/session/publication.js';
+import type { ProcessLaunch } from '../../process/port.js';
+import type { SessionOpeningDescriptor } from '../kernel/model/opening-state.js';
 
 type SessionProcessLaunch = Omit<ProcessLaunch, 'onStdout' | 'onStderr'>;
 
 export interface PreparedSessionOpening {
   readonly definition: AgentDefinition;
+  readonly inputs: Readonly<{
+    readonly parameters: JsonObject;
+    readonly permissions: JsonObject;
+  }>;
   readonly launch: SessionProcessLaunch;
   readonly output: SessionOutputPublicationTarget;
 }

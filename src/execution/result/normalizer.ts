@@ -1,4 +1,4 @@
-import type { AgentFault } from '../../contracts/manager.js';
+import type { AgentFault } from '../../contracts/manager/core.js';
 import { RawResponseEvidence } from './raw-response.js';
 import { compileResultSchema } from './schema-validator.js';
 

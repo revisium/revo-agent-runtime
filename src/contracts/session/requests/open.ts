@@ -1,6 +1,6 @@
 import type { AgentRef } from '../../agent-definition.js';
 import type { AgentConfigurationSelection } from '../../configuration.js';
-import type { AgentStartContext } from '../../manager.js';
+import type { AgentStartContext } from '../../manager/invocation.js';
 
 export type AgentSessionLaunchContext = AgentStartContext;
 

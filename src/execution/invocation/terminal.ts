@@ -1,4 +1,5 @@
-import type { AgentFault, AgentUsage } from '../../contracts/manager.js';
+import type { AgentFault } from '../../contracts/manager/core.js';
+import type { AgentUsage } from '../../contracts/manager/invocation.js';
 import type { RawResponseEvidence } from '../result/raw-response.js';
 
 interface TerminalEvidence {

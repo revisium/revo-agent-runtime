@@ -103,6 +103,7 @@ export const createAgentSessionStory = (options: AgentSessionStoryOptions): Agen
         status: 'prepared',
         value: {
           definition: definition.definition,
+          inputs: { parameters: {}, permissions: {} },
           launch: {
             args: [],
             command: definition.definition.launch.command,
