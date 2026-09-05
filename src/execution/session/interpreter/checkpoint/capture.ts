@@ -18,6 +18,7 @@ import {
 import { digestSessionContinuation, encodeSessionContinuation } from './encode.js';
 
 type CaptureEffect = Extract<SessionEffect, { readonly type: 'checkpoint.capture' }>;
+type CaptureFailureStatus = 'unsupported' | 'failed' | 'timed_out' | 'invalid';
 
 interface CaptureOptions {
   readonly clock: SessionObservationClock;
@@ -141,7 +142,7 @@ const emitFailure = (
   effect: CaptureEffect,
   output: SessionEffectOutput,
   options: CaptureOptions,
-  status: 'unsupported' | 'failed' | 'timed_out' | 'invalid',
+  status: CaptureFailureStatus,
   failure?: Parameters<typeof protocolFault>[0],
 ): void => {
   const fault = captureFault(status, failure);
@@ -156,7 +157,7 @@ const emitFailure = (
 };
 
 const captureFault = (
-  status: 'unsupported' | 'failed' | 'timed_out' | 'invalid',
+  status: CaptureFailureStatus,
   failure?: Parameters<typeof protocolFault>[0],
 ): AgentFault => {
   if (status === 'failed') return protocolFault(failure, 'session_checkpointing');
@@ -173,7 +174,7 @@ const captureFault = (
 };
 
 const captureFailureType = (
-  status: 'unsupported' | 'failed' | 'timed_out' | 'invalid',
+  status: CaptureFailureStatus,
 ): 'checkpoint.unsupported' | 'checkpoint.timed_out' | 'checkpoint.failed' => {
   if (status === 'unsupported') return 'checkpoint.unsupported';
   if (status === 'timed_out') return 'checkpoint.timed_out';
