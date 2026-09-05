@@ -131,7 +131,14 @@ export const failActiveSession = (
   error: Extract<TerminalIntent, { readonly outcome: 'failed' }>['error'],
 ): SessionTransition => {
   const intent = { error, outcome: 'failed' as const };
-  const terminal = terminalizingState(state, intent, {
+  const cleared = {
+    ...state,
+    events: {
+      ...(state.events.cursor === undefined ? {} : { cursor: state.events.cursor }),
+      pending: [] as const,
+    },
+  };
+  const terminal = terminalizingState(cleared, intent, {
     correlation: nextEffectCorrelation(state),
     stage: 'closing_provider',
   });

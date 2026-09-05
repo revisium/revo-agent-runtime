@@ -2,7 +2,11 @@ import { createHash } from 'node:crypto';
 
 import { createManagedAgentSessions } from '../../../../src/application/session/management/managed-sessions.js';
 import type { AgentDescriptor } from '../../../../src/contracts/manager.js';
-import type { AgentSessionEvent, AgentSessions } from '../../../../src/contracts/session.js';
+import type {
+  AgentSessionEvent,
+  AgentSessionResumeToken,
+  AgentSessions,
+} from '../../../../src/contracts/session.js';
 import { validateAgentDefinition } from '../../../../src/definition/index.js';
 import { composeSessionInterpreters } from '../../../../src/execution/session/interpreter/composition/interpreters.js';
 import { reduceSession } from '../../../../src/execution/session/kernel/reducer/reduce.js';
@@ -14,6 +18,7 @@ import {
   createControllableSessionProtocolDriver,
   type FakeSessionProtocolCall,
 } from '../fakes/protocol/driver.js';
+import { createStoryProtocolScript, type AgentSessionStoryOptions } from './script.js';
 
 const capabilities = {
   interactions: { input: true, permission: true },
@@ -26,16 +31,19 @@ const protocolCapabilities = {
   cancellation: { prompt: true, session: true },
 } as const;
 
-export interface AgentSessionStoryOptions {
-  readonly checkpoint: Readonly<Record<string, string>>;
-  readonly replies: readonly string[];
-}
-
 export interface AgentSessionStory {
   readonly sessions: AgentSessions;
   open(sessionId: string): ReturnType<AgentSessions['open']>;
+  resume(token: AgentSessionResumeToken): ReturnType<AgentSessions['resume']>;
+  events(): readonly AgentSessionEvent[];
   eventTypes(): readonly AgentSessionEvent['type'][];
+  providerCalls(): readonly FakeSessionProtocolCall[];
   providerCallTypes(): readonly FakeSessionProtocolCall['type'][];
+  settle(): Promise<void>;
+  waitForAgent(barrier: string): Promise<void>;
+  releaseAgent(barrier: string): void;
+  activeProcesses(): number;
+  maximumActiveProcesses(): number;
 }
 
 const descriptorFrom = (definition: ReturnType<typeof validateAgentDefinition>): AgentDescriptor =>
@@ -60,26 +68,9 @@ export const createAgentSessionStory = (options: AgentSessionStoryOptions): Agen
       version: '1',
     }),
   );
-  const driver = createControllableSessionProtocolDriver({
-    checkpoints: [
-      {
-        continuation: { data: options.checkpoint, format: 'fake/v1' },
-        status: 'captured',
-      },
-    ],
-    closes: [{ status: 'closed' }],
-    openings: [
-      {
-        kind: 'fresh',
-        outcome: { capabilities: protocolCapabilities, status: 'opened' },
-        steps: [],
-      },
-    ],
-    prompts: options.replies.map((content) => ({
-      outcome: { status: 'completed' as const },
-      steps: [{ type: 'update' as const, value: { content, type: 'message.delta' as const } }],
-    })),
-  });
+  const driver = createControllableSessionProtocolDriver(
+    createStoryProtocolScript(options, protocolCapabilities),
+  );
   const clock: SessionClock = {
     now: () => ({ iso: '2026-09-05T00:00:00.000Z', milliseconds: 1_000 }),
     schedule: () => ({ cancel: () => undefined }),
@@ -87,6 +78,8 @@ export const createAgentSessionStory = (options: AgentSessionStoryOptions): Agen
   const digest = {
     digest: (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex'),
   };
+  let activeProcesses = 0;
+  let maximumActiveProcesses = 0;
   let resourceIdentity = 0;
   const composition = composeSessionInterpreters({
     activeStateSink: {
@@ -98,6 +91,8 @@ export const createAgentSessionStory = (options: AgentSessionStoryOptions): Agen
     driver,
     eventSink: {
       append: async (event) => {
+        if (event.type === options.rejectEvent) throw new Error('Fake event sink rejection.');
+        if (event.type === options.stallEvent) await new Promise<never>(() => undefined);
         events.push(event);
         return { state: 'appended' };
       },
@@ -128,33 +123,46 @@ export const createAgentSessionStory = (options: AgentSessionStoryOptions): Agen
       }),
     },
     spawner: {
-      start: async () => ({
-        completion: new Promise<never>(() => undefined),
-        identity: {
-          fingerprint: 'fake-process',
-          pid: 42,
-          processGroupId: 42,
-          startedAt: clock.now().iso,
-        },
-        terminateAndReap: async () => ({
-          exit: { exitCode: 0, signal: null },
-          status: 'confirmed',
-        }),
-        transport: {
-          input: new WritableStream<Uint8Array>(),
-          output: new ReadableStream<Uint8Array>({
-            start: (controller) => controller.close(),
-          }),
-        },
-      }),
+      start: async () => {
+        activeProcesses += 1;
+        maximumActiveProcesses = Math.max(maximumActiveProcesses, activeProcesses);
+        let cleaned = false;
+        return {
+          completion: new Promise<never>(() => undefined),
+          identity: {
+            fingerprint: `fake-process-${resourceIdentity}`,
+            pid: 42 + resourceIdentity,
+            processGroupId: 42 + resourceIdentity,
+            startedAt: clock.now().iso,
+          },
+          terminateAndReap: async () => {
+            if (!cleaned) activeProcesses -= 1;
+            cleaned = true;
+            return { exit: { exitCode: 0, signal: null }, status: 'confirmed' };
+          },
+          transport: {
+            input: new WritableStream<Uint8Array>(),
+            output: new ReadableStream<Uint8Array>({
+              start: (controller) => controller.close(),
+            }),
+          },
+        };
+      },
     },
-    timer: clock,
   });
-  const runtimeFactory = new SessionActorFactory({
+  const actorFactory = new SessionActorFactory({
     clock,
     dispatcher: new SessionEffectDispatcher(composition.interpreters),
     reducer: reduceSession,
   });
+  const runtimes: ReturnType<SessionActorFactory['createOpening']>[] = [];
+  const runtimeFactory = {
+    createOpening: (command: Parameters<SessionActorFactory['createOpening']>[0]) => {
+      const runtime = actorFactory.createOpening(command);
+      runtimes.push(runtime);
+      return runtime;
+    },
+  };
   let identity = 0;
   const sessions = createManagedAgentSessions({
     agents: [descriptorFrom(definition)],
@@ -163,18 +171,34 @@ export const createAgentSessionStory = (options: AgentSessionStoryOptions): Agen
     nextIdentity: (kind) => `${kind}-${++identity}`,
     runtimeFactory,
   });
+  const launch = {
+    output: { directory: '/output' },
+    parameters: {},
+    permissions: {},
+    workspace: { directory: '/workspace' },
+  } as const;
   return Object.freeze({
+    activeProcesses: () => activeProcesses,
+    events: () => Object.freeze([...events]),
     eventTypes: () => Object.freeze(events.map(({ type }) => type)),
+    maximumActiveProcesses: () => maximumActiveProcesses,
     open: (sessionId: string) =>
       sessions.open({
+        ...launch,
         agent: { id: 'fake-session-agent', version: '1' },
-        output: { directory: '/output' },
-        parameters: {},
-        permissions: {},
+        ...(options.eventSinkTimeoutMs === undefined
+          ? {}
+          : { limits: { eventSinkTimeoutMs: options.eventSinkTimeoutMs } }),
         sessionId,
-        workspace: { directory: '/workspace' },
       }),
+    providerCalls: () => Object.freeze([...driver.calls]),
     providerCallTypes: () => Object.freeze(driver.calls.map(({ type }) => type)),
+    releaseAgent: (barrier: string) => driver.barriers.release(barrier),
+    resume: (token: AgentSessionResumeToken) => sessions.resume({ ...launch, token }),
+    settle: async () => {
+      await Promise.all(runtimes.map((runtime) => runtime.whenQuiescent()));
+    },
     sessions,
+    waitForAgent: (barrier: string) => driver.barriers.reached(barrier),
   });
 };
