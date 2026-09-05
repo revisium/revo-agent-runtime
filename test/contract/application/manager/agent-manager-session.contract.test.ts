@@ -99,7 +99,7 @@ test('manager shutdown cancels and drains an active session turn', async () => {
   const active = new Map<string, ActiveAgentSessionSnapshot>();
   const manager = createAgentManager({
     activeStateSink: noOpActiveStateSink,
-    definitions: [fakeAcpDefinition({ mode: 'hang', session: true })],
+    definitions: [fakeAcpDefinition({ mode: 'session-cancellation' })],
     sessions: {
       activeStateSink: {
         remove: async ({ incarnationId, sessionId }) => {

@@ -12,12 +12,15 @@ export const createAgentSessionTurn = (
   turnId: string,
   resultSettlement: Promise<PublicCallSettlement>,
 ): AgentSessionTurn => {
+  let completed: AgentSessionTurnResult | undefined;
   const result = resultSettlement.then((settlement) => {
     options.onSettled();
-    return resolutionOf(settlement, 'turn_result').result;
+    completed = resolutionOf(settlement, 'turn_result').result;
+    return completed;
   });
   return Object.freeze({
     cancel: async (reason?: string): Promise<CancelAgentSessionTurnResult> => {
+      if (completed !== undefined) return { state: 'already_completed', result: completed };
       const observed = options.clock.now();
       const resolution = await dispatchCall(
         options.runtime,

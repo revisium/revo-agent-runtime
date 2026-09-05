@@ -8,6 +8,58 @@ import {
 
 const update = (value: unknown): acp.SessionUpdate => value as acp.SessionUpdate;
 
+test('merges sparse updates, resets reused call identities, and bounds the per-turn cache', () => {
+  const tools: NonNullable<Parameters<typeof mapAcpSessionUpdate>[1]> = new Map();
+  mapAcpSessionUpdate(
+    update({
+      sessionUpdate: 'tool_call',
+      toolCallId: 'tool-1',
+      title: 'Read config',
+      kind: 'read',
+      status: 'in_progress',
+    }),
+    tools,
+  );
+  expect(
+    mapAcpSessionUpdate(
+      update({ sessionUpdate: 'tool_call_update', toolCallId: 'tool-1', status: 'completed' }),
+      tools,
+    ),
+  ).toMatchObject({ title: 'Read config', kind: 'read', status: 'completed' });
+  expect(
+    mapAcpSessionUpdate(
+      update({ sessionUpdate: 'tool_call_update', toolCallId: 'tool-1', title: 'Done' }),
+      tools,
+    ),
+  ).toMatchObject({ title: 'Done', kind: 'read', status: 'completed' });
+  expect(
+    mapAcpSessionUpdate(
+      update({ sessionUpdate: 'tool_call', toolCallId: 'tool-1', title: 'New call' }),
+      tools,
+    ),
+  ).toMatchObject({ title: 'New call', kind: 'other', status: 'started' });
+  for (let index = 0; index < 1_024; index++) {
+    mapAcpSessionUpdate(
+      update({ sessionUpdate: 'tool_call', toolCallId: `other-${index}`, title: 'Other' }),
+      tools,
+    );
+  }
+  expect(tools.size).toBe(1_024);
+  expect(tools.has('tool-1')).toBe(false);
+});
+
+test('delivers a status-only tool completion', () => {
+  expect(
+    mapAcpSessionUpdate(
+      update({
+        sessionUpdate: 'tool_call_update',
+        toolCallId: 'tool-1',
+        status: 'completed',
+      }),
+    ),
+  ).toMatchObject({ type: 'tool', toolCallId: 'tool-1', status: 'completed' });
+});
+
 test('maps non-empty assistant text and ignores unsupported message content', () => {
   expect(
     mapAcpSessionUpdate(

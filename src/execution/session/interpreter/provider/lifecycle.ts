@@ -50,8 +50,13 @@ const cancelTurn = async (
     emitCancellationFailure(effect, output, options, false);
     return;
   }
-  const operation: Promise<SessionProtocolCancellationOutcome> = Promise.resolve().then(() =>
-    resource.prompt.cancel(effect.reason),
+  const operation: Promise<SessionProtocolCancellationOutcome> = Promise.resolve().then(
+    async () => {
+      const requested = await resource.prompt.cancel(effect.reason);
+      if (requested.status === 'requested')
+        await Promise.race([resource.prompt.completion, resource.stopped]);
+      return requested;
+    },
   );
   const settlement = await settleOperation({
     onTimeout: () => undefined,
@@ -73,16 +78,7 @@ const cancelTurn = async (
         ? settlement.value.failure
         : undefined,
     );
-    return;
   }
-  const now = options.clock.now();
-  output.outcome({
-    correlation: effect.correlation,
-    observedAt: now.iso,
-    observedAtMs: now.milliseconds,
-    outcome: { status: 'cancelled' },
-    type: 'provider.prompt.completed',
-  });
 };
 
 const emitCancellationFailure = (

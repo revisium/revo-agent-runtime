@@ -146,6 +146,7 @@ import {
 const acpProtocolDriver = createAcpProtocolDriver(builtInConfigurationCompatibility);
 const acpConfigurationDriver = createAcpConfigurationDriver(builtInConfigurationCompatibility);
 const sessionComposer = createAgentSessionComposer({
+  hostEnvironment: () => process.env,
   digest: nodeSha256Digest,
   driver: createAcpSessionProtocolDriver(builtInConfigurationCompatibility),
   executablePreflight: createExecutablePreflight(nodeExecutableProbe),

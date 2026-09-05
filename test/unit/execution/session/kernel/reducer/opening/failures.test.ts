@@ -82,7 +82,11 @@ test('cleans a process after a definitive active-state save failure', () => {
     progress: { stage: 'cleaning_process' },
     status: 'opening',
   });
-  expect(transition.effects.map(({ type }) => type)).toEqual(['process.cleanup']);
+  expect(transition.effects.map(({ type }) => type)).toEqual([
+    'timer.cancel',
+    'timer.cancel',
+    'process.cleanup',
+  ]);
 
   const cleanup = effectOf(transition, 'process.cleanup');
   transition = reduceSession(transition.state, {

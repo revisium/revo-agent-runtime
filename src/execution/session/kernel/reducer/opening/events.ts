@@ -18,7 +18,7 @@ import {
   failOpeningBeforeProcess,
   openingEventConflictFault,
 } from './failure.js';
-import type { OpeningCommand, OpeningState } from './state.js';
+import { openingCleanupInProgress, type OpeningCommand, type OpeningState } from './state.js';
 import { cancelOpeningTimer, scheduleOpeningTimer } from './timing.js';
 
 const acceptedEvent = (state: OpeningState, command: OpeningCommand): SessionAcceptedEvent => {
@@ -65,6 +65,7 @@ export const startOpening = (state: OpeningState, command: OpeningCommand): Sess
     state,
     acceptedEvent(state, command),
     acceptedPrecondition(command),
+    command.opening.environment?.secrets,
   );
   transition = scheduleOpeningTimer(transition, {
     deadlineMs: state.acceptedAtMs + state.limits.wallClockTimeoutMs,
@@ -157,6 +158,7 @@ export const reduceOpeningEvent = (
     }
   >,
 ): SessionTransition => {
+  if (openingCleanupInProgress(state)) return unchangedTransition(state);
   const failEvent = (fault: import('../../../../../contracts/manager/core.js').AgentFault) =>
     state.progress.stage === 'publishing_opened'
       ? beginOpeningProcessCleanup(state, fault, 'remove_state')

@@ -10,6 +10,7 @@ export interface SessionContinuityEvidence {
 }
 
 export interface SessionCancellationEvidence {
+  readonly nextTurnStatus: 'completed';
   readonly cleanup: 'confirmed';
   readonly eventCount: number;
   readonly providerId: string;
@@ -49,6 +50,7 @@ export const formatSessionSmokeEvidence = (evidence: SessionSmokeEvidence): stri
         ].join('; ')
       : [
           `${evidence.providerId}-cancel: status=${evidence.status}`,
+          `nextTurn=${evidence.nextTurnStatus}`,
           `events=${evidence.eventCount}`,
           `cleanup=${evidence.cleanup}`,
         ].join('; ');

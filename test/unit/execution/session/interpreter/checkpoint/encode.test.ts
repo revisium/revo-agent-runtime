@@ -9,11 +9,19 @@ import {
 
 const encode = (
   data: unknown,
-  overrides: { format?: unknown; maxBytes?: number; secrets?: readonly string[] } = {},
+  overrides: {
+    format?: unknown;
+    maxBytes?: number;
+    secrets?: readonly string[];
+    acceptedTurnIds?: readonly string[];
+  } = {},
 ): string =>
   Reflect.apply(encodeSessionContinuation, undefined, [
     {
       continuation: { data, format: overrides.format ?? 'acp/v1' },
+      ...(overrides.acceptedTurnIds === undefined
+        ? {}
+        : { acceptedTurnIds: overrides.acceptedTurnIds }),
       maxBytes: overrides.maxBytes ?? 1_048_576,
       secrets: overrides.secrets ?? [],
       usageBaseline: { inputTokens: 1, scope: 'session_cumulative', totalTokens: 1 },
@@ -51,6 +59,13 @@ test.each([
   ['positive infinity', { value: Number.POSITIVE_INFINITY }, {}],
   ['non-JSON object prototype', { value: new Date(0) }, {}],
   ['embedded secret', { value: 'prefix-known-secret-suffix' }, { secrets: ['known-secret'] }],
+  ['secret-bearing field name', { 'known-secret': 'value' }, { secrets: ['known-secret'] }],
+  ['secret-bearing format', {}, { format: 'known-secret/v1', secrets: ['known-secret'] }],
+  [
+    'secret-bearing turn ledger',
+    {},
+    { acceptedTurnIds: ['trn_known-secret'], secrets: ['known-secret'] },
+  ],
   ['forbidden key', { Authorization: 'value' }, {}],
   ['forbidden nested key', { nested: { process: 1 } }, {}],
   ['empty format', {}, { format: '' }],

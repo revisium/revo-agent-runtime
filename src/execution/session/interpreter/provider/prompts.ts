@@ -4,6 +4,8 @@ interface ProviderPromptResource {
   readonly effectId: string;
   readonly prompt: SessionProtocolPrompt;
   readonly cancellationRequested: boolean;
+  readonly stopped: Promise<void>;
+  readonly stop: () => void;
 }
 
 export class ProviderPromptRegistry {
@@ -12,11 +14,17 @@ export class ProviderPromptRegistry {
   register(
     providerResourceId: string,
     turnId: string,
-    resource: Omit<ProviderPromptResource, 'cancellationRequested'>,
+    resource: Pick<ProviderPromptResource, 'effectId' | 'prompt'>,
   ): boolean {
     const key = this.#key(providerResourceId, turnId);
     if (this.#prompts.has(key)) return false;
-    this.#prompts.set(key, { ...resource, cancellationRequested: false });
+    const stopped = Promise.withResolvers<void>();
+    this.#prompts.set(key, {
+      ...resource,
+      cancellationRequested: false,
+      stopped: stopped.promise,
+      stop: stopped.resolve,
+    });
     return true;
   }
 
@@ -51,6 +59,7 @@ export class ProviderPromptRegistry {
     for (const [key, resource] of this.#prompts) {
       if (!key.startsWith(prefix)) continue;
       this.#prompts.delete(key);
+      resource.stop();
       resources.push(resource);
     }
     return resources;

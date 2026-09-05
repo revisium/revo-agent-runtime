@@ -62,6 +62,8 @@ export const composeSessionInterpreters = (
   });
   const interpreters: SessionInterpreterComposition['interpreters'] = [
     createEventAppendInterpreter({
+      secrets: (correlation) =>
+        resources.preparations.forSession(correlation)?.opening.environment?.secrets ?? [],
       clock: options.clock,
       sink: options.eventSink,
       ...(options.timer === undefined ? {} : { timer: options.timer }),

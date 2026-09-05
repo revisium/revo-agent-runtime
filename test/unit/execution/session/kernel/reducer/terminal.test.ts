@@ -107,6 +107,12 @@ test('closes an idle session only after cleanup, state removal, event, and outpu
       observedAt,
       observedAtMs: 60_001,
       type: 'session.close',
+    }).effects,
+  ).toEqual([
+    expect.objectContaining({
+      type: 'public.resolve',
+      callId: 'late_close',
+      resolution: { kind: 'close', result: { state: 'already_terminal' } },
     }),
-  ).toEqual({ effects: [], state: terminal });
+  ]);
 });

@@ -40,6 +40,7 @@ export interface SessionTimerState {
 }
 
 interface SessionStateBase {
+  readonly acceptedTurnIds?: readonly string[];
   readonly sessionId: string;
   readonly epoch: number;
   readonly incarnationId: string;

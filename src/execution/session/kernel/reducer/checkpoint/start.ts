@@ -56,6 +56,7 @@ export const startCheckpoint = (
     {
       checkpointId: command.checkpointId,
       correlation,
+      ...(state.acceptedTurnIds === undefined ? {} : { acceptedTurnIds: state.acceptedTurnIds }),
       cursor: nextSessionEventCursor(state),
       kind: 'checkpoint',
       maxBytes: state.limits.maxCheckpointBytes,

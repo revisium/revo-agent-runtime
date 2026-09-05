@@ -2,7 +2,10 @@ import type { AgentFault } from '../../../../contracts/manager/core.js';
 import type { AgentSessionOutputPublication } from '../../../../contracts/session/lifecycle/result.js';
 import type { SessionEffect } from '../../kernel/effect/session-effect.js';
 import type { SessionEffectOutput } from '../../runtime/effects/outcomes.js';
-import type { SessionInterpreterResources } from '../provider/opening/resources.js';
+import type {
+  PreparedSessionResource,
+  SessionInterpreterResources,
+} from '../provider/opening/resources.js';
 import type { SessionEffectHandler } from '../shared/effect/handler.js';
 import type { SessionObservationClock } from '../shared/observation/clock.js';
 
@@ -23,14 +26,12 @@ const publicationFault = (): AgentFault => ({
 export const createOutputPublicationInterpreter = (
   options: PublishOptions,
 ): SessionEffectHandler<'output.publish'> => {
-  const claimed = new Set<string>();
+  const claimed = new WeakMap<PreparedSessionResource, string>();
   return {
     type: 'output.publish',
     execute: (candidate, output): void => {
-      if (candidate.type !== 'output.publish' || claimed.has(candidate.correlation.effectId))
-        return;
-      claimed.add(candidate.correlation.effectId);
-      void publish(candidate, output, options);
+      if (candidate.type !== 'output.publish') return;
+      void publish(candidate, output, options, claimed);
     },
   };
 };
@@ -39,12 +40,19 @@ const publish = async (
   effect: PublishEffect,
   output: SessionEffectOutput,
   options: PublishOptions,
+  claimed: WeakMap<PreparedSessionResource, string>,
 ): Promise<void> => {
   const preparation = options.resources.preparations.forSession(effect.correlation);
   if (preparation === undefined) {
     emit(effect, output, options, 'failed');
     return;
   }
+  const owner = claimed.get(preparation);
+  if (owner !== undefined) {
+    if (owner !== effect.correlation.effectId) emit(effect, output, options, 'failed');
+    return;
+  }
+  claimed.set(preparation, effect.correlation.effectId);
   const collected = preparation.output.finalize();
   if (collected.stdout.byteLength + collected.stderr.byteLength > effect.maxBytes) {
     emit(effect, output, options, 'failed');

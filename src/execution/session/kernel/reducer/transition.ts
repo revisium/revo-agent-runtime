@@ -68,6 +68,7 @@ export const queueSessionEvent = <State extends SessionState>(
   state: State,
   event: AgentSessionEvent,
   expected: AgentSessionEventAppendPrecondition = defaultPrecondition(state),
+  redactionSecrets?: readonly string[],
 ): SessionTransition<State> => {
   const nextState = { ...state, nextEventSequence: state.nextEventSequence + 1 };
   if (state.events.inFlight !== undefined)
@@ -91,6 +92,7 @@ export const queueSessionEvent = <State extends SessionState>(
       correlation,
       event,
       expected,
+      ...(redactionSecrets === undefined ? {} : { redactionSecrets }),
       maxBytes: state.limits.maxEventBytes,
       timeoutMs: state.limits.eventSinkTimeoutMs,
       type: 'event.append',

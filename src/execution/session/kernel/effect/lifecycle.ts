@@ -16,6 +16,7 @@ interface PrepareSessionOpeningEffect {
 }
 
 type CaptureCheckpointEffect = {
+  readonly acceptedTurnIds?: readonly string[];
   readonly type: 'checkpoint.capture';
   readonly correlation: EffectCorrelation;
   readonly providerResourceId: string;

@@ -37,7 +37,8 @@ const setup = (
     context: { notify, request } as unknown as acp.ClientContext,
     providerSessionId: 'provider-session',
     release,
-    setObserver: (nextObserver) => observers.push(nextObserver),
+    flushUpdates: async () => undefined,
+    setObserver: (next) => observers.push(next),
   });
   return { broker, notify, observers, release, request, resource };
 };

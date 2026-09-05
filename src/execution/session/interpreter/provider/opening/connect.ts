@@ -14,6 +14,7 @@ import {
   systemSessionOperationTimer,
   type SessionOperationTimer,
 } from '../../shared/operation/timer.js';
+import { redactSessionValue } from '../../shared/value/redacted.js';
 import { protocolFault } from '../fault.js';
 import { mapProtocolCapabilities, mapProtocolInteraction } from '../updates.js';
 import { SessionUsageAccumulator } from '../usage.js';
@@ -83,7 +84,9 @@ const connectProvider = async (
         observedAt: observed.iso,
         observedAtMs: observed.milliseconds,
         providerResourceId,
-        request: mapProtocolInteraction(update.request),
+        request: mapProtocolInteraction(
+          redactSessionValue(update.request, preparation.opening.environment?.secrets ?? []),
+        ),
         scope: { kind: 'opening' },
         type: 'provider.interaction_requested',
       });

@@ -332,48 +332,63 @@ test('fails closed when a ready runtime omits negotiated session capabilities', 
   });
 });
 
-test('aborting a pending opening dispatches cancellation before detaching the signal', async () => {
-  const openingCall = Promise.withResolvers<PublicCallSettlement>();
-  const commands: PublicSessionCommand[] = [];
-  const runtimeFactory: SessionRuntimeFactory = {
-    createOpening: (opening) => ({
-      dispatch: (command) => {
-        commands.push(command);
-        if (command.type === 'session.cancel')
-          queueMicrotask(() =>
-            settlements.get(command.call.callId)?.({
-              resolution: { kind: 'cancel_session', result: { state: 'requested' } },
-              state: 'resolved',
-            }),
-          );
-        return { state: 'accepted' };
-      },
-      inspect: () => ({
-        acceptedAt: opening.opening.acceptedAt,
-        capabilities: sessionCapabilities,
-        outputDirectory: opening.opening.request.request.output.directory,
-        pendingInteractions: [],
-        pin: opening.opening.pin,
-        sessionId: opening.call.sessionId,
-        status: 'opening',
+test.each(['resolved', 'rejected'] as const)(
+  'aborting dispatches cancellation and contains its %s outcome',
+  async (cancelState) => {
+    const openingCall = Promise.withResolvers<PublicCallSettlement>();
+    const commands: PublicSessionCommand[] = [];
+    const runtimeFactory: SessionRuntimeFactory = {
+      createOpening: (opening) => ({
+        dispatch: (command) => {
+          commands.push(command);
+          if (command.type === 'session.cancel')
+            queueMicrotask(() =>
+              settlements.get(command.call.callId)?.(
+                cancelState === 'resolved'
+                  ? {
+                      resolution: { kind: 'cancel_session', result: { state: 'requested' } },
+                      state: 'resolved',
+                    }
+                  : {
+                      state: 'rejected',
+                      fault: {
+                        code: 'revo.agent.session_closed',
+                        message: 'Already closed.',
+                        phase: 'session_opening',
+                        retryable: false,
+                      },
+                    },
+              ),
+            );
+          return { state: 'accepted' };
+        },
+        inspect: () => ({
+          acceptedAt: opening.opening.acceptedAt,
+          capabilities: sessionCapabilities,
+          outputDirectory: opening.opening.request.request.output.directory,
+          pendingInteractions: [],
+          pin: opening.opening.pin,
+          sessionId: opening.call.sessionId,
+          status: 'opening',
+        }),
+        registerCall: (callId) => {
+          if (callId === opening.call.callId) return openingCall.promise;
+          return new Promise((resolve) => settlements.set(callId, resolve));
+        },
+        terminal: () => undefined,
+        whenQuiescent: async () => undefined,
       }),
-      registerCall: (callId) => {
-        if (callId === opening.call.callId) return openingCall.promise;
-        return new Promise((resolve) => settlements.set(callId, resolve));
-      },
-      terminal: () => undefined,
-      whenQuiescent: async () => undefined,
-    }),
-  };
-  const settlements = new Map<string, (value: PublicCallSettlement) => void>();
-  const { controller } = controllerSetup(runtimeFactory);
-  const abort = new AbortController();
-  const pending = controller.sessions.open(openInput(), { signal: abort.signal });
-  abort.abort();
-  await expect.poll(() => commands.map(({ type }) => type)).toContain('session.cancel');
-  openingCall.resolve({ resolution: { kind: 'session_ready' }, state: 'resolved' });
-  await expect(pending).resolves.toMatchObject({ sessionId: 'dlg_01' });
-});
+    };
+    const settlements = new Map<string, (value: PublicCallSettlement) => void>();
+    const { controller } = controllerSetup(runtimeFactory);
+    const abort = new AbortController();
+    const pending = controller.sessions.open(openInput(), { signal: abort.signal });
+    abort.abort();
+    await expect.poll(() => commands.map(({ type }) => type)).toContain('session.cancel');
+    openingCall.resolve({ resolution: { kind: 'session_ready' }, state: 'resolved' });
+    await expect(pending).resolves.toMatchObject({ sessionId: 'dlg_01' });
+  },
+);
 
 test('aborting ignores an opening already reconciled as terminal', async () => {
   const openingCall = Promise.withResolvers<PublicCallSettlement>();

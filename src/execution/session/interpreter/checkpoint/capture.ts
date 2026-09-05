@@ -85,6 +85,7 @@ const emitCaptured = (
   options: CaptureOptions,
 ): void => {
   const payload = encodeSessionContinuation({
+    ...(effect.acceptedTurnIds === undefined ? {} : { acceptedTurnIds: effect.acceptedTurnIds }),
     continuation,
     maxBytes: effect.maxBytes,
     secrets: Object.values(preparation.opening.environment?.secrets ?? {}),

@@ -2,6 +2,8 @@ import type { PublicSessionCommand } from '../../command/public.js';
 import type { SessionState } from '../../model/session-state.js';
 
 export type OpeningState = Extract<SessionState, { readonly status: 'opening' }>;
+export const openingCleanupInProgress = (state: OpeningState): boolean =>
+  state.progress.stage === 'cleaning_process' || state.progress.stage === 'removing_state';
 export type OpeningCommand = Extract<
   PublicSessionCommand,
   { readonly type: 'session.open' | 'session.resume' }
@@ -14,6 +16,7 @@ export const createOpeningSessionState = (command: OpeningCommand): OpeningState
     opening.request.kind === 'resume' ? opening.request.request.token.cursor : undefined;
   const streamId = previousCursor?.streamId ?? opening.streamId;
   return {
+    ...(opening.acceptedTurnIds === undefined ? {} : { acceptedTurnIds: opening.acceptedTurnIds }),
     acceptedAt: opening.acceptedAt,
     acceptedAtMs: opening.acceptedAtMs,
     callId: command.call.callId,

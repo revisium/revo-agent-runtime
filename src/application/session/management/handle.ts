@@ -15,6 +15,7 @@ export const createManagedSessionHandle = (
   runtime: SessionCommandRuntime,
   opening: PreparedManagedSessionOpening,
 ): AgentSession => {
+  const { limits, epoch, pin } = opening;
   const snapshot = runtime.inspect();
   if (snapshot?.capabilities === undefined)
     throw sessionManagerError(
@@ -25,19 +26,19 @@ export const createManagedSessionHandle = (
     capabilities: snapshot.capabilities,
     clock: options.clock,
     decodeResponse: (value) => {
-      const decoded = decodeRespondAgentSessionRequest(value, opening.limits);
+      const decoded = decodeRespondAgentSessionRequest(value, limits);
       interactionRequestId(decoded.requestId);
       return decoded;
     },
     decodeSend: (value) => {
-      const decoded = decodeSendAgentSessionInput(value, opening.limits);
+      const decoded = decodeSendAgentSessionInput(value, limits);
       turnId(decoded.turnId);
       return decoded;
     },
-    epoch: opening.epoch,
+    epoch,
     nextIdentity: options.nextIdentity,
     onSettled: () => registry.reconcile(snapshot.sessionId),
-    pin: opening.pin,
+    pin,
     runtime,
     sessionId: snapshot.sessionId,
   });

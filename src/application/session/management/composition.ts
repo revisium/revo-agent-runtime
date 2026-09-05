@@ -11,6 +11,7 @@ export type NormalizedAgentSessionManagerOptions = Omit<AgentSessionManagerOptio
 };
 
 interface AgentSessionCompositionInput {
+  readonly redactionSecrets: readonly string[];
   readonly agents: readonly AgentDescriptor[];
   readonly definitions: SealedAgentRegistry;
   readonly options: NormalizedAgentSessionManagerOptions;

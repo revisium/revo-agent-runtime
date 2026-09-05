@@ -1,6 +1,7 @@
 import type { TurnStartedEvent } from '../../../../../contracts/session/events/event.js';
 import type { PublicSessionCommand } from '../../command/public.js';
 import type { SessionState } from '../../model/session-state.js';
+import { rejectPublicCommand } from '../public/settlement.js';
 import { resetInactivity } from '../timer/inactivity.js';
 import {
   appendEffect,
@@ -19,22 +20,31 @@ export const rejectBusyTurn = (
   state: RunningState,
   command: SendTurnCommand,
 ): SessionTransition => {
-  const correlation = nextEffectCorrelation(state, command.call.turnId);
-  return appendEffect(unchangedTransition(state), {
-    callId: command.call.callId,
-    correlation,
-    fault: {
-      code: 'revo.agent.session_busy',
-      message: 'The session already has an active turn.',
-      phase: 'session_running',
-      retryable: true,
-    },
-    type: 'public.reject',
-  });
+  return rejectPublicCommand(
+    state,
+    command,
+    'revo.agent.session_busy',
+    'The session already has an active turn.',
+  );
 };
 
 export const startTurn = (state: IdleState, command: SendTurnCommand): SessionTransition => {
   if (command.call.turnId !== command.input.turnId) return unchangedTransition(state);
+  const accepted = state.acceptedTurnIds ?? [];
+  if (accepted.includes(command.input.turnId))
+    return rejectPublicCommand(
+      state,
+      command,
+      'revo.agent.turn_duplicate',
+      'The turn identity was already accepted.',
+    );
+  if (accepted.length >= 10_000)
+    return rejectPublicCommand(
+      state,
+      command,
+      'revo.agent.session_identity_capacity',
+      'The session turn identity capacity is exhausted.',
+    );
   const event: TurnStartedEvent = {
     eventId: nextSessionEventId(state),
     ...(command.metadata === undefined ? {} : { metadata: command.metadata }),
@@ -50,6 +60,7 @@ export const startTurn = (state: IdleState, command: SendTurnCommand): SessionTr
     queueSessionEvent(
       {
         ...state,
+        acceptedTurnIds: [...accepted, command.input.turnId],
         status: 'running',
         turn: {
           handleCallId: command.call.callId,

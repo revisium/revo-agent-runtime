@@ -170,7 +170,7 @@ test('session and turn handles hide command correlation from the consumer', asyn
     status: 'completed',
   });
   await expect(turn.cancel()).resolves.toMatchObject({ state: 'already_completed' });
-  expect(runtime.commands.map(({ type }) => type)).toEqual(['turn.send', 'turn.cancel']);
+  expect(runtime.commands.map(({ type }) => type)).toEqual(['turn.send']);
   expect(runtime.commands[0]).toMatchObject({
     call: { epoch: 1, sessionId: 'dlg_01', turnId: 'trn_01' },
     input: { prompt: 'Do the work', turnId: 'trn_01' },

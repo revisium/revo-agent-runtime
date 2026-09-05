@@ -23,6 +23,7 @@ import {
 } from '../mailbox/credits.js';
 import { SerializedMailboxDrain } from '../mailbox/drain.js';
 import { SessionMailboxQueue } from '../mailbox/queue.js';
+import { ownedFrozenValue } from '../resources/owned.js';
 import type { SessionClock } from '../timing/clock.js';
 import { SessionTimerRegistry } from '../timing/timers.js';
 import type { SessionCommandRuntime } from './port.js';
@@ -39,6 +40,7 @@ type CoalescedControlCommand = Extract<
 >;
 
 export interface SessionActorOptions {
+  readonly release?: (session: { readonly sessionId: string; readonly epoch: number }) => void;
   readonly initialState: SessionState;
   readonly reducer: SessionReducer;
   readonly dispatcher: SessionEffectDispatcher;
@@ -66,10 +68,12 @@ export class SessionActor implements SessionCommandRuntime {
   readonly #drain: SerializedMailboxDrain<ActorEnvelope>;
   readonly #timers: SessionTimerRegistry;
   readonly #output: SessionEffectOutputController;
+  private readonly options: Omit<SessionActorOptions, 'initialState'>;
   #state: SessionState;
 
-  constructor(private readonly options: SessionActorOptions) {
-    this.#state = options.initialState;
+  constructor({ initialState, ...options }: SessionActorOptions) {
+    this.options = options;
+    this.#state = initialState;
     this.#drain = new SerializedMailboxDrain(this.#queue, (envelope) => this.#consume(envelope));
     this.#timers = new SessionTimerRegistry(options.clock, (command) => this.#enqueue({ command }));
     this.#output = new SessionEffectOutputController(
@@ -90,11 +94,13 @@ export class SessionActor implements SessionCommandRuntime {
   }
 
   inspect() {
-    return projectSessionSnapshot(this.#state);
+    const snapshot = projectSessionSnapshot(this.#state);
+    return snapshot === undefined ? undefined : ownedFrozenValue(snapshot);
   }
 
   terminal() {
-    return projectTerminalRecord(this.#state);
+    const record = projectTerminalRecord(this.#state);
+    return record === undefined ? undefined : ownedFrozenValue(record);
   }
 
   registerCall(callId: string): Promise<PublicCallSettlement> {
@@ -119,8 +125,10 @@ export class SessionActor implements SessionCommandRuntime {
       this.#tracker.size === 0 &&
       this.#calls.size === 0 &&
       this.#output.blockedUpdates === 0
-    )
+    ) {
+      this.#releaseTerminalResources();
       return;
+    }
     await Promise.all([this.#tracker.whenIdle(), this.#calls.whenEmpty()]);
     return this.whenQuiescent();
   }
@@ -169,6 +177,22 @@ export class SessionActor implements SessionCommandRuntime {
       this.#state.events.pending.length,
     );
     this.#output.releaseBlocked(this.#state.events.pending.length);
+    this.#releaseTerminalResources();
+  }
+
+  #releaseTerminalResources(): void {
+    if (
+      this.#queue.size !== 0 ||
+      this.#tracker.size !== 0 ||
+      this.#calls.size !== 0 ||
+      this.#output.blockedUpdates !== 0
+    )
+      return;
+    const terminal =
+      this.#state.status === 'cleanup_uncertain' ||
+      projectTerminalRecord(this.#state) !== undefined;
+    if (terminal)
+      this.options.release?.({ sessionId: this.#state.sessionId, epoch: this.#state.epoch });
   }
 
   #finishOutcome(command: SessionCommand): void {

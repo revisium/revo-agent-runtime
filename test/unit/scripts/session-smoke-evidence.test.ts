@@ -24,8 +24,9 @@ test('formats cancellation evidence without provider output', () => {
       eventCount: 5,
       providerId: 'claude-acp',
       status: 'cancelled',
+      nextTurnStatus: 'completed',
     }),
-  ).toBe('claude-acp-cancel: status=cancelled; events=5; cleanup=confirmed');
+  ).toBe('claude-acp-cancel: status=cancelled; nextTurn=completed; events=5; cleanup=confirmed');
 });
 
 test('formats sequential interaction evidence without response values', () => {

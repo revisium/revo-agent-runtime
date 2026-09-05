@@ -264,8 +264,16 @@ export const runSessionCancellationScenario = async ({
     const result = await turn.result();
     status = result.status;
     if (status !== 'cancelled') throw new Error(`Cancelled session turn ended with ${status}.`);
+    const next = await (
+      await session.send({
+        prompt: 'Do not use tools. Reply with a short acknowledgement.',
+        turnId: 'trn_after_cancel',
+      })
+    ).result();
+    requireCompleted(next, 'After cancellation');
     await session.close('manual cancellation smoke complete');
     return {
+      nextTurnStatus: next.status,
       cleanup: requireClean(state),
       eventCount: state.events.length,
       providerId: definition.id,

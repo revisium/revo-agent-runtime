@@ -14,6 +14,7 @@ import { systemSessionClock } from '../../execution/session/runtime/timing/clock
 import type { SessionProtocolDriver } from '../../protocol/session/port/driver.js';
 
 export interface SessionComposerServices {
+  readonly hostEnvironment: () => Readonly<Record<string, string | undefined>>;
   readonly digest: Sha256Digest;
   readonly driver: SessionProtocolDriver;
   readonly executablePreflight: ExecutablePreflight;
@@ -28,7 +29,7 @@ export const createAgentSessionComposer = (
   services: SessionComposerServices,
 ): AgentSessionComposer => {
   const composer: AgentSessionComposer = {
-    create: ({ agents, definitions, options }) => {
+    create: ({ agents, definitions, options, redactionSecrets }) => {
       const preparer = createSessionOpeningPreparer({
         definitions,
         executablePreflight: services.executablePreflight,
@@ -46,10 +47,14 @@ export const createAgentSessionComposer = (
         spawner: services.spawner,
       });
       const runtimeFactory = new SessionActorFactory({
+        release: (identity) =>
+          composition.resources.preparations.release({ ...identity, effectId: 'release' }),
         dispatcher: new SessionEffectDispatcher(composition.interpreters),
         reducer: reduceSession,
       });
       return createManagedAgentSessionController({
+        redactionSecrets,
+        hostEnvironment: services.hostEnvironment,
         activeStateSink: options.activeStateSink,
         agents,
         clock: systemSessionClock,

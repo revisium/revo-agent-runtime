@@ -59,10 +59,20 @@ it('finalizes redacted output and publishes it exactly once', async () => {
   const interpreter = createOutputPublicationInterpreter({ clock, resources });
   interpreter.execute(effect, recorded.output);
   interpreter.execute(effect, recorded.output);
+  interpreter.execute(
+    { ...effect, correlation: { ...effect.correlation, effectId: 'duplicate-publication' } },
+    recorded.output,
+  );
   await flushMicrotasks(12);
 
   expect(publish).toHaveBeenCalledTimes(1);
-  expect(recorded.outcomes).toEqual([expect.objectContaining({ type: 'output.published' })]);
+  expect(recorded.outcomes).toEqual([
+    expect.objectContaining({
+      type: 'output.failed',
+      correlation: expect.objectContaining({ effectId: 'duplicate-publication' }),
+    }),
+    expect.objectContaining({ type: 'output.published' }),
+  ]);
 });
 
 it('classifies a thrown publication as uncertain', async () => {

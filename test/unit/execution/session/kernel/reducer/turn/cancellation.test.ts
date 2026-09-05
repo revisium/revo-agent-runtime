@@ -120,7 +120,7 @@ test('rejects a second turn and graceful close while a turn is active', () => {
   });
 });
 
-test('ignores cancellation for another turn identity', () => {
+test('rejects cancellation for another turn identity without cancelling the active prompt', () => {
   const { state } = promptingTurn();
   const command = {
     call: { callId: 'cancel_01', epoch: 1, sessionId: 'session_01', turnId: 'turn_01' },
@@ -129,14 +129,24 @@ test('ignores cancellation for another turn identity', () => {
     turnId: 'turn_other',
     type: 'turn.cancel',
   } as const;
-  expect(reduceSession(state, command)).toEqual({ effects: [], state });
+  expect(reduceSession(state, command).effects).toEqual([
+    expect.objectContaining({
+      type: 'public.reject',
+      fault: expect.objectContaining({ code: 'revo.agent.session_busy' }),
+    }),
+  ]);
   expect(
     reduceSession(state, {
       ...command,
       call: { ...command.call, turnId: 'turn_other' },
       turnId: 'turn_01',
+    }).effects,
+  ).toEqual([
+    expect.objectContaining({
+      type: 'public.reject',
+      fault: expect.objectContaining({ code: 'revo.agent.session_busy' }),
     }),
-  ).toEqual({ effects: [], state });
+  ]);
 });
 
 test('coalesces cancellation during turn admission and provider settlement', () => {

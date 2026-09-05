@@ -64,6 +64,7 @@ type OutcomeByType = {
 };
 
 const outcomes = {
+  'process.exited': { ...failed, type: 'process.exited', processResourceId: 'process_01' },
   'opening.preparation.succeeded': {
     ...base,
     preparationId: 'preparation_01',

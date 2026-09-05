@@ -56,5 +56,10 @@ test('stale and unrelated commands are no-ops while opening', () => {
     createOpeningSessionState(command),
     sessionOpeningCommand('resume'),
   );
-  expect(wrongMode.effects).toEqual([]);
+  expect(wrongMode.effects).toEqual([
+    expect.objectContaining({
+      type: 'public.reject',
+      fault: expect.objectContaining({ code: 'revo.agent.session_busy' }),
+    }),
+  ]);
 });

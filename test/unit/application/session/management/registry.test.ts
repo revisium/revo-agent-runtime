@@ -51,6 +51,18 @@ const handle = { sessionId: 'dlg_one' } as AgentSession;
 const registry = (overrides: Parameters<typeof resolveAgentSessionManagerLimits>[0] = {}) =>
   new ManagedSessionRegistry(resolveAgentSessionManagerLimits(overrides));
 
+test('capacity rejection does not consume an unaccepted resume token', () => {
+  const subject = registry({ maxActiveSessions: 1 });
+  subject.register('dlg_busy', 1, runtime(snapshot('dlg_busy')));
+  expect(() => subject.claimResume('dlg_resume', 'tok_retry')).toThrowError(
+    expect.objectContaining({
+      fault: expect.objectContaining({ code: 'revo.agent.session_capacity' }),
+    }),
+  );
+  subject.register('dlg_busy', 1, runtime(undefined, terminal('dlg_busy')));
+  expect(subject.claimResume('dlg_resume', 'tok_retry')).toBe(1);
+});
+
 test('registry exposes active handles, runtimes, snapshots, and exact filters', () => {
   const subject = registry();
   const active = runtime(snapshot('dlg_one'));

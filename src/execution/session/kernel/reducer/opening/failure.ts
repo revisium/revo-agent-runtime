@@ -5,6 +5,7 @@ import {
   isPersistenceOutcome,
   type PersistenceOutcome,
 } from '../persistence/outcome.js';
+import { clearAllTimers } from '../timer/all.js';
 import {
   appendEffect,
   nextEffectCorrelation,
@@ -44,7 +45,7 @@ export const failOpeningBeforeProcess = (
 
 const uncertainOpeningCleanup = (state: OpeningState, fault: AgentFault): SessionTransition => {
   const { callId, progress: _progress, ...base } = state;
-  let transition: SessionTransition = {
+  const transition: SessionTransition = {
     effects: [],
     state: {
       ...base,
@@ -55,7 +56,6 @@ const uncertainOpeningCleanup = (state: OpeningState, fault: AgentFault): Sessio
       timers: [],
     },
   };
-  for (const timer of state.timers) transition = cancelOpeningTimer(transition, timer);
   const correlation = nextEffectCorrelation(transition.state);
   return appendEffect(transition, { callId, correlation, fault, type: 'public.reject' });
 };
@@ -67,12 +67,22 @@ export const beginOpeningProcessCleanup = (
 ): SessionTransition => {
   if (!('process' in state.progress))
     return failOpeningBeforeProcess(state, fault, state.acceptedAt);
-  const correlation = nextEffectCorrelation(state);
+  let transition = clearAllTimers(unchangedTransition(state));
+  if ('providerResourceId' in state.progress) {
+    transition = appendEffect(transition, {
+      correlation: nextEffectCorrelation(transition.state),
+      providerResourceId: state.progress.providerResourceId,
+      reason: fault.message,
+      timeoutMs: state.limits.operationTimeoutMs,
+      type: 'provider.close',
+    });
+  }
+  const correlation = nextEffectCorrelation(transition.state);
   return appendEffect(
     {
-      effects: [],
+      effects: transition.effects,
       state: {
-        ...state,
+        ...transition.state,
         progress: {
           afterCleanup,
           correlation,

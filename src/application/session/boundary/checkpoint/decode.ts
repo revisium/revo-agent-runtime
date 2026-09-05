@@ -153,10 +153,10 @@ const decodeEnvelope = (
     const value = decodeImmutableJsonObject(parsed, {
       maxBytes: maximumBytes,
       maxDepth: 32,
-      maxNodes: 4_096,
+      maxNodes: 14_096,
     });
     if (
-      !exactKeys(value, ['provider', 'schemaVersion', 'usageBaseline']) ||
+      !exactKeys(value, ['provider', 'schemaVersion', 'usageBaseline'], ['acceptedTurnIds']) ||
       value.schemaVersion !== 'agent-session-continuation-envelope/v1'
     )
       return invalidToken();
@@ -166,9 +166,30 @@ const decodeEnvelope = (
       !isJsonObject(value.provider.data)
     )
       return invalidToken();
+    const accepted = value.acceptedTurnIds;
+    if (
+      accepted !== undefined &&
+      (!Array.isArray(accepted) ||
+        accepted.length > 10_000 ||
+        accepted.some(
+          (id) =>
+            typeof id !== 'string' ||
+            id.length === 0 ||
+            new TextEncoder().encode(id).byteLength > 256,
+        ) ||
+        new Set(accepted).size !== accepted.length)
+    )
+      return invalidToken();
+    const acceptedTurnIds =
+      accepted === undefined ? undefined : Object.freeze(accepted.map((id) => boundedString(id)));
     return Object.freeze({
+      ...(acceptedTurnIds === undefined ? {} : { acceptedTurnIds }),
       provider: Object.freeze({
-        data: value.provider.data,
+        data: decodeImmutableJsonObject(value.provider.data, {
+          maxBytes: maximumBytes,
+          maxDepth: 32,
+          maxNodes: 4_096,
+        }),
         format: boundedString(value.provider.format, 256),
       }),
       schemaVersion: 'agent-session-continuation-envelope/v1',

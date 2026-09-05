@@ -114,6 +114,82 @@ interactions, update kinds, cancellation, or native resume. `checkpoint()`,
 `hibernate()`, and `resume()` do not synthesize replay: native continuation is
 available only when both the definition and provider advertise it.
 
+### Command and deadline semantics
+
+Only one turn may be active in a session. A cancellation result of `requested`
+acknowledges the request, not completion: await `turn.result()` before sending
+another turn. The runtime waits for the original provider prompt to settle.
+If cancellation cannot be confirmed within its bounded control-operation
+deadline, the turn fails and the session closes with process cleanup; the
+uncertain provider is never reused for another turn.
+
+Turn IDs are unique for the lifetime of the logical session, including native
+continuations. Duplicate IDs reject with `revo.agent.turn_duplicate`; they do
+not replay a result or send another prompt. The ledger retains at most 10,000
+accepted IDs and then rejects new turns with
+`revo.agent.session_identity_capacity`. Checkpoint byte limits still apply to
+the complete continuation envelope. A resume rejected for capacity before
+admission does not consume its token; a token accepted for resume is once-only.
+
+Calling `cancel()` on a completed turn returns `already_completed` with its
+result, including after subsequent turns. Repeated terminal session
+`close()`/`cancel()` calls return `already_terminal`. Other commands on a terminal
+handle reject with `revo.agent.session_closed`; commands unavailable during a
+transition reject with `revo.agent.session_busy` rather than remaining pending.
+Opening sessions can be cancelled or answered through
+`manager.sessions.cancel(id)` / `respond(id, request)` before `open()` resolves.
+
+`operationTimeoutMs` bounds individual control operations, not the whole agent
+turn. Session wall-clock and inactivity deadlines bound long-running work.
+While a human interaction is pending, inactivity timing is paused; the
+wall-clock deadline still applies. An unexpected provider-process exit also
+ends the session without waiting for a new consumer command.
+
+Snapshots, turn results, terminal records, events, and sink preconditions are
+owned immutable values. Manager `redaction.secrets` and explicit launch-context
+secrets protect provider presentation text, journal metadata, results, and
+process output. Opaque identities and protocol values are not rewritten: if
+they contain a declared secret, delivery fails closed. Do not put credentials
+in identifiers or consumer metadata. Launch preparations and buffered output
+are released after terminal quiescence independently of terminal-record
+retention. Output that arrives after release is ignored.
+
+### Durable events and consumer subscriptions
+
+Session events are delivered through `sessions.eventSink`, not
+`manager.subscribe()` (which observes invocations). The consumer owns storage,
+replay, and subscriber fan-out. Publish to subscribers only after committing
+the append. A listener failure must not roll back that durable append.
+
+`append(event, { expected, signal })` must atomically verify `expected` and
+append the event. `empty` requires an empty journal; `cursor` requires the
+matching last event; `hibernation_token` additionally checks and claims the
+resume-token identity/digest against the matching predecessor. A read followed
+by an unrelated write is not an atomic check. For example, a consumer can map
+the contract onto its own transactional storage API:
+
+```ts
+const eventSink = {
+  append: (event, { expected, signal }) =>
+    journal.transaction(
+      async (tx) => {
+        if (!(await tx.matches(event.sessionId, expected))) {
+          return { state: 'conflict' };
+        }
+        await tx.appendAndClaimContinuation(event, expected);
+        return { state: 'appended' };
+      },
+      { signal },
+    ),
+};
+```
+
+The journal/transaction methods above are consumer-defined, not runtime APIs.
+Cancellation of the append signal does not prove that a write was rolled back;
+the sink must report the actual outcome, and the runtime fails closed if that
+outcome remains unknown. Recovery uses owner-fenced active-state snapshots;
+it does not reconstruct an agent conversation from the event journal.
+
 ## Configuration
 
 `inspectConfiguration()` returns an immutable

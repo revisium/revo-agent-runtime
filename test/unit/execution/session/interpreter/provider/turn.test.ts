@@ -29,6 +29,7 @@ const capabilities = {
 
 const prepare = async (
   steps: Parameters<typeof createControllableSessionProtocolDriver>[0]['prompts'],
+  withSecrets = true,
 ) => {
   const driver = createControllableSessionProtocolDriver({
     openings: [{ kind: 'fresh', outcome: { capabilities, status: 'opened' }, steps: [] }],
@@ -51,7 +52,7 @@ const prepare = async (
   const resources = createSessionInterpreterResources();
   const openingDescriptor = {
     ...sessionOpeningCommand().opening,
-    environment: { secrets: ['secret'], values: { token: 'secret' } },
+    ...(withSecrets ? { environment: { secrets: ['secret'], values: { token: 'secret' } } } : {}),
     usageBaseline: { inputTokens: 10, scope: 'session_cumulative' as const, totalTokens: 10 },
   };
   const preparation: PreparedSessionResource = {
@@ -92,6 +93,43 @@ const promptEffect = {
   timeoutMs: 100,
   type: 'provider.prompt' as const,
 };
+
+test('contains asynchronous prompt failure without leaking the provider error', async () => {
+  const { resources } = await prepare([]);
+  resources.providers.get('provider-1')!.session.prompt = () => ({
+    cancel: async () => ({ status: 'requested' }),
+    completion: Promise.reject(new Error('private provider detail')),
+  });
+  const recorded = recordingSessionEffectOutput();
+  createProviderTurnInterpreter({ clock, digest, resources }).execute(
+    promptEffect,
+    recorded.output,
+  );
+  await flushMicrotasks(16);
+  expect(recorded.outcomes.at(-1)).toMatchObject({ type: 'provider.prompt.failed' });
+  expect(JSON.stringify(recorded.outcomes)).not.toContain('private provider detail');
+});
+
+test('publishes non-message updates without an environment snapshot', async () => {
+  const { resources } = await prepare(
+    [
+      {
+        outcome: { status: 'completed' },
+        steps: [{ type: 'update', value: { type: 'progress', message: 'Working' } }],
+      },
+    ],
+    false,
+  );
+  const recorded = recordingSessionEffectOutput();
+  createProviderTurnInterpreter({ clock, digest, resources }).execute(
+    promptEffect,
+    recorded.output,
+  );
+  await flushMicrotasks(16);
+  expect(recorded.updates).toContainEqual(
+    expect.objectContaining({ type: 'provider.progress', message: 'Working' }),
+  );
+});
 
 it('streams normalized updates in order and restores cumulative usage', async () => {
   const { resources } = await prepare([
@@ -285,24 +323,24 @@ test.each([
   expect(recorded.outcomes.at(-1)).toMatchObject(expected);
 });
 
-test('times out a provider prompt and requests bounded cancellation', async () => {
+test('keeps a prompt pending until completion or provider resource release', async () => {
   const { driver, resources } = await prepare([
     { outcome: { status: 'completed' }, steps: [{ barrier: 'never', type: 'wait' }] },
   ]);
-  const immediateTimer = {
-    schedule: (_milliseconds: number, callback: () => void) => {
-      queueMicrotask(callback);
-      return { cancel: () => undefined };
-    },
-  };
   const recorded = recordingSessionEffectOutput();
-  createProviderTurnInterpreter({ clock, digest, resources, timer: immediateTimer }).execute(
+  createProviderTurnInterpreter({ clock, digest, resources }).execute(
     promptEffect,
     recorded.output,
   );
   await flushMicrotasks(16);
-  expect(driver.calls.some(({ type }) => type === 'prompt.cancel')).toBe(true);
-  expect(recorded.outcomes.at(-1)).toMatchObject({ type: 'provider.prompt.timed_out' });
+  expect(driver.calls.some(({ type }) => type === 'prompt.cancel')).toBe(false);
+  expect(recorded.outcomes.map(({ type }) => type)).toEqual(['provider.prompt.accepted']);
+  resources.prompts.takeProvider('provider-1');
+  await flushMicrotasks(16);
+  expect(recorded.outcomes.at(-1)).toMatchObject({
+    type: 'provider.prompt.completed',
+    outcome: { status: 'interrupted' },
+  });
 });
 
 test('publishes tool, plan, and turn-scoped interaction updates', async () => {
