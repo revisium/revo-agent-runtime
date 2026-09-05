@@ -50,13 +50,9 @@ const cleanup = async (
     emit(effect, output, options, false);
     return;
   }
-  let operation: Promise<ProcessCleanupOutcome>;
-  try {
-    operation = process.terminateAndReap();
-  } catch {
-    emit(effect, output, options, false);
-    return;
-  }
+  const operation: Promise<ProcessCleanupOutcome> = Promise.resolve().then(() =>
+    process.terminateAndReap(),
+  );
   const settlement = await settleOperation({
     onTimeout: () => undefined,
     operation,

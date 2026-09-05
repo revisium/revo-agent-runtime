@@ -51,6 +51,39 @@ const safeString = (value: unknown, maxBytes = 256): string => {
   return value;
 };
 
+const containerOf = (value: unknown, secrets: readonly string[]): object | undefined => {
+  if (value === null || typeof value === 'boolean') return undefined;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return invalid();
+    return undefined;
+  }
+  if (typeof value === 'string') {
+    if (secrets.some((secret) => secret.length > 0 && value.includes(secret))) return invalid();
+    return undefined;
+  }
+  if (typeof value !== 'object') return invalid();
+  return value;
+};
+
+const objectValues = (value: object): readonly unknown[] => {
+  const prototype: unknown = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return invalid();
+  const values: unknown[] = [];
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== 'string' || forbiddenKeys.has(key.toLowerCase())) return invalid();
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor?.enumerable !== true || !Object.hasOwn(descriptor, 'value')) return invalid();
+    values.push(descriptor.value);
+  }
+  return values;
+};
+
+const containerValues = (value: object): readonly unknown[] => {
+  if (!Array.isArray(value)) return objectValues(value);
+  if (Object.getPrototypeOf(value) !== Array.prototype) return invalid();
+  return value;
+};
+
 const inspectData = (source: unknown, secrets: readonly string[]): Readonly<JsonObject> => {
   let cloned: unknown;
   try {
@@ -67,32 +100,12 @@ const inspectData = (source: unknown, secrets: readonly string[]): Readonly<Json
   for (let current = pending.pop(); current !== undefined; current = pending.pop()) {
     nodes += 1;
     if (nodes > 4_096 || current.depth > 32) return invalid();
-    const value = current.value;
-    if (value === null || typeof value === 'boolean') continue;
-    if (typeof value === 'number') {
-      if (!Number.isFinite(value)) return invalid();
-      continue;
-    }
-    if (typeof value === 'string') {
-      if (secrets.some((secret) => secret.length > 0 && value.includes(secret))) return invalid();
-      continue;
-    }
-    if (typeof value !== 'object') return invalid();
-    if (seen.has(value)) return invalid();
-    seen.add(value);
-    const prototype: unknown = Object.getPrototypeOf(value);
-    if (Array.isArray(value)) {
-      if (prototype !== Array.prototype) return invalid();
-      for (const item of value) pending.push({ depth: current.depth + 1, value: item });
-      continue;
-    }
-    if (prototype !== Object.prototype && prototype !== null) return invalid();
-    for (const key of Reflect.ownKeys(value)) {
-      if (typeof key !== 'string' || forbiddenKeys.has(key.toLowerCase())) return invalid();
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor?.enumerable !== true || !Object.hasOwn(descriptor, 'value')) return invalid();
-      pending.push({ depth: current.depth + 1, value: descriptor.value });
-    }
+    const container = containerOf(current.value, secrets);
+    if (container === undefined) continue;
+    if (seen.has(container)) return invalid();
+    seen.add(container);
+    for (const child of containerValues(container))
+      pending.push({ depth: current.depth + 1, value: child });
   }
   return cloned;
 };

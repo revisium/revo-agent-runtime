@@ -50,12 +50,9 @@ const prepareOpening = async (
   },
 ): Promise<void> => {
   const controller = new AbortController();
-  let operation: ReturnType<SessionOpeningPreparer['prepare']>;
-  try {
-    operation = options.preparer.prepare(effect.opening, { signal: controller.signal });
-  } catch {
-    operation = Promise.reject(new Error('Session opening preparation failed synchronously.'));
-  }
+  const operation: ReturnType<SessionOpeningPreparer['prepare']> = Promise.resolve().then(() =>
+    options.preparer.prepare(effect.opening, { signal: controller.signal }),
+  );
   const settlement = await settleOperation({
     onTimeout: () => controller.abort(),
     operation,

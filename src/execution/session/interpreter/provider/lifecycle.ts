@@ -50,13 +50,9 @@ const cancelTurn = async (
     emitCancellationFailure(effect, output, options, false);
     return;
   }
-  let operation: Promise<SessionProtocolCancellationOutcome>;
-  try {
-    operation = resource.prompt.cancel(effect.reason);
-  } catch {
-    emitCancellationFailure(effect, output, options, false);
-    return;
-  }
+  const operation: Promise<SessionProtocolCancellationOutcome> = Promise.resolve().then(() =>
+    resource.prompt.cancel(effect.reason),
+  );
   const settlement = await settleOperation({
     onTimeout: () => undefined,
     operation,
@@ -106,22 +102,15 @@ const emitCancellationFailure = (
 const closeProvider = async (effect: CloseEffect, options: LifecycleOptions): Promise<void> => {
   for (const resource of options.resources.prompts.takeProvider(effect.providerResourceId)) {
     if (resource.cancellationRequested) continue;
-    try {
-      void resource.prompt.cancel(effect.reason).catch(() => undefined);
-    } catch {
-      // Process cleanup remains the authoritative terminal fence.
-    }
+    void Promise.resolve()
+      .then(() => resource.prompt.cancel(effect.reason))
+      .catch(() => undefined);
   }
   const endpoint =
     options.resources.providers.take(effect.providerResourceId)?.session ??
     options.resources.providerOpenings.takeByResourceId(effect.providerResourceId);
   if (endpoint === undefined) return;
-  let operation;
-  try {
-    operation = endpoint.close(effect.reason);
-  } catch {
-    return;
-  }
+  const operation = Promise.resolve().then(() => endpoint.close(effect.reason));
   await settleOperation({
     onTimeout: () => undefined,
     operation,

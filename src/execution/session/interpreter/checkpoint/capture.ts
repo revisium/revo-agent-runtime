@@ -45,21 +45,21 @@ const capture = async (
     emitFailure(effect, output, options, 'failed');
     return;
   }
-  let operation: Promise<SessionProtocolCheckpointOutcome>;
-  try {
-    operation = provider.session.checkpoint();
-  } catch {
-    emitFailure(effect, output, options, 'failed');
-    return;
-  }
+  const operation: Promise<SessionProtocolCheckpointOutcome> = Promise.resolve().then(() =>
+    provider.session.checkpoint(),
+  );
   const settlement = await settleOperation({
     onTimeout: () => undefined,
     operation,
     timeoutMs: effect.timeoutMs,
     timer: options.timer ?? systemSessionOperationTimer,
   });
-  if (settlement.state !== 'fulfilled' || settlement.phase !== 'initial') {
+  if (settlement.state === 'unknown' || settlement.phase === 'late') {
     emitFailure(effect, output, options, 'timed_out');
+    return;
+  }
+  if (settlement.state === 'rejected') {
+    emitFailure(effect, output, options, 'failed');
     return;
   }
   if (settlement.value.status !== 'captured') {
@@ -144,40 +144,38 @@ const emitFailure = (
   status: 'unsupported' | 'failed' | 'timed_out' | 'invalid',
   failure?: Parameters<typeof protocolFault>[0],
 ): void => {
-  const fault: AgentFault =
-    status === 'timed_out'
-      ? {
-          code: 'revo.agent.timeout',
-          message: 'Checkpoint capture timed out.',
-          phase: 'session_checkpointing',
-          retryable: false,
-        }
-      : status === 'invalid'
-        ? {
-            code: 'revo.agent.checkpoint_invalid',
-            message: 'Provider continuation is invalid.',
-            phase: 'session_checkpointing',
-            retryable: false,
-          }
-        : status === 'unsupported'
-          ? {
-              code: 'revo.agent.checkpoint_unsupported',
-              message: 'Provider checkpoint capture is unsupported.',
-              phase: 'session_checkpointing',
-              retryable: false,
-            }
-          : protocolFault(failure, 'session_checkpointing');
+  const fault = captureFault(status, failure);
   const now = options.clock.now();
   output.outcome({
     correlation: effect.correlation,
     fault,
     observedAt: now.iso,
     observedAtMs: now.milliseconds,
-    type:
-      status === 'unsupported'
-        ? 'checkpoint.unsupported'
-        : status === 'timed_out'
-          ? 'checkpoint.timed_out'
-          : 'checkpoint.failed',
+    type: captureFailureType(status),
   });
+};
+
+const captureFault = (
+  status: 'unsupported' | 'failed' | 'timed_out' | 'invalid',
+  failure?: Parameters<typeof protocolFault>[0],
+): AgentFault => {
+  if (status === 'failed') return protocolFault(failure, 'session_checkpointing');
+  const details = {
+    invalid: ['revo.agent.checkpoint_invalid', 'Provider continuation is invalid.'],
+    timed_out: ['revo.agent.timeout', 'Checkpoint capture timed out.'],
+    unsupported: [
+      'revo.agent.checkpoint_unsupported',
+      'Provider checkpoint capture is unsupported.',
+    ],
+  } as const;
+  const [code, message] = details[status];
+  return { code, message, phase: 'session_checkpointing', retryable: false };
+};
+
+const captureFailureType = (
+  status: 'unsupported' | 'failed' | 'timed_out' | 'invalid',
+): 'checkpoint.unsupported' | 'checkpoint.timed_out' | 'checkpoint.failed' => {
+  if (status === 'unsupported') return 'checkpoint.unsupported';
+  if (status === 'timed_out') return 'checkpoint.timed_out';
+  return 'checkpoint.failed';
 };

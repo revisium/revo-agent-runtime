@@ -52,19 +52,16 @@ const startProcess = async (
     return;
   }
   const controller = new AbortController();
-  let operation: Promise<OwnedProcess>;
-  try {
-    operation = options.spawner.start(
+  const operation: Promise<OwnedProcess> = Promise.resolve().then(() =>
+    options.spawner.start(
       {
         ...prepared.prepared.launch,
         onStderr: (bytes) => prepared.output.writeStderr(bytes),
         onStdout: (bytes) => prepared.output.writeStdout(bytes),
       },
       controller.signal,
-    );
-  } catch {
-    operation = Promise.reject(new Error('Session process start failed synchronously.'));
-  }
+    ),
+  );
   const settlement = await settleOperation({
     onTimeout: () => controller.abort(),
     operation,

@@ -85,21 +85,17 @@ class ActiveStateMutationLane {
 
   #start(effect: PersistenceEffect): StartedMutation {
     const controller = new AbortController();
-    let operation: Promise<ActiveAgentSessionStateMutationResult>;
-    try {
-      operation =
-        effect.type === 'persistence.save'
-          ? this.sink.save(effect.snapshot, { signal: controller.signal })
-          : this.sink.remove(
-              {
-                incarnationId: effect.incarnationId,
-                sessionId: effect.correlation.sessionId,
-              },
-              { signal: controller.signal },
-            );
-    } catch {
-      operation = Promise.reject(new Error('Active session state mutation failed synchronously.'));
-    }
+    const operation: Promise<ActiveAgentSessionStateMutationResult> = Promise.resolve().then(() =>
+      effect.type === 'persistence.save'
+        ? this.sink.save(effect.snapshot, { signal: controller.signal })
+        : this.sink.remove(
+            {
+              incarnationId: effect.incarnationId,
+              sessionId: effect.correlation.sessionId,
+            },
+            { signal: controller.signal },
+          ),
+    );
     return {
       classification: settleOperation({
         onTimeout: () => controller.abort(),

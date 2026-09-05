@@ -36,11 +36,9 @@ const observed = (options: TurnOptions) => {
 };
 
 const requestCancellation = (prompt: SessionProtocolPrompt, reason: string): void => {
-  try {
-    void prompt.cancel(reason).catch(() => undefined);
-  } catch {
-    // Prompt completion or the bounded timeout still determines the turn outcome.
-  }
+  void Promise.resolve()
+    .then(() => prompt.cancel(reason))
+    .catch(() => undefined);
 };
 
 const isJsonObject = (value: unknown): value is JsonObject =>

@@ -42,24 +42,24 @@ const deliverInteraction = async (
     emit(effect, output, options, 'failed');
     return;
   }
-  let operation: Promise<SessionProtocolInteractionOutcome>;
-  try {
-    operation = endpoint.respond({
+  const operation: Promise<SessionProtocolInteractionOutcome> = Promise.resolve().then(() =>
+    endpoint.respond({
       requestId: effect.request.requestId,
       response: effect.response,
-    });
-  } catch {
-    emit(effect, output, options, 'failed');
-    return;
-  }
+    }),
+  );
   const settlement = await settleOperation({
     onTimeout: () => undefined,
     operation,
     timeoutMs: effect.timeoutMs,
     timer: options.timer ?? systemSessionOperationTimer,
   });
-  if (settlement.state !== 'fulfilled' || settlement.phase !== 'initial') {
+  if (settlement.state === 'unknown' || settlement.phase === 'late') {
     emit(effect, output, options, 'timed_out');
+    return;
+  }
+  if (settlement.state === 'rejected') {
+    emit(effect, output, options, 'failed');
     return;
   }
   if (settlement.value.status === 'accepted') {
@@ -86,17 +86,15 @@ const emit = (
     output.outcome({ ...base, type: 'provider.interaction.accepted' });
     return;
   }
+  const phase = effect.scope.kind === 'opening' ? 'session_opening' : 'session_running';
   const fault: AgentFault =
     status === 'timed_out'
       ? {
           code: 'revo.agent.timeout',
           message: 'Provider interaction delivery timed out.',
-          phase: effect.scope.kind === 'opening' ? 'session_opening' : 'session_running',
+          phase,
           retryable: false,
         }
-      : protocolFault(
-          failure,
-          effect.scope.kind === 'opening' ? 'session_opening' : 'session_running',
-        );
+      : protocolFault(failure, phase);
   output.outcome({ ...base, fault, type: `provider.interaction.${status}` });
 };
