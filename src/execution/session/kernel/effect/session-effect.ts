@@ -1,3 +1,5 @@
+import type { EffectOutcomeCommand } from '../command/effect.js';
+import type { ProviderCommand } from '../command/provider.js';
 import type { SessionEventEffect } from './event.js';
 import type { SessionLifecycleEffect } from './lifecycle.js';
 import type { SessionPersistenceEffect } from './persistence.js';
@@ -10,3 +12,6 @@ export type SessionEffect =
   | SessionPersistenceEffect
   | SessionLifecycleEffect
   | SessionPublicCallEffect;
+
+export type SessionEffectOutcome = EffectOutcomeCommand;
+export type SessionProviderUpdate = ProviderCommand;
