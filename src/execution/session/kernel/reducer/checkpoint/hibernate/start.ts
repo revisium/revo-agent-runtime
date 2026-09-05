@@ -10,26 +10,29 @@ import {
 
 type ActiveState = Extract<SessionState, { readonly status: 'idle' | 'running' }>;
 type HibernateCommand = Extract<PublicSessionCommand, { readonly type: 'session.hibernate' }>;
+type RejectionCode =
+  | 'revo.agent.session_busy'
+  | 'revo.agent.checkpoint_invalid'
+  | 'revo.agent.checkpoint_unsupported';
+
+const rejectionMessage = (code: RejectionCode): string => {
+  if (code === 'revo.agent.session_busy') return 'Hibernation requires an idle session.';
+  if (code === 'revo.agent.checkpoint_unsupported')
+    return 'The provider did not negotiate native continuation.';
+  return 'Hibernation requires a durable session cursor.';
+};
 
 const reject = (
   state: ActiveState,
   command: HibernateCommand,
-  code:
-    | 'revo.agent.session_busy'
-    | 'revo.agent.checkpoint_invalid'
-    | 'revo.agent.checkpoint_unsupported',
+  code: RejectionCode,
 ): SessionTransition =>
   appendEffect(unchangedTransition(state), {
     callId: command.call.callId,
     correlation: nextEffectCorrelation(state),
     fault: {
       code,
-      message:
-        code === 'revo.agent.session_busy'
-          ? 'Hibernation requires an idle session.'
-          : code === 'revo.agent.checkpoint_unsupported'
-            ? 'The provider did not negotiate native continuation.'
-            : 'Hibernation requires a durable session cursor.',
+      message: rejectionMessage(code),
       phase: 'session_checkpointing',
       retryable: code === 'revo.agent.session_busy',
     },

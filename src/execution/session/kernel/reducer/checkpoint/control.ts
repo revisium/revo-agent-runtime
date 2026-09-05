@@ -23,15 +23,18 @@ const reject = (state: CheckpointingState, callId: string, fault: AgentFault) =>
     type: 'public.reject',
   });
 
-const checkpointInterrupted = (command: ControlCommand): AgentFault =>
-  command.type === 'timer.fired'
-    ? timerFault(command.kind === 'idle' ? 'idle' : 'wall_clock')
-    : {
-        code: 'revo.agent.cancelled',
-        message: 'Checkpoint capture was interrupted by session cancellation.',
-        phase: 'session_checkpointing',
-        retryable: false,
-      };
+const checkpointInterrupted = (command: ControlCommand): AgentFault => {
+  if (command.type === 'timer.fired') {
+    const kind = command.kind === 'idle' ? 'idle' : 'wall_clock';
+    return timerFault(kind);
+  }
+  return {
+    code: 'revo.agent.cancelled',
+    message: 'Checkpoint capture was interrupted by session cancellation.',
+    phase: 'session_checkpointing',
+    retryable: false,
+  };
+};
 
 const matchesTimer = (state: CheckpointingState, command: TimerCommand): boolean =>
   state.timers.some(
@@ -41,6 +44,45 @@ const matchesTimer = (state: CheckpointingState, command: TimerCommand): boolean
       timer.kind === command.kind &&
       (timer.kind === 'idle' || timer.kind === 'wall_clock'),
   );
+
+const resolveCancellation = (
+  transition: SessionTransition<CheckpointingState>,
+  command: Extract<ControlCommand, { readonly type: 'session.cancel' }>,
+): SessionTransition =>
+  appendEffect(transition, {
+    callId: command.call.callId,
+    correlation: nextEffectCorrelation(transition.state),
+    resolution: { kind: 'cancel_session', result: { state: 'requested' } },
+    type: 'public.resolve',
+  });
+
+const deferredIntent = (command: ControlCommand) => {
+  if (command.type !== 'timer.fired')
+    return {
+      ...(command.reason === undefined ? {} : { reason: command.reason }),
+      outcome: 'cancelled' as const,
+    };
+  return {
+    error: checkpointInterrupted(command),
+    outcome: 'timed_out' as const,
+    timeout: command.kind === 'idle' ? ('idle_timeout' as const) : ('wall_clock_timeout' as const),
+  };
+};
+
+const deferTerminalControl = (
+  state: CheckpointingState,
+  command: Exclude<ControlCommand, { readonly type: 'session.close' }>,
+): SessionTransition => {
+  if (state.terminalAfterCheckpoint !== undefined) {
+    if (command.type === 'timer.fired') return unchangedTransition(state);
+    return resolveCancellation(unchangedTransition(state), command);
+  }
+  const transition = {
+    effects: [],
+    state: { ...state, terminalAfterCheckpoint: deferredIntent(command) },
+  };
+  return command.type === 'timer.fired' ? transition : resolveCancellation(transition, command);
+};
 
 export const reduceCheckpointControl = (
   state: CheckpointingState,
@@ -55,37 +97,7 @@ export const reduceCheckpointControl = (
     });
   if (command.type === 'timer.fired' && !matchesTimer(state, command))
     return unchangedTransition(state);
-  if (state.progress.stage === 'publishing') {
-    if (state.terminalAfterCheckpoint !== undefined) {
-      if (command.type === 'timer.fired') return unchangedTransition(state);
-      return appendEffect(unchangedTransition(state), {
-        callId: command.call.callId,
-        correlation: nextEffectCorrelation(state),
-        resolution: { kind: 'cancel_session', result: { state: 'requested' } },
-        type: 'public.resolve',
-      });
-    }
-    const intent =
-      command.type === 'timer.fired'
-        ? {
-            error: checkpointInterrupted(command),
-            outcome: 'timed_out' as const,
-            timeout:
-              command.kind === 'idle' ? ('idle_timeout' as const) : ('wall_clock_timeout' as const),
-          }
-        : {
-            ...(command.reason === undefined ? {} : { reason: command.reason }),
-            outcome: 'cancelled' as const,
-          };
-    const transition = { effects: [], state: { ...state, terminalAfterCheckpoint: intent } };
-    if (command.type === 'timer.fired') return transition;
-    return appendEffect(transition, {
-      callId: command.call.callId,
-      correlation: nextEffectCorrelation(transition.state),
-      resolution: { kind: 'cancel_session', result: { state: 'requested' } },
-      type: 'public.resolve',
-    });
-  }
+  if (state.progress.stage === 'publishing') return deferTerminalControl(state, command);
   const terminal = reduceActiveTerminal(idleFromCheckpoint(state), command);
   return appendEffect(terminal, {
     callId: state.callId,
