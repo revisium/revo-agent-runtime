@@ -1,4 +1,4 @@
-import type { AgentLaunchEvidence } from '../../contracts/manager.js';
+import type { AgentLaunchEvidence } from '../../contracts/launch.js';
 import { createBoundedOutput } from '../output/bounded-output.js';
 import type { ProcessExit } from '../process/port.js';
 import type { ExecutionEvidence, InvocationExecutionRequest } from './contracts.js';

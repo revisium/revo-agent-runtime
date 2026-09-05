@@ -1,4 +1,4 @@
-import type { AgentUsage } from '../../../contracts/manager.js';
+import type { AgentUsage } from '../../../contracts/manager/invocation.js';
 import type { SessionProtocolFailure } from '../errors/protocol-error.js';
 import type { SessionProtocolContinuation } from './request.js';
 

@@ -1,4 +1,4 @@
-import type { AgentFault } from '../../../../contracts/manager.js';
+import type { AgentFault } from '../../../../contracts/manager/core.js';
 import type { SessionProtocolInteractionOutcome } from '../../../../protocol/session/model/outcome.js';
 import type { SessionEffect } from '../../kernel/effect/session-effect.js';
 import type { SessionEffectOutput } from '../../runtime/effects/outcomes.js';

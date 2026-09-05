@@ -11,11 +11,12 @@ ports:
 
 ```text
 src/index.ts
-  -> application/manager + discovery
+  -> application/manager + discovery + composition/session
   -> execution ports/use cases + protocol/acp + platform/node
 
 providers/* -> discovery/configuration adapter ports -> contracts
 application/* -> definition + execution ports -> contracts
+composition/session -> application/session + execution/session + portable ports
 execution/* -> protocol ports + normalized configuration + contracts
 protocol/acp -> protocol ports + normalized configuration + contracts
 platform/node -> execution ports
@@ -59,10 +60,12 @@ provider-owned definition data, not a reason to couple provider folders.
 | `application/configuration`       | Defensive snapshot of public inspection and selection inputs                                                | Public contracts                                                         |
 | `application/active-state`        | Serialized sink mutation, recovery, reservation, and snapshots                                              | Active-state contract and process identity port                          |
 | `application/invocation`          | Request admission, effective inputs, preflight, and terminal finalization                                   | Definition, result, and execution ports                                  |
+| `application/admission`           | Shared effective-input and process/output admission policy                                                  | Definition and execution ports                                           |
 | `application/result`              | Public invocation-result construction and snapshots                                                         | Execution evidence and output contracts                                  |
 | `application/faults`              | Stable translation from internal outcomes to public faults                                                  | Contracts and execution outcomes                                         |
 | `application/session/management`  | Session-capable catalog, identity/capacity registry, fresh/resume opening, active and terminal queries      | Session boundaries, policies, handles, and the narrow runtime port       |
 | `application/session/handles`     | Consumer-facing session/turn calls translated into correlated kernel commands                               | Session contracts, public commands, and the narrow runtime port          |
+| `application/session/admission`   | Pinned definition, effective inputs, literal launch, preflight, and exclusive output preparation            | Shared admission and the preparation port                                |
 | `execution/invocation`            | Executor contracts/composition, top-down lifecycle, session operations, artifacts, and terminal arbitration | Portable process/protocol ports, output, result, and security            |
 | `execution/configuration`         | Inspection deadline, bounded fallback, process ownership, close, and reap                                   | Normalized catalog and portable process/configuration ports              |
 | `execution/output`                | Bounded streams/events, exclusive output claim, and publication capability                                  | Contracts and redaction channel                                          |
@@ -70,11 +73,17 @@ provider-owned definition data, not a reason to couple provider folders.
 | `execution/probe`                 | Fresh executable/version preflight policy                                                                   | Executable probe port and definition version rules                       |
 | `execution/process`               | Portable owned-process, cleanup, identity, and recovery ports                                               | No concrete platform                                                     |
 | `execution/session/runtime`       | Per-session actor, bounded mailbox, public-call settlement, timers, and contract-only state projections     | Pure session kernel plus private interpreter dispatch                    |
+| `execution/session/kernel`        | Pure session state machine, commands, effects, events, lifecycle transitions, and projections               | Portable session contracts only                                          |
+| `execution/session/interpreter`   | External effects for provider, process, event/state sinks, output, checkpointing, and cleanup               | Kernel effects and portable ports                                        |
+| `execution/session/port`          | Narrow opening-preparation boundary consumed by the interpreter                                             | Kernel descriptor and portable execution contracts                       |
 | `execution/security/redaction`    | Streaming channel, state engine, and independently readable matching rules                                  | No application or platform modules                                       |
 | `protocol/driver`                 | Protocol-neutral invocation and configuration session ports                                                 | Contracts and normalized catalog                                         |
 | `protocol/acp`                    | ACP SDK session implementation, stable configuration requester, and compatibility seam                      | Protocol ports, normalized catalog, and official ACP SDK                 |
+| `protocol/session`                | Provider-neutral long-lived session, interaction, update, and continuation ports                            | Portable contracts                                                       |
+| `composition/session`             | Concrete wiring of policy, state machine, actor, interpreters, ACP driver, and platform services            | Session application/execution layers and portable ports                  |
 | `platform/node/process`           | Node child-process spawn, identity, cleanup, and recovered-process inspection                               | Process port; Execa and Node APIs                                        |
 | `platform/node/output`            | Durable, non-replacing filesystem claim and publication                                                     | Output ports; Node filesystem APIs                                       |
+| `platform/node/session`           | Runtime identities and atomic session stdout/stderr/manifest publication                                    | Session runtime and output ports; Node APIs                              |
 | `platform/node/probe`             | Bounded executable resolution/version observation                                                           | Probe and process ports; Execa and Node APIs                             |
 
 The staged `contracts/session` hierarchy owns session API, event, interaction,
@@ -85,11 +94,11 @@ untrusted session values; `application/session/policy` independently owns
 identifier, capability, and limit decisions. Portable digest consumers depend
 on `execution/security/digest/port`, never on Node crypto.
 
-The package-private session facade composes management and handle layers over a
-narrow runtime port. Consumers of that facade do not construct kernel commands,
-track effect correlations, inspect mailbox state, or retain provider resources.
-Root export and built-in ACP composition remain a later delivery slice, so the
-repository does not expose a facade before its concrete provider path exists.
+The public `AgentManager.sessions` facade composes management and handle layers
+over a narrow runtime port. Consumers do not construct kernel commands, track
+effect correlations, inspect mailbox state, or retain provider resources. The
+root imports the session composition boundary; it does not import the kernel,
+runtime, or interpreter implementation directly.
 
 ## Enforced structural rules
 

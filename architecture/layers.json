@@ -14,8 +14,13 @@
       "dependencies": ["contracts"]
     },
     {
+      "name": "contracts-manager-surface",
+      "pattern": "^src/contracts/manager(?:\\.ts|/(?:api|options)\\.ts)$",
+      "dependencies": ["contracts", "contracts-session"]
+    },
+    {
       "name": "contracts",
-      "pattern": "^src/contracts/(?!session(?:\\.ts|/)).+",
+      "pattern": "^src/contracts/(?!(?:session(?:\\.ts|/)|manager(?:\\.ts|/(?:api|options)\\.ts$))).+",
       "dependencies": []
     },
     {
@@ -53,7 +58,25 @@
         "contracts-session",
         "contracts-session-envelope",
         "definition",
+        "execution",
         "execution-security-digest-port"
+      ]
+    },
+    {
+      "name": "application-admission",
+      "pattern": "^src/application/admission/",
+      "dependencies": ["contracts", "definition", "execution"]
+    },
+    {
+      "name": "application-session-admission",
+      "pattern": "^src/application/session/admission/",
+      "dependencies": [
+        "application-admission",
+        "contracts",
+        "definition",
+        "execution",
+        "execution-session-output-port",
+        "session-opening-preparation-port"
       ]
     },
     {
@@ -70,6 +93,8 @@
         "application-session-policy",
         "contracts",
         "contracts-session",
+        "definition",
+        "execution-process-port",
         "session-runtime-dispatch"
       ]
     },
@@ -85,13 +110,44 @@
     },
     {
       "name": "application",
-      "pattern": "^src/application/(?!session/).+",
+      "pattern": "^src/application/(?!session/|admission/).+",
       "dependencies": [
+        "application-admission",
         "application-session-management",
+        "application-session-policy",
         "contracts",
+        "contracts-manager-surface",
+        "contracts-session",
         "definition",
         "execution",
         "execution-process-port"
+      ]
+    },
+    {
+      "name": "composition-session",
+      "pattern": "^src/composition/session/",
+      "dependencies": [
+        "application-session-admission",
+        "application-session-management",
+        "execution",
+        "execution-process-port",
+        "execution-security-digest-port",
+        "execution-session-output-port",
+        "protocol-session",
+        "session-interpreter",
+        "session-kernel",
+        "session-runtime"
+      ]
+    },
+    {
+      "name": "session-opening-preparation-port",
+      "pattern": "^src/execution/session/port/",
+      "dependencies": [
+        "contracts",
+        "contracts-session",
+        "execution-process-port",
+        "execution-session-output-port",
+        "session-kernel"
       ]
     },
     {
@@ -166,6 +222,7 @@
         "execution-session-output-port",
         "protocol-session",
         "session-kernel-effects",
+        "session-opening-preparation-port",
         "session-runtime-identity-port",
         "session-runtime-outcome-port",
         "session-runtime-resources"
@@ -221,7 +278,13 @@
     {
       "name": "platform-session-output",
       "pattern": "^src/platform/node/output/session/",
-      "dependencies": ["execution", "execution-session-output-port", "platform"]
+      "dependencies": [
+        "contracts",
+        "contracts-session",
+        "execution",
+        "execution-session-output-port",
+        "platform"
+      ]
     },
     {
       "name": "platform-session-primitives",
@@ -243,11 +306,9 @@
       "pattern": "^src/index\\.ts$",
       "dependencies": [
         "application",
-        "application-session-boundary",
-        "application-session-handles",
-        "application-session-management",
-        "application-session-policy",
+        "composition-session",
         "contracts",
+        "contracts-manager-surface",
         "contracts-session",
         "discovery",
         "execution",

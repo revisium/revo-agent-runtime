@@ -67,12 +67,17 @@ describe('architecture layer manifest', () => {
   it.each([
     ['src/contracts/session/continuation/envelope.ts', 'contracts-session-envelope'],
     ['src/contracts/session/events.ts', 'contracts-session'],
+    ['src/contracts/manager/options.ts', 'contracts-manager-surface'],
+    ['src/application/admission/effective-inputs.ts', 'application-admission'],
+    ['src/application/session/admission/preparer.ts', 'application-session-admission'],
     ['src/application/session/management/coordinator.ts', 'application-session-management'],
+    ['src/composition/session/manager.ts', 'composition-session'],
     ['src/execution/session/kernel/effect/request.ts', 'session-kernel-effects'],
     ['src/execution/session/kernel/command/public.ts', 'session-kernel-public-command'],
     ['src/execution/session/runtime/actor/port.ts', 'session-runtime-dispatch'],
     ['src/execution/session/runtime/resources/provider-sessions.ts', 'session-runtime-resources'],
     ['src/execution/session/runtime/actor/machine.ts', 'session-runtime'],
+    ['src/execution/session/port/opening-preparation.ts', 'session-opening-preparation-port'],
     ['src/execution/session/interpreter/driver.ts', 'session-interpreter'],
     ['src/execution/security/redaction/channel.ts', 'execution-security-redaction'],
     ['src/protocol/acp/session/adapter.ts', 'protocol-acp-session'],
@@ -110,5 +115,7 @@ describe('architecture layer manifest', () => {
     expect(layer('root').dependencies).not.toContain('session-kernel');
     expect(layer('root').dependencies).not.toContain('session-runtime');
     expect(layer('root').dependencies).not.toContain('session-interpreter');
+    expect(layer('root').dependencies).toContain('composition-session');
+    expect(layer('root').dependencies).not.toContain('application-session-admission');
   });
 });

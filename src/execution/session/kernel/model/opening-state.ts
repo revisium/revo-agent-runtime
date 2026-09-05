@@ -14,9 +14,8 @@ import type { ResumeAgentSession } from '../../../../contracts/session/requests/
 import type { EffectCorrelation } from './identity.js';
 
 type SessionLaunchEnvironment = Readonly<{
-  inherit: readonly string[];
-  variables: Readonly<Record<string, string>>;
-  secrets: Readonly<Record<string, string>>;
+  values: Readonly<Record<string, string>>;
+  secrets: readonly string[];
 }>;
 type ProviderContinuation = Readonly<{ format: string; data: Readonly<JsonObject> }>;
 

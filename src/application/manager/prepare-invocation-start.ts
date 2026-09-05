@@ -2,21 +2,21 @@ import { AgentManagerError, type AgentStartContext } from '../../contracts/manag
 import type { CapturedEnvironment } from '../../execution/invocation/environment.js';
 import type { ClaimedInvocationOutput, OutputClaimPlatform } from '../../execution/output/claim.js';
 import type { ExecutablePreflight } from '../../execution/probe/executable-preflight.js';
+import type {
+  EffectiveInvocationInputPolicy,
+  EffectiveInvocationInputs,
+} from '../admission/effective-inputs.js';
+import { prepareProcessAdmission } from '../admission/process.js';
 import {
   executablePreflightError,
   fault,
   outputPreflightError,
   preacceptanceError,
 } from '../faults/agent-faults.js';
-import type {
-  EffectiveInvocationInputPolicy,
-  EffectiveInvocationInputs,
-} from '../invocation/input/effective-invocation-inputs.js';
 import {
   captureStartEnvironment,
   type PreparedInvocationRequest,
 } from '../invocation/preflight.js';
-import { prepareInvocationAdmission } from './invocation-admission.js';
 
 export interface PreparedInvocationStart {
   readonly admission: Readonly<{
@@ -58,7 +58,7 @@ export const prepareInvocationStart = async (
       ),
     );
   const environment = captureStartEnvironment(context);
-  const admission = await prepareInvocationAdmission({
+  const admission = await prepareProcessAdmission({
     definition: prepared.definition.definition,
     executablePreflight: services.executablePreflight,
     outputClaimPlatform: services.outputClaimPlatform,

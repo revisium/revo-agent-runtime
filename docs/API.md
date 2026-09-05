@@ -32,6 +32,10 @@ const manager = createAgentManager({
   activeStateSink: { save, remove },
   limits,
   redaction: { secrets },
+  sessions: {
+    activeStateSink: { save: saveSession, remove: removeSession },
+    eventSink: { append: appendSessionEvent },
+  },
 });
 ```
 
@@ -40,8 +44,12 @@ canonicalized, copied, frozen, and registered by exact `{ id, version }`
 identity. `ActiveInvocationStateSink` is caller-owned: the manager serializes
 its `save` and `remove` calls but never reads it.
 
-Call `initialize(snapshots)` before other manager operations. It reconciles
-caller-supplied active snapshots and returns after initialization completes.
+Call `initialize(snapshots)` before other manager operations. Pass the legacy
+invocation array or `{ invocations, sessions }`. Initialization reconciles
+caller-supplied active rows and returns only after recovery completes. Session
+recovery never attaches to an unknown live process: it confirms absence,
+identity mismatch, or termination before owner-fenced row removal, and fails
+closed when cleanup or ownership is ambiguous.
 
 ## Manager methods
 
@@ -56,6 +64,55 @@ caller-supplied active snapshots and returns after initialization completes.
 | `getResult(id)` / `waitForResult(id)`            | Read or await a terminal result.                                          |
 | `cancel(id, reason?)`                            | Request idempotent cancellation.                                          |
 | `shutdown(reason?)`                              | Cancel accepted work and wait for confirmed quiescence.                   |
+
+## Long-lived sessions
+
+`manager.sessions` is the consumer-facing facet for one hot provider process
+across multiple turns. It is always present. Without `sessions` construction
+options, discovery remains available through `listAgents()`, while mutating
+session operations reject with `revo.agent.session_state_unavailable`.
+
+```ts
+await manager.initialize({
+  invocations: await invocationStateStore.list(),
+  sessions: await sessionStateStore.list(),
+});
+
+const session = await manager.sessions.open({
+  agent: { id: 'codex-acp', version: '1.7.0' },
+  output: { directory: sessionOutputDirectory },
+  parameters: {},
+  permissions: {},
+  sessionId: 'dlg_01',
+  workspace: { directory: workspaceDirectory },
+});
+
+const first = await session.send({ prompt: 'Remember 73.', turnId: 'trn_01' });
+await first.result();
+const second = await session.send({ prompt: 'What number?', turnId: 'trn_02' });
+const result = await second.result();
+await session.close();
+```
+
+`AgentSessions` provides `listAgents`, `open`, `resume`, active `get`, `inspect`,
+and `list`, terminal `getTerminal` and `listTerminal`, plus `respond` and
+`cancel`.
+`AgentSession` provides `send`, `respond`, `checkpoint`, `hibernate`, `close`,
+and `cancel`. A turn result is `completed`, `failed`, `cancelled`, `timed_out`,
+or `interrupted`. Passing an `AbortSignal` to `send()` cancels that turn; manager
+shutdown cancels and drains all sessions it owns.
+
+The session event sink receives ordered accepted/opened, turn, assistant
+message, tool, plan, usage, interaction, checkpoint, hibernation, and terminal
+events. Permission responses select one provider option. Structured input
+responses support text, number, boolean, single-select, and multi-select values,
+including several questions in one request. The consumer persists this journal
+and decides how and when a human answers it.
+
+Capabilities are negotiated per opened session. Check them before relying on
+interactions, update kinds, cancellation, or native resume. `checkpoint()`,
+`hibernate()`, and `resume()` do not synthesize replay: native continuation is
+available only when both the definition and provider advertise it.
 
 ## Configuration
 

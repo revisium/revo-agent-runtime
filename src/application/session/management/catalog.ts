@@ -1,5 +1,5 @@
 import type { AgentRef } from '../../../contracts/agent-definition.js';
-import type { AgentDescriptor, AgentExecutionPin } from '../../../contracts/manager.js';
+import type { AgentDescriptor, AgentExecutionPin } from '../../../contracts/manager/core.js';
 import type { AgentSessionAgentDescriptor } from '../../../contracts/session.js';
 import { sessionManagerError } from './errors.js';
 

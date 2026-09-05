@@ -2,7 +2,7 @@ import type {
   AgentDefinitionSessionCapabilities,
   JsonObject,
 } from '../../../../contracts/agent-definition.js';
-import { AgentManagerError } from '../../../../contracts/manager.js';
+import { AgentManagerError } from '../../../../contracts/manager/core.js';
 import type { AgentSessionCapabilities } from '../../../../contracts/session.js';
 import {
   canonicalizeCopiedJsonBytes,

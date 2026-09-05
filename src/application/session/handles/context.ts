@@ -1,5 +1,5 @@
 import type { JsonObject } from '../../../contracts/agent-definition.js';
-import type { AgentExecutionPin } from '../../../contracts/manager.js';
+import type { AgentExecutionPin } from '../../../contracts/manager/core.js';
 import type {
   AgentSessionCapabilities,
   RespondAgentSessionRequest,

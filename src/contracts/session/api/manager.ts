@@ -1,4 +1,4 @@
-import type { ActiveInvocationSnapshot } from '../../manager.js';
+import type { ActiveInvocationSnapshot } from '../../manager/core.js';
 import type { AgentSessionAgentDescriptor } from '../capabilities/negotiated.js';
 import type { AgentSessionEventSink } from '../events/sink.js';
 import type {

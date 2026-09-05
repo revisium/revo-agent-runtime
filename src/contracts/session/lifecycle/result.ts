@@ -1,4 +1,5 @@
-import type { AgentFault, AgentUsage } from '../../manager.js';
+import type { AgentFault } from '../../manager/core.js';
+import type { AgentUsage } from '../../manager/invocation.js';
 
 export interface AgentSessionUsage extends AgentUsage {
   readonly scope: 'session_cumulative';

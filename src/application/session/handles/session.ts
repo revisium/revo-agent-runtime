@@ -1,7 +1,8 @@
-import { AgentManagerError } from '../../../contracts/manager.js';
+import { AgentManagerError } from '../../../contracts/manager/core.js';
 import type {
   AgentSession,
   AgentSessionCheckpoint,
+  AgentSessionCommandContext,
   AgentSessionHibernateResult,
   AgentSessionTurn,
   CancelAgentSessionResult,
@@ -115,7 +116,17 @@ export const createAgentSessionHandle = (options: AgentSessionHandleOptions): Ag
       options.onSettled();
       return resolution.result;
     },
-    send: async (input: SendAgentSessionInput): Promise<AgentSessionTurn> => {
+    send: async (
+      input: SendAgentSessionInput,
+      context?: AgentSessionCommandContext,
+    ): Promise<AgentSessionTurn> => {
+      if (context?.signal?.aborted)
+        throw new AgentManagerError({
+          code: 'revo.agent.cancelled',
+          message: 'The session turn was cancelled.',
+          phase: 'session_running',
+          retryable: false,
+        });
       requireIdle(options);
       const decoded = options.decodeSend(input);
       const resultCallId = options.nextIdentity('call');
@@ -135,7 +146,17 @@ export const createAgentSessionHandle = (options: AgentSessionHandleOptions): Ag
       };
       const ready = await dispatchCall(options.runtime, command, 'turn_ready');
       options.onSettled();
-      return createAgentSessionTurn(options, ready.turnId, resultSettlement);
+      const turn = createAgentSessionTurn(options, ready.turnId, resultSettlement);
+      const signal = context?.signal;
+      if (signal === undefined) return turn;
+      const cancel = (): void => {
+        void turn.cancel('The session turn was cancelled.').catch(() => undefined);
+      };
+      signal.addEventListener('abort', cancel, { once: true });
+      const removeListener = (): void => signal.removeEventListener('abort', cancel);
+      void resultSettlement.then(removeListener, removeListener);
+      if (signal.aborted) cancel();
+      return turn;
     },
     sessionId: options.sessionId,
   });

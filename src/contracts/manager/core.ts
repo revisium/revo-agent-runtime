@@ -1,9 +1,4 @@
-import type {
-  AgentDefinition,
-  AgentDefinitionInput,
-  AgentRef,
-  JsonObject,
-} from '../agent-definition.js';
+import type { AgentDefinition, AgentRef, JsonObject } from '../agent-definition.js';
 export type { AgentLaunchEvidence } from '../launch.js';
 
 export interface AgentDescriptor {
@@ -40,13 +35,6 @@ export interface ActiveInvocationStateSink {
     context: { readonly signal: AbortSignal },
   ): Promise<void>;
   remove(invocationId: string, context: { readonly signal: AbortSignal }): Promise<void>;
-}
-
-export interface AgentManagerOptions {
-  readonly definitions: readonly AgentDefinitionInput[];
-  readonly activeStateSink: ActiveInvocationStateSink;
-  readonly limits?: AgentManagerLimits;
-  readonly redaction?: { readonly secrets: readonly string[] };
 }
 
 export interface AgentManagerLimits {

@@ -1,10 +1,14 @@
 import { AgentManagerError, type ActiveInvocationStateSink } from '../../contracts/manager.js';
+import type { AgentSessionManagerOptions } from '../../contracts/session/api/manager.js';
+import type { AgentSessionEventSink } from '../../contracts/session/events/sink.js';
+import type { ActiveAgentSessionStateSink } from '../../contracts/session/persistence/active-state.js';
 import {
   createSealedAgentRegistry,
   DefinitionValidationError,
   DuplicateAgentDefinitionError,
 } from '../../definition/index.js';
 import { fault } from '../faults/agent-faults.js';
+import { resolveAgentSessionManagerLimits } from '../session/policy/limits/resolve.js';
 import { LimitValidationError, managerLimits } from './limits.js';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -13,11 +17,40 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isActiveStateSink = (value: unknown): value is ActiveInvocationStateSink =>
   isRecord(value) && typeof value.save === 'function' && typeof value.remove === 'function';
 
+const isActiveSessionStateSink = (value: unknown): value is ActiveAgentSessionStateSink =>
+  isRecord(value) && typeof value.save === 'function' && typeof value.remove === 'function';
+
+const isSessionEventSink = (value: unknown): value is AgentSessionEventSink =>
+  isRecord(value) && typeof value.append === 'function';
+
+const sessionOptions = (value: unknown): AgentSessionManagerOptions | undefined => {
+  if (value === undefined) return undefined;
+  if (
+    !isRecord(value) ||
+    Reflect.ownKeys(value).some(
+      (key) => key !== 'activeStateSink' && key !== 'eventSink' && key !== 'limits',
+    ) ||
+    !isActiveSessionStateSink(value.activeStateSink) ||
+    !isSessionEventSink(value.eventSink)
+  )
+    throw new TypeError('Invalid session manager options.');
+  const limits = resolveAgentSessionManagerLimits(value.limits);
+  return Object.freeze({
+    activeStateSink: value.activeStateSink,
+    eventSink: value.eventSink,
+    limits,
+  });
+};
+
 const isNonEmptyStringArray = (value: unknown): value is readonly string[] =>
   Array.isArray(value) &&
   value.every((item: unknown) => typeof item === 'string' && item.length > 0);
 
 const constructionError = (error: unknown): AgentManagerError => {
+  if (error instanceof AgentManagerError && error.fault.code === 'revo.agent.limit_invalid')
+    return new AgentManagerError(
+      fault('revo.agent.limit_invalid', 'Agent manager limit is invalid.', 'construction'),
+    );
   if (error instanceof DuplicateAgentDefinitionError)
     return new AgentManagerError(
       fault(
@@ -71,7 +104,8 @@ export const validateManagerOptions = (options: unknown) => {
           key !== 'activeStateSink' &&
           key !== 'definitions' &&
           key !== 'limits' &&
-          key !== 'redaction',
+          key !== 'redaction' &&
+          key !== 'sessions',
       ) ||
       !Array.isArray(options.definitions) ||
       !isActiveStateSink(options.activeStateSink)
@@ -84,6 +118,7 @@ export const validateManagerOptions = (options: unknown) => {
       redaction: Object.freeze({
         secrets: redactionSecrets(options.redaction ?? { secrets: [] }),
       }),
+      sessions: sessionOptions(options.sessions),
     });
   } catch (error) {
     throw constructionError(error);

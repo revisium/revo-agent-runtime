@@ -17,8 +17,8 @@ import type { ClaimedInvocationOutputPublisher } from '../../execution/output/pu
 import type { ExecutablePreflight } from '../../execution/probe/executable-preflight.js';
 import type { ProcessIdentity } from '../../execution/process/port.js';
 import { ActiveStateReservation } from '../active-state/reservation.js';
+import type { EffectiveInvocationInputPolicy } from '../admission/effective-inputs.js';
 import { activeStateError, fault, preacceptanceError } from '../faults/agent-faults.js';
-import type { EffectiveInvocationInputPolicy } from '../invocation/input/effective-invocation-inputs.js';
 import { prepareInvocationRequest } from '../invocation/preflight.js';
 import type { EventSubscriptions } from './events.js';
 import { InvocationEvents } from './invocation-events.js';

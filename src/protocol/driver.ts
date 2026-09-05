@@ -1,6 +1,6 @@
 import type { AgentDefinition } from '../contracts/agent-definition.js';
 import type { AgentConfigurationSelection } from '../contracts/configuration.js';
-import type { AgentUsage } from '../contracts/manager.js';
+import type { AgentUsage } from '../contracts/manager/invocation.js';
 
 interface ProtocolTransport {
   readonly input: WritableStream<Uint8Array>;

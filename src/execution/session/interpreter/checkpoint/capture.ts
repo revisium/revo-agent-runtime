@@ -1,4 +1,4 @@
-import type { AgentFault } from '../../../../contracts/manager.js';
+import type { AgentFault } from '../../../../contracts/manager/core.js';
 import type { SessionProtocolCheckpointOutcome } from '../../../../protocol/session/model/outcome.js';
 import type { Sha256Digest } from '../../../security/digest/port.js';
 import type { SessionEffect } from '../../kernel/effect/session-effect.js';

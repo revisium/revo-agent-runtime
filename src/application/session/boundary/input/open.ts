@@ -1,4 +1,4 @@
-import { AgentManagerError } from '../../../../contracts/manager.js';
+import { AgentManagerError } from '../../../../contracts/manager/core.js';
 import type { OpenAgentSession } from '../../../../contracts/session.js';
 import { isJsonObject } from '../../../../definition/canonical-json.js';
 import { decodeImmutableJsonObject, hasExactJsonKeys } from './immutable-json.js';

@@ -1,6 +1,6 @@
 import type { NormalizedAcpConfiguration } from '../../configuration/catalog.js';
 import type { AgentDefinition } from '../../contracts/agent-definition.js';
-import type { AgentLaunchEvidence } from '../../contracts/manager.js';
+import type { AgentLaunchEvidence } from '../../contracts/launch.js';
 import type { ProtocolConfigurationDriver } from '../../protocol/configuration-driver.js';
 import { createBoundedOutput } from '../output/bounded-output.js';
 import { literalArguments } from '../process/literal-launch.js';

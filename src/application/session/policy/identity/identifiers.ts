@@ -1,4 +1,4 @@
-import { AgentManagerError } from '../../../../contracts/manager.js';
+import { AgentManagerError } from '../../../../contracts/manager/core.js';
 
 const encoder = new TextEncoder();
 const maximumIdentifierBytes = 256;

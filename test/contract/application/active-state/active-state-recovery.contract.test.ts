@@ -101,6 +101,29 @@ test('a failed recovery attempt is retryable on the same manager after quiescenc
 
 test.each([
   { label: 'not an array', snapshots: null },
+  { label: 'structured input without invocations', snapshots: { sessions: [] } },
+  {
+    label: 'structured input with an unexpected key',
+    snapshots: { extra: true, invocations: [] },
+  },
+  {
+    label: 'structured input with an accessor',
+    snapshots: Object.defineProperty({ sessions: [] }, 'invocations', {
+      enumerable: true,
+      get: () => [],
+    }),
+  },
+  {
+    label: 'hostile structured input proxy',
+    snapshots: new Proxy(
+      { invocations: [] },
+      {
+        ownKeys: () => {
+          throw new Error('hostile initialization');
+        },
+      },
+    ),
+  },
   {
     label: 'duplicate invocation ids',
     snapshots: [recoverySnapshot('duplicate'), recoverySnapshot('duplicate')],

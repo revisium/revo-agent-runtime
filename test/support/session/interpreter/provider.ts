@@ -32,7 +32,10 @@ export const registerProtocolSession = (
   const definition = validateAgentDefinition(agentDefinition({ version: '1' })).definition;
   const descriptor = {
     ...sessionOpeningCommand().opening,
-    environment: { inherit: [], secrets: options.secrets ?? {}, variables: {} },
+    environment: {
+      secrets: Object.values(options.secrets ?? {}),
+      values: { ...(options.secrets ?? {}) },
+    },
   };
   const preparation: PreparedSessionResource = {
     correlation: { effectId: 'prepare', epoch: 1, sessionId: 'session_01' },
@@ -43,6 +46,7 @@ export const registerProtocolSession = (
     ),
     prepared: {
       definition,
+      inputs: { parameters: {}, permissions: {} },
       launch: { args: [], command: 'agent', cwd: '/workspace' },
       output: options.output ?? {
         publish: async () => ({

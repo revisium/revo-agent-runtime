@@ -1,4 +1,4 @@
-import type { AgentRawResponseDiagnostic } from '../../contracts/manager.js';
+import type { AgentRawResponseDiagnostic } from '../../contracts/manager/invocation.js';
 import { createRedactionChannel } from '../security/redaction/channel.js';
 
 const previewDecoder = new TextDecoder('utf-8', { fatal: false });

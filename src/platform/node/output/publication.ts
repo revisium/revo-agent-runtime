@@ -31,7 +31,7 @@ export interface NodeOutputPublicationSystem {
   unlink(path: string): Promise<void>;
 }
 
-const nodeOutputPublicationSystem: NodeOutputPublicationSystem = Object.freeze({
+export const nodeOutputPublicationSystem: NodeOutputPublicationSystem = Object.freeze({
   link,
   open: async (path: string, flags: 'wx', mode: number): Promise<OutputFileHandle> =>
     open(path, flags, mode),
@@ -77,12 +77,12 @@ const flushDirectory = async (
   }
 };
 
-type FileCommit = Readonly<{
+export type FileCommit = Readonly<{
   status: 'published' | 'failed' | 'uncertain';
   committed: boolean;
 }>;
 
-const writeCommittedFile = async (
+export const writeCommittedFile = async (
   system: NodeOutputPublicationSystem,
   directory: string,
   filename: string,

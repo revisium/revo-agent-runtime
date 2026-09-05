@@ -17,6 +17,7 @@ let cancelReceived = false;
 let closeCalls = 0;
 let cancelCalls = 0;
 let configurationOptions: acp.SessionConfigOption[] = [];
+let remembered = '';
 
 const configurationState = async (): Promise<string | undefined> => {
   if (configurationStateFile === undefined) return undefined;
@@ -215,6 +216,18 @@ acp
       await sendUpdates(3);
     }
     if (mode === 'hang') return new Promise<never>(() => undefined);
+    if (mode === 'session') {
+      const prompt = context.params.prompt.find((block) => block.type === 'text');
+      if (remembered.length === 0 && prompt?.type === 'text') remembered = prompt.text;
+      await context.client.notify(acp.methods.client.session.update, {
+        sessionId: context.params.sessionId,
+        update: {
+          content: { text: remembered, type: 'text' },
+          sessionUpdate: 'agent_message_chunk',
+        },
+      });
+      return { stopReason: 'end_turn' };
+    }
     if (
       mode === 'recovery' &&
       context.params.prompt.some(

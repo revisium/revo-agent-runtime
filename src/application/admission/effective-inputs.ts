@@ -1,8 +1,8 @@
 import { Ajv2020 } from 'ajv/dist/2020.js';
 
-import type { JsonObject, JsonValue } from '../../../contracts/agent-definition.js';
-import type { ValidatedAgentDefinition } from '../../../definition/index.js';
-import { snapshotPlainJsonObject } from '../../../execution/output/plain-json-snapshot.js';
+import type { JsonObject, JsonValue } from '../../contracts/agent-definition.js';
+import type { ValidatedAgentDefinition } from '../../definition/index.js';
+import { snapshotPlainJsonObject } from '../../execution/output/plain-json-snapshot.js';
 
 interface EffectiveInputValidators {
   readonly parameters: (value: JsonObject) => boolean;

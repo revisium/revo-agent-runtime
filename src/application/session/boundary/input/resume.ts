@@ -1,5 +1,5 @@
 import type { JsonObject } from '../../../../contracts/agent-definition.js';
-import { AgentManagerError } from '../../../../contracts/manager.js';
+import { AgentManagerError } from '../../../../contracts/manager/core.js';
 import { isJsonObject } from '../../../../definition/canonical-json.js';
 import { decodeImmutableJsonObject, hasExactJsonKeys } from './immutable-json.js';
 import {

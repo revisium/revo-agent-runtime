@@ -9,7 +9,8 @@ import type { SessionCommandRuntime } from '../../../execution/session/runtime/a
 import type { EffectiveAgentSessionManagerLimits } from '../policy/limits/resolve.js';
 import { sessionManagerError } from './errors.js';
 
-interface ManagedSessionEntry {
+export interface ManagedSessionEntry {
+  readonly sessionId: string;
   readonly epoch: number;
   readonly runtime: SessionCommandRuntime;
   handle?: AgentSession;
@@ -56,7 +57,7 @@ export class ManagedSessionRegistry {
   }
 
   register(sessionId: string, epoch: number, runtime: SessionCommandRuntime): void {
-    this.#active.set(sessionId, { epoch, runtime });
+    this.#active.set(sessionId, { epoch, runtime, sessionId });
     this.#epochs.set(sessionId, epoch);
     this.#terminal.delete(sessionId);
   }
@@ -129,6 +130,11 @@ export class ManagedSessionRegistry {
 
   reconcileAll(): void {
     for (const sessionId of this.#active.keys()) this.reconcile(sessionId);
+  }
+
+  activeEntries(): readonly ManagedSessionEntry[] {
+    this.reconcileAll();
+    return Object.freeze([...this.#active.values()]);
   }
 
   #claim(sessionId: string): number {

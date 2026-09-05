@@ -1,4 +1,4 @@
-import type { AgentExecutionPin } from '../../manager.js';
+import type { AgentExecutionPin } from '../../manager/core.js';
 import type { AgentSessionEventCursor } from '../events/event.js';
 
 interface AgentSessionContinuationBase {

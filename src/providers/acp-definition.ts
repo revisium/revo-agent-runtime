@@ -42,5 +42,15 @@ export const acpDefinition = ({
   delivery: { prompt: 'protocol', resultSchema: 'protocol', result: 'protocol' },
   parameters: { schema: { $schema: dialect, type: 'object' } },
   permissions: { schema: { $schema: dialect, type: 'object' } },
-  capabilities: { cancellation: true, structuredResult: true, usage: true },
+  capabilities: {
+    cancellation: true,
+    session: {
+      interactions: { input: true, permission: true },
+      multiTurn: true,
+      resume: 'none',
+      updates: { message: true, plan: true, progress: false, tool: true, usage: true },
+    },
+    structuredResult: true,
+    usage: true,
+  },
 });

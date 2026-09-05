@@ -4,6 +4,7 @@ import type { SessionProtocolDriver } from '../../../../protocol/session/port/dr
 import type { ProcessSpawner } from '../../../process/port.js';
 import type { Sha256Digest } from '../../../security/digest/port.js';
 import type { SessionEffect } from '../../kernel/effect/session-effect.js';
+import type { SessionOpeningPreparer } from '../../port/opening-preparation.js';
 import type { SessionRuntimeIdentitySource } from '../../runtime/primitives/identity.js';
 import { createCheckpointCaptureInterpreter } from '../checkpoint/capture.js';
 import { createEventAppendInterpreter } from '../event/deliver.js';
@@ -13,7 +14,6 @@ import { createProcessCleanupInterpreter } from '../process/cleanup.js';
 import { createProviderInteractionInterpreter } from '../provider/interaction.js';
 import { createProviderLifecycleInterpreters } from '../provider/lifecycle.js';
 import { createProviderOpeningInterpreters } from '../provider/opening.js';
-import type { SessionOpeningPreparer } from '../provider/opening/preparation.js';
 import {
   createSessionInterpreterResources,
   type SessionInterpreterResources,

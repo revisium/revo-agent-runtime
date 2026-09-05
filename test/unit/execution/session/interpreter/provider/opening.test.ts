@@ -78,6 +78,10 @@ const runOpening = async (mode: 'fresh' | 'resume') => {
         status: 'prepared',
         value: {
           definition,
+          inputs: {
+            parameters: { model: 'effective-model' },
+            permissions: { write: false },
+          },
           launch: { args: [], command: 'agent', cwd: '/workspace' },
           output: {
             publish: async () => ({
@@ -107,7 +111,7 @@ const runOpening = async (mode: 'fresh' | 'resume') => {
     throw new Error('Missing opening interpreter');
   const opening = {
     ...sessionOpeningCommand(mode).opening,
-    environment: { inherit: [], secrets: { token: 'secret' }, variables: {} },
+    environment: { secrets: ['secret'], values: { token: 'secret' } },
   };
   prepare.execute(
     {
@@ -159,6 +163,13 @@ describe('provider opening interpreters', () => {
         type: 'provider.interaction_requested',
       }),
     ]);
+    expect(result.driver.calls[0]).toMatchObject({
+      request: {
+        parameters: { model: 'effective-model' },
+        permissions: { write: false },
+      },
+      type: 'open.fresh',
+    });
     const collected = result.resources.preparations.get('preparation-1')?.output.finalize();
     expect(new TextDecoder().decode(collected?.stdout)).toBe('token=[REDACTED]');
     expect(new TextDecoder().decode(collected?.stderr)).toBe('warning');

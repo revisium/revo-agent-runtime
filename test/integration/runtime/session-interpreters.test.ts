@@ -100,6 +100,7 @@ test('complete real kernel and interpreter composition opens, turns, checkpoints
         status: 'prepared',
         value: {
           definition,
+          inputs: { parameters: {}, permissions: {} },
           launch: { args: [], command: 'agent', cwd: '/workspace' },
           output: {
             publish: async (publication) => {

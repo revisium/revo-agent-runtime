@@ -1,4 +1,5 @@
-import type { AgentEvent, AgentInvocationResult } from '../../contracts/manager.js';
+import type { AgentEvent } from '../../contracts/manager/events.js';
+import type { AgentInvocationResult } from '../../contracts/manager/invocation.js';
 import type { ClaimedInvocationOutput } from './claim.js';
 
 export interface ClaimedOutputPublication {

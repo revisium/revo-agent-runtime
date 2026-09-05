@@ -1,4 +1,4 @@
-import type { AgentFault, AgentExecutionPin } from '../../manager.js';
+import type { AgentFault, AgentExecutionPin } from '../../manager/core.js';
 import type { AgentSessionCapabilities } from '../capabilities/negotiated.js';
 import type {
   AgentSessionInteractionScope,
