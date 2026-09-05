@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 
 import { validateBridgeEvidence } from './bridge-evidence.js';
 import { expectedPackedPaths } from './inventory.js';
@@ -29,12 +29,19 @@ const isPackManifest = (value: unknown): value is PackManifest =>
 const packageName = '@revisium/revo-agent-runtime';
 const root = process.cwd();
 const attw = join(root, 'node_modules/.bin/attw');
+const publint = join(root, 'node_modules/.bin/publint');
 
-const validateContents = (manifest: PackManifest): void => {
+const validateContents = async (manifest: PackManifest): Promise<void> => {
+  const sourceDirectory = join(root, 'src');
+  const sourceFiles = (await readdir(sourceDirectory, { recursive: true, withFileTypes: true }))
+    .filter((entry) => entry.isFile())
+    .map((entry) =>
+      relative(sourceDirectory, join(entry.parentPath, entry.name)).split(sep).join('/'),
+    );
   const paths = manifest.files.map((file) => file.path).sort();
   assert.deepEqual(
     paths,
-    expectedPackedPaths(),
+    expectedPackedPaths(sourceFiles),
     'Packed package must contain only the declared build artifacts.',
   );
   assert.ok(
@@ -84,10 +91,11 @@ try {
   assert.ok(Array.isArray(parsed) && parsed.length === 1, 'npm pack must create one tarball.');
   const manifest: unknown = parsed[0];
   assert.ok(isPackManifest(manifest), 'npm pack must return a valid tarball manifest.');
-  validateContents(manifest);
+  await validateContents(manifest);
   await validateBridgeEvidence(root);
 
   const tarball = join(packageDirectory, manifest.filename);
+  execFileSync(publint, ['run', tarball, '--strict', '--pack=false'], { cwd: root, stdio: 'pipe' });
   execFileSync(attw, [tarball, '--profile', 'esm-only'], { cwd: root, stdio: 'pipe' });
 
   await writeFile(

@@ -1,4 +1,4 @@
-# Revo Agent Runtime 2
+# Revo Agent Runtime
 
 This repository implements the current public contract in
 [docs/API.md](./docs/API.md). Public symbols are changed only by an approved

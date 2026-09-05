@@ -24,7 +24,7 @@ the export map deliberately changes.
 
 Production source must not depend on tests, fixtures, scripts, generated output,
 or repository tooling. Concrete Codex and Claude bridges are direct production
-dependencies, but are not imported until their behavior slice.
+dependencies discovered and launched through their provider adapters.
 
 `architecture/layers.json` is the executable dependency map. Dependency Cruiser
 enforces that map, cycles, provider isolation, portable contracts, and private

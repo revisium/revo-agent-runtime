@@ -1,5 +1,5 @@
 import type { AgentSessionEvent } from '../../../../contracts/session/events/event.js';
-import { ownedFrozenValue } from '../shared/value/owned.js';
+import { ownedFrozenValue } from '../../runtime/resources/owned.js';
 
 const encoder = new TextEncoder();
 

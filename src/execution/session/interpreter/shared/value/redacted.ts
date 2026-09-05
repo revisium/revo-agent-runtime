@@ -1,5 +1,5 @@
 import { createRedactionChannel } from '../../../../security/redaction/channel.js';
-import { ownedFrozenValue } from './owned.js';
+import { ownedFrozenValue } from '../../../runtime/resources/owned.js';
 
 const displayFields = new Set(['content', 'message', 'title', 'label', 'description', 'reason']);
 
