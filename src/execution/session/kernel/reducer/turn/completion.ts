@@ -3,6 +3,7 @@ import type { AgentSessionTurnResult } from '../../../../../contracts/session/li
 import type { SessionCommand } from '../../command/session-command.js';
 import type { SessionState } from '../../model/session-state.js';
 import type { TerminalTurnState } from '../../model/turn-state.js';
+import { resetInactivity } from '../timer/inactivity.js';
 import {
   appendEffect,
   nextEffectCorrelation,
@@ -11,7 +12,6 @@ import {
   type SessionTransition,
   unchangedTransition,
 } from '../transition.js';
-import { resetTurnInactivity } from './timing.js';
 
 type RunningState = Extract<SessionState, { readonly status: 'running' }>;
 type PromptOutcome = Extract<SessionCommand, { readonly type: `provider.prompt.${string}` }>;
@@ -44,7 +44,7 @@ const publishTurnCompletion = (
 ): SessionTransition => {
   if (state.turn.status === 'starting') return unchangedTransition(state);
   const usage = outcome.status === 'completed' ? (outcome.usage ?? state.usage) : state.usage;
-  return resetTurnInactivity(
+  return resetInactivity(
     queueSessionEvent(
       {
         ...state,
@@ -82,7 +82,7 @@ export const reducePromptOutcome = (
   if (state.turn.status === 'starting' || !matchesPrompt(state, command))
     return unchangedTransition(state);
   if (command.type === 'provider.prompt.accepted')
-    return resetTurnInactivity(
+    return resetInactivity(
       {
         effects: [],
         state: { ...state, turn: { ...state.turn, status: 'streaming' } },

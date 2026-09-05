@@ -1,5 +1,7 @@
 import type { SessionCommand } from '../command/session-command.js';
 import type { SessionState } from '../model/session-state.js';
+import { reduceCheckpointSession } from './checkpoint.js';
+import { reduceInteractionSession } from './interaction.js';
 import { reduceOpeningSession } from './opening.js';
 import { reduceActiveTerminal, reduceTerminalizing } from './terminal.js';
 import {
@@ -31,9 +33,15 @@ export const reduceSession: SessionReducer = (state: SessionState, command: Sess
       type: 'process.cleanup',
     });
   }
-  if (state.status === 'opening') return reduceOpeningSession(state, command);
   if (state.status === 'closing' || state.status === 'cancelling')
     return reduceTerminalizing(state, command);
+  const checkpoint = reduceCheckpointSession(state, command);
+  if (checkpoint !== undefined) return checkpoint;
+  if (state.status === 'opening' || state.status === 'idle' || state.status === 'running') {
+    const interaction = reduceInteractionSession(state, command);
+    if (interaction !== undefined) return interaction;
+  }
+  if (state.status === 'opening') return reduceOpeningSession(state, command);
   if (
     (state.status === 'idle' || state.status === 'running') &&
     (command.type === 'session.close' ||

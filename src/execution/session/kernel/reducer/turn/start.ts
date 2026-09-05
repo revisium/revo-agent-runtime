@@ -1,6 +1,7 @@
 import type { TurnStartedEvent } from '../../../../../contracts/session/events/event.js';
 import type { PublicSessionCommand } from '../../command/public.js';
 import type { SessionState } from '../../model/session-state.js';
+import { resetInactivity } from '../timer/inactivity.js';
 import {
   appendEffect,
   nextEffectCorrelation,
@@ -9,7 +10,6 @@ import {
   type SessionTransition,
   unchangedTransition,
 } from '../transition.js';
-import { resetTurnInactivity } from './timing.js';
 
 type IdleState = Extract<SessionState, { readonly status: 'idle' }>;
 type RunningState = Extract<SessionState, { readonly status: 'running' }>;
@@ -46,7 +46,7 @@ export const startTurn = (state: IdleState, command: SendTurnCommand): SessionTr
     turnId: command.input.turnId,
     type: 'turn.started',
   };
-  return resetTurnInactivity(
+  return resetInactivity(
     queueSessionEvent(
       {
         ...state,

@@ -128,12 +128,13 @@ const finishOpenedEvent = (
     },
   };
   if (openingTimer !== undefined) result = cancelOpeningTimer(result, openingTimer);
-  result = scheduleOpeningTimer(result, {
-    deadlineMs: progress.openedAtMs + state.limits.idleTimeoutMs,
-    generation: 1,
-    kind: 'idle',
-    timerId: `${state.sessionId}:${state.epoch}:idle`,
-  });
+  if (result.state.interactions.length === 0)
+    result = scheduleOpeningTimer(result, {
+      deadlineMs: progress.openedAtMs + state.limits.idleTimeoutMs,
+      generation: 1,
+      kind: 'idle',
+      timerId: `${state.sessionId}:${state.epoch}:idle`,
+    });
   const correlation = nextEffectCorrelation(result.state);
   return appendEffect(result, {
     callId,

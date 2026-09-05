@@ -30,6 +30,7 @@ const common = {
   epoch: 1,
   events: { pending: [] },
   incarnationId: 'incarnation_01',
+  idleTimerGeneration: 0,
   interactions: [],
   limits,
   nextEffectSequence: 1,

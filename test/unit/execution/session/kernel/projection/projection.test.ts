@@ -33,6 +33,7 @@ test('projects every active phase and pending interaction state', () => {
     turnId: 'turn_01',
   } as const;
   const interaction = {
+    providerResourceId: 'provider_01',
     request: { kind: 'input', message: 'Choose', questions: [], requestId: 'request_01' },
     scope: { kind: 'turn', turnId: 'turn_01' },
   } as const;

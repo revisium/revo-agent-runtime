@@ -57,7 +57,11 @@ const request = {
   options: [{ kind: 'allow_once', label: 'Allow', optionId: 'allow' }],
   requestId: 'request_01',
 } as const;
-const interactionBase = { request, scope: { kind: 'turn', turnId: 'turn_01' } } as const;
+const interactionBase = {
+  providerResourceId: 'provider_01',
+  request,
+  scope: { kind: 'turn', turnId: 'turn_01' },
+} as const;
 
 type InteractionByStage = {
   readonly [Stage in InteractionState['stage']]: Extract<
