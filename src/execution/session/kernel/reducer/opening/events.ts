@@ -82,16 +82,16 @@ export const startOpening = (state: OpeningState, command: OpeningCommand): Sess
 
 const prepareAfterAccepted = (
   state: OpeningState,
-  transition: SessionTransition,
+  transition: SessionTransition<OpeningState>,
 ): SessionTransition => {
-  if (state.progress.stage !== 'publishing_accepted' || transition.state.status !== 'opening')
-    return transition;
-  const correlation = nextEffectCorrelation(transition.state);
+  if (state.progress.stage !== 'publishing_accepted') return transition;
+  const opening = transition.state;
+  const correlation = nextEffectCorrelation(opening);
   return appendEffect(
     {
       effects: transition.effects,
       state: {
-        ...transition.state,
+        ...opening,
         progress: { correlation, opening: state.progress.opening, stage: 'preparing' },
       },
     },
@@ -106,11 +106,10 @@ const prepareAfterAccepted = (
 
 const finishOpenedEvent = (
   state: OpeningState,
-  transition: SessionTransition,
+  transition: SessionTransition<OpeningState>,
   event: SessionOpenedEvent,
 ): SessionTransition => {
-  if (state.progress.stage !== 'publishing_opened' || transition.state.status !== 'opening')
-    return transition;
+  if (state.progress.stage !== 'publishing_opened') return transition;
   const progress = state.progress;
   const { callId, progress: _progress, ...base } = transition.state;
   const openingTimer = base.timers.find(({ kind }) => kind === 'opening');

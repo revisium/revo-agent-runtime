@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { expect, it } from 'vitest';
+import { expect, it, test } from 'vitest';
 
 import { decodeResumeToken } from '../../../../../../src/application/session/boundary/checkpoint/decode.js';
 import { createCheckpointCaptureInterpreter } from '../../../../../../src/execution/session/interpreter/checkpoint/capture.js';
@@ -131,5 +131,84 @@ it('rejects a continuation whose canonical envelope exceeds the effect limit', a
   expect(recorded.outcomes.at(-1)).toMatchObject({
     fault: { code: 'revo.agent.checkpoint_invalid' },
     type: 'checkpoint.failed',
+  });
+});
+
+test('ignores unrelated effects and fails when provider resource is absent', async () => {
+  const resources = createSessionInterpreterResources();
+  const recorded = recordingSessionEffectOutput();
+  const handler = createCheckpointCaptureInterpreter({ clock, digest, resources });
+  handler.execute({ type: 'other' } as never, recorded.output);
+  handler.execute(effect('checkpoint'), recorded.output);
+  await flushMicrotasks(6);
+  expect(recorded.outcomes).toEqual([expect.objectContaining({ type: 'checkpoint.failed' })]);
+});
+
+test.each([
+  {
+    failure: { code: 'capability_unsupported' as const, message: 'unsupported', retryable: false },
+    status: 'unsupported' as const,
+  },
+  {
+    failure: { code: 'transport_failed' as const, message: 'failed', retryable: true },
+    status: 'failed' as const,
+  },
+])('maps provider checkpoint outcome %#', async (checkpointOutcome) => {
+  const resources = createSessionInterpreterResources();
+  registerProtocolSession(resources, {
+    ...sessionWithCheckpoint({}),
+    checkpoint: async () => checkpointOutcome,
+  });
+  const recorded = recordingSessionEffectOutput();
+  createCheckpointCaptureInterpreter({ clock, digest, resources }).execute(
+    effect('checkpoint'),
+    recorded.output,
+  );
+  await flushMicrotasks(8);
+  expect(recorded.outcomes.at(-1)).toMatchObject({
+    type:
+      checkpointOutcome.status === 'unsupported' ? 'checkpoint.unsupported' : 'checkpoint.failed',
+  });
+});
+
+test.each(['throw', 'reject'] as const)('contains provider checkpoint %s failure', async (mode) => {
+  const resources = createSessionInterpreterResources();
+  registerProtocolSession(resources, {
+    ...sessionWithCheckpoint({}),
+    checkpoint: () => {
+      if (mode === 'throw') throw new Error('checkpoint failed');
+      return Promise.reject(new Error('checkpoint failed'));
+    },
+  });
+  const recorded = recordingSessionEffectOutput();
+  createCheckpointCaptureInterpreter({ clock, digest, resources }).execute(
+    effect('checkpoint'),
+    recorded.output,
+  );
+  await flushMicrotasks(8);
+  expect(recorded.outcomes.at(-1)).toMatchObject({ type: 'checkpoint.failed' });
+});
+
+test('times out an unsettled checkpoint capture', async () => {
+  const resources = createSessionInterpreterResources();
+  registerProtocolSession(resources, {
+    ...sessionWithCheckpoint({}),
+    checkpoint: async () => new Promise<never>(() => undefined),
+  });
+  const timer = {
+    schedule: (_milliseconds: number, callback: () => void) => {
+      queueMicrotask(callback);
+      return { cancel: () => undefined };
+    },
+  };
+  const recorded = recordingSessionEffectOutput();
+  createCheckpointCaptureInterpreter({ clock, digest, resources, timer }).execute(
+    effect('checkpoint'),
+    recorded.output,
+  );
+  await flushMicrotasks(16);
+  expect(recorded.outcomes.at(-1)).toMatchObject({
+    fault: { code: 'revo.agent.timeout' },
+    type: 'checkpoint.timed_out',
   });
 });

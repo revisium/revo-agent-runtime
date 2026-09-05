@@ -23,7 +23,7 @@ const isBuiltInProviderId = (value: string): value is BuiltInProviderId =>
 
 const selectedProvider = (
   value: string,
-  variable: 'REVO_LIVE_AGENT_SMOKE' | 'REVO_LIVE_CONFIGURATION_SMOKE',
+  variable: 'REVO_LIVE_AGENT_SMOKE' | 'REVO_LIVE_CONFIGURATION_SMOKE' | 'REVO_LIVE_SESSION_SMOKE',
 ): BuiltInProviderId => {
   if (isBuiltInProviderId(value)) return value;
   throw new Error(`${variable} must name a supported built-in ACP provider or all.`);
@@ -38,3 +38,10 @@ export const agentSmokeProviders = (value: string): readonly BuiltInProviderId[]
 /** Configuration `all` deliberately proves the stricter every-provider boundary. */
 export const configurationSmokeProviders = (value: string): readonly BuiltInProviderId[] =>
   value === 'all' ? builtInProviderIds : [selectedProvider(value, 'REVO_LIVE_CONFIGURATION_SMOKE')];
+
+const acceptedSessionAllProviders = Object.freeze(['codex', 'claude', 'opencode'] as const);
+
+export const sessionSmokeProviders = (value: string): readonly BuiltInProviderId[] =>
+  value === 'all'
+    ? acceptedSessionAllProviders
+    : [selectedProvider(value, 'REVO_LIVE_SESSION_SMOKE')];

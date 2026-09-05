@@ -124,3 +124,22 @@ test.each(['fresh', 'resume'] as const)(
     expect(effectOf(transition, 'event.append').event.type).toBe('session.opened');
   },
 );
+
+test('ignores an opening interaction request before provider ownership', () => {
+  const command = sessionOpeningCommand();
+  const state = createOpeningSessionState(command);
+  const transition = reduceSession(state, {
+    ...observed,
+    correlation: { effectId: 'foreign', epoch: 1, sessionId: state.sessionId },
+    providerResourceId: 'provider_01',
+    request: {
+      action: { kind: 'execute' },
+      kind: 'permission',
+      options: [],
+      requestId: 'permission_01',
+    },
+    scope: { kind: 'opening' },
+    type: 'provider.interaction_requested',
+  });
+  expect(transition).toEqual({ effects: [], state });
+});

@@ -71,6 +71,31 @@ describe('session event delivery', () => {
     expect(outcome.fault.message).not.toContain('secret');
   });
 
+  it('contains a synchronous sink exception', async () => {
+    const result = output();
+    const sink: AgentSessionEventSink = {
+      append: () => {
+        throw new Error('secret synchronous failure');
+      },
+    };
+    createEventAppendInterpreter({ clock, sink }).execute(effect, result.port);
+    await vi.runAllTimersAsync();
+
+    expect(result.outcomes).toEqual([expect.objectContaining({ type: 'event.failed' })]);
+  });
+
+  it('ignores an effect owned by another interpreter', async () => {
+    const append = vi.fn<AgentSessionEventSink['append']>();
+    const result = output();
+    createEventAppendInterpreter({ clock, sink: { append } }).execute(
+      { ...effect, type: 'process.cleanup' } as never,
+      result.port,
+    );
+    await vi.runAllTimersAsync();
+    expect(append).not.toHaveBeenCalled();
+    expect(result.outcomes).toEqual([]);
+  });
+
   it.each([
     ['fulfilled', 'event.timed_out_then_applied'],
     ['rejected', 'event.timed_out_then_failed'],

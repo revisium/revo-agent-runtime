@@ -70,8 +70,8 @@ export const reduceTerminalEventOutcome = (
       observedAtMs: command.observedAtMs,
       type: 'event.failed',
     });
-  const acknowledged = acknowledgeSessionEvent(state, command.correlation);
-  if (acknowledged === undefined) return unchangedTransition(state);
+  // The in-flight correlation was matched above, so acknowledgement is total here.
+  const acknowledged = acknowledgeSessionEvent(state, command.correlation)!;
   return publishOutput(
     acknowledged.transition.state,
     command.observedAt,

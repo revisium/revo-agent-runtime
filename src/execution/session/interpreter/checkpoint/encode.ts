@@ -85,16 +85,10 @@ const containerValues = (value: object): readonly unknown[] => {
 };
 
 const inspectData = (source: unknown, secrets: readonly string[]): Readonly<JsonObject> => {
-  let cloned: unknown;
-  try {
-    cloned = structuredClone(source);
-  } catch {
-    return invalid();
-  }
-  if (!isJsonObject(cloned)) return invalid();
+  if (!isJsonObject(source)) return invalid();
   const seen = new WeakSet<object>();
   const pending: Array<{ readonly depth: number; readonly value: unknown }> = [
-    { depth: 1, value: cloned },
+    { depth: 1, value: source },
   ];
   let nodes = 0;
   for (let current = pending.pop(); current !== undefined; current = pending.pop()) {
@@ -107,7 +101,11 @@ const inspectData = (source: unknown, secrets: readonly string[]): Readonly<Json
     for (const child of containerValues(container))
       pending.push({ depth: current.depth + 1, value: child });
   }
-  return cloned;
+  try {
+    return structuredClone(source);
+  } catch {
+    return invalid();
+  }
 };
 
 const canonicalCheckpointBytes = (value: unknown): Uint8Array => {

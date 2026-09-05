@@ -21,7 +21,7 @@ import { boundAcpInput } from '../frame-boundary.js';
 import { AcpSessionFrameCapture } from '../session-frame-capture.js';
 import { acpSessionClientCapabilities, negotiateAcpSessionCapabilities } from './capabilities.js';
 import { AcpSessionInteractionBroker } from './interaction/broker.js';
-import { mapAcpSessionUpdate } from './mapping/updates.js';
+import { deliverAcpSessionUpdate } from './mapping/updates.js';
 import { AcpSessionResource } from './resource.js';
 
 const maxAcpFrameBytes = 1_048_576;
@@ -115,8 +115,7 @@ const openAcpSession = (
     )
     .onNotification(acp.methods.client.session.update, async ({ params }) => {
       if (!belongsToSession(params.sessionId)) return;
-      const update = mapAcpSessionUpdate(params.update);
-      if (update !== undefined) await observer?.update(update);
+      await deliverAcpSessionUpdate(observer, params.update);
     })
     .connectWith(stream, async (context) => {
       const initialized = await context.request(acp.methods.agent.initialize, {

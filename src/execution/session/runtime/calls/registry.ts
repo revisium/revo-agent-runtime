@@ -11,11 +11,8 @@ interface PendingCall {
 }
 
 const pendingCall = (): PendingCall => {
-  let settle: (value: PublicCallSettlement) => void = () => undefined;
-  const promise = new Promise<PublicCallSettlement>((resolve) => {
-    settle = resolve;
-  });
-  return { followers: new Set(), promise, settle };
+  const pending = Promise.withResolvers<PublicCallSettlement>();
+  return { followers: new Set(), promise: pending.promise, settle: pending.resolve };
 };
 
 export class PublicCallRegistry {
@@ -59,9 +56,7 @@ export class PublicCallRegistry {
   #settle(callId: string, settlement: PublicCallSettlement): boolean {
     if (!this.#calls.has(callId)) return false;
     const remaining = [callId];
-    while (remaining.length > 0) {
-      const nextId = remaining.shift();
-      if (nextId === undefined) break;
+    for (const nextId of remaining) {
       const call = this.#calls.get(nextId);
       if (call === undefined) continue;
       this.#calls.delete(nextId);

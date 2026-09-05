@@ -51,6 +51,7 @@ test('one public manager owns a hot multi-turn session and its lifecycle', async
           return { state: 'appended' };
         },
       },
+      limits: { maxActiveSessions: 2 },
     },
   });
   await manager.initialize({ invocations: [], sessions: [] });

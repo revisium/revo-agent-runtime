@@ -32,6 +32,17 @@ describe('provider message stream', () => {
     });
   });
 
+  it('moves a chunk boundary before a split UTF-8 code point', () => {
+    const stream = new SessionMessageStream({
+      digest,
+      maxChunkBytes: 4,
+      maxMessageBytes: 16,
+      secrets: [],
+    });
+
+    expect([...stream.push('a😀b'), ...stream.complete().chunks]).toEqual(['a', '😀', 'b']);
+  });
+
   it('fails closed when the redacted message exceeds its total budget', () => {
     const stream = new SessionMessageStream({
       digest,
@@ -41,5 +52,34 @@ describe('provider message stream', () => {
     });
 
     expect(() => stream.push('hello')).toThrow(SessionMessageLimitError);
+  });
+
+  it.each([
+    { maxChunkBytes: 3, maxMessageBytes: 8 },
+    { maxChunkBytes: Number.NaN, maxMessageBytes: 8 },
+    { maxChunkBytes: 4, maxMessageBytes: 0 },
+    { maxChunkBytes: 4, maxMessageBytes: Number.NaN },
+  ])('rejects invalid byte limits: %o', (limits) => {
+    expect(() => new SessionMessageStream({ ...limits, digest, secrets: [] })).toThrow(
+      SessionMessageLimitError,
+    );
+  });
+
+  it('completes an empty stream once and rejects writes after completion', () => {
+    const stream = new SessionMessageStream({
+      digest,
+      maxChunkBytes: 4,
+      maxMessageBytes: 8,
+      secrets: [],
+    });
+
+    expect(stream.push('')).toEqual([]);
+    const completion = stream.complete();
+    expect(completion).toEqual({
+      chunks: [],
+      summary: { contentBytes: 0, contentSha256: 'sha256:' },
+    });
+    expect(stream.complete()).toBe(completion);
+    expect(() => stream.push('late')).toThrow(SessionMessageLimitError);
   });
 });

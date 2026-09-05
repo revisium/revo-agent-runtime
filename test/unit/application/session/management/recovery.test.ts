@@ -1,6 +1,9 @@
-import { expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
-import { recoverAgentSessions } from '../../../../../src/application/session/management/recovery.js';
+import {
+  beginAgentSessionRecovery,
+  recoverAgentSessions,
+} from '../../../../../src/application/session/management/recovery.js';
 import type {
   RecoveredProcessInspector,
   RecoveredProcessReconciliation,
@@ -12,6 +15,11 @@ import type {
 } from '../../../../../src/index.js';
 
 const definitionDigest = 'a'.repeat(64);
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 const agent: AgentDescriptor = {
   agent: { id: 'fake', version: '1.0.0' },
   capabilities: { cancellation: true, structuredResult: true, usage: false },
@@ -131,4 +139,90 @@ test.each([
   });
   expect(story.inspected).toEqual([]);
   expect(story.removed).toEqual([]);
+});
+
+test('accepts an empty recovery set without touching external ports', async () => {
+  const story = setup([]);
+
+  await expect(story.recover([])).resolves.toBeUndefined();
+  expect(story.inspected).toEqual([]);
+  expect(story.removed).toEqual([]);
+});
+
+test.each(['inspection', 'removal'] as const)(
+  'contains a thrown %s port failure',
+  async (phase) => {
+    const story = setup([{ status: 'absent' }]);
+    if (phase === 'removal') vi.spyOn(story.sink, 'remove').mockRejectedValue(new Error('failure'));
+
+    const inspector: RecoveredProcessInspector = {
+      inspectAndReconcileRecoveredProcess:
+        phase === 'inspection'
+          ? async () => {
+              throw new Error('failure');
+            }
+          : async () => ({ status: 'absent' }),
+    };
+    await expect(
+      recoverAgentSessions({
+        agents: [agent],
+        inspector,
+        operationTimeoutMs: 100,
+        recoveryTimeoutMs: 500,
+        sink: story.sink,
+        snapshots: [snapshot('port-failure')],
+      }),
+    ).rejects.toMatchObject({ fault: { code: 'revo.agent.session_state_unavailable' } });
+  },
+);
+
+test('reports timeout immediately but keeps quiescence pending until the port settles', async () => {
+  vi.useFakeTimers();
+  const inspection = Promise.withResolvers<RecoveredProcessReconciliation>();
+  const attempt = beginAgentSessionRecovery({
+    agents: [agent],
+    inspector: { inspectAndReconcileRecoveredProcess: async () => inspection.promise },
+    operationTimeoutMs: 100,
+    recoveryTimeoutMs: 500,
+    sink: setup([]).sink,
+    snapshots: [snapshot('timeout')],
+  });
+  let quiescent = false;
+  void attempt.quiescence.then(() => {
+    quiescent = true;
+  });
+
+  await vi.advanceTimersByTimeAsync(101);
+  await expect(attempt.result).rejects.toMatchObject({
+    fault: { code: 'revo.agent.session_state_unavailable' },
+  });
+  expect(quiescent).toBe(false);
+  inspection.resolve({ status: 'absent' });
+  await attempt.quiescence;
+  expect(quiescent).toBe(true);
+  vi.useRealTimers();
+});
+
+test('fails closed when the global recovery deadline expires before removal', async () => {
+  const now = vi
+    .spyOn(Date, 'now')
+    .mockReturnValueOnce(0)
+    .mockReturnValueOnce(0)
+    .mockReturnValue(501);
+  const story = setup([{ status: 'absent' }]);
+
+  await expect(story.recover([snapshot('deadline')])).rejects.toMatchObject({
+    fault: { code: 'revo.agent.session_state_unavailable' },
+  });
+  expect(story.removed).toEqual([]);
+  now.mockRestore();
+});
+
+test('fails closed when the global deadline expires before process inspection', async () => {
+  vi.spyOn(Date, 'now').mockReturnValueOnce(0).mockReturnValue(501);
+  const story = setup([{ status: 'absent' }]);
+  await expect(story.recover([snapshot('expired-before-inspection')])).rejects.toMatchObject({
+    fault: { code: 'revo.agent.session_state_unavailable' },
+  });
+  expect(story.inspected).toEqual([]);
 });

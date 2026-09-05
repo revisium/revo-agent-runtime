@@ -25,8 +25,8 @@ export const reduceTurnEvent = (state: RunningState, command: EventOutcome): Ses
       phase: 'session_delivery',
       retryable: false,
     });
-  const acknowledged = acknowledgeSessionEvent(state, command.correlation);
-  if (acknowledged === undefined) return unchangedTransition(state);
+  // The in-flight correlation was matched above, so acknowledgement is total here.
+  const acknowledged = acknowledgeSessionEvent(state, command.correlation)!;
   if (acknowledged.event.type === 'turn.started')
     return beginProviderPrompt(state, acknowledged.transition);
   if (acknowledged.event.type === 'turn.completed')

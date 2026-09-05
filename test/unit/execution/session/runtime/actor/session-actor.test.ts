@@ -70,4 +70,102 @@ describe('session actor', () => {
     expect(actor.state.nextEventSequence).toBe(4);
     expect(actor.activeEffects).toBe(0);
   });
+
+  test('contains a synchronously throwing mandatory effect interpreter', async () => {
+    const commands: string[] = [];
+    const reducer: SessionReducer = (state, command) => {
+      commands.push(command.type);
+      return command.type === 'session.close'
+        ? {
+            effects: [
+              {
+                correlation: { effectId: 'prepare_01', epoch: 1, sessionId: 'session_01' },
+                opening: sessionOpeningCommand().opening,
+                timeoutMs: 100,
+                type: 'opening.prepare',
+              },
+            ],
+            state: { ...state, nextEffectSequence: state.nextEffectSequence + 1 },
+          }
+        : { effects: [], state };
+    };
+    const interpreter = {
+      execute: () => {
+        throw new Error('interpreter failed');
+      },
+      type: 'opening.prepare',
+    } satisfies SessionEffectInterpreter;
+    const actor = new SessionActor({
+      clock,
+      dispatcher: new SessionEffectDispatcher([interpreter]),
+      initialState: idleSessionState(),
+      reducer,
+    });
+
+    actor.dispatch(closeCommand());
+    await actor.whenQuiescent();
+    expect(commands).toEqual(['session.close', 'opening.preparation.failed']);
+    expect(actor.activeEffects).toBe(0);
+  });
+
+  test('fails a mandatory effect when no interpreter owns it', async () => {
+    const commands: string[] = [];
+    const reducer: SessionReducer = (state, command) => {
+      commands.push(command.type);
+      return command.type === 'session.close'
+        ? {
+            effects: [
+              {
+                correlation: { effectId: 'prepare_missing', epoch: 1, sessionId: 'session_01' },
+                opening: sessionOpeningCommand().opening,
+                timeoutMs: 100,
+                type: 'opening.prepare',
+              },
+            ],
+            state,
+          }
+        : { effects: [], state };
+    };
+    const actor = new SessionActor({
+      clock,
+      dispatcher: new SessionEffectDispatcher([]),
+      initialState: idleSessionState(),
+      reducer,
+    });
+
+    actor.dispatch(closeCommand());
+    await actor.whenQuiescent();
+
+    expect(commands).toEqual(['session.close', 'opening.preparation.failed']);
+    expect(actor.activeEffects).toBe(0);
+  });
+
+  test('contains an unowned best-effort effect without manufacturing an outcome', async () => {
+    const reducer: SessionReducer = (state, command) =>
+      command.type === 'session.close'
+        ? {
+            effects: [
+              {
+                correlation: { effectId: 'close_unowned', epoch: 1, sessionId: 'session_01' },
+                providerResourceId: 'provider_01',
+                reason: 'best effort',
+                timeoutMs: 100,
+                type: 'provider.close',
+              },
+            ],
+            state,
+          }
+        : { effects: [], state };
+    const actor = new SessionActor({
+      clock,
+      dispatcher: new SessionEffectDispatcher([]),
+      initialState: idleSessionState(),
+      reducer,
+    });
+
+    actor.dispatch(closeCommand());
+    await actor.whenQuiescent();
+
+    expect(actor.activeEffects).toBe(0);
+  });
 });

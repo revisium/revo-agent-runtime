@@ -6,6 +6,12 @@ import { failInteractionSession } from './failure.js';
 import { sameInteractionRequest } from './matching.js';
 
 type RequestState = Extract<SessionState, { readonly status: 'opening' | 'running' }>;
+type InteractiveRunningState = Extract<RequestState, { readonly status: 'running' }> & {
+  readonly turn: Exclude<
+    Extract<RequestState, { readonly status: 'running' }>['turn'],
+    { readonly status: 'starting' | 'settling' }
+  >;
+};
 type InteractionRequest = Extract<
   ProviderCommand,
   { readonly type: 'provider.interaction_requested' }
@@ -26,6 +32,11 @@ const requestedEvent = (
   type: 'interaction.requested',
 });
 
+const hasInteractiveTurn = (
+  state: Extract<RequestState, { readonly status: 'running' }>,
+): state is InteractiveRunningState =>
+  state.turn.status !== 'starting' && state.turn.status !== 'settling';
+
 export const requestInteraction = (
   state: RequestState,
   command: InteractionRequest,
@@ -38,10 +49,9 @@ export const requestInteraction = (
     )
       return { effects: [], state };
   } else {
+    if (!hasInteractiveTurn(state)) return { effects: [], state };
     const turn = state.turn;
     if (
-      turn.status === 'starting' ||
-      turn.status === 'settling' ||
       turn.correlation.effectId !== command.correlation.effectId ||
       turn.turnId !== command.correlation.turnId ||
       command.scope.kind !== 'turn' ||
@@ -87,7 +97,6 @@ export const requestInteraction = (
       requestedEvent(state, command),
     );
   const turn = state.turn;
-  if (turn.status === 'starting' || turn.status === 'settling') return { effects: [], state };
   return queueSessionEvent(
     {
       ...state,

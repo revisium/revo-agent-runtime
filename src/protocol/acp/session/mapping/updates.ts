@@ -1,6 +1,7 @@
 import type * as acp from '@agentclientprotocol/sdk';
 
 import type { SessionProtocolUpdate } from '../../../session/model/update.js';
+import type { SessionProtocolObserver } from '../../../session/port/session.js';
 
 const toolKind = (kind: acp.ToolKind | null | undefined) => {
   if (kind === 'think' || kind === 'switch_mode' || kind === undefined || kind === null)
@@ -46,4 +47,13 @@ export const mapAcpSessionUpdate = (
   if (update.sessionUpdate === 'plan')
     return Object.freeze({ items: Object.freeze(planItems(update.entries)), type: 'plan' });
   return undefined;
+};
+
+export const deliverAcpSessionUpdate = async (
+  observer: SessionProtocolObserver | undefined,
+  update: acp.SessionUpdate,
+): Promise<void> => {
+  const mapped = mapAcpSessionUpdate(update);
+  if (mapped === undefined || observer === undefined) return;
+  await observer.update(mapped);
 };

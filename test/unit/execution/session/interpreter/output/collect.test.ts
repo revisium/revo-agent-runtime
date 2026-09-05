@@ -23,3 +23,18 @@ it('redacts secrets split across writes before retaining bytes', () => {
   collector.writeStdout(new TextEncoder().encode('ret'));
   expect(new TextDecoder().decode(collector.finalize().stdout)).toBe('value=[REDACTED]');
 });
+
+it.each([0, 39, Number.NaN])('rejects an invalid shared output limit: %s', (limit) => {
+  expect(() => new SessionOutputCollector(limit, [])).toThrow('byte limit');
+});
+
+it('retains untruncated stdout and stderr without markers', () => {
+  const collector = new SessionOutputCollector(128, []);
+  collector.writeStdout(new TextEncoder().encode('out'));
+  collector.writeStderr(new TextEncoder().encode('err'));
+
+  const result = collector.finalize();
+  expect(new TextDecoder().decode(result.stdout)).toBe('out');
+  expect(new TextDecoder().decode(result.stderr)).toBe('err');
+  expect(result.truncated).toEqual({ stderr: false, stdout: false });
+});

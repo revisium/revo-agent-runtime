@@ -40,6 +40,7 @@
     "smoke:agent": "node --import tsx test/smoke/agent.ts",
     "smoke:configuration": "node --import tsx test/smoke/configuration.ts",
     "smoke:recovery": "node --import tsx test/smoke/recovery.ts",
+    "smoke:session": "node --import tsx test/smoke/session.ts",
     "test:unit": "vitest run --passWithNoTests test/unit",
     "test:contract": "vitest run --passWithNoTests test/contract",
     "test:integration": "vitest run --passWithNoTests test/integration",

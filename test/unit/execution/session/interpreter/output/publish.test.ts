@@ -93,3 +93,71 @@ it('fails without calling a target when no preparation owns the session', async 
     type: 'output.failed',
   });
 });
+
+it('fails when collected output exceeds the effect budget', async () => {
+  const publish = vi.fn<SessionOutputPublicationTarget['publish']>();
+  const resources = createSessionInterpreterResources();
+  const preparation = registerProtocolSession(resources, session, { output: { publish } });
+  preparation.output.writeStdout(new TextEncoder().encode('large'));
+  const recorded = recordingSessionEffectOutput();
+  createOutputPublicationInterpreter({ clock, resources }).execute(
+    { ...effect, maxBytes: 1 },
+    recorded.output,
+  );
+  await flushMicrotasks(8);
+  expect(publish).not.toHaveBeenCalled();
+  expect(recorded.outcomes.at(-1)?.type).toBe('output.failed');
+});
+
+it.each(['failed', 'uncertain'] as const)('preserves a target %s publication', async (state) => {
+  const resources = createSessionInterpreterResources();
+  registerProtocolSession(resources, session, {
+    output: {
+      publish: async () => ({
+        error: {
+          code: 'revo.agent.output_write_failed',
+          message: 'failed',
+          phase: 'session_terminal',
+          retryable: false,
+        },
+        files: { directory: '/output', stdout: 'stdout.log' },
+        state,
+      }),
+    },
+  });
+  const recorded = recordingSessionEffectOutput();
+  createOutputPublicationInterpreter({ clock, resources }).execute(effect, recorded.output);
+  await flushMicrotasks(8);
+  expect(recorded.outcomes.at(-1)).toMatchObject({ output: { state }, type: `output.${state}` });
+});
+
+it('rejects a publication for a different output directory', async () => {
+  const resources = createSessionInterpreterResources();
+  registerProtocolSession(resources, session, {
+    output: {
+      publish: async () => ({
+        files: {
+          directory: '/other',
+          manifest: 'session.json',
+          stderr: 'stderr.log',
+          stdout: 'stdout.log',
+        },
+        state: 'published',
+      }),
+    },
+  });
+  const recorded = recordingSessionEffectOutput();
+  createOutputPublicationInterpreter({ clock, resources }).execute(effect, recorded.output);
+  await flushMicrotasks(8);
+  expect(recorded.outcomes.at(-1)?.type).toBe('output.failed');
+});
+
+it('ignores an effect owned by another interpreter', async () => {
+  const recorded = recordingSessionEffectOutput();
+  createOutputPublicationInterpreter({
+    clock,
+    resources: createSessionInterpreterResources(),
+  }).execute({ ...effect, type: 'process.cleanup' } as never, recorded.output);
+  await flushMicrotasks(4);
+  expect(recorded.outcomes).toEqual([]);
+});

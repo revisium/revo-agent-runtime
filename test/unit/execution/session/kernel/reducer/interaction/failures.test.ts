@@ -1,8 +1,12 @@
 import { expect, test } from 'vitest';
 
 import type { SessionEffect } from '../../../../../../../src/execution/session/kernel/effect/session-effect.js';
+import { reduceInteractionEvent } from '../../../../../../../src/execution/session/kernel/reducer/interaction/events.js';
+import { failInteractionSession } from '../../../../../../../src/execution/session/kernel/reducer/interaction/failure.js';
+import { createOpeningSessionState } from '../../../../../../../src/execution/session/kernel/reducer/opening.js';
 import { reduceSession } from '../../../../../../../src/execution/session/kernel/reducer/reduce.js';
 import type { SessionTransition } from '../../../../../../../src/execution/session/kernel/reducer/transition.js';
+import { sessionOpeningCommand } from '../../../../../../support/session/builders/kernel/opening.js';
 import { streamingSessionState } from '../../../../../../support/session/builders/kernel/running.js';
 
 const observed = { observedAt: '2026-03-21T00:00:02.000Z', observedAtMs: 2_000 } as const;
@@ -56,6 +60,84 @@ test('fails closed when request publication fails', () => {
     intent: { error: fault, outcome: 'failed' },
     status: 'cancelling',
   });
+});
+
+test('ignores stale request publication and fails closed on a durable event conflict', () => {
+  const requested = requestedInteraction();
+  const stale = reduceSession(requested.state, {
+    ...observed,
+    correlation: { ...requested.requested.correlation, effectId: 'stale' },
+    result: { state: 'appended' },
+    type: 'event.applied',
+  });
+  expect(stale).toEqual({ effects: [], state: requested.state });
+
+  const conflict = reduceSession(requested.state, {
+    ...observed,
+    correlation: requested.requested.correlation,
+    result: { state: 'conflict' },
+    type: 'event.applied',
+  });
+  expect(conflict.state).toMatchObject({
+    intent: { error: { code: 'revo.agent.event_conflict' }, outcome: 'failed' },
+    status: 'cancelling',
+  });
+});
+
+test('ignores an interaction delivery outcome without a matching reservation', () => {
+  const state = streamingSessionState();
+  const transition = reduceSession(state, {
+    ...observed,
+    correlation: state.turn.correlation,
+    type: 'provider.interaction.accepted',
+  });
+  expect(transition).toEqual({ effects: [], state });
+});
+
+test('acknowledges unrelated events and tolerates a missing requested interaction', () => {
+  const requested = requestedInteraction();
+  const state = requested.state;
+  const inFlight = state.events.inFlight!;
+  const unrelated = {
+    eventId: 'turn-started',
+    observedAt: observed.observedAt,
+    prompt: 'Continue',
+    schemaVersion: 'agent-session-event/v1' as const,
+    sequence: state.nextEventSequence,
+    sessionId: state.sessionId,
+    streamId: state.streamId,
+    turnId: 'turn_01',
+    type: 'turn.started' as const,
+  };
+  const withUnrelated = {
+    ...state,
+    events: { ...state.events, inFlight: { correlation: inFlight.correlation, event: unrelated } },
+  };
+  const applied = {
+    ...observed,
+    correlation: inFlight.correlation,
+    result: { state: 'appended' },
+    type: 'event.applied',
+  } as const;
+  expect(
+    reduceInteractionEvent(withUnrelated as Parameters<typeof reduceInteractionEvent>[0], applied)
+      .state.events.cursor,
+  ).toMatchObject({
+    eventId: 'turn-started',
+  });
+  const withoutInteraction = { ...state, interactions: [] };
+  expect(
+    reduceInteractionEvent(
+      withoutInteraction as Parameters<typeof reduceInteractionEvent>[0],
+      applied,
+    ).state.interactions,
+  ).toEqual([]);
+});
+
+test('opening interaction failure begins owned-resource cleanup', () => {
+  const command = sessionOpeningCommand();
+  const state = createOpeningSessionState(command);
+  expect(failInteractionSession(state, fault).state.status).toBe('failed');
 });
 
 test('fails closed when the provider rejects a reserved response', () => {

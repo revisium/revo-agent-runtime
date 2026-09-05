@@ -122,8 +122,7 @@ export class ManagedSessionRegistry {
     this.#terminal.delete(sessionId);
     this.#terminal.set(sessionId, terminal);
     while (this.#terminal.size > this.limits.maxCompletedSessions) {
-      const oldest = this.#terminal.keys().next().value;
-      if (oldest === undefined) break;
+      const oldest = this.#terminal.keys().next().value!;
       this.#terminal.delete(oldest);
     }
   }

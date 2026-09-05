@@ -1,12 +1,19 @@
 import type { AgentDescriptor } from '../../../contracts/manager/core.js';
-import type { AgentSessionManagerOptions } from '../../../contracts/session/api/manager.js';
+import type {
+  AgentSessionManagerLimits,
+  AgentSessionManagerOptions,
+} from '../../../contracts/session/api/manager.js';
 import type { SealedAgentRegistry } from '../../../definition/index.js';
 import type { ManagedAgentSessionController } from './managed-sessions.js';
+
+export type NormalizedAgentSessionManagerOptions = Omit<AgentSessionManagerOptions, 'limits'> & {
+  readonly limits: Required<AgentSessionManagerLimits>;
+};
 
 interface AgentSessionCompositionInput {
   readonly agents: readonly AgentDescriptor[];
   readonly definitions: SealedAgentRegistry;
-  readonly options: AgentSessionManagerOptions;
+  readonly options: NormalizedAgentSessionManagerOptions;
 }
 
 export interface AgentSessionComposer {

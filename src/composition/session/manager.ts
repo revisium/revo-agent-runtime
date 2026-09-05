@@ -54,7 +54,7 @@ export const createAgentSessionComposer = (
         agents,
         clock: systemSessionClock,
         digest: services.digest,
-        ...(options.limits === undefined ? {} : { limits: options.limits }),
+        limits: options.limits,
         nextIdentity: (kind) => services.identities.next(kind),
         recoveryInspector: services.recoveryInspector,
         runtimeFactory,

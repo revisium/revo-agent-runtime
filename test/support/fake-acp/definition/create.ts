@@ -17,10 +17,15 @@ export const fakeAcpAgentDefinition = (
   permissions: { schema: { $schema: schemaDialect, type: 'object' } },
   capabilities: {
     cancellation: true,
-    ...(options.mode === 'session' || options.session === true
+    ...(options.mode === 'session' ||
+    options.mode === 'session-interactions' ||
+    options.session === true
       ? {
           session: {
-            interactions: { input: false, permission: false },
+            interactions: {
+              input: options.mode === 'session-interactions',
+              permission: options.mode === 'session-interactions',
+            },
             multiTurn: true as const,
             resume: 'none' as const,
             updates: {

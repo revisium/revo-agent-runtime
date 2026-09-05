@@ -63,28 +63,29 @@ export class AcpSessionInteractionBroker {
 
   respond(request: SessionProtocolInteractionResponseRequest): SessionProtocolInteractionOutcome {
     const pending = this.#pending.get(request.requestId);
-    if (pending?.kind !== request.response.kind) return failed();
-    if (pending.kind === 'permission' && request.response.kind === 'permission') {
+    if (pending === undefined) return failed();
+    if (pending.kind === 'permission') {
+      if (request.response.kind !== 'permission') return failed();
+      const response = request.response;
       pending.complete({
         outcome:
-          request.response.outcome === 'selected'
+          response.outcome === 'selected'
             ? {
-                optionId: request.response.optionId,
+                optionId: response.optionId,
                 outcome: 'selected',
               }
             : { outcome: 'cancelled' },
       });
       return { status: 'accepted' };
     }
-    if (pending.kind === 'input' && request.response.kind === 'input') {
-      pending.complete(
-        request.response.outcome === 'submitted'
-          ? { action: 'accept', content: structuredClone(request.response.values) }
-          : { action: request.response.outcome === 'declined' ? 'decline' : 'cancel' },
-      );
-      return { status: 'accepted' };
-    }
-    return failed();
+    if (request.response.kind !== 'input') return failed();
+    const response = request.response;
+    pending.complete(
+      response.outcome === 'submitted'
+        ? { action: 'accept', content: structuredClone(response.values) }
+        : { action: response.outcome === 'declined' ? 'decline' : 'cancel' },
+    );
+    return { status: 'accepted' };
   }
 
   cancelPending(): void {

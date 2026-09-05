@@ -33,6 +33,11 @@ interface ActorEnvelope {
   readonly complete?: (result: ProviderUpdateCompletion) => void;
 }
 
+type CoalescedControlCommand = Extract<
+  PublicSessionCommand,
+  { readonly type: 'manager.shutdown' | 'session.cancel' | 'session.close' }
+>;
+
 export interface SessionActorOptions {
   readonly initialState: SessionState;
   readonly reducer: SessionReducer;
@@ -123,13 +128,17 @@ export class SessionActor implements SessionCommandRuntime {
   #enqueue(envelope: ActorEnvelope): 'accepted' | 'coalesced' | 'rejected' {
     const admission = this.#queue.admit(envelope, commandAdmission(envelope.command));
     if (admission.state === 'coalesced')
-      this.#aliasControl(envelope.command, admission.leader.command);
+      this.#aliasControl(
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- coalescing is exclusive to commandAdmission control keys
+        envelope.command as CoalescedControlCommand,
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- a control leader owns the same queue key
+        admission.leader.command as CoalescedControlCommand,
+      );
     if (admission.state === 'accepted') this.#drain.run();
     return admission.state;
   }
 
-  #aliasControl(follower: SessionCommand, leader: SessionCommand): void {
-    if (!('call' in follower) || !('call' in leader)) return;
+  #aliasControl(follower: CoalescedControlCommand, leader: CoalescedControlCommand): void {
     this.#calls.alias(follower.call.callId, leader.call.callId);
   }
 
@@ -196,8 +205,8 @@ export class SessionActor implements SessionCommandRuntime {
       phase: 'session_terminal',
       retryable: false,
     };
-    const outcome = failedEffectOutcome(effect, this.options.clock.now(), fault);
-    if (outcome !== undefined) this.#enqueue({ command: outcome });
+    const outcome = failedEffectOutcome(effect, this.options.clock.now(), fault)!;
+    this.#enqueue({ command: outcome });
   }
 
   #cleanupLateProvider(command: SessionCommand): void {

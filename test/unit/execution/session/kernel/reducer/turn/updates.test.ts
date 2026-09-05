@@ -5,6 +5,7 @@ import type { SessionEffect } from '../../../../../../../src/execution/session/k
 import type { TurnEffectCorrelation } from '../../../../../../../src/execution/session/kernel/model/identity.js';
 import { reduceSession } from '../../../../../../../src/execution/session/kernel/reducer/reduce.js';
 import type { SessionTransition } from '../../../../../../../src/execution/session/kernel/reducer/transition.js';
+import { reduceProviderUpdate } from '../../../../../../../src/execution/session/kernel/reducer/turn/updates.js';
 import { idleSessionState } from '../../../../../../support/session/builders/kernel/session-state.js';
 
 const observed = { observedAt: '2026-03-21T00:00:02.000Z', observedAtMs: 2_000 } as const;
@@ -123,4 +124,19 @@ test('routes interaction requests outside generic update normalization', () => {
     turn: { status: 'awaiting_interaction' },
   });
   expect(effectOf(transition, 'event.append').event.type).toBe('interaction.requested');
+});
+
+test('generic update normalization declines interaction requests', () => {
+  const { correlation, state } = streamingTurn();
+  const command = {
+    ...observed,
+    correlation,
+    providerResourceId: 'provider_01',
+    request: { kind: 'input', message: 'Choose', questions: [], requestId: 'request_01' },
+    scope: { kind: 'turn', turnId: 'turn_01' },
+    type: 'provider.interaction_requested',
+  } as const;
+  expect(
+    reduceProviderUpdate(state as Parameters<typeof reduceProviderUpdate>[0], command),
+  ).toEqual({ effects: [], state });
 });
