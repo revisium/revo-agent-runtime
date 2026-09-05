@@ -108,6 +108,16 @@ test('active-state ownership refusal cleans the newly owned process', () => {
   expect(transition.state).toMatchObject({ progress: { stage: 'cleaning_process' } });
 });
 
+test('late applied active-state save resumes provider opening', () => {
+  const started = savingProcess();
+  const transition = reduceSession(started.state, {
+    ...base(effectOf(started, 'persistence.save')),
+    result: { state: 'applied' },
+    type: 'persistence.late_applied',
+  });
+  expect(effectOf(transition, 'provider.open')).toBeDefined();
+});
+
 test.each(['provider.open_failed', 'provider.open_timed_out'] as const)(
   '%s cleans the process and saved state',
   (type) => {
@@ -144,7 +154,7 @@ test('event conflicts and stale event outcomes fail safely', () => {
   });
 });
 
-test.each(['persistence.failed', 'persistence.unknown'] as const)(
+test.each(['persistence.failed', 'persistence.late_failed', 'persistence.unknown'] as const)(
   '%s while removing saved opening state preserves uncertainty',
   (type) => {
     const opened = openingProvider();

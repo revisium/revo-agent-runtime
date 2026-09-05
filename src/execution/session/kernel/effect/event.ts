@@ -7,6 +7,7 @@ interface AppendSessionEventEffect {
   readonly correlation: EffectCorrelation;
   readonly event: AgentSessionEvent;
   readonly expected: AgentSessionEventAppendPrecondition;
+  readonly maxBytes: number;
   readonly timeoutMs: number;
 }
 

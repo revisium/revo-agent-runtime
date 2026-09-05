@@ -1,5 +1,6 @@
 import type { SessionOpenedEvent } from '../../../../../contracts/session/events/event.js';
 import type { SessionCommand } from '../../command/session-command.js';
+import { isPersistenceApplied, type PersistenceOutcome } from '../persistence/outcome.js';
 import {
   appendEffect,
   nextEffectCorrelation,
@@ -96,20 +97,18 @@ export const reduceProcessOutcome = (
 
 export const reducePersistenceOutcome = (
   state: OpeningState,
-  command: Extract<
-    SessionCommand,
-    { readonly type: 'persistence.applied' | 'persistence.failed' | 'persistence.unknown' }
-  >,
+  command: PersistenceOutcome,
 ): SessionTransition => {
   if (
     state.progress.stage !== 'saving_process' ||
     !matchingProgress(state, command.correlation.effectId)
   )
     return unchangedTransition(state);
-  if (command.type === 'persistence.failed')
+  if (command.type === 'persistence.failed' || command.type === 'persistence.late_failed')
     return beginOpeningProcessCleanup(state, command.fault, 'fail');
   if (command.type === 'persistence.unknown')
     return beginOpeningProcessCleanup(state, command.fault, 'uncertain');
+  if (!isPersistenceApplied(command)) return unchangedTransition(state);
   if (command.result.state !== 'applied')
     return beginOpeningProcessCleanup(
       state,

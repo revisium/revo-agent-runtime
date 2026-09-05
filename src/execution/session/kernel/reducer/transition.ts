@@ -1,4 +1,7 @@
-import type { AgentSessionEvent } from '../../../../contracts/session/events/event.js';
+import type {
+  AgentSessionEvent,
+  AgentSessionEventCursor,
+} from '../../../../contracts/session/events/event.js';
 import type { AgentSessionEventAppendPrecondition } from '../../../../contracts/session/events/sink.js';
 import type { SessionCommand } from '../command/session-command.js';
 import type { SessionEffect } from '../effect/session-effect.js';
@@ -21,6 +24,12 @@ export const unchangedTransition = <State extends SessionState>(
 
 export const nextSessionEventId = (state: SessionState): string =>
   `${state.sessionId}:${state.epoch}:event:${state.nextEventSequence}`;
+
+export const nextSessionEventCursor = (state: SessionState): AgentSessionEventCursor => ({
+  eventId: nextSessionEventId(state),
+  sequence: state.nextEventSequence,
+  streamId: state.streamId,
+});
 
 export function nextEffectCorrelation(state: SessionState, turnId: string): TurnEffectCorrelation;
 export function nextEffectCorrelation(state: SessionState): EffectCorrelation;
@@ -82,6 +91,7 @@ export const queueSessionEvent = <State extends SessionState>(
       correlation,
       event,
       expected,
+      maxBytes: state.limits.maxEventBytes,
       timeoutMs: state.limits.eventSinkTimeoutMs,
       type: 'event.append',
     },
@@ -125,6 +135,7 @@ export const acknowledgeSessionEvent = <State extends SessionState>(
         correlation: nextCorrelation,
         event: next,
         expected: { cursor, kind: 'cursor' },
+        maxBytes: state.limits.maxEventBytes,
         timeoutMs: state.limits.eventSinkTimeoutMs,
         type: 'event.append',
       },

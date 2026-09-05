@@ -2,7 +2,7 @@ import type { AgentUsage } from '../../../contracts/manager.js';
 import type { SessionProtocolFailure } from '../errors/protocol-error.js';
 import type { SessionProtocolContinuation } from './request.js';
 
-interface SessionProtocolCapabilities {
+export interface SessionProtocolCapabilities {
   readonly multiTurn: true;
   readonly resume: 'none' | 'native';
   readonly cancellation: { readonly prompt: boolean; readonly session: true };

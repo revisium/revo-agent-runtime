@@ -10,6 +10,7 @@ describe('provider resource registries', () => {
     const resource = Object.freeze({ connection: 'provider' });
 
     expect(openings.register('effect_01', 'resource_01', resource)).toBe(true);
+    expect(openings.get('resource_01')).toBe(resource);
     expect(openings.register('effect_01', 'resource_02', {})).toBe(false);
     expect(openings.promote('effect_01', 'resource_01', sessions)).toBe(true);
 

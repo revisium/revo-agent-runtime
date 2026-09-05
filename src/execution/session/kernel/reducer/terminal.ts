@@ -1,4 +1,5 @@
 import type { SessionCommand } from '../command/session-command.js';
+import { isPersistenceOutcome } from './persistence/outcome.js';
 import { cancelRunningSession, reduceTimer } from './terminal/control.js';
 import { coalesceTerminalCommand, rejectBusyClose } from './terminal/intent.js';
 import { reduceCleanupOutcome, reduceRemovalOutcome } from './terminal/lifecycle.js';
@@ -53,12 +54,7 @@ export const reduceTerminalizing = (
   if (turnTransition !== undefined) return turnTransition;
   if (command.type === 'process.cleanup.confirmed' || command.type === 'process.cleanup.uncertain')
     return reduceCleanupOutcome(state, command);
-  if (
-    command.type === 'persistence.applied' ||
-    command.type === 'persistence.failed' ||
-    command.type === 'persistence.unknown'
-  )
-    return reduceRemovalOutcome(state, command);
+  if (isPersistenceOutcome(command)) return reduceRemovalOutcome(state, command);
   if (isEventOutcome(command)) return reduceTerminalEventOutcome(state, command);
   if (isOutputOutcome(command)) return finishTerminal(state, command);
   return unchangedTransition(state);

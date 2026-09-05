@@ -97,6 +97,7 @@ export const mandatoryOutcomeCases: readonly OutcomeCase[] = [
         type: 'agent.progress',
       },
       expected: { kind: 'empty' },
+      maxBytes: 1_024,
       timeoutMs: 100,
       type: 'event.append',
     },
