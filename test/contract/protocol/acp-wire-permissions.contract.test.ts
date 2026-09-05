@@ -104,10 +104,9 @@ test('delivers the complete ACP invocation contract and publishes advertised usa
     expect(prompt).toMatchObject({
       params: {
         prompt: [
-          { text: 'Return the fake result.', type: 'text' },
           {
             text:
-              'Revo invocation contract (JSON):\n' +
+              'Return the fake result.\n\nRevo invocation contract (JSON):\n' +
               '{"parameters":{"mode":"structured"},"permissions":{"filesystem":"read-only"},"resultSchema":{"additionalProperties":true,"properties":{"answer":{"type":"string"}},"required":["answer"],"type":"object"}}\n' +
               'Honor the parameters and permission constraints. Return exactly one JSON object matching resultSchema, without markdown or surrounding text.',
             type: 'text',

@@ -9,14 +9,13 @@ const invocationContract = (
     resultSchema: request.resultSchema,
   });
 
-/** Keeps the caller prompt distinct while delivering Revo's complete invocation contract. */
+/** Delivers the caller prompt and Revo invocation contract as one ordered ACP text prompt. */
 export const acpPrompt = (
   request: Pick<ProtocolSessionRequest, 'parameters' | 'permissions' | 'prompt' | 'resultSchema'>,
 ) => [
-  Object.freeze({ text: request.prompt, type: 'text' as const }),
   Object.freeze({
     text:
-      `Revo invocation contract (JSON):\n${invocationContract(request)}\n` +
+      `${request.prompt}\n\nRevo invocation contract (JSON):\n${invocationContract(request)}\n` +
       'Honor the parameters and permission constraints. Return exactly one JSON object matching resultSchema, without markdown or surrounding text.',
     type: 'text' as const,
   }),
