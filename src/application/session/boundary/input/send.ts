@@ -12,6 +12,9 @@ interface SendInputLimits {
   readonly maxMetadataBytes: number;
   readonly maxPromptBytes: number;
 }
+export interface DecodedSendAgentSessionInput extends Omit<SendAgentSessionInput, 'metadata'> {
+  readonly metadata?: Readonly<import('../../../../contracts/agent-definition.js').JsonObject>;
+}
 const invalid = (): never => {
   throw new AgentManagerError(
     Object.freeze({
@@ -26,7 +29,7 @@ const invalid = (): never => {
 export const decodeSendAgentSessionInput = (
   input: unknown,
   limits: SendInputLimits,
-): SendAgentSessionInput => {
+): DecodedSendAgentSessionInput => {
   try {
     const value = decodeImmutableJsonObject(input, {
       maxBytes: limits.maxPromptBytes + limits.maxMetadataBytes + 1_024,

@@ -1,7 +1,9 @@
 import type { SessionState } from '../../kernel/model/session-state.js';
+import { createOpeningSessionState } from '../../kernel/reducer/opening/state.js';
 import type { SessionReducer } from '../../kernel/reducer/transition.js';
 import { SessionEffectDispatcher } from '../effects/dispatcher.js';
 import { systemSessionClock, type SessionClock } from '../timing/clock.js';
+import type { SessionOpeningCommand, SessionRuntimeFactory } from './port.js';
 import { SessionActor } from './session-actor.js';
 
 export interface SessionActorFactoryOptions {
@@ -10,7 +12,7 @@ export interface SessionActorFactoryOptions {
   readonly clock?: SessionClock;
 }
 
-export class SessionActorFactory {
+export class SessionActorFactory implements SessionRuntimeFactory {
   constructor(private readonly options: SessionActorFactoryOptions) {}
 
   create(initialState: SessionState): SessionActor {
@@ -20,5 +22,9 @@ export class SessionActorFactory {
       initialState,
       reducer: this.options.reducer,
     });
+  }
+
+  createOpening(command: SessionOpeningCommand): SessionActor {
+    return this.create(createOpeningSessionState(command));
   }
 }

@@ -5,8 +5,14 @@ import type { AgentSessionLaunchInput } from '../../../../contracts/session.js';
 import { isJsonObject } from '../../../../definition/canonical-json.js';
 import { hasExactJsonKeys, immutableJsonByteLength } from './immutable-json.js';
 
-export interface DecodedAgentSessionLaunchInput extends Omit<AgentSessionLaunchInput, 'limits'> {
+export interface DecodedAgentSessionLaunchInput extends Omit<
+  AgentSessionLaunchInput,
+  'limits' | 'metadata' | 'parameters' | 'permissions'
+> {
   readonly limits?: Readonly<JsonObject>;
+  readonly metadata?: Readonly<JsonObject>;
+  readonly parameters: Readonly<JsonObject>;
+  readonly permissions: Readonly<JsonObject>;
 }
 
 const encoder = new TextEncoder();

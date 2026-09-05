@@ -104,6 +104,9 @@ const decodePin = (value: unknown): AgentExecutionPin => {
   });
 };
 
+export const inspectResumeTokenPin = (value: Readonly<JsonObject>): AgentExecutionPin =>
+  decodePin(value.pin);
+
 const decodeCursor = (value: unknown) => {
   if (!isJsonObject(value) || !exactKeys(value, ['eventId', 'sequence', 'streamId']))
     return invalidToken();

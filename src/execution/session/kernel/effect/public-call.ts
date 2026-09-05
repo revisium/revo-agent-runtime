@@ -12,7 +12,7 @@ import type {
 } from '../../../../contracts/session/lifecycle/result.js';
 import type { EffectCorrelation } from '../model/identity.js';
 
-type PublicCallResolution =
+export type PublicCallResolution =
   | { readonly kind: 'session_ready' }
   | { readonly kind: 'turn_ready'; readonly turnId: string }
   | { readonly kind: 'turn_result'; readonly result: AgentSessionTurnResult }

@@ -66,6 +66,7 @@
       "pattern": "^src/application/session/management/",
       "dependencies": [
         "application-session-boundary",
+        "application-session-handles",
         "application-session-policy",
         "contracts",
         "contracts-session",
@@ -121,7 +122,12 @@
     {
       "name": "session-runtime-dispatch",
       "pattern": "^src/execution/session/runtime/actor/port\\.ts$",
-      "dependencies": ["contracts-session", "session-kernel-public-command"]
+      "dependencies": [
+        "contracts",
+        "contracts-session",
+        "session-kernel-effects",
+        "session-kernel-public-command"
+      ]
     },
     {
       "name": "session-runtime-identity-port",
