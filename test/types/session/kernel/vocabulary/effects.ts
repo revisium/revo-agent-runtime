@@ -85,6 +85,7 @@ const effects = {
     correlation,
     event,
     expected: { kind: 'empty' },
+    maxBytes: 1_024,
     timeoutMs,
     type: 'event.append',
   },

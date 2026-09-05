@@ -4,6 +4,7 @@ import { pauseInactivity } from '../timer/inactivity.js';
 import {
   appendEffect,
   nextEffectCorrelation,
+  nextSessionEventCursor,
   type SessionTransition,
   unchangedTransition,
 } from '../transition.js';
@@ -55,7 +56,7 @@ export const startCheckpoint = (
     {
       checkpointId: command.checkpointId,
       correlation,
-      cursor: state.events.cursor,
+      cursor: nextSessionEventCursor(state),
       kind: 'checkpoint',
       maxBytes: state.limits.maxCheckpointBytes,
       pin: state.pin,

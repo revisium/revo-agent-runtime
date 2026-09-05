@@ -1,6 +1,11 @@
 import type { AgentFault } from '../../../../../contracts/manager/core.js';
 import type { EffectOutcomeCommand } from '../../command/effect.js';
 import {
+  isPersistenceApplied,
+  isPersistenceOutcome,
+  type PersistenceOutcome,
+} from '../persistence/outcome.js';
+import {
   appendEffect,
   nextEffectCorrelation,
   type SessionTransition,
@@ -96,10 +101,7 @@ export const reduceOpeningCleanup = (
         EffectOutcomeCommand,
         { readonly type: 'process.cleanup.confirmed' | 'process.cleanup.uncertain' }
       >
-    | Extract<
-        EffectOutcomeCommand,
-        { readonly type: 'persistence.applied' | 'persistence.failed' | 'persistence.unknown' }
-      >,
+    | PersistenceOutcome,
 ): SessionTransition => {
   if (!('correlation' in state.progress)) return unchangedTransition(state);
   if (state.progress.correlation.effectId !== command.correlation.effectId)
@@ -130,11 +132,10 @@ export const reduceOpeningCleanup = (
     );
   }
   if (state.progress.stage !== 'removing_state') return unchangedTransition(state);
-  if (command.type === 'persistence.applied')
+  if (!isPersistenceOutcome(command)) return unchangedTransition(state);
+  if (isPersistenceApplied(command))
     return failOpeningBeforeProcess(state, state.progress.fault, command.observedAt);
-  if (command.type === 'persistence.failed' || command.type === 'persistence.unknown')
-    return uncertainOpeningCleanup(state, command.fault);
-  return unchangedTransition(state);
+  return uncertainOpeningCleanup(state, command.fault);
 };
 
 export const openingEventConflictFault = (): AgentFault => ({

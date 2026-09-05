@@ -1,5 +1,6 @@
 import type { SessionCommand } from '../../command/session-command.js';
 import type { SessionState } from '../../model/session-state.js';
+import { isPersistenceOutcome } from '../persistence/outcome.js';
 import type { SessionTransition } from '../transition.js';
 import { reduceHibernationCapture } from './hibernate/capture.js';
 import { reduceHibernationControl } from './hibernate/control.js';
@@ -47,12 +48,7 @@ export const reduceHibernation = (
   if (isCaptureOutcome(command)) return reduceHibernationCapture(state, command);
   if (command.type === 'process.cleanup.confirmed' || command.type === 'process.cleanup.uncertain')
     return reduceHibernationCleanup(state, command);
-  if (
-    command.type === 'persistence.applied' ||
-    command.type === 'persistence.failed' ||
-    command.type === 'persistence.unknown'
-  )
-    return reduceHibernationRemoval(state, command);
+  if (isPersistenceOutcome(command)) return reduceHibernationRemoval(state, command);
   if (
     command.type === 'output.published' ||
     command.type === 'output.failed' ||

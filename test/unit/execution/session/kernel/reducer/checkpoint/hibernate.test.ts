@@ -76,7 +76,7 @@ test('releases a resume token only after confirmed hibernation', () => {
     ...observed,
     correlation: removal.correlation,
     result: { state: 'applied' },
-    type: 'persistence.applied',
+    type: 'persistence.late_applied',
   });
   const output = effectOf(transition, 'output.publish');
   expect(output.publication).toMatchObject({ status: 'hibernated' });

@@ -1,5 +1,6 @@
 import type { SessionClosedEvent } from '../../../../../contracts/session/events/event.js';
 import type { EffectOutcomeCommand } from '../../command/effect.js';
+import { isPersistenceApplied, type PersistenceOutcome } from '../persistence/outcome.js';
 import {
   appendEffect,
   nextEffectCorrelation,
@@ -81,17 +82,14 @@ export const reduceCleanupOutcome = (
 
 export const reduceRemovalOutcome = (
   state: TerminalizingSession,
-  command: Extract<
-    EffectOutcomeCommand,
-    { readonly type: 'persistence.applied' | 'persistence.failed' | 'persistence.unknown' }
-  >,
+  command: PersistenceOutcome,
 ): SessionTransition => {
   if (
     state.progress.stage !== 'removing_state' ||
     !matchesProgress(state, command.correlation.effectId)
   )
     return unchangedTransition(state);
-  if (command.type !== 'persistence.applied') {
+  if (!isPersistenceApplied(command)) {
     const {
       callIds: _calls,
       intent: _intent,

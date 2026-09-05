@@ -21,9 +21,9 @@ import {
 } from '../mailbox/credits.js';
 import { SerializedMailboxDrain } from '../mailbox/drain.js';
 import { SessionMailboxQueue } from '../mailbox/queue.js';
-import { ownsProviderResource } from '../resources/provider-openings.js';
 import type { SessionClock } from '../timing/clock.js';
 import { SessionTimerRegistry } from '../timing/timers.js';
+import { ownsProviderResource } from './provider-ownership.js';
 
 interface ActorEnvelope {
   readonly command: SessionCommand;

@@ -4,6 +4,7 @@ import { pauseInactivity } from '../../timer/inactivity.js';
 import {
   appendEffect,
   nextEffectCorrelation,
+  nextSessionEventCursor,
   type SessionTransition,
   unchangedTransition,
 } from '../../transition.js';
@@ -65,7 +66,7 @@ export const startHibernation = (
     },
     {
       correlation,
-      cursor: state.events.cursor,
+      cursor: nextSessionEventCursor(state),
       kind: 'hibernate',
       maxBytes: state.limits.maxCheckpointBytes,
       pin: state.pin,

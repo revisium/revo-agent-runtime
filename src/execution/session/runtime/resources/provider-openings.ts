@@ -1,5 +1,3 @@
-import type { SessionState } from '../../kernel/model/session-state.js';
-
 interface ProviderResourceTarget<Resource> {
   register(resourceId: string, resource: Resource): boolean;
 }
@@ -9,21 +7,18 @@ interface ProviderOpening<Resource> {
   readonly resource: Resource;
 }
 
-export const ownsProviderResource = (state: SessionState, resourceId: string): boolean => {
-  if ('providerResourceId' in state && state.providerResourceId === resourceId) return true;
-  return (
-    state.status === 'opening' &&
-    'providerResourceId' in state.progress &&
-    state.progress.providerResourceId === resourceId
-  );
-};
-
 export class ProviderOpeningRegistry<Resource> {
   readonly #openings = new Map<string, ProviderOpening<Resource>>();
   readonly #resourceIds = new Set<string>();
 
   get size(): number {
     return this.#openings.size;
+  }
+
+  get(resourceId: string): Resource | undefined {
+    for (const opening of this.#openings.values())
+      if (opening.resourceId === resourceId) return opening.resource;
+    return undefined;
   }
 
   register(effectId: string, resourceId: string, resource: Resource): boolean {
@@ -39,6 +34,12 @@ export class ProviderOpeningRegistry<Resource> {
     this.#openings.delete(effectId);
     this.#resourceIds.delete(resourceId);
     return opening.resource;
+  }
+
+  takeByResourceId(resourceId: string): Resource | undefined {
+    for (const [effectId, opening] of this.#openings)
+      if (opening.resourceId === resourceId) return this.take(effectId, resourceId);
+    return undefined;
   }
 
   promote(effectId: string, resourceId: string, target: ProviderResourceTarget<Resource>): boolean {

@@ -1,6 +1,7 @@
 import type { AgentFault } from '../../../../../../contracts/manager/core.js';
 import type { SessionHibernatedEvent } from '../../../../../../contracts/session/events/event.js';
 import type { SessionCommand } from '../../../command/session-command.js';
+import { isPersistenceApplied, type PersistenceOutcome } from '../../persistence/outcome.js';
 import {
   appendEffect,
   nextEffectCorrelation,
@@ -12,12 +13,6 @@ import {
 import { failedHibernation, uncertainHibernation, type HibernatingState } from './state.js';
 
 type CleanupOutcome = Extract<SessionCommand, { readonly type: `process.cleanup.${string}` }>;
-type PersistenceOutcome = Extract<
-  SessionCommand,
-  {
-    readonly type: 'persistence.applied' | 'persistence.failed' | 'persistence.unknown';
-  }
->;
 type OutputOutcome = Extract<SessionCommand, { readonly type: `output.${string}` }>;
 
 const matchesProgress = (state: HibernatingState, effectId: string): boolean =>
@@ -74,7 +69,10 @@ export const reduceHibernationCleanup = (
 };
 
 const removalFault = (
-  command: Exclude<PersistenceOutcome, { readonly type: 'persistence.applied' }>,
+  command: Exclude<
+    PersistenceOutcome,
+    { readonly type: 'persistence.applied' | 'persistence.late_applied' }
+  >,
 ): AgentFault => command.fault;
 
 export const reduceHibernationRemoval = (
@@ -86,7 +84,7 @@ export const reduceHibernationRemoval = (
     !matchesProgress(state, command.correlation.effectId)
   )
     return unchangedTransition(state);
-  if (command.type !== 'persistence.applied') {
+  if (!isPersistenceApplied(command)) {
     const fault = removalFault(command);
     return reject(
       { effects: [], state: uncertainHibernation(state, fault, false) },

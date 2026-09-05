@@ -9,6 +9,7 @@ import {
 } from './opening/stages.js';
 import type { OpeningState } from './opening/state.js';
 import { reduceOpeningTimer } from './opening/timeouts.js';
+import { isPersistenceOutcome } from './persistence/outcome.js';
 import type { SessionTransition } from './transition.js';
 import { unchangedTransition } from './transition.js';
 
@@ -44,11 +45,7 @@ export const reduceOpeningSession = (
     return reduceProcessOutcome(state, command);
   if (command.type === 'process.cleanup.confirmed' || command.type === 'process.cleanup.uncertain')
     return reduceOpeningCleanup(state, command);
-  if (
-    command.type === 'persistence.applied' ||
-    command.type === 'persistence.failed' ||
-    command.type === 'persistence.unknown'
-  )
+  if (isPersistenceOutcome(command))
     return state.progress.stage === 'cleaning_process' || state.progress.stage === 'removing_state'
       ? reduceOpeningCleanup(state, command)
       : reducePersistenceOutcome(state, command);

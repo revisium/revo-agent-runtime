@@ -71,8 +71,10 @@ describe('architecture layer manifest', () => {
     ['src/execution/session/kernel/effect/request.ts', 'session-kernel-effects'],
     ['src/execution/session/kernel/command/public.ts', 'session-kernel-public-command'],
     ['src/execution/session/runtime/actor/port.ts', 'session-runtime-dispatch'],
+    ['src/execution/session/runtime/resources/provider-sessions.ts', 'session-runtime-resources'],
     ['src/execution/session/runtime/actor/machine.ts', 'session-runtime'],
     ['src/execution/session/interpreter/driver.ts', 'session-interpreter'],
+    ['src/execution/security/redaction/channel.ts', 'execution-security-redaction'],
     ['src/protocol/acp/session/adapter.ts', 'protocol-acp-session'],
     ['src/platform/node/session/primitives/identity.ts', 'platform-session-primitives'],
   ])('assigns the planned module %s to %s', (modulePath, owner) => {

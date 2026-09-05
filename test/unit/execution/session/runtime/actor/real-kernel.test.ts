@@ -67,16 +67,11 @@ describe('complete kernel through the runtime actor', () => {
       execute: (effect, output) => {
         if (effect.type !== 'checkpoint.capture') throw new Error('Expected checkpoint capture.');
         if (effect.kind !== 'checkpoint') throw new Error('Expected an observation checkpoint.');
-        const sequence = effect.cursor.sequence + 1;
         output.outcome({
           ...observed,
           checkpoint: {
             checkpointId: effect.checkpointId,
-            cursor: {
-              eventId: `session_01:1:event:${sequence}`,
-              sequence,
-              streamId: effect.cursor.streamId,
-            },
+            cursor: effect.cursor,
             eligibility: 'observation_only',
             payload: 'opaque-provider-state',
             pin: effect.pin,

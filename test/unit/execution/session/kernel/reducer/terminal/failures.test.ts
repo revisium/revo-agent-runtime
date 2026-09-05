@@ -70,7 +70,7 @@ test('cleanup uncertainty remains visible and retains process ownership', () => 
   });
 });
 
-test.each(['persistence.failed', 'persistence.unknown'] as const)(
+test.each(['persistence.failed', 'persistence.late_failed', 'persistence.unknown'] as const)(
   '%s during removal remains cleanup-uncertain',
   (type) => {
     const started = removing();

@@ -41,7 +41,7 @@ test('returns an observation checkpoint only after its cursor event is durable',
   const capture = effectOf(transition, 'checkpoint.capture');
   expect(capture).toMatchObject({
     checkpointId: 'checkpoint_01',
-    cursor: { sequence: 2 },
+    cursor: { sequence: 3 },
     kind: 'checkpoint',
     usageBaseline: { scope: 'session_cumulative' },
   });

@@ -114,6 +114,11 @@
       ]
     },
     {
+      "name": "session-runtime-resources",
+      "pattern": "^src/execution/session/runtime/resources/",
+      "dependencies": []
+    },
+    {
       "name": "session-runtime-dispatch",
       "pattern": "^src/execution/session/runtime/actor/port\\.ts$",
       "dependencies": ["contracts-session", "session-kernel-public-command"]
@@ -130,7 +135,7 @@
     },
     {
       "name": "session-runtime",
-      "pattern": "^src/execution/session/runtime/(?!(?:actor/port|primitives/identity|effects/outcomes)\\.ts$).+",
+      "pattern": "^src/execution/session/runtime/(?!(?:actor/port|primitives/identity|effects/outcomes)\\.ts$|resources/).+",
       "dependencies": [
         "contracts-session",
         "session-kernel",
@@ -138,7 +143,8 @@
         "session-kernel-public-command",
         "session-runtime-dispatch",
         "session-runtime-identity-port",
-        "session-runtime-outcome-port"
+        "session-runtime-outcome-port",
+        "session-runtime-resources"
       ]
     },
     {
@@ -149,18 +155,25 @@
         "contracts-session",
         "contracts-session-envelope",
         "execution-process-port",
+        "execution-security-redaction",
         "execution-security-digest-port",
         "execution-session-output-port",
         "protocol-session",
         "session-kernel-effects",
         "session-runtime-identity-port",
-        "session-runtime-outcome-port"
+        "session-runtime-outcome-port",
+        "session-runtime-resources"
       ]
     },
     {
       "name": "execution-process-port",
       "pattern": "^src/execution/process/port\\.ts$",
       "dependencies": ["contracts"]
+    },
+    {
+      "name": "execution-security-redaction",
+      "pattern": "^src/execution/security/redaction/",
+      "dependencies": []
     },
     {
       "name": "execution-security-digest-port",
@@ -174,12 +187,13 @@
     },
     {
       "name": "execution",
-      "pattern": "^src/execution/(?!(?:session/|process/port\\.ts$|security/digest/port\\.ts$|output/session/publication\\.ts$)).+",
+      "pattern": "^src/execution/(?!(?:session/|process/port\\.ts$|security/(?:digest/port\\.ts$|redaction/)|output/session/publication\\.ts$)).+",
       "dependencies": [
         "configuration",
         "contracts",
         "definition",
         "execution-process-port",
+        "execution-security-redaction",
         "protocol"
       ]
     },
