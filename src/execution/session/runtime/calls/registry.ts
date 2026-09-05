@@ -1,12 +1,8 @@
-import type { SessionEffect } from '../../kernel/effect/session-effect.js';
+import type { PublicCallResolution, PublicCallSettlement } from '../actor/port.js';
 
-type ResolveEffect = Extract<SessionEffect, { readonly type: 'public.resolve' }>;
-type AgentFault = Extract<SessionEffect, { readonly type: 'public.reject' }>['fault'];
-export type PublicCallResolution = ResolveEffect['resolution'];
+export type { PublicCallSettlement } from '../actor/port.js';
 
-export type PublicCallSettlement =
-  | { readonly state: 'resolved'; readonly resolution: PublicCallResolution }
-  | { readonly state: 'rejected'; readonly fault: AgentFault };
+type AgentFault = Extract<PublicCallSettlement, { readonly state: 'rejected' }>['fault'];
 
 interface PendingCall {
   readonly promise: Promise<PublicCallSettlement>;

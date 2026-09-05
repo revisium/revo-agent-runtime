@@ -2,6 +2,8 @@ import type { PublicSessionCommand } from '../../kernel/command/public.js';
 import type { SessionCommand } from '../../kernel/command/session-command.js';
 import type { SessionEffect } from '../../kernel/effect/session-effect.js';
 import type { SessionState } from '../../kernel/model/session-state.js';
+import { projectSessionSnapshot } from '../../kernel/projection/snapshot.js';
+import { projectTerminalRecord } from '../../kernel/projection/terminal-record.js';
 import type { SessionReducer } from '../../kernel/reducer/transition.js';
 import { PublicCallRegistry, type PublicCallSettlement } from '../calls/registry.js';
 import { SessionEffectDispatcher } from '../effects/dispatcher.js';
@@ -23,6 +25,7 @@ import { SerializedMailboxDrain } from '../mailbox/drain.js';
 import { SessionMailboxQueue } from '../mailbox/queue.js';
 import type { SessionClock } from '../timing/clock.js';
 import { SessionTimerRegistry } from '../timing/timers.js';
+import type { SessionCommandRuntime } from './port.js';
 import { ownsProviderResource } from './provider-ownership.js';
 
 interface ActorEnvelope {
@@ -50,7 +53,7 @@ const backpressureFault = (state: SessionState): AgentFault => ({
   retryable: true,
 });
 
-export class SessionActor {
+export class SessionActor implements SessionCommandRuntime {
   readonly #queue = new SessionMailboxQueue<ActorEnvelope>();
   readonly #credits = new OutcomeCreditLedger();
   readonly #tracker = new EffectTracker();
@@ -79,6 +82,14 @@ export class SessionActor {
 
   get activeEffects(): number {
     return this.#tracker.size;
+  }
+
+  inspect() {
+    return projectSessionSnapshot(this.#state);
+  }
+
+  terminal() {
+    return projectTerminalRecord(this.#state);
   }
 
   registerCall(callId: string): Promise<PublicCallSettlement> {

@@ -5,6 +5,7 @@ import { SessionActorFactory } from '../../../../../../src/execution/session/run
 import type { SessionCommandDispatch } from '../../../../../../src/execution/session/runtime/actor/port.js';
 import { SessionEffectDispatcher } from '../../../../../../src/execution/session/runtime/effects/dispatcher.js';
 import type { SessionClock } from '../../../../../../src/execution/session/runtime/timing/clock.js';
+import { sessionOpeningCommand } from '../../../../../support/session/builders/kernel/opening.js';
 import { idleSessionState } from '../../../../../support/session/builders/kernel/session-state.js';
 
 const clock: SessionClock = {
@@ -35,4 +36,17 @@ test('factory creates isolated actors behind the narrow public-command dispatch 
 
   expect(first.state.nextEventSequence).toBe(4);
   expect(second.state.nextEventSequence).toBe(3);
+});
+
+test('factory creates an opening runtime with contract projections hidden behind its port', () => {
+  const factory = new SessionActorFactory({
+    clock,
+    dispatcher: new SessionEffectDispatcher([]),
+    reducer: (state) => ({ effects: [], state }),
+  });
+
+  const runtime = factory.createOpening(sessionOpeningCommand());
+
+  expect(runtime.inspect()).toMatchObject({ sessionId: 'session_01', status: 'opening' });
+  expect(runtime.terminal()).toBeUndefined();
 });

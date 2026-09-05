@@ -61,12 +61,15 @@ provider-owned definition data, not a reason to couple provider folders.
 | `application/invocation`          | Request admission, effective inputs, preflight, and terminal finalization                                   | Definition, result, and execution ports                                  |
 | `application/result`              | Public invocation-result construction and snapshots                                                         | Execution evidence and output contracts                                  |
 | `application/faults`              | Stable translation from internal outcomes to public faults                                                  | Contracts and execution outcomes                                         |
+| `application/session/management`  | Session-capable catalog, identity/capacity registry, fresh/resume opening, active and terminal queries      | Session boundaries, policies, handles, and the narrow runtime port       |
+| `application/session/handles`     | Consumer-facing session/turn calls translated into correlated kernel commands                               | Session contracts, public commands, and the narrow runtime port          |
 | `execution/invocation`            | Executor contracts/composition, top-down lifecycle, session operations, artifacts, and terminal arbitration | Portable process/protocol ports, output, result, and security            |
 | `execution/configuration`         | Inspection deadline, bounded fallback, process ownership, close, and reap                                   | Normalized catalog and portable process/configuration ports              |
 | `execution/output`                | Bounded streams/events, exclusive output claim, and publication capability                                  | Contracts and redaction channel                                          |
 | `execution/result`                | Raw response evidence, schema validation, and result normalization                                          | Contracts, output snapshots, and redaction channel                       |
 | `execution/probe`                 | Fresh executable/version preflight policy                                                                   | Executable probe port and definition version rules                       |
 | `execution/process`               | Portable owned-process, cleanup, identity, and recovery ports                                               | No concrete platform                                                     |
+| `execution/session/runtime`       | Per-session actor, bounded mailbox, public-call settlement, timers, and contract-only state projections     | Pure session kernel plus private interpreter dispatch                    |
 | `execution/security/redaction`    | Streaming channel, state engine, and independently readable matching rules                                  | No application or platform modules                                       |
 | `protocol/driver`                 | Protocol-neutral invocation and configuration session ports                                                 | Contracts and normalized catalog                                         |
 | `protocol/acp`                    | ACP SDK session implementation, stable configuration requester, and compatibility seam                      | Protocol ports, normalized catalog, and official ACP SDK                 |
@@ -81,6 +84,12 @@ continuation envelope is intentionally absent from both public export barrels.
 untrusted session values; `application/session/policy` independently owns
 identifier, capability, and limit decisions. Portable digest consumers depend
 on `execution/security/digest/port`, never on Node crypto.
+
+The package-private session facade composes management and handle layers over a
+narrow runtime port. Consumers of that facade do not construct kernel commands,
+track effect correlations, inspect mailbox state, or retain provider resources.
+Root export and built-in ACP composition remain a later delivery slice, so the
+repository does not expose a facade before its concrete provider path exists.
 
 ## Enforced structural rules
 
