@@ -1,6 +1,6 @@
 {
   "name": "@revisium/revo-agent-runtime",
-  "version": "0.2.0-alpha.0",
+  "version": "0.3.0-alpha.0",
   "description": "Protocol-neutral agent execution runtime for Revo.",
   "homepage": "https://github.com/revisium/revo-agent-runtime#readme",
   "bugs": {
