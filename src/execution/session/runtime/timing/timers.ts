@@ -44,7 +44,7 @@ export class SessionTimerRegistry {
   }
 
   cancelAll(): void {
-    for (const timerId of [...this.#armed.keys()]) this.#cancel(timerId);
+    for (const timerId of this.#armed.keys()) this.#cancel(timerId);
   }
 
   #arm(state: SessionTimerDeclarations, timer: SessionTimerState): void {
