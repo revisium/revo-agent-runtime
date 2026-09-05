@@ -27,7 +27,7 @@ interface SessionProtocolQuestionBase {
   readonly required: boolean;
 }
 
-type SessionProtocolQuestion = SessionProtocolQuestionBase &
+export type SessionProtocolQuestion = SessionProtocolQuestionBase &
   (
     | {
         readonly input: 'text';
@@ -50,7 +50,7 @@ type SessionProtocolQuestion = SessionProtocolQuestionBase &
       }
   );
 
-type SessionProtocolInteractionRequest =
+export type SessionProtocolInteractionRequest =
   | {
       readonly kind: 'permission';
       readonly requestId: string;

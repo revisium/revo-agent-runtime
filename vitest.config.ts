@@ -12,6 +12,7 @@ export default defineConfig({
         'src/application/session/handles/**',
         'src/application/session/management/**',
         'src/execution/session/**',
+        'src/protocol/acp/session/**',
       ],
       reporter: ['text', 'lcov'],
       reportsDirectory: 'coverage',
