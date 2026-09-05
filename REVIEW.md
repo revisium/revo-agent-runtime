@@ -7,7 +7,8 @@ Block a change when it:
 - changes the target API without reconciling `docs/API.md`;
 - weakens strict TypeScript, type-aware lint, architecture, package, or
   lockfile checks;
-- leaves an invalid negative fixture in the worktree or stops running it;
+- leaves an invalid negative fixture in the worktree or skips the conditional
+  tooling checks required by `VERIFICATION.md`;
 - lets production source import tests, scripts, generated output, Node/ACP from
   future contracts, concrete adapters from application/execution, application
   from discovery, or otherwise violates the directed dependency map enforced

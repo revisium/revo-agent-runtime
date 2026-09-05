@@ -1,6 +1,6 @@
 import type { AgentSessionInteractiveRequest } from '../../../../contracts/session/interaction/request.js';
 import type { SessionProtocolUpdate } from '../../../../protocol/session/model/update.js';
-import { ownedFrozenValue } from '../shared/value/owned.js';
+import { ownedFrozenValue } from '../../runtime/resources/owned.js';
 
 type ProtocolInteraction = Extract<
   SessionProtocolUpdate,

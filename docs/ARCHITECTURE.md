@@ -129,5 +129,5 @@ exports. Code layout and readability remain ordinary design/review concerns,
 not a second custom source parser.
 
 `pnpm verify:package` additionally seeds a stale compiled artifact, proves that
-the build removes it, and validates the exact current packed inventory, ESM/type
+the build removes it, and validates the exact source-derived packed inventory, ESM/type
 resolution, public root exports, and private deep-import denial.

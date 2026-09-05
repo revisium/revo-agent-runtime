@@ -2,8 +2,6 @@ node_modules/
 dist/
 coverage/
 .revisium-actions/
-.architecture-probe-*/
-.package-proof-*/
 .agents/local.*
 .env
 .env.*
