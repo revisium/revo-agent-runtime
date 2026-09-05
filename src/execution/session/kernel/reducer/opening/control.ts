@@ -20,14 +20,12 @@ export const cancelOpening = (
   };
   let transition: SessionTransition = unchangedTransition(state);
   if (!openingCleanupInProgress(state)) {
-    transition =
-      'process' in state.progress
-        ? beginOpeningProcessCleanup(
-            state,
-            fault,
-            state.progress.stage === 'saving_process' ? 'uncertain' : 'remove_state',
-          )
-        : failOpeningBeforeProcess(state, fault, command.observedAt);
+    if ('process' in state.progress) {
+      const afterCleanup = state.progress.stage === 'saving_process' ? 'uncertain' : 'remove_state';
+      transition = beginOpeningProcessCleanup(state, fault, afterCleanup);
+    } else {
+      transition = failOpeningBeforeProcess(state, fault, command.observedAt);
+    }
   }
   return appendEffect(transition, {
     type: 'public.resolve',

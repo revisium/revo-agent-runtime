@@ -53,8 +53,8 @@ const cancelTurn = async (
   const operation: Promise<SessionProtocolCancellationOutcome> = Promise.resolve().then(
     async () => {
       const requested = await resource.prompt.cancel(effect.reason);
-      if (requested.status !== 'requested') return requested;
-      await Promise.race([resource.prompt.completion, resource.stopped]);
+      if (requested.status === 'requested')
+        await Promise.race([resource.prompt.completion, resource.stopped]);
       return requested;
     },
   );
@@ -78,7 +78,6 @@ const cancelTurn = async (
         ? settlement.value.failure
         : undefined,
     );
-    return;
   }
 };
 

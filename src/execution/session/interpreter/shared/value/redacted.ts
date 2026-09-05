@@ -19,6 +19,18 @@ const redactText = (value: string, secrets: readonly string[]): string => {
   }
 };
 
+const redactFieldText = (
+  value: string,
+  key: string,
+  metadata: boolean,
+  secrets: readonly string[],
+): string => {
+  if (metadata || displayFields.has(key)) return redactText(value, secrets);
+  if (containsSecret(value, secrets))
+    throw new TypeError('A session identity or protocol value contains a secret.');
+  return value;
+};
+
 export const redactSessionValue = <Value extends object>(
   value: Value,
   secrets: readonly string[],
@@ -32,11 +44,7 @@ export const redactSessionValue = <Value extends object>(
       const child: unknown = Reflect.get(entry.value, key);
       const metadata = entry.metadata || key === 'metadata';
       if (typeof child === 'string') {
-        if (metadata || displayFields.has(key)) {
-          Reflect.set(entry.value, key, redactText(child, secrets));
-        } else if (containsSecret(child, secrets)) {
-          throw new TypeError('A session identity or protocol value contains a secret.');
-        }
+        Reflect.set(entry.value, key, redactFieldText(child, key, metadata, secrets));
       } else if (typeof child === 'object' && child !== null) {
         pending.push({ value: child, metadata });
       }

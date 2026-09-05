@@ -6,10 +6,10 @@ import type {
   AgentSessionTerminalRecord,
 } from '../../../contracts/session/lifecycle/snapshot.js';
 import type { SessionCommandRuntime } from '../../../execution/session/runtime/actor/port.js';
-import type { EffectiveAgentSessionManagerLimits } from '../policy/limits/resolve.js';
 import {
   resolveAgentSessionLimits,
   type EffectiveAgentSessionLimits,
+  type EffectiveAgentSessionManagerLimits,
 } from '../policy/limits/resolve.js';
 import { sessionManagerError } from './errors.js';
 

@@ -36,6 +36,14 @@ export const rejectPublicCommand = (
   return transition;
 };
 
+const terminalResolution = (type: 'session.close' | 'session.cancel' | 'turn.cancel') => {
+  if (type === 'session.close')
+    return { kind: 'close' as const, result: { state: 'already_terminal' as const } };
+  if (type === 'session.cancel')
+    return { kind: 'cancel_session' as const, result: { state: 'already_terminal' as const } };
+  return { kind: 'cancel_turn' as const, result: { state: 'session_terminal' as const } };
+};
+
 export const settleInactiveCommand = (
   state: SessionState,
   command: PublicSessionCommand,
@@ -53,17 +61,11 @@ export const settleInactiveCommand = (
       command.type === 'session.cancel' ||
       command.type === 'turn.cancel')
   ) {
-    const resolution =
-      command.type === 'session.close'
-        ? { kind: 'close' as const, result: { state: 'already_terminal' as const } }
-        : command.type === 'session.cancel'
-          ? { kind: 'cancel_session' as const, result: { state: 'already_terminal' as const } }
-          : { kind: 'cancel_turn' as const, result: { state: 'session_terminal' as const } };
     return appendEffect(unchangedTransition(state), {
       type: 'public.resolve',
       correlation: nextEffectCorrelation(state),
       callId: command.call.callId,
-      resolution,
+      resolution: terminalResolution(command.type),
     });
   }
   if (
