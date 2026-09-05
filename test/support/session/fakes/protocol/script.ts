@@ -23,10 +23,18 @@ export interface FakeSessionProtocolPromptScript {
   readonly outcome: SessionProtocolPromptOutcome;
 }
 
+export interface FakeSessionProtocolInteractionScript {
+  readonly outcome: SessionProtocolInteractionOutcome;
+  readonly wait?: string;
+}
+
 export interface FakeSessionProtocolScript {
   readonly openings: readonly FakeSessionProtocolOpeningScript[];
   readonly prompts?: readonly FakeSessionProtocolPromptScript[];
-  readonly interactions?: readonly SessionProtocolInteractionOutcome[];
+  readonly interactions?: readonly (
+    | SessionProtocolInteractionOutcome
+    | FakeSessionProtocolInteractionScript
+  )[];
   readonly checkpoints?: readonly SessionProtocolCheckpointOutcome[];
   readonly cancellations?: readonly SessionProtocolCancellationOutcome[];
   readonly closes?: readonly SessionProtocolCloseOutcome[];

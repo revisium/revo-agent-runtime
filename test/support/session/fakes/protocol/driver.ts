@@ -23,6 +23,7 @@ import type {
 import { FakeSessionProtocolBarriers } from './barriers.js';
 import type {
   FakeSessionProtocolOpeningScript,
+  FakeSessionProtocolInteractionScript,
   FakeSessionProtocolPromptScript,
   FakeSessionProtocolScript,
   FakeSessionProtocolStep,
@@ -45,7 +46,10 @@ export class ControllableSessionProtocolDriver implements SessionProtocolDriver 
   readonly #calls: FakeSessionProtocolCall[] = [];
   readonly #openings: FakeSessionProtocolOpeningScript[];
   readonly #prompts: FakeSessionProtocolPromptScript[];
-  readonly #interactions: SessionProtocolInteractionOutcome[];
+  readonly #interactions: (
+    | SessionProtocolInteractionOutcome
+    | FakeSessionProtocolInteractionScript
+  )[];
   readonly #checkpoints: SessionProtocolCheckpointOutcome[];
   readonly #cancellations: SessionProtocolCancellationOutcome[];
   readonly #closes: SessionProtocolCloseOutcome[];
@@ -114,7 +118,10 @@ export class ControllableSessionProtocolDriver implements SessionProtocolDriver 
     request: SessionProtocolInteractionResponseRequest,
   ): Promise<SessionProtocolInteractionOutcome> {
     this.#calls.push({ request, type: 'interaction.respond' });
-    return this.#required(this.#interactions, 'interaction response');
+    const script = this.#required(this.#interactions, 'interaction response');
+    if (!('outcome' in script)) return script;
+    if (script.wait !== undefined) await this.barriers.wait(script.wait);
+    return script.outcome;
   }
 
   async checkpoint(): Promise<SessionProtocolCheckpointOutcome> {

@@ -43,12 +43,14 @@ test.each(['event.failed', 'event.unknown', 'event.timed_out_then_failed'] as co
       type,
     });
     expect(transition.state).toMatchObject({
+      events: { pending: [] },
       intent: { outcome: 'failed' },
       lastTurn: { result: { status: 'failed' } },
       progress: { stage: 'cleaning_process' },
       status: 'cancelling',
       timers: [],
     });
+    expect(transition.state.events).not.toHaveProperty('inFlight');
     expect(transition.effects).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ callId: 'send_01', type: 'public.reject' }),
