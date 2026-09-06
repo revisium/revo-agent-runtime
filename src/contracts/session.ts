@@ -5,7 +5,7 @@ export type {
   AgentSessions,
 } from './session/api/manager.js';
 export type { AgentSession } from './session/api/session.js';
-export type { AgentSessionTurn } from './session/api/turn.js';
+export type { AgentSessionTurn, AgentSessionTurnSnapshot } from './session/api/turn.js';
 export type {
   AgentSessionAgentDescriptor,
   AgentSessionCapabilities,

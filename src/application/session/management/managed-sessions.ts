@@ -26,6 +26,7 @@ import { ManagedSessionOpeningBuilder, type PreparedManagedSessionOpening } from
 import type { ManagedAgentSessionsOptions } from './options.js';
 import { beginAgentSessionRecovery } from './recovery.js';
 import { ManagedSessionRegistry } from './registry.js';
+import { ManagedSessionTurns } from './turns.js';
 
 export type { ManagedAgentSessionsOptions } from './options.js';
 
@@ -56,7 +57,9 @@ export const createManagedAgentSessionController = (
   options: ManagedAgentSessionsOptions,
 ): ManagedAgentSessionController => {
   const catalog = new SessionAgentCatalog(options.agents);
-  const registry = new ManagedSessionRegistry(resolveAgentSessionManagerLimits(options.limits));
+  const limits = resolveAgentSessionManagerLimits(options.limits);
+  const registry = new ManagedSessionRegistry(limits);
+  const turns = new ManagedSessionTurns(limits);
   const openings = new ManagedSessionOpeningBuilder(options, catalog, registry);
   const controls = new ManagedSessionControls(options, registry);
   let accepting = true;
@@ -87,7 +90,7 @@ export const createManagedAgentSessionController = (
     } finally {
       signal?.removeEventListener('abort', cancel);
     }
-    const handle = createManagedSessionHandle(options, registry, runtime, opening);
+    const handle = createManagedSessionHandle(options, registry, turns, runtime, opening);
     registry.attach(command.call.sessionId, handle);
     return handle;
   };
@@ -96,6 +99,8 @@ export const createManagedAgentSessionController = (
     cancel: (id: string, reason?: string): Promise<CancelAgentSessionResult> =>
       controls.cancel(id, reason),
     get: (id: string) => registry.get(id),
+    getTurn: (sessionId: string, turnId: string) => turns.get(sessionId, turnId),
+    inspectTurn: (sessionId: string, turnId: string) => turns.inspect(sessionId, turnId),
     getTerminal: (id: string): AgentSessionTerminalRecord | undefined => registry.terminal(id),
     inspect: (id: string): AgentSessionSnapshot | undefined => registry.inspect(id),
     list: (filter?: AgentSessionFilter) => registry.list(filter),
@@ -123,7 +128,6 @@ export const createManagedAgentSessionController = (
           ),
         );
       }
-      const limits = resolveAgentSessionManagerLimits(options.limits);
       const recovery = beginAgentSessionRecovery({
         agents: options.agents,
         inspector: options.recoveryInspector,

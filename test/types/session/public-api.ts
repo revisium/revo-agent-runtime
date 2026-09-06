@@ -9,6 +9,7 @@ import type {
   AgentSessionResumeToken,
   AgentSessions,
   AgentSessionTurn,
+  AgentSessionTurnSnapshot,
   OpenAgentSession,
   RespondAgentSessionRequest,
   ResumeAgentSession,
@@ -19,6 +20,7 @@ import type {
   AgentSessionEventSink as RootAgentSessionEventSink,
   AgentSessionResumeToken as RootAgentSessionResumeToken,
   AgentSessions as RootAgentSessions,
+  AgentSessionTurnSnapshot as RootAgentSessionTurnSnapshot,
 } from '../../../src/index.js';
 
 declare const sessions: AgentSessions;
@@ -72,7 +74,7 @@ const activeStateSink = {
 const managerOptions = {
   activeStateSink,
   eventSink,
-  limits: { maxActiveSessions: 32 },
+  limits: { maxActiveSessions: 32, maxCompletedTurns: 1_000, maxCompletedTurnBytes: 16_777_216 },
 } satisfies AgentSessionManagerOptions;
 
 const openFunction: AgentSessions['open'] = async (request, context) => {
@@ -111,6 +113,23 @@ void managerOptions;
 void openFunction;
 void sendFunction;
 void resultFunction;
+
+const lookup: AgentSessionTurn | undefined = sessions.getTurn('dlg_01', 'trn_01');
+const inspected: AgentSessionTurnSnapshot | undefined = sessions.inspectTurn('dlg_01', 'trn_01');
+const rootSnapshot: RootAgentSessionTurnSnapshot | undefined = inspected;
+void lookup;
+void rootSnapshot;
+if (inspected?.state === 'completed') void inspected.result.status;
+if (inspected?.state === 'running') {
+  // @ts-expect-error A running snapshot has no terminal result.
+  void inspected.result;
+}
+// @ts-expect-error Turn lookup is always scoped by both session and turn identity.
+sessions.getTurn('trn_01');
+if (inspected !== undefined) {
+  // @ts-expect-error Inspection cannot mutate the retained identity.
+  inspected.turnId = 'trn_other';
+}
 
 // Required top-level fields remain required.
 // @ts-expect-error A fresh session always names an agent.

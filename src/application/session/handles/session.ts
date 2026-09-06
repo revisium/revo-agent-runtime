@@ -147,6 +147,7 @@ export const createAgentSessionHandle = (options: AgentSessionHandleOptions): Ag
       const ready = await dispatchCall(options.runtime, command, 'turn_ready');
       options.onSettled();
       const turn = createAgentSessionTurn(options, ready.turnId, resultSettlement);
+      options.onTurn(turn);
       const signal = context?.signal;
       if (signal === undefined) return turn;
       const cancel = (): void => {

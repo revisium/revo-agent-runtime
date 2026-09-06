@@ -15,6 +15,10 @@ test('event sink failure cannot produce a false successful turn', async () => {
     status: 'failed',
   });
   await story.settle();
+  expect(story.sessions.inspectTurn(session.sessionId, turn.turnId)).toMatchObject({
+    state: 'completed',
+    result: { status: 'failed', error: { code: 'revo.agent.event_sink_failed' } },
+  });
   expect(story.sessions.get('dlg_sink_failure')).toBeUndefined();
   expect(story.sessions.getTerminal('dlg_sink_failure')).toMatchObject({
     error: { code: 'revo.agent.event_sink_failed' },

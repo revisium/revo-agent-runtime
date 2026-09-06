@@ -8,10 +8,12 @@ import { sessionManagerError } from './errors.js';
 import type { PreparedManagedSessionOpening } from './opening.js';
 import type { ManagedAgentSessionsOptions } from './options.js';
 import type { ManagedSessionRegistry } from './registry.js';
+import type { ManagedSessionTurns } from './turns.js';
 
 export const createManagedSessionHandle = (
   options: ManagedAgentSessionsOptions,
   registry: ManagedSessionRegistry,
+  turns: ManagedSessionTurns,
   runtime: SessionCommandRuntime,
   opening: PreparedManagedSessionOpening,
 ): AgentSession => {
@@ -38,6 +40,7 @@ export const createManagedSessionHandle = (
     epoch,
     nextIdentity: options.nextIdentity,
     onSettled: () => registry.reconcile(snapshot.sessionId),
+    onTurn: (turn) => turns.add(turn),
     pin,
     runtime,
     sessionId: snapshot.sessionId,

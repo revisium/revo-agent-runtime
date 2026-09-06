@@ -18,6 +18,8 @@ export const createUnavailableAgentSessions = (
   return Object.freeze({
     cancel: async () => unavailable(),
     get: () => undefined,
+    getTurn: () => undefined,
+    inspectTurn: () => undefined,
     getTerminal: () => undefined,
     inspect: () => undefined,
     list: () => Object.freeze([]),
