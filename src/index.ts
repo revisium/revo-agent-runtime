@@ -98,6 +98,7 @@ export type {
   AgentSessionTurn,
   AgentSessionTurnOutcome,
   AgentSessionTurnResult,
+  AgentSessionTurnSnapshot,
   AgentSessionUsage,
   AssistantMessageCompletedEvent,
   AssistantMessageDeltaEvent,

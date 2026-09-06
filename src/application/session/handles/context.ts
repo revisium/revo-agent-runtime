@@ -2,6 +2,7 @@ import type { JsonObject } from '../../../contracts/agent-definition.js';
 import type { AgentExecutionPin } from '../../../contracts/manager/core.js';
 import type {
   AgentSessionCapabilities,
+  AgentSessionTurn,
   RespondAgentSessionRequest,
 } from '../../../contracts/session.js';
 import type { SessionCommandRuntime } from '../../../execution/session/runtime/actor/port.js';
@@ -26,6 +27,7 @@ export interface AgentSessionHandleOptions {
   readonly epoch: number;
   readonly nextIdentity: (kind: SessionHandleIdentityKind) => string;
   readonly onSettled: () => void;
+  readonly onTurn: (turn: AgentSessionTurn) => void;
   readonly pin: AgentExecutionPin;
   readonly runtime: SessionCommandRuntime;
   readonly sessionId: string;

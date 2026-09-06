@@ -18,6 +18,10 @@ test('an uncooperative prompt fails the turn and session, publishes completion, 
     error: { code: 'revo.agent.timeout' },
   });
   await story.settle();
+  expect(story.sessions.inspectTurn(session.sessionId, turn.turnId)).toMatchObject({
+    state: 'completed',
+    result: { status: 'failed', error: { code: 'revo.agent.timeout' } },
+  });
   expect(story.sessions.getTerminal(session.sessionId)).toMatchObject({ status: 'failed' });
   expect(story.events()).toContainEqual(
     expect.objectContaining({

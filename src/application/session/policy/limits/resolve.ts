@@ -79,6 +79,16 @@ export const resolveAgentSessionManagerLimits = (
       'maxCompletedSessions',
       agentSessionManagerLimitPolicies.maxCompletedSessions,
     ),
+    maxCompletedTurns: readLimit(
+      input,
+      'maxCompletedTurns',
+      agentSessionManagerLimitPolicies.maxCompletedTurns,
+    ),
+    maxCompletedTurnBytes: readLimit(
+      input,
+      'maxCompletedTurnBytes',
+      agentSessionManagerLimitPolicies.maxCompletedTurnBytes,
+    ),
     maxOpeningSessions: readLimit(
       input,
       'maxOpeningSessions',

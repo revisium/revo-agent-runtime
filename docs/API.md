@@ -97,10 +97,43 @@ await session.close();
 `AgentSessions` provides `listAgents`, `open`, `resume`, active `get`, `inspect`,
 and `list`, terminal `getTerminal` and `listTerminal`, plus `respond` and
 `cancel`.
+Turn lookup is available through `getTurn(sessionId, turnId)` and
+`inspectTurn(sessionId, turnId)`; callers do not need their own handle registry.
 `AgentSession` provides `send`, `respond`, `checkpoint`, `hibernate`, `close`,
 and `cancel`. A turn result is `completed`, `failed`, `cancelled`, `timed_out`,
 or `interrupted`. Passing an `AbortSignal` to `send()` cancels that turn; manager
 shutdown cancels and drains all sessions it owns.
+
+### Turn lookup and retention
+
+`getTurn` returns the accepted `AgentSessionTurn` handle, or `undefined` for an
+unknown or evicted entry. Use its existing `result()` and `cancel(reason?)`
+methods. Lookup is available when `send()` resolves, unless an already completed
+result has been evicted by the retention policy. Repeated waits observe the same
+outcome; lookup does not send a new provider prompt.
+
+`inspectTurn` returns an immutable `AgentSessionTurnSnapshot` with `sessionId`,
+`turnId`, and `state`: `running`, or `completed` with `result` containing the
+existing `AgentSessionTurnResult` union. Here `completed` means settled, not
+successful: inspect `result.status` for failure, cancellation, or timeout.
+Previously returned snapshots do not change when the turn settles.
+
+The session manager limits include `maxCompletedTurns` (default 1,000; range
+1–10,000) and `maxCompletedTurnBytes` (default 16 MiB; range 1 KiB–256 MiB).
+Both budgets apply across all sessions owned by one manager. The byte budget
+counts UTF-8 JSON of retained terminal turn snapshots, not total process heap.
+Oldest completed entries are evicted first; reads do not refresh their position.
+A result larger than the byte budget is not retained and does not evict other
+results. Active turns are never evicted by these budgets; existing session
+admission and per-session message limits bound active work.
+
+Eviction affects lookup only. Previously returned handles remain usable, and
+the logical session's duplicate-turn-ID ledger is independent of result
+retention. Completed lookups survive later turns, session close, manager shutdown,
+and in-process native resume within those budgets. They retain no execution
+resources solely to serve a completed result. A new manager does not recover
+historical turn results from a continuation token: this is process-local lookup,
+not durable history.
 
 The session event sink receives ordered accepted/opened, turn, assistant
 message, tool, plan, usage, interaction, checkpoint, hibernation, and terminal

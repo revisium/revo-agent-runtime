@@ -8,19 +8,27 @@ import { dispatchCall, resolutionOf } from './call.js';
 import type { AgentSessionHandleOptions } from './context.js';
 
 export const createAgentSessionTurn = (
-  options: AgentSessionHandleOptions,
+  initialOptions: AgentSessionHandleOptions,
   turnId: string,
   resultSettlement: Promise<PublicCallSettlement>,
 ): AgentSessionTurn => {
+  const sessionId = initialOptions.sessionId;
+  let activeOptions: AgentSessionHandleOptions | undefined = initialOptions;
   let completed: AgentSessionTurnResult | undefined;
   const result = resultSettlement.then((settlement) => {
-    options.onSettled();
-    completed = resolutionOf(settlement, 'turn_result').result;
-    return completed;
+    try {
+      activeOptions?.onSettled();
+      completed = resolutionOf(settlement, 'turn_result').result;
+      return completed;
+    } finally {
+      activeOptions = undefined;
+    }
   });
   return Object.freeze({
     cancel: async (reason?: string): Promise<CancelAgentSessionTurnResult> => {
       if (completed !== undefined) return { state: 'already_completed', result: completed };
+      const options = activeOptions;
+      if (options === undefined) return { state: 'session_terminal' };
       const observed = options.clock.now();
       const resolution = await dispatchCall(
         options.runtime,
@@ -43,7 +51,7 @@ export const createAgentSessionTurn = (
       return resolution.result;
     },
     result: (): Promise<AgentSessionTurnResult> => result,
-    sessionId: options.sessionId,
+    sessionId,
     turnId,
   });
 };

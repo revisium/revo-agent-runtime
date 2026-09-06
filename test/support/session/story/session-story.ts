@@ -159,6 +159,7 @@ export const createAgentSessionStory = (options: AgentSessionStoryOptions): Agen
     agents: [descriptorFrom(definition)],
     clock,
     digest,
+    ...(options.managerLimits === undefined ? {} : { limits: options.managerLimits }),
     nextIdentity: (kind) => `${kind}-${++identity}`,
     runtimeFactory,
   });

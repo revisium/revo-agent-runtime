@@ -24,6 +24,7 @@ class ImmediateRuntime implements SessionCommandRuntime {
     private readonly status: 'idle' | 'running' | 'terminal' = 'idle',
     private readonly onTurnSend?: () => void,
     private readonly rejectTurnCancellation: boolean = false,
+    private readonly turnSettlement?: PublicCallSettlement,
   ) {}
 
   dispatch(command: PublicSessionCommand) {
@@ -31,6 +32,10 @@ class ImmediateRuntime implements SessionCommandRuntime {
     if (command.type === 'turn.send') {
       this.#resolve(command.call.callId, { kind: 'turn_ready', turnId: command.input.turnId });
       this.onTurnSend?.();
+      if (this.turnSettlement !== undefined) {
+        this.#calls.get(command.resultCallId)?.(this.turnSettlement);
+        return { state: 'accepted' as const };
+      }
       this.#resolve(command.resultCallId, {
         kind: 'turn_result',
         result: {
@@ -153,11 +158,29 @@ const handleFor = (runtime: ImmediateRuntime, withMetadata: boolean = false) => 
     epoch: 1,
     nextIdentity: (kind) => `${kind}-${++identity}`,
     onSettled: () => undefined,
+    onTurn: () => undefined,
     pin,
     runtime,
     sessionId: 'dlg_01',
   });
 };
+
+test('a rejected result releases cancellation access to the session runtime', async () => {
+  const runtime = new ImmediateRuntime('idle', undefined, false, {
+    state: 'rejected',
+    fault: {
+      code: 'revo.agent.internal',
+      message: 'Result settlement failed.',
+      phase: 'session_running',
+      retryable: false,
+    },
+  });
+  const turn = await handleFor(runtime).send({ prompt: 'Work', turnId: 'trn_01' });
+
+  await expect(turn.result()).rejects.toMatchObject({ fault: { code: 'revo.agent.internal' } });
+  await expect(turn.cancel()).resolves.toEqual({ state: 'session_terminal' });
+  expect(runtime.commands.map(({ type }) => type)).toEqual(['turn.send']);
+});
 
 test('session and turn handles hide command correlation from the consumer', async () => {
   const runtime = new ImmediateRuntime();

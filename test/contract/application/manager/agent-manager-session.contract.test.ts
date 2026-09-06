@@ -75,6 +75,12 @@ test('one public manager owns a hot multi-turn session and its lifecycle', async
   await expect(session.close()).resolves.toEqual({ state: 'closed' });
   await manager.shutdown();
 
+  expect(manager.sessions.getTurn(session.sessionId, first.turnId)).toBe(first);
+  expect(manager.sessions.inspectTurn(session.sessionId, second.turnId)).toMatchObject({
+    state: 'completed',
+    result: { status: 'completed', message: { content: 'nonce-2RD' } },
+  });
+
   expect(active.size).toBe(0);
   expect(events.map(({ type }) => type)).toEqual([
     'session.accepted',
@@ -137,6 +143,15 @@ test('manager shutdown cancels and drains an active session turn', async () => {
   await expect(turn.result()).resolves.toMatchObject({ status: 'interrupted' });
   expect(active.size).toBe(0);
   expect(manager.sessions.get('dlg_shutdown_contract')).toBeUndefined();
+  expect(manager.sessions.inspectTurn(session.sessionId, turn.turnId)).toMatchObject({
+    state: 'completed',
+    result: { status: 'interrupted' },
+  });
+  await expect(manager.sessions.getTurn(session.sessionId, turn.turnId)?.result()).resolves.toEqual(
+    {
+      status: 'interrupted',
+    },
+  );
   await expect(
     manager.sessions.open({
       agent: { id: 'codex', version: '1.0.0' },
@@ -206,6 +221,8 @@ test('the session facet remains discoverable but fails closed without session st
   if (descriptor === undefined) throw new Error('Expected a session-capable fake agent.');
 
   expect(manager.sessions.inspect('dlg_missing')).toBeUndefined();
+  expect(manager.sessions.getTurn('dlg_missing', 'trn_missing')).toBeUndefined();
+  expect(manager.sessions.inspectTurn('dlg_missing', 'trn_missing')).toBeUndefined();
   expect(manager.sessions.list()).toEqual([]);
   expect(manager.sessions.getTerminal('dlg_missing')).toBeUndefined();
   expect(manager.sessions.listTerminal()).toEqual([]);
