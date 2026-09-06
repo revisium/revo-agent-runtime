@@ -10,6 +10,12 @@ export const agentSessionManagerLimitPolicies = Object.freeze({
   maxActiveSessions: Object.freeze({ default: 32, minimum: 1, maximum: 256 }),
   maxOpeningSessions: Object.freeze({ default: 4, minimum: 1, maximum: 32 }),
   maxCompletedSessions: Object.freeze({ default: 1_000, minimum: 1, maximum: 10_000 }),
+  maxCompletedTurns: Object.freeze({ default: 1_000, minimum: 1, maximum: 10_000 }),
+  maxCompletedTurnBytes: Object.freeze({
+    default: 16_777_216,
+    minimum: 1_024,
+    maximum: 268_435_456,
+  }),
   maxSessionIdentities: Object.freeze({ default: 10_000, minimum: 32, maximum: 100_000 }),
 }) satisfies Readonly<Record<string, LimitPolicy>>;
 

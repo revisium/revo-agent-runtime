@@ -108,6 +108,14 @@ lives in `kernel/reducer/turn/result`, while running and terminalizing flows
 keep their separate orchestration. Prompt interpreters observe real provider
 completion; control-operation deadlines never double as whole-turn deadlines.
 
+`management/turns` owns session-scoped turn lookup and count/byte-bounded
+completed-result retention. It observes existing handle settlement; it does not
+execute turns or reconstruct outcomes from events. Accepted handles are registered
+before `send()` returns. Turn handles release their execution context on
+settlement, so retained results do not keep actors alive. Eviction leaves issued
+handles and the kernel's duplicate-ID ledger intact. Native continuation transfers
+conversation state and accepted identities, not a durable result registry.
+
 Host-environment capture is injected at the root composition boundary.
 Actor construction does not retain its original opening descriptor, and
 terminal quiescence releases preparation/output resources. Immutable graph

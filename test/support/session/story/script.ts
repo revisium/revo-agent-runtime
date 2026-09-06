@@ -2,6 +2,7 @@ import type { JsonObject } from '../../../../src/contracts/agent-definition.js';
 import type {
   AgentSessionEvent,
   AgentSessionInteractiveRequest,
+  AgentSessionManagerLimits,
 } from '../../../../src/contracts/session.js';
 import type {
   SessionProtocolCancellationOutcome,
@@ -25,6 +26,7 @@ interface AgentStoryTurn {
 }
 
 export interface AgentSessionStoryOptions {
+  readonly managerLimits?: AgentSessionManagerLimits;
   readonly processStartBarrier?: string;
   readonly openingSteps?: readonly AgentStoryTurnStep[];
   readonly checkpoint?: Readonly<JsonObject>;

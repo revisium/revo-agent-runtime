@@ -3,6 +3,8 @@ import type {
   AgentDefinitionInput,
   AgentSessionEvent,
   AgentSessionLaunchContext,
+  AgentSessions,
+  AgentSessionTurn,
   AgentSessionTurnResult,
 } from '../../../src/index.js';
 import { createAgentManager } from '../../../src/index.js';
@@ -123,6 +125,30 @@ function requireCompleted(
   }
 }
 
+const requireTurnLookup = (sessions: AgentSessions, turn: AgentSessionTurn): AgentSessionTurn => {
+  const recovered = sessions.getTurn(turn.sessionId, turn.turnId);
+  if (recovered !== turn || sessions.inspectTurn(turn.sessionId, turn.turnId) === undefined)
+    throw new Error('Session smoke could not recover the accepted turn.');
+  return recovered;
+};
+
+const requireRetainedResult = async (
+  sessions: AgentSessions,
+  sessionId: string,
+  turnId: string,
+  expected: AgentSessionTurnResult,
+): Promise<void> => {
+  const retained = sessions.getTurn(sessionId, turnId);
+  const snapshot = sessions.inspectTurn(sessionId, turnId);
+  if (
+    retained === undefined ||
+    (await retained.result()) !== expected ||
+    snapshot?.state !== 'completed' ||
+    snapshot.result !== expected
+  )
+    throw new Error('Session smoke did not retain the completed turn result.');
+};
+
 export const runSessionContinuityScenario = async ({
   context,
   definition,
@@ -160,12 +186,11 @@ export const runSessionContinuityScenario = async ({
       },
       context,
     );
-    const first = await (
-      await session.send({
-        prompt: `Do not use tools. Remember this non-secret verification token for the next turn. Your entire reply must be exactly: ${nonce}`,
-        turnId: 'trn_remember',
-      })
-    ).result();
+    const firstTurn = await session.send({
+      prompt: `Do not use tools. Remember this non-secret verification token for the next turn. Your entire reply must be exactly: ${nonce}`,
+      turnId: 'trn_remember',
+    });
+    const first = await requireTurnLookup(manager.sessions, firstTurn).result();
     turnStatuses.push(first.status);
     requireCompleted(first, 'First');
     const second = await (
@@ -207,6 +232,7 @@ export const runSessionContinuityScenario = async ({
     } else {
       await session.close('manual session smoke complete');
     }
+    await requireRetainedResult(manager.sessions, session.sessionId, firstTurn.turnId, first);
     return {
       cleanup: requireClean(state),
       eventCount: state.events.length,
@@ -260,8 +286,9 @@ export const runSessionCancellationScenario = async ({
       turnId: 'trn_cancel',
     });
     await delay(cancelDelayMs);
-    await turn.cancel('manual session cancellation smoke');
-    const result = await turn.result();
+    const recovered = requireTurnLookup(manager.sessions, turn);
+    await recovered.cancel('manual session cancellation smoke');
+    const result = await recovered.result();
     status = result.status;
     if (status !== 'cancelled') throw new Error(`Cancelled session turn ended with ${status}.`);
     const next = await (
@@ -272,6 +299,7 @@ export const runSessionCancellationScenario = async ({
     ).result();
     requireCompleted(next, 'After cancellation');
     await session.close('manual cancellation smoke complete');
+    await requireRetainedResult(manager.sessions, session.sessionId, turn.turnId, result);
     return {
       nextTurnStatus: next.status,
       cleanup: requireClean(state),

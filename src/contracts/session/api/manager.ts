@@ -19,6 +19,7 @@ import type {
 import type { AgentSessionLaunchContext, OpenAgentSession } from '../requests/open.js';
 import type { ResumeAgentSession } from '../requests/resume.js';
 import type { AgentSession } from './session.js';
+import type { AgentSessionTurn, AgentSessionTurnSnapshot } from './turn.js';
 
 export interface AgentSessionManagerLimits {
   readonly activeStateOperationTimeoutMs?: number;
@@ -26,6 +27,8 @@ export interface AgentSessionManagerLimits {
   readonly maxActiveSessions?: number;
   readonly maxOpeningSessions?: number;
   readonly maxCompletedSessions?: number;
+  readonly maxCompletedTurns?: number;
+  readonly maxCompletedTurnBytes?: number;
   readonly maxSessionIdentities?: number;
 }
 
@@ -47,6 +50,8 @@ export interface AgentSessions {
   resume(request: ResumeAgentSession, context?: AgentSessionLaunchContext): Promise<AgentSession>;
 
   get(sessionId: string): AgentSession | undefined;
+  getTurn(sessionId: string, turnId: string): AgentSessionTurn | undefined;
+  inspectTurn(sessionId: string, turnId: string): AgentSessionTurnSnapshot | undefined;
   inspect(sessionId: string): AgentSessionSnapshot | undefined;
   list(filter?: AgentSessionFilter): readonly AgentSessionSnapshot[];
   getTerminal(sessionId: string): AgentSessionTerminalRecord | undefined;

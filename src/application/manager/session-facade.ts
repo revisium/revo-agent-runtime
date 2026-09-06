@@ -18,6 +18,14 @@ export const createManagerSessionFacade = (
       access.requireReady();
       return sessions.get(sessionId);
     },
+    getTurn: (sessionId, turnId) => {
+      access.requireReady();
+      return sessions.getTurn(sessionId, turnId);
+    },
+    inspectTurn: (sessionId, turnId) => {
+      access.requireReady();
+      return sessions.inspectTurn(sessionId, turnId);
+    },
     getTerminal: (sessionId) => {
       access.requireReady();
       return sessions.getTerminal(sessionId);
