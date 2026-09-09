@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
+
+import { execaSync } from 'execa';
 
 import { validateBridgeEvidence } from './bridge-evidence.js';
 import { expectedPackedPaths } from './inventory.js';
@@ -54,7 +55,7 @@ const validateCleanBuild = async (): Promise<void> => {
   const retiredArtifact = join(root, 'dist', 'retired-private-path.js');
   await mkdir(dirname(retiredArtifact), { recursive: true });
   await writeFile(retiredArtifact, 'throw new Error("stale build artifact");\n', 'utf8');
-  execFileSync('pnpm', ['run', 'build'], { cwd: root, stdio: 'pipe' });
+  execaSync('pnpm', ['run', 'build'], { cwd: root, stdio: 'pipe' });
   await assert.rejects(
     readFile(retiredArtifact),
     (error: unknown) => isRecord(error) && error.code === 'ENOENT',
@@ -72,7 +73,7 @@ try {
   await mkdir(packageDirectory);
   await mkdir(consumerDirectory);
   await validateCleanBuild();
-  const packed = execFileSync(
+  const packed = execaSync(
     'npm',
     ['pack', '--json', '--ignore-scripts', '--pack-destination', packageDirectory],
     {
@@ -87,7 +88,7 @@ try {
       },
     },
   );
-  const parsed: unknown = JSON.parse(packed);
+  const parsed: unknown = JSON.parse(packed.stdout);
   assert.ok(Array.isArray(parsed) && parsed.length === 1, 'npm pack must create one tarball.');
   const manifest: unknown = parsed[0];
   assert.ok(isPackManifest(manifest), 'npm pack must return a valid tarball manifest.');
@@ -95,8 +96,8 @@ try {
   await validateBridgeEvidence(root);
 
   const tarball = join(packageDirectory, manifest.filename);
-  execFileSync(publint, ['run', tarball, '--strict', '--pack=false'], { cwd: root, stdio: 'pipe' });
-  execFileSync(attw, [tarball, '--profile', 'esm-only'], { cwd: root, stdio: 'pipe' });
+  execaSync(publint, ['run', tarball, '--strict', '--pack=false'], { cwd: root, stdio: 'pipe' });
+  execaSync(attw, [tarball, '--profile', 'esm-only'], { cwd: root, stdio: 'pipe' });
 
   await writeFile(
     join(consumerDirectory, 'package.json'),
@@ -129,7 +130,7 @@ try {
     )}\n`,
   );
 
-  execFileSync(
+  execaSync(
     'npm',
     [
       'install',
@@ -153,11 +154,11 @@ try {
       },
     },
   );
-  execFileSync(join(consumerDirectory, 'node_modules/.bin/tsc'), ['-p', 'tsconfig.json'], {
+  execaSync(join(consumerDirectory, 'node_modules/.bin/tsc'), ['-p', 'tsconfig.json'], {
     cwd: consumerDirectory,
     stdio: 'pipe',
   });
-  execFileSync(process.execPath, ['consumer.mjs'], { cwd: consumerDirectory, stdio: 'pipe' });
+  execaSync(process.execPath, ['consumer.mjs'], { cwd: consumerDirectory, stdio: 'pipe' });
 
   console.log(
     `Exact tarball validation passed (${manifest.files.length} files; ATTW, contents, ESM, types, and deep-import denial).`,

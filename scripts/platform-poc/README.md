@@ -46,7 +46,8 @@ is involved.
 ## CI evidence
 
 `ci.yml` runs this experiment and the full existing `pnpm verify` on real
-Ubuntu x64, macOS arm64, and Windows x64 runners. Matrix fail-fast is disabled;
+Ubuntu x64, macOS arm64, and Windows x64 runners. Experiment, full verification, and package diagnostics have explicit step deadlines.
+Matrix fail-fast is disabled;
 failures remain failures. Full verification runs even if the experiment fails.
 Package verification is also attempted after an earlier failure so platform
 tooling issues remain visible. Sonar analysis stays on Linux to avoid competing

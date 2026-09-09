@@ -47,13 +47,16 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Native process PoC
+        timeout-minutes: 2
         run: pnpm poc:platform
 
       - name: Verify
+        timeout-minutes: 6
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm verify
 
       - name: Inspect package after a failed native verification
+        timeout-minutes: 4
         if: ${{ failure() && steps.install.outcome == 'success' }}
         run: pnpm verify:package
 
