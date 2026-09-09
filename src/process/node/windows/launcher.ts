@@ -106,6 +106,7 @@ export const launchWindowsProcess = async (
       message?: string;
       code?: string;
     }) => {
+      console.error('OWNER message', launch.command, message.type, Date.now());
       if (message.type === 'spawned') {
         opened = true;
         accept();
@@ -125,6 +126,7 @@ export const launchWindowsProcess = async (
   void child.catch(reject);
   child.stdout.on('data', (chunk: Uint8Array) => launch.onStdout?.(new Uint8Array(chunk)));
   child.stderr.on('data', (chunk: Uint8Array) => launch.onStderr?.(new Uint8Array(chunk)));
+  child.stderr.on('data', chunk => console.error('BOOT STDERR', String(chunk)));
   child.stderr.resume();
   const transport = Object.freeze({
     input: Writable.toWeb(child.stdin) as WritableStream<Uint8Array>,
@@ -137,6 +139,7 @@ export const launchWindowsProcess = async (
     10_000,
   );
   try {
+    console.error('OWNER assign', launch.command, Date.now());
     job.assign(pid);
     assigned = true;
     const identity = windowsOperations.inspectWindowsIdentity(pid, jobName);
@@ -152,6 +155,7 @@ export const launchWindowsProcess = async (
         if (error) reject(error);
       },
     );
+    console.error('OWNER sent', launch.command, Date.now());
     await admission;
     if (inspectIdentity) await inspectIdentity(pid);
     if (signal.aborted) throw signal.reason;

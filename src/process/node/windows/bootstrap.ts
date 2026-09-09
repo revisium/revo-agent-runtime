@@ -7,12 +7,14 @@ import type { ProcessLaunch } from '../../contracts.js';
 
 /** Trusted startup: no provider environment or code is loaded until the owner assigns the Job. */
 export const runWindowsBootstrap = async (): Promise<void> => {
+  console.error('BOOT loaded', Date.now());
   const launch = await new Promise<ProcessLaunch>((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error('Process owner did not admit the launch.')),
       10_000,
     );
     process.once('message', (message: ProcessLaunch) => {
+      console.error('BOOT received', Date.now());
       clearTimeout(timeout);
       resolve(message);
     });
@@ -22,6 +24,7 @@ export const runWindowsBootstrap = async (): Promise<void> => {
     });
   });
   try {
+    console.error('BOOT launching', launch.command, Date.now());
     // Preflight supplies a resolved path. Reject missing files before Execa can
     // fall back to cmd.exe; retain its Windows shebang and argument handling.
     await access(launch.command);
@@ -35,7 +38,7 @@ export const runWindowsBootstrap = async (): Promise<void> => {
     });
     void subprocess.catch(() => undefined);
     const child = subprocess.nodeChildProcess;
-    child.once('spawn', () => process.send?.({ type: 'spawned' }));
+    child.once('spawn', () => { console.error('BOOT spawned', Date.now()); process.send?.({ type: 'spawned' }); });
     await once(child, 'exit');
     process.send?.({
       type: 'exit',
