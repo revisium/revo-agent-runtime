@@ -55,6 +55,13 @@ recovery never attaches to an unknown live process: it confirms absence,
 identity mismatch, or termination before owner-fenced row removal, and fails
 closed when cleanup or ownership is ambiguous.
 
+Persist each `ActiveProcessIdentity` unchanged. New identities use `version: 2`
+and `platform: 'linux' | 'darwin' | 'win32'`, alongside `pid`, `fingerprint`,
+and `startedAt`. Linux/macOS identities carry `processGroupId`; Windows identities
+carry `jobName`, and their PID identifies the owned bootstrap. Legacy unversioned
+identities remain readable on Linux. Recovery rejects identities from another
+platform without signalling their processes.
+
 ## Manager methods
 
 | Method                                           | Behavior                                                                  |
