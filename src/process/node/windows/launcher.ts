@@ -136,7 +136,7 @@ export const launchWindowsProcess = async (
   signal.addEventListener('abort', aborted, { once: true });
   const timeout = setTimeout(
     () => reject(new Error('Process bootstrap admission timed out.')),
-    10_000,
+    45_000,
   );
   try {
     console.error('OWNER assign', launch.command, Date.now());

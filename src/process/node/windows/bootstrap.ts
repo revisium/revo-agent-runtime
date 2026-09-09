@@ -28,6 +28,7 @@ export const runWindowsBootstrap = async (): Promise<void> => {
     // Preflight supplies a resolved path. Reject missing files before Execa can
     // fall back to cmd.exe; retain its Windows shebang and argument handling.
     await access(launch.command);
+    console.error('BOOT access done', Date.now());
     const subprocess = execa(launch.command, [...launch.args], {
       cwd: launch.cwd,
       env: launch.environment ?? {},
@@ -36,6 +37,7 @@ export const runWindowsBootstrap = async (): Promise<void> => {
       shell: false,
       reject: false,
     });
+    console.error('BOOT execa returned', Date.now());
     void subprocess.catch(() => undefined);
     const child = subprocess.nodeChildProcess;
     child.once('spawn', () => { console.error('BOOT spawned', Date.now()); process.send?.({ type: 'spawned' }); });
