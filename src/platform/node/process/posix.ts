@@ -35,11 +35,19 @@ const launchPosix = async (
     exitCode: child.nodeChildProcess.exitCode,
     signal: child.nodeChildProcess.signalCode,
   });
-  const completion = child.then(readExit, readExit);
+  // Process exit drives supervision; inherited streams may still be open then.
+  const completion = new Promise<ProcessExit>((resolve) => {
+    child.nodeChildProcess.once('exit', () => resolve(readExit()));
+  });
+  const closed = new Promise<ProcessExit>((resolve) => {
+    child.nodeChildProcess.once('close', () => resolve(readExit()));
+  });
+  void child.catch(() => undefined);
   child.stdout.on('data', (chunk: Uint8Array) => launch.onStdout?.(new Uint8Array(chunk)));
   child.stderr.on('data', (chunk: Uint8Array) => launch.onStderr?.(new Uint8Array(chunk)));
   child.stderr.resume();
-  const terminateAndReap = createProcessCleanup(pid, completion);
+  // Cleanup confirms both the process group and closure of its local pipes.
+  const terminateAndReap = createProcessCleanup(pid, closed);
   if (signal.aborted) {
     const cleanup = await terminateAndReap();
     throw new ProcessStartError(cleanup.status, { cause: signal.reason });

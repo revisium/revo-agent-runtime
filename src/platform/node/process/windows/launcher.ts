@@ -58,6 +58,9 @@ export const launchWindowsProcess = async (
   const completion = new Promise<ProcessExit>((resolve) => {
     reap = resolve;
   });
+  const closed = new Promise<void>((resolve) => {
+    child.nodeChildProcess.once('close', resolve);
+  });
   let assigned = false;
   let cleanupPromise: Promise<ProcessCleanupOutcome> | undefined;
   const terminateAndReap = (): Promise<ProcessCleanupOutcome> => {
@@ -66,7 +69,10 @@ export const launchWindowsProcess = async (
         if (assigned) job.terminate();
         else child.kill('SIGKILL');
         const empty = await waitForWindowsJob(job, Date.now() + 2_500);
-        const exit = await Promise.race([completion, delay(500).then(() => undefined)]);
+        const exit = await Promise.race([
+          closed.then(() => completion),
+          delay(500).then(() => undefined),
+        ]);
         return empty && exit !== undefined
           ? { status: 'confirmed', exit }
           : { status: 'uncertain' };

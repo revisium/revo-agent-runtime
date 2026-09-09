@@ -128,6 +128,8 @@ const startVersionProbe = async (
       // Output callbacks retain bounded evidence; drain the protocol stream without a second buffer.
       void owned.transport.output.pipeTo(new WritableStream()).catch(() => undefined);
       const exit = await owned.completion;
+      // Exit and pipe closure are separate OS events. Retain output through cleanup.
+      await owned.terminateAndReap();
       stdoutStream.end();
       stderrStream.end();
       await Promise.all([stdout.completion, stderr.completion]);
