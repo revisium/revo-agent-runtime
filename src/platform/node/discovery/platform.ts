@@ -50,6 +50,7 @@ const probeSystemExecutable = async (
             running.timeout.then(() => undefined),
             cancelled,
           ]);
+      console.error('probe-result', executable, result === undefined ? 'timed out or cancelled' : {...result, ...('stdout' in result ? {stdout: Buffer.from(result.stdout).toString(), stderr: Buffer.from(result.stderr).toString()} : {})});
       return (
         result?.status === 'exited' &&
         result.exitCode === 0 &&
@@ -59,7 +60,8 @@ const probeSystemExecutable = async (
     } finally {
       await running.terminateAndReap();
     }
-  } catch {
+  } catch (error) {
+    console.error('probe-error', executable, error);
     return false;
   } finally {
     signal?.removeEventListener('abort', onAbort);
@@ -140,8 +142,10 @@ export const createNodeDiscoveryPlatform = (
     ) => {
       if (signal?.aborted) return undefined;
       const candidate = override ?? (await dependencies.resolveSystemExecutable(policy.command));
+      console.error('cli-candidate', policy.command, candidate);
       if (candidate === undefined || signal?.aborted) return undefined;
       const executable = installedCliExecutable(policy, candidate, hostPlatform);
+      console.error('cli-executable', policy.command, executable);
       if (executable === undefined) return undefined;
       return (await probeSystemExecutable(
         executable,
