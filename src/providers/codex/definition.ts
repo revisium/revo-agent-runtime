@@ -9,6 +9,7 @@ export const codexProviderPolicy: BundledAcpProviderPolicy = Object.freeze({
   cli: Object.freeze({
     command: 'codex',
     packageName: '@openai/codex',
+    versionProbeTimeoutMs: 30_000,
     nativePackagePrefix: '@openai/codex',
     nativeTargets: Object.freeze({
       'linux-x64': 'x86_64-unknown-linux-musl',

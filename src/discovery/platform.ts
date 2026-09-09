@@ -33,6 +33,7 @@ export interface AdjacentNodePackage {
 export interface InstalledCliPolicy {
   readonly command: string;
   readonly packageName: string;
+  readonly versionProbeTimeoutMs: number;
   readonly nativePackagePrefix?: string;
   readonly nativeTargets?: Readonly<Record<string, string>>;
 }
