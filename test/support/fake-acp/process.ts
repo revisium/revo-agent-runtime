@@ -92,7 +92,7 @@ process.stdin.on('data', (chunk: Buffer) => inboundChunks.push(chunk.toString('u
 protocolOutput.on('data', (chunk: Buffer) => {
   outboundChunks.push(chunk.toString('utf8'));
   // Persist before forwarding: Windows Job termination bypasses exit hooks.
-  if (closeReceived) writeTrace();
+  writeTrace();
 });
 protocolOutput.pipe(process.stdout);
 
@@ -121,12 +121,7 @@ const writeTrace = (exited = false): void => {
   renameSync(temporary, traceFile);
 };
 
-process.on('exit', () => {
-  // Windows Job termination can interrupt an exit-hook write after truncation.
-  // The close response already persisted the complete trace before being forwarded.
-  if (traceFile === undefined || process.platform === 'win32') return;
-  writeTrace(true);
-});
+process.on('exit', () => writeTrace(true));
 
 process.on('SIGTERM', () => {
   if (mode === 'stubborn-descendant') return;
@@ -188,7 +183,7 @@ acp
           : configurationOptions,
     };
   })
-  .onNotification(acp.methods.agent.session.cancel, async () => {
+  .onNotification(acp.methods.agent.session.cancel, () => {
     cancelReceived = true;
     cancelCalls += 1;
     pendingSessionPrompt?.resolve({ stopReason: 'cancelled' });
