@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import { expect, test } from 'vitest';
 
 import { EffectiveInvocationInputPolicy } from '../../../../src/application/admission/effective-inputs.js';
@@ -55,12 +57,12 @@ const invocation = (
 ): StartAgentInvocation => ({
   agent: { id: 'codex', version: '1.0.0' },
   invocationId,
-  output: { directory: '/fixture/output' },
+  output: { directory: resolve('/fixture/output') },
   parameters: inputs.parameters ?? {},
   permissions: inputs.permissions ?? {},
   prompt: 'Return one result.',
   result: { schema: { type: 'object' } },
-  workspace: { directory: '/fixture/workspace' },
+  workspace: { directory: resolve('/fixture/workspace') },
 });
 test('owns frozen effective values before the caller can mutate their request', async () => {
   const subject = effectiveInputExecutionStory([definitionWithInputs()]);

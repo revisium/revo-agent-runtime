@@ -1,3 +1,5 @@
+import { resolve as resolvePath } from 'node:path';
+
 import { expect, test } from 'vitest';
 
 import { createAgentManager } from '../../../../src/application/manager/manager.js';
@@ -16,12 +18,12 @@ import { noOpActiveStateSink } from '../../../support/stories/active-state.js';
 const request = (invocationId: string) => ({
   agent: { id: 'codex', version: '1.0.0' },
   invocationId,
-  output: { directory: '/fixture/output' },
+  output: { directory: resolvePath('/fixture/output') },
   parameters: {},
   permissions: {},
   prompt: 'Wait.',
   result: { schema: { type: 'object' } },
-  workspace: { directory: '/fixture/workspace' },
+  workspace: { directory: resolvePath('/fixture/workspace') },
 });
 
 const options = {

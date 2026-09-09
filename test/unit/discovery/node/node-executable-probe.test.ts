@@ -26,6 +26,34 @@ const versionProbe = (args: readonly string[], timeoutMs = 1_000) =>
     timeoutMs,
   });
 
+const admittedProbe = async (cleanupUncertain = false) => {
+  const admitted = Promise.withResolvers<void>();
+  const probe = createNodeExecutableProbe({
+    start: async (launch, signal) => {
+      const process = await nodeProcessLauncher.start(launch, signal);
+      admitted.resolve();
+      return {
+        ...process,
+        terminateAndReap: async () => {
+          const outcome = await process.terminateAndReap();
+          return cleanupUncertain ? { status: 'uncertain' as const } : outcome;
+        },
+      };
+    },
+  });
+  const running = await probe.startVersionProbe({
+    args: ['-e', 'setInterval(() => undefined, 1000)'],
+    environment: {},
+    executable: process.execPath,
+    shell: false,
+    stderrLimitBytes: 65_536,
+    stdoutLimitBytes: 65_536,
+    timeoutMs: 20,
+  });
+  await admitted.promise;
+  return running;
+};
+
 afterEach(() => vi.unstubAllEnvs());
 
 test('resolves only absolute launchable files and distinguishes missing from non-launchable', async () => {
@@ -113,7 +141,7 @@ test('reports the native exit status of a failed version command', async () => {
 });
 
 test('timeout termination resolves only after the probe leader is reaped', async () => {
-  const running = await versionProbe(['-e', 'setInterval(() => undefined, 1000)'], 20);
+  const running = await admittedProbe();
   await running.timeout;
 
   await expect(running.terminateAndReap()).resolves.toBeUndefined();
@@ -159,28 +187,7 @@ test('normalizes supported and unsupported Node host platforms', () => {
 });
 
 test('fails closed when version-probe cleanup cannot be confirmed', async () => {
-  const probe = createNodeExecutableProbe({
-    start: async (launch, signal) => {
-      const process = await nodeProcessLauncher.start(launch, signal);
-      return {
-        ...process,
-        terminateAndReap: async () => {
-          await process.terminateAndReap();
-          return { status: 'uncertain' };
-        },
-      };
-    },
-  });
-  expect(probe.hostPlatform()).toBe(process.platform);
-  const running = await probe.startVersionProbe({
-    args: ['-e', 'setInterval(() => undefined, 1000)'],
-    environment: {},
-    executable: process.execPath,
-    shell: false,
-    stderrLimitBytes: 65_536,
-    stdoutLimitBytes: 65_536,
-    timeoutMs: 20,
-  });
+  const running = await admittedProbe(true);
   await running.timeout;
   await expect(running.terminateAndReap()).rejects.toThrow('cleanup is uncertain');
 });

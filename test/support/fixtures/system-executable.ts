@@ -73,7 +73,7 @@ const executableBody = (behavior: ExecutableBehavior): string => {
 };
 
 const sourceFor = (behavior: ExecutableBehavior): string =>
-  `#!${process.platform === 'win32' ? '/usr/bin/env node' : process.execPath}\n${executableBody(behavior)}\n`;
+  `#!${process.execPath}\n${executableBody(behavior)}\n`;
 
 export const systemExecutable = async (
   behavior: ExecutableBehavior = 'version',

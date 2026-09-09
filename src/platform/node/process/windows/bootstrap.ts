@@ -1,5 +1,7 @@
-import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { access } from 'node:fs/promises';
+
+import { execa } from 'execa';
 
 import type { ProcessLaunch } from '../../../../execution/process/port.js';
 
@@ -19,16 +21,21 @@ export const runWindowsBootstrap = async (): Promise<void> => {
       process.exit(1);
     });
   });
-  // Discovery already resolves the executable and Node entrypoint. Node's literal
-  // spawn preserves ENOENT; Execa may launch cmd.exe for a missing Windows command.
-  const child = spawn(launch.command, [...launch.args], {
-    cwd: launch.cwd,
-    env: launch.environment ?? {},
-    stdio: 'inherit',
-    shell: false,
-  });
-  child.once('spawn', () => process.send?.({ type: 'spawned' }));
   try {
+    // Preflight supplies a resolved path. Reject missing files before Execa can
+    // fall back to cmd.exe; retain its Windows shebang and argument handling.
+    await access(launch.command);
+    const subprocess = execa(launch.command, [...launch.args], {
+      cwd: launch.cwd,
+      env: launch.environment ?? {},
+      extendEnv: false,
+      stdio: 'inherit',
+      shell: false,
+      reject: false,
+    });
+    void subprocess.catch(() => undefined);
+    const child = subprocess.nodeChildProcess;
+    child.once('spawn', () => process.send?.({ type: 'spawned' }));
     await once(child, 'exit');
     process.send?.({
       type: 'exit',
