@@ -9,8 +9,8 @@ import type {
   ProcessLaunch,
   ProcessRun,
 } from '../contracts.js';
-import { ProcessStartError } from '../contracts.js';
 import { createProcessCleanup } from './cleanup.js';
+import { rejectProcessStart } from './start-error.js';
 
 const launchPosix = async (
   launch: ProcessLaunch,
@@ -74,8 +74,7 @@ export const createPosixProcesses = (inspect: ProcessIdentityInspector) => ({
         terminateAndReap: process.terminateAndReap,
       });
     } catch (cause) {
-      const cleanup = await process.terminateAndReap();
-      throw new ProcessStartError(cleanup.status, { cause });
+      return rejectProcessStart(cause, () => process.terminateAndReap());
     }
   },
 });

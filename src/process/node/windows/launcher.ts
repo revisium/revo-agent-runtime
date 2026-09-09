@@ -6,13 +6,13 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { execa } from 'execa';
 
 import {
-  ProcessStartError,
   type OwnedProcess,
   type ProcessCleanupOutcome,
   type ProcessExit,
   type ProcessIdentityInspector,
   type ProcessLaunch,
 } from '../../contracts.js';
+import { rejectProcessStart } from '../start-error.js';
 import { windowsProcessNative } from './bindings.js';
 import { createWindowsProcessOperations } from './operations.js';
 import { waitForWindowsJob } from './wait.js';
@@ -162,8 +162,7 @@ export const launchWindowsProcess = async (
       transport,
     });
   } catch (cause) {
-    const cleanup = await terminateAndReap();
-    throw new ProcessStartError(cleanup.status, { cause });
+    return rejectProcessStart(cause, terminateAndReap);
   } finally {
     clearTimeout(timeout);
     signal.removeEventListener('abort', aborted);
