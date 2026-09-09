@@ -74,7 +74,7 @@ test('contains invalid subscriptions and makes unsubscribe idempotent', async ()
     await manager.shutdown();
     expect(delivered).toEqual(['invocation.accepted', 'invocation.started', 'invocation.finished']);
   });
-}, 15_000);
+});
 
 test.each([
   {

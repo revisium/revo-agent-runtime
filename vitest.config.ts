@@ -4,6 +4,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/**/*.test.ts'],
+    // Native Windows scenarios start several child processes within a single test.
+    testTimeout: process.platform === 'win32' ? 15_000 : 5_000,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],

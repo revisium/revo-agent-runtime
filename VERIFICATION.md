@@ -41,6 +41,10 @@ The full suite runs once through `test:cov`; individual lanes and `test` remain
 available for development without coverage. Each lane requires tests. The package
 lane proves that only the root entrypoint is public.
 
+Vitest allows 15 seconds per test on Windows for native child-process startup
+on shared runners, and 5 seconds elsewhere. Runtime operation deadlines remain
+independent of this outer test budget.
+
 Run the frozen install after dependency or lockfile changes (`verify:lock` is an
 alias). CI installs once before `verify`. Run `verify:negative` after changes to
 the formatter, compiler, Knip, Publint, or their configuration; it checks deliberate

@@ -105,7 +105,7 @@ test('keeps an override provider failure bounded and never changes the selected 
       await executable.dispose();
     }
   });
-}, 15_000);
+});
 
 for (const story of systemAcpStories) {
   test(`runs a discovered ${story.agent.id} definition through the shared public ACP flow`, async () => {
