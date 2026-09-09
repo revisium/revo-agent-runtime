@@ -38,6 +38,7 @@ try {
   assert.deepEqual(
     discovery.definitions.map(({ id }) => id),
     ['claude-acp', 'codex-acp'],
+    JSON.stringify(discovery.diagnostics),
   );
   const manager = createAgentManager({
     definitions: discovery.definitions,

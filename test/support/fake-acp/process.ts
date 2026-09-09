@@ -120,7 +120,9 @@ const writeTrace = async (): Promise<void> => {
 };
 
 process.on('exit', () => {
-  if (traceFile === undefined) return;
+  // Windows Job termination can interrupt an exit-hook write after truncation.
+  // The close response already persisted the complete trace before being forwarded.
+  if (traceFile === undefined || process.platform === 'win32') return;
   writeFileSync(traceFile, trace(true), 'utf8');
 });
 
