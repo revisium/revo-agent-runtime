@@ -7,9 +7,9 @@ export const rejectProcessStart = async (
   let outcome: ProcessCleanupOutcome;
   try {
     outcome = await cleanup();
-  } catch (cleanupFailure) {
+  } catch (error_) {
     throw new ProcessStartError('uncertain', {
-      cause: new AggregateError([cause, cleanupFailure], 'Process start and cleanup failed.', {
+      cause: new AggregateError([cause, error_], 'Process start and cleanup failed.', {
         cause,
       }),
     });
