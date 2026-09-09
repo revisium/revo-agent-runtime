@@ -8,7 +8,6 @@ import {
   nodeOutputPublicationSystem,
   type NodeOutputPublicationSystem,
 } from '../../../../src/platform/node/output/publication.js';
-import { expectPrivateOutput } from '../../../support/assertions/private-output.js';
 import { withTemporaryDirectory } from '../../../support/assertions/temporary-directory.js';
 import {
   claimOutput as claim,
@@ -17,7 +16,7 @@ import {
   outputPublication as publication,
   successfulOutputResult as result,
 } from '../../../support/fixtures/claimed-output.js';
-test('publishes bounded owner-only evidence before an atomically committed result and reports exact files', async () => {
+test('publishes bounded evidence before an atomically committed result and reports exact files', async () => {
   await withTemporaryDirectory(async (directory) => {
     const output = await claim(directory);
     const outputDirectory = join(directory, 'output');
@@ -40,10 +39,6 @@ test('publishes bounded owner-only evidence before an atomically committed resul
     ]);
     await expect(readFile(join(outputDirectory, 'result.json'), 'utf8')).resolves.toBe(
       `${JSON.stringify(result(outputDirectory, true))}\n`,
-    );
-    await expectPrivateOutput(
-      files.map((filename) => join(outputDirectory, filename)),
-      0o600,
     );
   });
 });

@@ -22,12 +22,12 @@ ConvertTo-Json -InputObject $results -Depth 4 -Compress
 `;
 
 export const expectPrivateOutput = async (
-  paths: readonly string[],
-  mode: number,
+  entries: readonly { readonly path: string; readonly mode: number }[],
 ): Promise<void> => {
+  const paths = entries.map(({ path }) => path);
   if (process.platform !== 'win32') {
     const modes = await Promise.all(paths.map(async (path) => (await stat(path)).mode & 0o777));
-    expect(modes).toEqual(paths.map(() => mode));
+    expect(modes).toEqual(entries.map(({ mode }) => mode));
     return;
   }
   const { stdout } = await execa(

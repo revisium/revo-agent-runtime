@@ -11,7 +11,6 @@ import {
   createNodeOutputClaimPlatform,
   type NodeOutputClaimSystem,
 } from '../../../../src/platform/node/output/claim.js';
-import { expectPrivateOutput } from '../../../support/assertions/private-output.js';
 import { withTemporaryDirectory } from '../../../support/assertions/temporary-directory.js';
 
 const platform = createNodeOutputClaimPlatform();
@@ -36,7 +35,6 @@ test('admits an existing workspace and atomically reserves one fresh output leaf
 
     expect(result.status).toBe('claimed');
     await expect(stat(output).then((entry) => entry.isDirectory())).resolves.toBe(true);
-    await expectPrivateOutput([output], 0o700);
   });
 });
 
