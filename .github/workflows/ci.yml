@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 25
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      VITEST_MAX_WORKERS: 1
 
     steps:
       - name: Check out repository
