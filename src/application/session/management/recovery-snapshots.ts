@@ -1,6 +1,6 @@
 import type { AgentDescriptor } from '../../../contracts/manager/core.js';
 import type { ActiveAgentSessionSnapshot } from '../../../contracts/session/persistence/active-state.js';
-import { snapshotProcessIdentity } from '../../../execution/process/identity.js';
+import { snapshotProcessIdentity } from '../../../process/index.js';
 
 const encoder = new TextEncoder();
 const digestPattern = /^[a-f0-9]{64}$/u;

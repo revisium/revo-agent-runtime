@@ -3,7 +3,7 @@ import { createSealedAgentRegistry } from '../../../src/definition/index.js';
 import type {
   RecoveredProcessInspector,
   RecoveredProcessReconciliation,
-} from '../../../src/execution/process/port.js';
+} from '../../../src/process/index.js';
 import { agentDefinition } from '../builders/agent-definition.js';
 import { processIdentity } from '../builders/process-identity.js';
 

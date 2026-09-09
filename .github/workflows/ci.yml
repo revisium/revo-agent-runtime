@@ -46,10 +46,6 @@ jobs:
         id: install
         run: pnpm install --frozen-lockfile
 
-      - name: Native process PoC
-        timeout-minutes: 2
-        run: pnpm poc:platform
-
       - name: Static verification
         timeout-minutes: 4
         if: ${{ !cancelled() && steps.install.outcome == 'success' && matrix.os == 'ubuntu-24.04' }}

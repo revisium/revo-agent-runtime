@@ -5,8 +5,8 @@ import { afterEach, expect, test, vi } from 'vitest';
 
 import { createAgentManager } from '../../../../src/application/manager/manager.js';
 import type {} from '../../../../src/execution/invocation/executor.js';
-import type { RecoveredProcessInspector } from '../../../../src/execution/process/port.js';
 import { nodeClaimedOutputPublisher } from '../../../../src/platform/node/output/publication.js';
+import type { RecoveredProcessInspector } from '../../../../src/process/index.js';
 import { remainsPending } from '../../../support/assertions/supervision.js';
 import { withTemporaryDirectory } from '../../../support/assertions/temporary-directory.js';
 import { agentDefinition } from '../../../support/builders/agent-definition.js';

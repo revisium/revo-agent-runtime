@@ -1,4 +1,4 @@
-import type { WindowsProcessNative } from '../../../src/platform/node/process/windows/operations.js';
+import type { WindowsProcessNative } from '../../../src/process/node/windows/operations.js';
 
 type FailingCall =
   | 'closeHandle'

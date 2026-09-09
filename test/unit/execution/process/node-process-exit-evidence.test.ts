@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 
-import { createNodeProcessSpawner } from '../../../../src/platform/node/process/spawner.js';
+import { createNodeProcessSpawner } from '../../../../src/process/node/spawner.js';
 
 const nodeLaunch = (source: string) => ({
   args: ['-e', source],

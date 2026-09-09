@@ -2,14 +2,14 @@ import { Readable } from 'node:stream';
 
 import { afterEach, expect, test, vi } from 'vitest';
 
-import { ProcessStartError } from '../../../../src/execution/process/port.js';
 import {
   collectBounded,
   createNodeExecutableProbe,
   nodeExecutableProbe,
   normalizeHostPlatform,
 } from '../../../../src/platform/node/probe/executable-probe.js';
-import { nodeProcessLauncher } from '../../../../src/platform/node/process/spawner.js';
+import { ProcessStartError } from '../../../../src/process/index.js';
+import { nodeProcessLauncher } from '../../../../src/process/node.js';
 import {
   nonExecutableFile,
   systemExecutable,

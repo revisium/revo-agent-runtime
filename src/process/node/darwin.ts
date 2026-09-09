@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import koffi from 'koffi';
 
-import type { ProcessGroupIdentity } from '../../../execution/process/port.js';
+import type { ProcessGroupIdentity } from '../contracts.js';
 
 // Apple xnu/bsd/sys/proc_info.h: PROC_PIDTBSDINFO and struct proc_bsdinfo.
 const bsdInfo = koffi.struct({

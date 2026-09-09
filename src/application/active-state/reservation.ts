@@ -1,5 +1,5 @@
 import type { ActiveInvocationStateSink, AgentExecutionPin } from '../../contracts/manager.js';
-import type { ProcessIdentity } from '../../execution/process/port.js';
+import type { ProcessIdentity } from '../../process/index.js';
 import { ActiveStateLane, type ActiveStateMutationOutcome } from './lane.js';
 import { activeInvocationSnapshot } from './snapshot.js';
 

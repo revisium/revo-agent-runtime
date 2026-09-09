@@ -21,7 +21,7 @@
     {
       "name": "contracts",
       "pattern": "^src/contracts/(?!(?:session(?:\\.ts|/)|manager(?:\\.ts|/(?:api|options)\\.ts$))).+",
-      "dependencies": []
+      "dependencies": ["process-contracts"]
     },
     {
       "name": "configuration",
@@ -94,7 +94,7 @@
         "contracts",
         "contracts-session",
         "definition",
-        "execution-process-port",
+        "process-contracts",
         "session-runtime-dispatch"
       ]
     },
@@ -120,7 +120,7 @@
         "contracts-session",
         "definition",
         "execution",
-        "execution-process-port"
+        "process-contracts"
       ]
     },
     {
@@ -130,7 +130,7 @@
         "application-session-admission",
         "application-session-management",
         "execution",
-        "execution-process-port",
+        "process-contracts",
         "execution-security-digest-port",
         "execution-session-output-port",
         "protocol-session",
@@ -145,7 +145,7 @@
       "dependencies": [
         "contracts",
         "contracts-session",
-        "execution-process-port",
+        "process-contracts",
         "execution-session-output-port",
         "session-kernel"
       ]
@@ -216,7 +216,7 @@
         "contracts",
         "contracts-session",
         "contracts-session-envelope",
-        "execution-process-port",
+        "process-contracts",
         "execution-security-redaction",
         "execution-security-digest-port",
         "execution-session-output-port",
@@ -229,9 +229,9 @@
       ]
     },
     {
-      "name": "execution-process-port",
-      "pattern": "^src/execution/process/(?:port|identity)\\.ts$",
-      "dependencies": ["contracts"]
+      "name": "process-contracts",
+      "pattern": "^src/process/(?!node(?:\\.ts$|/))",
+      "dependencies": []
     },
     {
       "name": "execution-security-redaction",
@@ -250,12 +250,12 @@
     },
     {
       "name": "execution",
-      "pattern": "^src/execution/(?!(?:session/|process/(?:port|identity)\\.ts$|security/(?:digest/port\\.ts$|redaction/)|output/session/publication\\.ts$)).+",
+      "pattern": "^src/execution/(?!(?:session/|security/(?:digest/port\\.ts$|redaction/)|output/session/publication\\.ts$)).+",
       "dependencies": [
         "configuration",
         "contracts",
         "definition",
-        "execution-process-port",
+        "process-contracts",
         "execution-security-redaction",
         "protocol"
       ]
@@ -299,7 +299,7 @@
     {
       "name": "platform",
       "pattern": "^src/platform/(?!(?:node/output/session/|node/session/primitives/|node/security/digest\\.ts$)).+",
-      "dependencies": ["discovery", "execution", "execution-process-port"]
+      "dependencies": ["discovery", "execution", "process-contracts", "process-node"]
     },
     {
       "name": "root",
@@ -312,7 +312,7 @@
         "contracts-session",
         "discovery",
         "execution",
-        "execution-process-port",
+        "process-contracts",
         "execution-security-digest-port",
         "execution-session-output-port",
         "platform",
@@ -321,8 +321,14 @@
         "platform-session-primitives",
         "protocol",
         "protocol-acp-session",
-        "providers"
+        "providers",
+        "process-node"
       ]
+    },
+    {
+      "name": "process-node",
+      "pattern": "^src/process/node(?:\\.ts|/)",
+      "dependencies": ["process-contracts"]
     }
   ]
 }

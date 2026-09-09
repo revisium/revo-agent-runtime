@@ -1,6 +1,6 @@
 import { AgentManagerError, type AgentDescriptor } from '../../../contracts/manager/core.js';
 import type { ActiveAgentSessionStateSink } from '../../../contracts/session/persistence/active-state.js';
-import type { RecoveredProcessInspector } from '../../../execution/process/port.js';
+import type { RecoveredProcessInspector } from '../../../process/index.js';
 import { recoverySessionSnapshots } from './recovery-snapshots.js';
 
 const unavailable = (): AgentManagerError =>

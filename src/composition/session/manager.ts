@@ -4,13 +4,13 @@ import { createManagedAgentSessionController } from '../../application/session/m
 import type { ClaimedInvocationOutput, OutputClaimPlatform } from '../../execution/output/claim.js';
 import type { SessionOutputPublicationTarget } from '../../execution/output/session/publication.js';
 import type { ExecutablePreflight } from '../../execution/probe/executable-preflight.js';
-import type { ProcessSpawner, RecoveredProcessInspector } from '../../execution/process/port.js';
 import type { Sha256Digest } from '../../execution/security/digest/port.js';
 import { composeSessionInterpreters } from '../../execution/session/interpreter/composition/interpreters.js';
 import { reduceSession } from '../../execution/session/kernel/reducer/reduce.js';
 import { SessionActorFactory } from '../../execution/session/runtime/actor/factory.js';
 import { SessionEffectDispatcher } from '../../execution/session/runtime/effects/dispatcher.js';
 import { systemSessionClock } from '../../execution/session/runtime/timing/clock.js';
+import type { ProcessSpawner, RecoveredProcessInspector } from '../../process/index.js';
 import type { SessionProtocolDriver } from '../../protocol/session/port/driver.js';
 
 export interface SessionComposerServices {

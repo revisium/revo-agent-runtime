@@ -16,7 +16,7 @@ import type {
   ProcessCleanupOutcome,
   ProcessExit,
   ProcessLaunch,
-} from '../../../src/execution/process/port.js';
+} from '../../../src/process/index.js';
 import type { ProtocolDriver } from '../../../src/protocol/driver.js';
 import { agentDefinition } from './agent-definition.js';
 import { processIdentity } from './process-identity.js';

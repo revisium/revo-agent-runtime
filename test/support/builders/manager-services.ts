@@ -9,7 +9,7 @@ import type { InvocationExecutor } from '../../../src/execution/invocation/execu
 import type { OutputClaimPlatform } from '../../../src/execution/output/claim.js';
 import type { ClaimedInvocationOutputPublisher } from '../../../src/execution/output/publication.js';
 import type { ExecutablePreflight } from '../../../src/execution/probe/executable-preflight.js';
-import type { RecoveredProcessInspector } from '../../../src/execution/process/port.js';
+import type { RecoveredProcessInspector } from '../../../src/process/index.js';
 import { noOpActiveStateSink } from '../stories/active-state.js';
 import { fixtureExecutionEvidence, terminalDrainage } from './execution-evidence.js';
 import { processIdentity } from './process-identity.js';

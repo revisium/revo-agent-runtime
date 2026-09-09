@@ -12,9 +12,9 @@ import type {
   VersionProbeObservation,
   VersionProbeOverflow,
 } from '../../../execution/probe/port.js';
-import { ProcessStartError, type ProcessLauncher } from '../../../execution/process/port.js';
-import { nodeErrorCode } from '../process/errors.js';
-import { nodeProcessLauncher } from '../process/spawner.js';
+import { ProcessStartError, type ProcessLauncher } from '../../../process/index.js';
+import { nodeProcessLauncher } from '../../../process/node.js';
+import { nodeErrorCode } from '../../../process/resources.js';
 
 export interface BoundedStream {
   readonly bytes: () => Uint8Array;

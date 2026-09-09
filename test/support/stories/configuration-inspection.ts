@@ -12,7 +12,7 @@ import {
   type OwnedProcess,
   type ProcessCleanupOutcome,
   type ProcessExit,
-} from '../../../src/execution/process/port.js';
+} from '../../../src/process/index.js';
 import type {
   ProtocolConfigurationDriver,
   ProtocolConfigurationSession,

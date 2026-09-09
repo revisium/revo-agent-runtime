@@ -15,7 +15,7 @@ import type {
 import type { OutputClaimPlatform } from '../../execution/output/claim.js';
 import type { ClaimedInvocationOutputPublisher } from '../../execution/output/publication.js';
 import type { ExecutablePreflight } from '../../execution/probe/executable-preflight.js';
-import type { ProcessIdentity } from '../../execution/process/port.js';
+import type { ProcessIdentity } from '../../process/index.js';
 import { ActiveStateReservation } from '../active-state/reservation.js';
 import type { EffectiveInvocationInputPolicy } from '../admission/effective-inputs.js';
 import { activeStateError, fault, preacceptanceError } from '../faults/agent-faults.js';

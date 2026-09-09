@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
-import type { OwnedProcess } from '../../src/execution/process/port.js';
-import { nodeProcessSpawner } from '../../src/platform/node/process/spawner.js';
+import type { OwnedProcess } from '../../../../src/process/index.js';
+import { nodeProcessSpawner } from '../../../../src/process/node.js';
 
 export const processExists = (pid: number): boolean => {
   try {

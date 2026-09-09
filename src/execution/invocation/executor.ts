@@ -1,5 +1,5 @@
+import type { ProcessSpawner } from '../../process/index.js';
 import type { ProtocolDriver } from '../../protocol/driver.js';
-import type { ProcessSpawner } from '../process/port.js';
 import type { InvocationExecutionRequest, InvocationExecutor } from './contracts.js';
 import { startInvocationLifecycle } from './lifecycle.js';
 

@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { createNodeProcessSpawner } from '../../src/platform/node/process/spawner.js';
+import { createNodeProcessSpawner } from '../../../../src/process/node/spawner.js';
 
 const directory = await mkdtemp(join(tmpdir(), 'revo-missing-process-'));
 const launch = { command: join(directory, 'missing.exe'), args: [], cwd: directory };

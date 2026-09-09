@@ -3,12 +3,12 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import { defaultSystemExecutableProbe } from '../../../../../src/discovery/platform.js';
-import { ProcessStartError } from '../../../../../src/execution/process/port.js';
 import {
   createNodeDiscoveryPlatform,
   nodeDiscoveryPlatform,
 } from '../../../../../src/platform/node/discovery/platform.js';
-import { nodeProcessLauncher } from '../../../../../src/platform/node/process/spawner.js';
+import { ProcessStartError } from '../../../../../src/process/index.js';
+import { nodeProcessLauncher } from '../../../../../src/process/node.js';
 import { claudeProviderPolicy } from '../../../../../src/providers/claude/definition.js';
 import { codexProviderPolicy } from '../../../../../src/providers/codex/definition.js';
 import { adjacentNodePackage } from '../../../../support/builders/adjacent-node-package.js';

@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 
-import { createWindowsProcessOperations } from '../../../../../src/platform/node/process/windows/operations.js';
+import { createWindowsProcessOperations } from '../../../../../src/process/node/windows/operations.js';
 import { windowsProcessFixture } from '../../../../support/fixtures/windows-process-native.js';
 
 const jobName = 'revo-12345678-1234-1234-1234-123456789abc';

@@ -17,3 +17,8 @@ export const withNativeResource = <T>(action: () => T, release: () => void): T =
   if ('error' in outcome) throw outcome.error;
   return outcome.value;
 };
+
+export const nodeErrorCode = (error: unknown): string | undefined =>
+  typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
+    ? error.code
+    : undefined;

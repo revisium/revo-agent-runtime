@@ -7,12 +7,8 @@ import type {
   StartAgentInvocation,
 } from '../../../src/contracts/manager.js';
 import { createInvocationExecutor } from '../../../src/execution/invocation/executor.js';
-import type {
-  OwnedProcess,
-  ProcessExit,
-  ProcessSpawner,
-} from '../../../src/execution/process/port.js';
-import { nodeProcessSpawner } from '../../../src/platform/node/process/spawner.js';
+import type { OwnedProcess, ProcessExit, ProcessSpawner } from '../../../src/process/index.js';
+import { nodeProcessSpawner } from '../../../src/process/node.js';
 import { acpProtocolDriver } from '../../../src/protocol/acp/driver.js';
 import type { ProtocolDriver, ProtocolSessionRequest } from '../../../src/protocol/driver.js';
 import { agentDefinition } from '../builders/agent-definition.js';
@@ -246,15 +242,6 @@ const fakeOwnedProcess = (): {
   });
 };
 
-const diagnosticProcessState = (pid: number): string => {
-  try {
-    process.kill(pid, 0);
-    return 'present';
-  } catch (error) {
-    return error instanceof Error && 'code' in error ? String(error.code) : String(error);
-  }
-};
-
 const countingProcessSpawner = (
   delegate: ProcessSpawner,
 ): { readonly cleanupCalls: () => number; readonly spawner: ProcessSpawner } => {
@@ -262,34 +249,11 @@ const countingProcessSpawner = (
   const spawner: ProcessSpawner = {
     start: async (launch, signal) => {
       const process = await delegate.start(launch, signal);
-      let exitObserved = false;
-      void process.completion.then(() => {
-        exitObserved = true;
-      });
-      const diagnostic = setTimeout(() => {
-        console.error('Native ACP cleanup diagnostic', {
-          identity: process.identity,
-          exitObserved,
-          cleanupCalls,
-          leader: diagnosticProcessState(process.identity.pid),
-          group:
-            'processGroupId' in process.identity
-              ? diagnosticProcessState(-process.identity.processGroupId)
-              : 'Job',
-        });
-      }, 3_000);
       return Object.freeze({
         ...process,
         terminateAndReap: async () => {
           cleanupCalls += 1;
-          const outcome = await process.terminateAndReap();
-          if (outcome.status === 'confirmed') clearTimeout(diagnostic);
-          else
-            console.error('Native ACP cleanup uncertain', {
-              identity: process.identity,
-              exitObserved,
-            });
-          return outcome;
+          return process.terminateAndReap();
         },
       });
     },

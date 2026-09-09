@@ -1,5 +1,5 @@
 import type { ActiveInvocationSnapshot, AgentExecutionPin } from '../../contracts/manager.js';
-import type { ProcessIdentity } from '../../execution/process/port.js';
+import type { ProcessIdentity } from '../../process/index.js';
 
 export const activeInvocationSnapshot = (
   invocationId: string,

@@ -1,9 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, readlink } from 'node:fs/promises';
 
-import type { ProcessGroupIdentity } from '../../../execution/process/port.js';
-
-export type ProcessIdentityInspector = (pid: number) => Promise<ProcessGroupIdentity>;
+import type { ProcessGroupIdentity, ProcessIdentityInspector } from '../contracts.js';
 
 export const parseLinuxProcessIdentity = (
   pid: number,

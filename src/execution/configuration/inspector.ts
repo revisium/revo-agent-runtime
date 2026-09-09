@@ -1,10 +1,10 @@
 import type { NormalizedAcpConfiguration } from '../../configuration/catalog.js';
 import type { AgentDefinition } from '../../contracts/agent-definition.js';
 import type { AgentLaunchEvidence } from '../../contracts/launch.js';
+import { ProcessStartError, type OwnedProcess, type ProcessSpawner } from '../../process/index.js';
 import type { ProtocolConfigurationDriver } from '../../protocol/configuration-driver.js';
 import { createBoundedOutput } from '../output/bounded-output.js';
 import { literalArguments } from '../process/literal-launch.js';
-import { ProcessStartError, type OwnedProcess, type ProcessSpawner } from '../process/port.js';
 import { ConfigurationDeadline, type ConfigurationDeadlineOutcome } from './deadline.js';
 import type {
   ConfigurationCatalogFallback,

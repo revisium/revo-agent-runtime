@@ -10,9 +10,9 @@ import {
   type OwnedProcess,
   type ProcessCleanupOutcome,
   type ProcessExit,
+  type ProcessIdentityInspector,
   type ProcessLaunch,
-} from '../../../../execution/process/port.js';
-import type { ProcessIdentityInspector } from '../identity.js';
+} from '../../contracts.js';
 import { windowsProcessNative } from './bindings.js';
 import { createWindowsProcessOperations } from './operations.js';
 import { waitForWindowsJob } from './wait.js';

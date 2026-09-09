@@ -1,4 +1,7 @@
+import type { ProcessIdentity as ActiveProcessIdentity } from '../../process/index.js';
 import type { AgentDefinition, AgentRef, JsonObject } from '../agent-definition.js';
+
+export type { ProcessIdentity as ActiveProcessIdentity } from '../../process/index.js';
 export type { AgentLaunchEvidence } from '../launch.js';
 
 export interface AgentDescriptor {
@@ -14,23 +17,6 @@ export interface AgentExecutionPin {
   readonly agentVersion: string;
   readonly definitionDigest: string;
 }
-
-interface ProcessIdentityEvidence {
-  readonly pid: number;
-  readonly fingerprint: string;
-  readonly startedAt: string;
-}
-
-export type ActiveProcessIdentity = ProcessIdentityEvidence &
-  (
-    | { readonly version?: never; readonly platform?: never; readonly processGroupId: number }
-    | {
-        readonly version: 2;
-        readonly platform: 'linux' | 'darwin';
-        readonly processGroupId: number;
-      }
-    | { readonly version: 2; readonly platform: 'win32'; readonly jobName: string }
-  );
 
 export interface ActiveInvocationSnapshot {
   readonly invocationId: string;

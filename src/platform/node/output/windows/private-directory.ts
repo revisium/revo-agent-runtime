@@ -1,6 +1,6 @@
 import { dirname, toNamespacedPath } from 'node:path';
 
-import { withNativeResource } from '../../native-resource.js';
+import { withNativeResource } from '../../../../process/resources.js';
 
 /** Native operations needed to create one output leaf with private inherited permissions. */
 export interface WindowsOutputNative {

@@ -1,5 +1,5 @@
-import type { RecoveredProcessInspector } from '../../../../execution/process/port.js';
-import { nodeErrorCode } from '../errors.js';
+import type { RecoveredProcessInspector } from '../../contracts.js';
+import { nodeErrorCode } from '../../resources.js';
 import { windowsProcessNative } from './bindings.js';
 import { createWindowsProcessOperations } from './operations.js';
 import { waitForWindowsJob } from './wait.js';

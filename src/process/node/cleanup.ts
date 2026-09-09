@@ -1,5 +1,5 @@
-import type { ProcessCleanupOutcome, ProcessExit } from '../../../execution/process/port.js';
-import { nodeErrorCode } from './errors.js';
+import type { ProcessCleanupOutcome, ProcessExit } from '../contracts.js';
+import { nodeErrorCode } from '../resources.js';
 
 export const processTerminationPolicy = Object.freeze({
   terminationGraceMs: 2_000,

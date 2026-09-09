@@ -1,6 +1,6 @@
 import type { ActiveInvocationSnapshot } from '../../contracts/manager.js';
 import type { SealedAgentRegistry } from '../../definition/index.js';
-import { snapshotProcessIdentity } from '../../execution/process/identity.js';
+import { snapshotProcessIdentity } from '../../process/index.js';
 
 const encoder = new TextEncoder();
 const digestPattern = /^[a-f0-9]{64}$/;

@@ -1,4 +1,4 @@
-import type { ProcessIdentity } from '../../../src/execution/process/port.js';
+import type { ProcessIdentity } from '../../../src/process/index.js';
 
 type LegacyIdentity = Extract<ProcessIdentity, { readonly version?: never }>;
 export const processIdentity = (overrides: Partial<LegacyIdentity> = {}): LegacyIdentity => ({

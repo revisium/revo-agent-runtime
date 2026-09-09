@@ -57,8 +57,7 @@
     "sonar:local": "bash scripts/sonar-local.sh",
     "sonar:issues:local": "bash scripts/sonar-issues-local.sh",
     "ci:local:sonar": "bash scripts/ci-local-sonar.sh",
-    "prepack": "pnpm run build",
-    "poc:platform": "node --import tsx --test scripts/platform-poc/process.test.ts"
+    "prepack": "pnpm run build"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "0.70.0",

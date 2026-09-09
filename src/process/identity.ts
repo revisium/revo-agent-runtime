@@ -1,4 +1,4 @@
-import type { ProcessIdentity } from './port.js';
+import type { ProcessIdentity } from './contracts.js';
 
 const positiveInteger = (value: unknown): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value) && value > 0;

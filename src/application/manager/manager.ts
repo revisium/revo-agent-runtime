@@ -22,7 +22,7 @@ import type { InvocationExecutor } from '../../execution/invocation/executor.js'
 import type { OutputClaimPlatform } from '../../execution/output/claim.js';
 import type { ClaimedInvocationOutputPublisher } from '../../execution/output/publication.js';
 import type { ExecutablePreflight } from '../../execution/probe/executable-preflight.js';
-import type { RecoveredProcessInspector } from '../../execution/process/port.js';
+import type { RecoveredProcessInspector } from '../../process/index.js';
 import { EffectiveInvocationInputPolicy } from '../admission/effective-inputs.js';
 import { activeStateError, fault, managerError } from '../faults/agent-faults.js';
 import type { AgentSessionComposer } from '../session/management/composition.js';

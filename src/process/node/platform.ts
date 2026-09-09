@@ -1,10 +1,11 @@
 import type {
   OwnedProcess,
+  ProcessIdentityInspector,
   ProcessLaunch,
   ProcessRun,
   RecoveredProcessInspector,
-} from '../../../execution/process/port.js';
-import { inspectLinuxProcessIdentity, type ProcessIdentityInspector } from './identity.js';
+} from '../contracts.js';
+import { inspectLinuxProcessIdentity } from './linux.js';
 import { createPosixRecovery } from './posix-recovery.js';
 import { createPosixProcesses } from './posix.js';
 

@@ -2,7 +2,7 @@ import * as filesystem from 'node:fs/promises';
 
 import { afterEach, expect, test, vi } from 'vitest';
 
-import { inspectLinuxProcessIdentity } from '../../../../src/platform/node/process/identity.js';
+import { inspectLinuxProcessIdentity } from '../../../../src/process/node/linux.js';
 
 vi.mock('node:fs/promises', { spy: true });
 afterEach(() => vi.restoreAllMocks());

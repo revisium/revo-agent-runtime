@@ -1,10 +1,10 @@
 import { expect, test, vi } from 'vitest';
 
-import { type ProcessGroupSystem } from '../../../../src/platform/node/process/cleanup.js';
+import { type ProcessGroupSystem } from '../../../../src/process/node/cleanup.js';
 import {
   createNodeRecoveredProcessInspector,
   nodeRecoveredProcessInspector,
-} from '../../../../src/platform/node/process/recovered-process.js';
+} from '../../../../src/process/node/recovered-process.js';
 
 const windowsIdentity = {
   version: 2,
@@ -101,6 +101,44 @@ test('recovery signals only the freshly inspected process group after identity m
   expect(signalled).toEqual([[84, 'SIGTERM']]);
 });
 
+test('recovery confirms concurrent natural exit even when TERM is refused', async () => {
+  const recovery = createNodeRecoveredProcessInspector(
+    async (pid) => confirmedIdentity(pid),
+    processGroupScenario({ termAccepted: false, goneAfterTerm: true }),
+  );
+
+  await expect(
+    recovery.inspectAndReconcileRecoveredProcess(
+      confirmedIdentity(42),
+      new AbortController().signal,
+    ),
+  ).resolves.toEqual({ status: 'terminated' });
+});
+
+test('cancellation during TERM confirmation stops recovery before KILL', async () => {
+  const controller = new AbortController();
+  const signals: NodeJS.Signals[] = [];
+  const system: ProcessGroupSystem = {
+    ...processGroupScenario({ goneAfterTerm: false }),
+    signal: (_pid, signal) => {
+      signals.push(signal);
+      return true;
+    },
+    wait: async () => {
+      controller.abort();
+    },
+  };
+  const recovery = createNodeRecoveredProcessInspector(
+    async (pid) => confirmedIdentity(pid),
+    system,
+  );
+
+  await expect(
+    recovery.inspectAndReconcileRecoveredProcess(confirmedIdentity(42), controller.signal),
+  ).resolves.toEqual({ status: 'termination_unconfirmed' });
+  expect(signals).toEqual(['SIGTERM']);
+});
+
 test('recovery distinguishes an absent process from inconclusive inspection', async () => {
   const absent = createNodeRecoveredProcessInspector(async () => {
     throw Object.assign(new Error('gone'), { code: 'ENOENT' });
@@ -129,11 +167,16 @@ test('recovery contains abort and signal-delivery uncertainty without using a pe
   );
   const termDenied = createNodeRecoveredProcessInspector(
     async (pid) => confirmedIdentity(pid),
-    processGroupScenario({ termAccepted: false }),
+    processGroupScenario({
+      termAccepted: false,
+      killAccepted: false,
+      goneAfterTerm: false,
+      goneAfterKill: false,
+    }),
   );
   const killDenied = createNodeRecoveredProcessInspector(
     async (pid) => confirmedIdentity(pid),
-    processGroupScenario({ goneAfterTerm: false, killAccepted: false }),
+    processGroupScenario({ goneAfterTerm: false, killAccepted: false, goneAfterKill: false }),
   );
 
   await expect(

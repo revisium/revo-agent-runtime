@@ -2,16 +2,16 @@ import { join } from 'node:path';
 
 import { expect, test } from 'vitest';
 
-import { ProcessStartError, type ProcessExit } from '../../../../src/execution/process/port.js';
+import { ProcessStartError, type ProcessExit } from '../../../../src/process/index.js';
 import {
   createProcessCleanup,
   nodeProcessGroupSystem,
   type ProcessGroupSystem,
-} from '../../../../src/platform/node/process/cleanup.js';
-import { nodeErrorCode } from '../../../../src/platform/node/process/errors.js';
-import { parseLinuxProcessIdentity } from '../../../../src/platform/node/process/identity.js';
-import { createNodeRecoveredProcessInspector } from '../../../../src/platform/node/process/recovered-process.js';
-import { createNodeProcessSpawner } from '../../../../src/platform/node/process/spawner.js';
+} from '../../../../src/process/node/cleanup.js';
+import { parseLinuxProcessIdentity } from '../../../../src/process/node/linux.js';
+import { createNodeRecoveredProcessInspector } from '../../../../src/process/node/recovered-process.js';
+import { createNodeProcessSpawner } from '../../../../src/process/node/spawner.js';
+import { nodeErrorCode } from '../../../../src/process/resources.js';
 
 const longRunningNode = {
   args: ['-e', 'setInterval(() => undefined, 1_000)'],

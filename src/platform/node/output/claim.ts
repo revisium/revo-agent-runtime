@@ -5,7 +5,7 @@ import type {
   ExclusiveDirectoryCreation,
   OutputClaimPlatform,
 } from '../../../execution/output/claim.js';
-import { nodeErrorCode } from '../process/errors.js';
+import { nodeErrorCode } from '../../../process/resources.js';
 import { createPrivateDirectory } from './platform.js';
 
 export interface NodeOutputClaimSystem {

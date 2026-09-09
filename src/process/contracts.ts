@@ -1,13 +1,28 @@
-import type { ActiveProcessIdentity } from '../../contracts/manager/core.js';
-
 /** Portable execution-process contracts implemented by platform adapters. */
 export interface ProcessExit {
   readonly exitCode: number | null;
   readonly signal: string | null;
 }
 
-export type ProcessIdentity = ActiveProcessIdentity;
+interface ProcessIdentityEvidence {
+  readonly pid: number;
+  readonly fingerprint: string;
+  readonly startedAt: string;
+}
+
+export type ProcessIdentity = ProcessIdentityEvidence &
+  (
+    | { readonly version?: never; readonly platform?: never; readonly processGroupId: number }
+    | {
+        readonly version: 2;
+        readonly platform: 'linux' | 'darwin';
+        readonly processGroupId: number;
+      }
+    | { readonly version: 2; readonly platform: 'win32'; readonly jobName: string }
+  );
+
 export type ProcessGroupIdentity = Exclude<ProcessIdentity, { readonly platform: 'win32' }>;
+export type ProcessIdentityInspector = (pid: number) => Promise<ProcessGroupIdentity>;
 
 export type ProcessCleanupOutcome =
   | { readonly status: 'confirmed'; readonly exit: ProcessExit }
@@ -19,11 +34,14 @@ export interface OwnedProcess {
     readonly input: WritableStream<Uint8Array>;
     readonly output: ReadableStream<Uint8Array>;
   };
+  /** Native leader exit; inherited output pipes can still be open. */
   readonly completion: Promise<ProcessExit>;
+  /** Confirms group/Job termination and closure of the local pipes. */
   terminateAndReap(): Promise<ProcessCleanupOutcome>;
 }
 
 export interface ProcessLaunch {
+  /** Executable path resolved by the caller before admission. */
   readonly command: string;
   readonly args: readonly string[];
   readonly cwd: string;

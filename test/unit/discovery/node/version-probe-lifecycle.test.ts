@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 
-import type { ProcessRun } from '../../../../src/execution/process/port.js';
 import { createNodeExecutableProbe } from '../../../../src/platform/node/probe/executable-probe.js';
+import type { ProcessRun } from '../../../../src/process/index.js';
 
 const exitedProcess = (overrides: Partial<ProcessRun> = {}): ProcessRun => ({
   completion: Promise.resolve({ exitCode: 0, signal: null }),

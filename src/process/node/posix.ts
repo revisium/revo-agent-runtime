@@ -5,12 +5,12 @@ import { execa } from 'execa';
 import type {
   OwnedProcess,
   ProcessExit,
+  ProcessIdentityInspector,
   ProcessLaunch,
   ProcessRun,
-} from '../../../execution/process/port.js';
-import { ProcessStartError } from '../../../execution/process/port.js';
+} from '../contracts.js';
+import { ProcessStartError } from '../contracts.js';
 import { createProcessCleanup } from './cleanup.js';
-import type { ProcessIdentityInspector } from './identity.js';
 
 const launchPosix = async (
   launch: ProcessLaunch,

@@ -12,7 +12,7 @@ import type {
   ProcessExit,
   ProcessLaunch,
   ProcessSpawner,
-} from '../../../src/execution/process/port.js';
+} from '../../../src/process/index.js';
 import type {
   ProtocolDriver,
   ProtocolObserver,

@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 
-import { snapshotProcessIdentity } from '../../../../src/execution/process/identity.js';
+import { snapshotProcessIdentity } from '../../../../src/process/index.js';
 
 const evidence = {
   pid: 42,

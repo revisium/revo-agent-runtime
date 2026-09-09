@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
-import type { ProcessIdentity } from '../../../../execution/process/port.js';
-import { withNativeResource } from '../../native-resource.js';
+import type { ProcessIdentity } from '../../contracts.js';
+import { withNativeResource } from '../../resources.js';
 
 export interface WindowsProcessNative {
   lastError(): number;

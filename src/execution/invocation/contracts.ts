@@ -1,7 +1,7 @@
 import type { AgentDefinition } from '../../contracts/agent-definition.js';
 import type { AgentConfigurationSelection } from '../../contracts/configuration.js';
 import type { AgentLaunchEvidence } from '../../contracts/launch.js';
-import type { OwnedProcess, ProcessExit } from '../process/port.js';
+import type { OwnedProcess, ProcessExit } from '../../process/index.js';
 import type { ExecutionOutcome } from './terminal.js';
 
 export type ExecutionDrainage =

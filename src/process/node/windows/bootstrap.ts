@@ -3,7 +3,7 @@ import { access } from 'node:fs/promises';
 
 import { execa } from 'execa';
 
-import type { ProcessLaunch } from '../../../../execution/process/port.js';
+import type { ProcessLaunch } from '../../contracts.js';
 
 /** Trusted startup: no provider environment or code is loaded until the owner assigns the Job. */
 export const runWindowsBootstrap = async (): Promise<void> => {
