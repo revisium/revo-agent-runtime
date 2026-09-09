@@ -23,6 +23,15 @@ dependencies, no material duplication, and short reader-facing setup; fixtures
 hide mechanics, never expected behavior. This section is authoritative; see
 `AGENTS.md` and `REVIEW.md` for its scoped obligations.
 
+`verify` builds the packaged ACP JavaScript assets before testing. When running
+individual test lanes in a fresh checkout, first run `corepack pnpm build:adapters`.
+CI builds those same assets on Linux, macOS, and Windows. Package verification
+checks that a fresh consumer receives the adapters without Codex/Claude CLI
+packages. `corepack pnpm smoke:installed-clis` installs fixed test CLI versions
+in a temporary directory and checks discovery/probe through PATH and explicit
+paths, without authentication or model calls; CI runs it on all three systems. Live checks must record the detected CLI path/version and exercise the
+user's default model as well as any explicitly selected matrix model.
+
 After the frozen install, it validates formatting, strict typechecking, type-aware
 lint, compiler-level unused locals/parameters, Knip dead exports, the
 unit/contract/integration/package Vitest lanes with V8 coverage, the manifest-derived
@@ -31,6 +40,10 @@ dependency graph, build, Publint, ATTW, and an isolated packed consumer.
 The full suite runs once through `test:cov`; individual lanes and `test` remain
 available for development without coverage. Each lane requires tests. The package
 lane proves that only the root entrypoint is public.
+
+Vitest allows 15 seconds per test on Windows for native child-process startup
+on shared runners, and 5 seconds elsewhere. Runtime operation deadlines remain
+independent of this outer test budget.
 
 Run the frozen install after dependency or lockfile changes (`verify:lock` is an
 alias). CI installs once before `verify`. Run `verify:negative` after changes to

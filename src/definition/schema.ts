@@ -29,6 +29,7 @@ const boundedArgumentString = boundedString(0, runtimeLimits.argumentBytes);
 const boundedStrategyIdentifier = boundedString(1, runtimeLimits.agentIdentityBytes);
 
 const versionProbeSchema = z.strictObject({
+  command: boundedString(1, runtimeLimits.argumentBytes).exactOptional(),
   args: z.array(boundedArgumentString).min(1).max(runtimeLimits.argumentCount),
   stream: z.enum(['stdout', 'stderr']),
   prefix: boundedString(1, runtimeLimits.versionProbePrefixBytes).exactOptional(),
@@ -78,6 +79,16 @@ const agentDefinitionSchema = z.strictObject({
   description: boundedString(0, runtimeLimits.descriptionBytes).exactOptional(),
   launch: z.strictObject({
     command: boundedString(1, runtimeLimits.argumentBytes),
+    environment: z
+      .record(
+        z
+          .string()
+          .regex(/^[A-Za-z_]\w*$/)
+          .max(128),
+        boundedString(0, 65_536).refine((value) => !value.includes('\0')),
+      )
+      .refine((value) => Object.keys(value).length <= 128)
+      .exactOptional(),
     args: z.array(argumentTemplateSchema).max(runtimeLimits.argumentCount),
     versionProbe: versionProbeSchema,
   }),

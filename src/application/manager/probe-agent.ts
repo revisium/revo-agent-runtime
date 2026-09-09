@@ -1,3 +1,4 @@
+import type { AgentLaunchEvidence } from '../../contracts/launch.js';
 import type { AgentDescriptor, AgentProbeResult } from '../../contracts/manager.js';
 import type { ValidatedAgentDefinition } from '../../definition/index.js';
 import type { ExecutablePreflight } from '../../execution/probe/executable-preflight.js';
@@ -10,13 +11,12 @@ export type AgentProbeAttempt =
 
 const availableResult = (
   descriptor: AgentDescriptor,
-  launch: Readonly<{ executable: string; reportedVersion: string }>,
+  launch: AgentLaunchEvidence,
 ): AgentProbeResult =>
   Object.freeze({
     agent: Object.freeze({ ...descriptor.agent }),
     definitionDigest: descriptor.definitionDigest,
-    executable: launch.executable,
-    reportedVersion: launch.reportedVersion,
+    ...launch,
     status: 'available',
   });
 

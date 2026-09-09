@@ -6,6 +6,7 @@ import type {
 } from '../../../execution/output/claim.js';
 import type { SessionOutputPublicationTarget } from '../../../execution/output/session/publication.js';
 import type { ExecutablePreflight } from '../../../execution/probe/executable-preflight.js';
+import { launchEnvironment } from '../../../execution/process/launch-environment.js';
 import { literalArguments } from '../../../execution/process/literal-launch.js';
 import type {
   PreparedSessionOpening,
@@ -112,7 +113,7 @@ export const createSessionOpeningPreparer = (
           args,
           command: admission.launch.executable,
           cwd: request.workspace.directory,
-          ...(opening.environment === undefined ? {} : { environment: opening.environment.values }),
+          environment: launchEnvironment(definition.definition, opening.environment?.values),
         }),
         output: options.outputTarget(admission.output),
       });

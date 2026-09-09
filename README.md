@@ -25,6 +25,7 @@ repository development uses pnpm 11.13.0 through Corepack.
 
 ```bash
 corepack pnpm install --frozen-lockfile
+corepack pnpm build:adapters
 ```
 
 The public API is exposed from the package root; deep imports are unsupported.
@@ -42,6 +43,12 @@ const discovery = await discoverAgents();
 console.log(discovery.definitions.map(({ id, version }) => `${id}@${version}`));
 console.log(discovery.diagnostics);
 ```
+
+Codex and Claude ACP adapters are included; their CLI executables are not.
+Install the CLI on the backend machine and make `codex`/`claude` available in its
+`PATH`, or pass an absolute CLI path in `systemExecutableOverrides`. Discovery
+supports Linux, macOS, and Windows (including known npm `.cmd` layouts). A missing
+or unlaunchable CLI is omitted from `definitions` with a diagnostic.
 
 Definitions are ready to register when discovery can verify their local launch
 shape; they do not prove provider authentication or prompt readiness.

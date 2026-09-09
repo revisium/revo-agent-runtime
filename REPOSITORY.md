@@ -23,8 +23,9 @@ do not depend on one another. All non-root source paths remain private unless
 the export map deliberately changes.
 
 Production source must not depend on tests, fixtures, scripts, generated output,
-or repository tooling. Concrete Codex and Claude bridges are direct production
-dependencies discovered and launched through their provider adapters.
+or repository tooling. Concrete Codex and Claude ACP adapters are pinned build dependencies, bundled as
+JavaScript assets without vendor CLI executables. Provider discovery selects the
+user-installed CLI and passes its canonical path to the packaged adapter.
 
 `architecture/layers.json` is the executable dependency map. Dependency Cruiser
 enforces that map, cycles, provider isolation, portable contracts, and private

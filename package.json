@@ -13,6 +13,7 @@
   },
   "files": [
     "dist",
+    "adapters",
     "LICENSE",
     "README.md",
     "THIRD_PARTY_NOTICES.md"
@@ -32,7 +33,7 @@
     "provenance": true
   },
   "scripts": {
-    "build": "node --import tsx scripts/clean-build.ts && tsc -p tsconfig.build.json",
+    "build": "node --import tsx scripts/clean-build.ts && tsc -p tsconfig.build.json && pnpm run build:adapters",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
     "lint": "oxlint --type-aware --type-check --deny-warnings --report-unused-disable-directives .",
@@ -53,15 +54,15 @@
     "verify:lock": "pnpm install --frozen-lockfile",
     "verify:negative": "node --import tsx scripts/verify-negative-evidence.ts",
     "verify:package": "node --import tsx scripts/verify-package.ts",
-    "verify": "pnpm run format:check && pnpm run typecheck && pnpm run lint && pnpm run verify:dead-exports && pnpm run test:cov && pnpm run verify:architecture && pnpm run verify:package",
+    "verify": "pnpm run build:adapters && pnpm run format:check && pnpm run typecheck && pnpm run lint && pnpm run verify:dead-exports && pnpm run test:cov && pnpm run verify:architecture && pnpm run verify:package",
     "sonar:local": "bash scripts/sonar-local.sh",
     "sonar:issues:local": "bash scripts/sonar-issues-local.sh",
     "ci:local:sonar": "bash scripts/ci-local-sonar.sh",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "build:adapters": "node --import tsx scripts/build-adapters.ts",
+    "smoke:installed-clis": "node --import tsx test/smoke/installed-clis.ts"
   },
   "dependencies": {
-    "@agentclientprotocol/claude-agent-acp": "0.70.0",
-    "@agentclientprotocol/codex-acp": "1.7.0",
     "@agentclientprotocol/sdk": "1.4.0",
     "ajv": "8.20.0",
     "canonicalize": "4.0.0",
@@ -71,11 +72,14 @@
     "zod": "4.5.4"
   },
   "devDependencies": {
+    "@agentclientprotocol/claude-agent-acp": "0.70.0",
+    "@agentclientprotocol/codex-acp": "1.7.0",
     "@arethetypeswrong/cli": "0.18.5",
     "@swc/core": "1.16.1",
     "@types/node": "24.13.3",
     "@vitest/coverage-v8": "4.1.11",
     "dependency-cruiser": "18.2.0",
+    "esbuild": "0.28.2",
     "knip": "6.33.0",
     "oxfmt": "0.65.0",
     "oxlint": "1.80.0",

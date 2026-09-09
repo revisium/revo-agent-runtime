@@ -38,7 +38,8 @@ export const expectPrivateOutput = async (
       '-EncodedCommand',
       Buffer.from(aclInspection, 'utf16le').toString('base64'),
     ],
-    { env: { REVO_TEST_PRIVATE_PATHS: JSON.stringify(paths) }, timeout: 10_000 },
+    // Cold Windows PowerShell startup can exceed 10 seconds on shared CI runners.
+    { env: { REVO_TEST_PRIVATE_PATHS: JSON.stringify(paths) }, timeout: 30_000 },
   );
   const observed: unknown = JSON.parse(stdout);
   if (!Array.isArray(observed)) throw new Error('Expected ACL inspections.');

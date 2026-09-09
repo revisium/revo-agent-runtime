@@ -10,7 +10,8 @@
     ".revisium-actions/**",
     "coverage/**",
     "dist/**",
-    "node_modules/**"
+    "node_modules/**",
+    "adapters/**"
   ],
   "options": {
     "typeAware": true,

@@ -7,6 +7,9 @@ test('derives the exact packed inventory from source modules, including nested a
     'LICENSE',
     'README.md',
     'THIRD_PARTY_NOTICES.md',
+    'adapters/NOTICE.txt',
+    'adapters/claude-agent-acp.mjs',
+    'adapters/codex-acp.mjs',
     'dist/index.d.ts',
     'dist/index.d.ts.map',
     'dist/index.js',
@@ -24,6 +27,9 @@ test('does not expect emitted artifacts for ambient declarations or non-TypeScri
     'LICENSE',
     'README.md',
     'THIRD_PARTY_NOTICES.md',
+    'adapters/NOTICE.txt',
+    'adapters/claude-agent-acp.mjs',
+    'adapters/codex-acp.mjs',
     'package.json',
   ]);
 });

@@ -3,6 +3,8 @@ import type { AgentLaunchEvidence } from '../../contracts/launch.js';
 import type { ExecutableProbePort, ProbeHostPlatform, VersionProbeObservation } from './port.js';
 import { parseVersionOutput, type VersionOutputFailureReason } from './version-output.js';
 
+type SupportedHostPlatform = Exclude<ProbeHostPlatform, 'other'>;
+
 export type ExecutablePreflightFailure = Readonly<{
   status: 'rejected';
   reason:
@@ -40,12 +42,12 @@ const failure = (
 const supportedPlatform = (
   definition: AgentDefinition,
   platform: ProbeHostPlatform,
-): platform is 'darwin' | 'linux' | 'win32' =>
+): platform is SupportedHostPlatform =>
   platform !== 'other' &&
   (definition.constraints?.platforms === undefined ||
     definition.constraints.platforms.includes(platform));
 
-const absoluteForPlatform = (platform: 'darwin' | 'linux' | 'win32', value: string): boolean =>
+const absoluteForPlatform = (platform: SupportedHostPlatform, value: string): boolean =>
   platform === 'win32'
     ? /^(?:[A-Za-z]:[\\/]|\\\\[^\\]+\\[^\\]+)/.test(value)
     : value.startsWith('/');
@@ -68,6 +70,7 @@ const classifyObservation = (
 const runVersionProbe = async (
   definition: AgentDefinition,
   executable: string,
+  versionProbeExecutable: string,
   port: ExecutableProbePort,
   signal: AbortSignal,
 ): Promise<ExecutablePreflightOutcome> => {
@@ -76,7 +79,7 @@ const runVersionProbe = async (
     running = await port.startVersionProbe({
       args: definition.launch.versionProbe.args,
       environment: Object.freeze({}),
-      executable,
+      executable: versionProbeExecutable,
       shell: false,
       stderrLimitBytes: 65_536,
       stdoutLimitBytes: 65_536,
@@ -118,10 +121,38 @@ const runVersionProbe = async (
   const classified = classifyObservation(definition, outcome.observation);
   return classified.status === 'version'
     ? Object.freeze({
-        launch: Object.freeze({ executable, reportedVersion: classified.reportedVersion }),
+        launch: Object.freeze({
+          executable,
+          reportedVersion: classified.reportedVersion,
+          ...(definition.launch.versionProbe.command === undefined
+            ? {}
+            : { versionProbeExecutable }),
+        }),
         status: 'ready',
       })
     : classified;
+};
+
+const resolveExecutable = async (
+  port: ExecutableProbePort,
+  command: string,
+  platform: SupportedHostPlatform,
+  signal: AbortSignal,
+): Promise<string | ExecutablePreflightFailure | Readonly<{ status: 'aborted' }>> => {
+  let resolution;
+  try {
+    resolution = await port.resolveExecutable(command);
+  } catch {
+    return failure('executable_not_found');
+  }
+  if (signal.aborted) return Object.freeze({ status: 'aborted' });
+  if (resolution.status === 'unavailable')
+    return failure(
+      resolution.reason === 'not_found' ? 'executable_not_found' : 'executable_not_launchable',
+    );
+  return absoluteForPlatform(platform, resolution.executable)
+    ? resolution.executable
+    : failure('executable_not_launchable');
 };
 
 export const createExecutablePreflight = (port: ExecutableProbePort): ExecutablePreflight =>
@@ -133,19 +164,14 @@ export const createExecutablePreflight = (port: ExecutableProbePort): Executable
       if (signal.aborted) return Object.freeze({ status: 'aborted' });
       const platform = port.hostPlatform();
       if (!supportedPlatform(definition, platform)) return failure('platform_unsupported');
-      let resolution;
-      try {
-        resolution = await port.resolveExecutable(definition.launch.command);
-      } catch {
-        return failure('executable_not_found');
-      }
-      if (signal.aborted) return Object.freeze({ status: 'aborted' });
-      if (resolution.status === 'unavailable')
-        return failure(
-          resolution.reason === 'not_found' ? 'executable_not_found' : 'executable_not_launchable',
-        );
-      if (!absoluteForPlatform(platform, resolution.executable))
-        return failure('executable_not_launchable');
-      return runVersionProbe(definition, resolution.executable, port, signal);
+      const executable = await resolveExecutable(port, definition.launch.command, platform, signal);
+      if (typeof executable !== 'string') return executable;
+      const probeCommand = definition.launch.versionProbe.command;
+      const probeExecutable =
+        probeCommand === undefined
+          ? executable
+          : await resolveExecutable(port, probeCommand, platform, signal);
+      if (typeof probeExecutable !== 'string') return probeExecutable;
+      return runVersionProbe(definition, executable, probeExecutable, port, signal);
     },
   });

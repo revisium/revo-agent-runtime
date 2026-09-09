@@ -11,13 +11,13 @@ export const systemOverrideUnavailable = (
 ): AgentDetectorResult['diagnostics'][number] =>
   Object.freeze({
     code: 'system_override_unavailable',
-    message: `Selected ${provider} ACP system override is unavailable.`,
+    message: `Selected ${provider} executable is unavailable.`,
     severity: 'error',
   });
 
 export const bundledBridgeUnavailable = (): AgentDetectorResult['diagnostics'][number] =>
   Object.freeze({
     code: 'bundled_bridge_unavailable',
-    message: 'The exact bundled ACP bridge is unavailable.',
+    message: 'The packaged ACP adapter is unavailable.',
     severity: 'error',
   });

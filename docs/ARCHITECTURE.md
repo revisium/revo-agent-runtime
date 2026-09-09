@@ -132,6 +132,20 @@ ownership is a portable runtime resource primitive reused by interpreter
 boundaries. Presentation redaction belongs to interpreter egress; the initial
 event effect explicitly carries its opening policy before a preparation exists.
 
+## Packaged adapters and installed CLIs
+
+Build tooling bundles the pinned third-party Codex/Claude ACP adapters into
+private `adapters/*.mjs` assets. Vendor CLI dependencies are excluded from the
+build install and are absent from the consumer dependency graph. These generated
+assets retain upstream license notices and are outside runtime source analysis.
+
+Provider policies own CLI names, npm layouts, adapter identity, and the path
+binding variable. Node discovery resolves installed executables and known npm
+shims. Portable preflight independently checks the launcher and CLI; shared launch
+environment composition preserves the selected CLI across inspection, invocation,
+and long-lived sessions. No provider-specific selection logic enters the process
+ownership module or ACP session engine.
+
 ## Enforced structural rules
 
 `pnpm verify:architecture` runs dependency-cruiser against the real source
