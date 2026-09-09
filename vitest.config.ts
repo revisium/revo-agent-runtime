@@ -17,6 +17,7 @@ export default defineConfig({
         'src/platform/node/process/windows/**',
         'src/platform/node/output/windows/**',
         'src/platform/node/output/claim.ts',
+        'src/platform/node/output/platform.ts',
         'src/platform/node/output/publication.ts',
         'src/platform/node/discovery/platform.ts',
         'src/platform/node/probe/executable-probe.ts',

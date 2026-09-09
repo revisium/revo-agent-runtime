@@ -180,16 +180,11 @@ export const normalizeHostPlatform = (
   return 'other';
 };
 
-export const nodeExecutableProbe: ExecutableProbePort = Object.freeze({
-  hostPlatform: () => normalizeHostPlatform(process.platform),
-  resolveExecutable,
-  startVersionProbe: (request: VersionProbeRequest) =>
-    startVersionProbe(request, nodeProcessLauncher),
-});
-
 export const createNodeExecutableProbe = (spawner: ProcessLauncher): ExecutableProbePort =>
   Object.freeze({
     hostPlatform: () => normalizeHostPlatform(process.platform),
     resolveExecutable,
     startVersionProbe: (request: VersionProbeRequest) => startVersionProbe(request, spawner),
   });
+
+export const nodeExecutableProbe = createNodeExecutableProbe(nodeProcessLauncher);

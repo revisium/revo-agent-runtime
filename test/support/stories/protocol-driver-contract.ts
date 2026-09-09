@@ -246,6 +246,15 @@ const fakeOwnedProcess = (): {
   });
 };
 
+const diagnosticProcessState = (pid: number): string => {
+  try {
+    process.kill(pid, 0);
+    return 'present';
+  } catch (error) {
+    return error instanceof Error && 'code' in error ? String(error.code) : String(error);
+  }
+};
+
 const countingProcessSpawner = (
   delegate: ProcessSpawner,
 ): { readonly cleanupCalls: () => number; readonly spawner: ProcessSpawner } => {
@@ -253,11 +262,34 @@ const countingProcessSpawner = (
   const spawner: ProcessSpawner = {
     start: async (launch, signal) => {
       const process = await delegate.start(launch, signal);
+      let exitObserved = false;
+      void process.completion.then(() => {
+        exitObserved = true;
+      });
+      const diagnostic = setTimeout(() => {
+        console.error('Native ACP cleanup diagnostic', {
+          identity: process.identity,
+          exitObserved,
+          cleanupCalls,
+          leader: diagnosticProcessState(process.identity.pid),
+          group:
+            'processGroupId' in process.identity
+              ? diagnosticProcessState(-process.identity.processGroupId)
+              : 'Job',
+        });
+      }, 3_000);
       return Object.freeze({
         ...process,
         terminateAndReap: async () => {
           cleanupCalls += 1;
-          return process.terminateAndReap();
+          const outcome = await process.terminateAndReap();
+          if (outcome.status === 'confirmed') clearTimeout(diagnostic);
+          else
+            console.error('Native ACP cleanup uncertain', {
+              identity: process.identity,
+              exitObserved,
+            });
+          return outcome;
         },
       });
     },

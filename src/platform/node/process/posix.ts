@@ -27,10 +27,7 @@ const launchPosix = async (
     stdio: 'pipe',
   });
   const pid = child.pid;
-  if (pid === undefined) {
-    await child;
-    throw new Error('Owned process did not expose required process resources.');
-  }
+  if (pid === undefined) throw await child;
   const readExit = (): ProcessExit => ({
     exitCode: child.nodeChildProcess.exitCode,
     signal: child.nodeChildProcess.signalCode,
@@ -48,10 +45,6 @@ const launchPosix = async (
   child.stderr.resume();
   // Cleanup confirms both the process group and closure of its local pipes.
   const terminateAndReap = createProcessCleanup(pid, closed);
-  if (signal.aborted) {
-    const cleanup = await terminateAndReap();
-    throw new ProcessStartError(cleanup.status, { cause: signal.reason });
-  }
   return Object.freeze({
     pid,
     completion,

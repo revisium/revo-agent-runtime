@@ -142,21 +142,39 @@ test('a failed OS spawn never reaches identity inspection or exposes a partial o
   expect(identityInspections).toBe(0);
 });
 
-test('cleanup is uncertain when TERM or KILL cannot be delivered', async () => {
+test('cleanup is uncertain when signalling fails and the group survives', async () => {
   const leaderExit = Promise.resolve<ProcessExit>({ exitCode: null, signal: 'SIGTERM' });
   const termDenied = createProcessCleanup(
     42,
     leaderExit,
-    processGroupScenario({ termAccepted: false }),
+    processGroupScenario({
+      termAccepted: false,
+      killAccepted: false,
+      goneAfterTerm: false,
+      goneAfterKill: false,
+    }),
   );
   const killDenied = createProcessCleanup(
     42,
     leaderExit,
-    processGroupScenario({ goneAfterTerm: false, killAccepted: false }),
+    processGroupScenario({ goneAfterTerm: false, killAccepted: false, goneAfterKill: false }),
   );
 
   await expect(termDenied()).resolves.toEqual({ status: 'uncertain' });
   await expect(killDenied()).resolves.toEqual({ status: 'uncertain' });
+});
+
+test('confirms a naturally reaped group even when a concurrent TERM was refused', async () => {
+  const cleanup = createProcessCleanup(
+    42,
+    Promise.resolve({ exitCode: 0, signal: null }),
+    processGroupScenario({ termAccepted: false, goneAfterTerm: true }),
+  );
+
+  await expect(cleanup()).resolves.toEqual({
+    status: 'confirmed',
+    exit: { exitCode: 0, signal: null },
+  });
 });
 
 test('cleanup requires both descendant exit and leader reap confirmation', async () => {

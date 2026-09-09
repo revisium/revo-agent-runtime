@@ -1,4 +1,4 @@
-import { mkdir, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 
 import type {
   DirectoryInspection,
@@ -6,6 +6,7 @@ import type {
   OutputClaimPlatform,
 } from '../../../execution/output/claim.js';
 import { nodeErrorCode } from '../process/errors.js';
+import { createPrivateDirectory } from './platform.js';
 
 export interface NodeOutputClaimSystem {
   stat(path: string): Promise<{ isDirectory(): boolean }>;
@@ -13,12 +14,7 @@ export interface NodeOutputClaimSystem {
 }
 
 const nodeOutputClaimSystem: NodeOutputClaimSystem = Object.freeze({
-  mkdir: async (path: string, options: Readonly<{ mode: number; recursive: false }>) => {
-    if (process.platform !== 'win32') return mkdir(path, options);
-    const { createWindowsPrivateDirectory } = await import('./windows/private-directory.js');
-    const { windowsOutputNative } = await import('./windows/native.js');
-    return createWindowsPrivateDirectory(path, windowsOutputNative);
-  },
+  mkdir: createPrivateDirectory,
   stat,
 });
 

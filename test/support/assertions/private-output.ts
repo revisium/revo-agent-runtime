@@ -9,9 +9,9 @@ $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $results = @(($env:REVO_TEST_PRIVATE_PATHS | ConvertFrom-Json) | ForEach-Object {
 $item = if ([System.IO.Directory]::Exists($_)) { [System.IO.DirectoryInfo]::new($_) } else { [System.IO.FileInfo]::new($_) }
 $acl = $item.GetAccessControl()
-$rules = @($acl.Access | ForEach-Object {
+$rules = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) | ForEach-Object {
   @{
-    sid = $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value
+    sid = $_.IdentityReference.Value
     allowed = $_.AccessControlType -eq 'Allow'
     fullControl = ($_.FileSystemRights -band [System.Security.AccessControl.FileSystemRights]::FullControl) -eq [System.Security.AccessControl.FileSystemRights]::FullControl
   }
