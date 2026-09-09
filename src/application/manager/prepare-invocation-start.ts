@@ -1,3 +1,4 @@
+import type { AgentLaunchEvidence } from '../../contracts/launch.js';
 import { AgentManagerError, type AgentStartContext } from '../../contracts/manager.js';
 import type { CapturedEnvironment } from '../../execution/invocation/environment.js';
 import type { ClaimedInvocationOutput, OutputClaimPlatform } from '../../execution/output/claim.js';
@@ -20,7 +21,7 @@ import {
 
 export interface PreparedInvocationStart {
   readonly admission: Readonly<{
-    readonly launch: { readonly executable: string; readonly reportedVersion: string };
+    readonly launch: AgentLaunchEvidence;
     readonly output: ClaimedInvocationOutput;
   }>;
   readonly environment: CapturedEnvironment;

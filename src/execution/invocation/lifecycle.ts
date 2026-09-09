@@ -1,5 +1,6 @@
 import { ProcessStartError, type OwnedProcess, type ProcessSpawner } from '../../process/index.js';
 import type { ProtocolDriver, ProtocolSession } from '../../protocol/driver.js';
+import { launchEnvironment } from '../process/launch-environment.js';
 import { literalArguments } from '../process/literal-launch.js';
 import { InvocationArtifacts } from './artifacts.js';
 import type {
@@ -100,7 +101,7 @@ class InvocationLifecycle {
           args,
           command: this.request.launch.executable,
           cwd: this.request.workspace,
-          environment: this.request.environment ?? {},
+          environment: launchEnvironment(this.request.definition, this.request.environment),
           onStderr: this.artifacts.writeStderr,
           onStdout: this.artifacts.writeStdout,
         },

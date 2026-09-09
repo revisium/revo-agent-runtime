@@ -8,6 +8,8 @@ export interface AcpDefinitionDetails {
   readonly displayName: string;
   readonly id: string;
   readonly version: string;
+  readonly environment?: Readonly<Record<string, string>>;
+  readonly versionProbeCommand?: string;
   readonly versionProbeArgs?: readonly string[];
   readonly versionProbePrefix?: string;
   readonly versionProbeTimeoutMs?: number;
@@ -20,6 +22,8 @@ export const acpDefinition = ({
   displayName,
   id,
   version,
+  environment,
+  versionProbeCommand,
   versionProbeArgs = ['--version'],
   versionProbePrefix,
   versionProbeTimeoutMs = 1_000,
@@ -30,9 +34,11 @@ export const acpDefinition = ({
   displayName,
   launch: {
     command,
+    ...(environment === undefined ? {} : { environment }),
     args: args.map((value) => ({ kind: 'literal', value })),
     versionProbe: {
       args: versionProbeArgs,
+      ...(versionProbeCommand === undefined ? {} : { command: versionProbeCommand }),
       ...(versionProbePrefix === undefined ? {} : { prefix: versionProbePrefix }),
       stream: 'stdout',
       timeoutMs: versionProbeTimeoutMs,

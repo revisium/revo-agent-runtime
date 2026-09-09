@@ -62,7 +62,10 @@ test('keeps an override provider failure bounded and never changes the selected 
         systemExecutableOverrides: { codex: executable.executable },
       });
       const definition = discovery.definitions[0];
-      expect(definition?.launch).toMatchObject({ command: executable.executable, args: [] });
+      expect(definition?.launch).toMatchObject({
+        command: process.execPath,
+        environment: { CODEX_PATH: executable.executable },
+      });
 
       const manager = createAgentManager({
         activeStateSink: noOpActiveStateSink,
@@ -87,7 +90,11 @@ test('keeps an override provider failure bounded and never changes the selected 
 
         expect(result).toMatchObject({
           error: { code: 'revo.agent.protocol_failed', phase: 'execution' },
-          launch: { executable: executable.executable, reportedVersion: '1.0.0' },
+          launch: {
+            executable: process.execPath,
+            versionProbeExecutable: executable.executable,
+            reportedVersion: '1.0.0',
+          },
           status: 'failed',
         });
         expect(JSON.stringify(result)).not.toContain('fixture-secret');

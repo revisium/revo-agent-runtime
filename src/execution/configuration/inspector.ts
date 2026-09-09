@@ -4,6 +4,7 @@ import type { AgentLaunchEvidence } from '../../contracts/launch.js';
 import { ProcessStartError, type OwnedProcess, type ProcessSpawner } from '../../process/index.js';
 import type { ProtocolConfigurationDriver } from '../../protocol/configuration-driver.js';
 import { createBoundedOutput } from '../output/bounded-output.js';
+import { launchEnvironment } from '../process/launch-environment.js';
 import { literalArguments } from '../process/literal-launch.js';
 import { ConfigurationDeadline, type ConfigurationDeadlineOutcome } from './deadline.js';
 import type {
@@ -68,7 +69,7 @@ const primaryLaunch = (
   args,
   command: request.launch.executable,
   cwd: request.workspace,
-  environment: request.environment,
+  environment: launchEnvironment(request.definition, request.environment),
 });
 
 const primaryStartFailure = (
@@ -140,7 +141,7 @@ const fallbackInspection = async (
         args: fallback.args,
         command: request.launch.executable,
         cwd: request.workspace,
-        environment: request.environment,
+        environment: launchEnvironment(request.definition, request.environment),
         onStdout: (chunk) => output.write(chunk),
       },
       deadline.signal,

@@ -210,7 +210,11 @@ test('does not run a detector when selection aborts its supplied signal', async 
 });
 
 test('reports credential-free model enumeration as unavailable without a model call', async () => {
-  const result = await discoverAgents({ detectors: [], includeBuiltInDetectors: true });
+  const result = await discoverAgents({
+    detectors: [],
+    includeBuiltInDetectors: true,
+    systemExecutableOverrides: { claude: process.execPath },
+  });
 
   expect(result.diagnostics).toEqual(
     expect.arrayContaining([

@@ -45,6 +45,7 @@ const recordingPlatform = (
         calls.push(`probe:${executable}:${signal?.aborted === true ? 'aborted' : 'active'}`);
         return behavior.probeAvailable ?? true;
       },
+      resolveInstalledCli: async (_policy, override) => override ?? '/system/installed-cli',
       resolveBundledBridge: (policy: BridgePackagePolicy) => {
         const provider =
           policy.bridgeName === '@agentclientprotocol/codex-acp' ? 'codex' : 'claude';
@@ -83,7 +84,9 @@ test('discovers a selected Gemini CLI through its native ACP mode', async () => 
     { overrideExecutable: '/system/selected-gemini' },
   );
 
-  expect(calls).toEqual(['bundle:claude', 'bundle:codex', 'override:/selected/gemini:active']);
+  expect(calls.filter((call) => !call.startsWith('bundle:'))).toEqual([
+    'override:/selected/gemini:active',
+  ]);
   expect(result.definitions.map(({ id }) => id)).toEqual(['claude-acp', 'codex-acp', 'gemini-acp']);
   expect(result.definitions[2]).toMatchObject({
     id: 'gemini-acp',
@@ -100,9 +103,7 @@ test('discovers the default Gemini CLI without starting an ACP session', async (
     systemExecutables: { gemini: '/system/gemini' },
   });
 
-  expect(calls).toEqual([
-    'bundle:claude',
-    'bundle:codex',
+  expect(calls.filter((call) => !call.startsWith('bundle:'))).toEqual([
     'which:gemini',
     'probe:/system/gemini:active',
   ]);
@@ -121,7 +122,9 @@ test('discovers a selected OpenCode CLI through its native ACP command', async (
     { overrideExecutable: '/system/selected-opencode' },
   );
 
-  expect(calls).toEqual(['bundle:claude', 'bundle:codex', 'override:/selected/opencode:active']);
+  expect(calls.filter((call) => !call.startsWith('bundle:'))).toEqual([
+    'override:/selected/opencode:active',
+  ]);
   expect(result.definitions.map(({ id }) => id)).toEqual([
     'claude-acp',
     'codex-acp',
@@ -142,9 +145,7 @@ test('discovers the default OpenCode CLI without starting an ACP session', async
     systemExecutables: { opencode: '/system/opencode' },
   });
 
-  expect(calls).toEqual([
-    'bundle:claude',
-    'bundle:codex',
+  expect(calls.filter((call) => !call.startsWith('bundle:'))).toEqual([
     'which:opencode',
     'probe:/system/opencode:active',
   ]);

@@ -12,23 +12,23 @@ resume is not advertised until a provider path proves a stable continuation
 contract. Actual capabilities are intersected with the provider response when
 the session opens; consumers must use the negotiated session capabilities.
 
-| Provider    | Definition        | Source         | Launch policy                                                                          |
-| ----------- | ----------------- | -------------- | -------------------------------------------------------------------------------------- |
-| Codex       | `codex-acp`       | bundled bridge | Exact pinned bridge; explicit system override is validated with no fallback.           |
-| Claude      | `claude-acp`      | bundled bridge | Exact pinned bridge; explicit system override is validated with no fallback.           |
-| Antigravity | `antigravity-acp` | system         | Provider executable; literal `--uid=` argument is preserved without deriving identity. |
-| Cline       | `cline-acp`       | system         | Provider CLI in ACP mode.                                                              |
-| Copilot     | `copilot-acp`     | system package | Canonical JavaScript package entrypoint launched by the runtime Node executable.       |
-| Cursor      | `cursor-acp`      | system package | Validated adjacent packaged Node and `index.js` layout.                                |
-| Gemini      | `gemini-acp`      | system         | Provider CLI in ACP mode.                                                              |
-| Goose       | `goose-acp`       | system         | Provider CLI in ACP mode.                                                              |
-| Grok        | `grok-acp`        | system         | Provider CLI in ACP mode.                                                              |
-| Hermes      | `hermes-acp`      | system         | Provider CLI in ACP mode.                                                              |
-| Kilo        | `kilo-acp`        | system package | Canonical JavaScript package entrypoint launched by the runtime Node executable.       |
-| Kimi        | `kimi-acp`        | system package | Canonical JavaScript package entrypoint launched by the runtime Node executable.       |
-| OpenCode    | `opencode-acp`    | system         | Provider CLI in ACP mode.                                                              |
-| Qwen        | `qwen-acp`        | system package | Canonical JavaScript package entrypoint launched by the runtime Node executable.       |
-| Vibe        | `vibe-acp`        | system         | Provider executable in ACP mode.                                                       |
+| Provider    | Definition        | Source                          | Launch policy                                                                          |
+| ----------- | ----------------- | ------------------------------- | -------------------------------------------------------------------------------------- |
+| Codex       | `codex-acp`       | bundled adapter + installed CLI | Installed CLI required; explicit override selects the CLI, with no fallback.           |
+| Claude      | `claude-acp`      | bundled adapter + installed CLI | Installed CLI required; explicit override selects the CLI, with no fallback.           |
+| Antigravity | `antigravity-acp` | system                          | Provider executable; literal `--uid=` argument is preserved without deriving identity. |
+| Cline       | `cline-acp`       | system                          | Provider CLI in ACP mode.                                                              |
+| Copilot     | `copilot-acp`     | system package                  | Canonical JavaScript package entrypoint launched by the runtime Node executable.       |
+| Cursor      | `cursor-acp`      | system package                  | Validated adjacent packaged Node and `index.js` layout.                                |
+| Gemini      | `gemini-acp`      | system                          | Provider CLI in ACP mode.                                                              |
+| Goose       | `goose-acp`       | system                          | Provider CLI in ACP mode.                                                              |
+| Grok        | `grok-acp`        | system                          | Provider CLI in ACP mode.                                                              |
+| Hermes      | `hermes-acp`      | system                          | Provider CLI in ACP mode.                                                              |
+| Kilo        | `kilo-acp`        | system package                  | Canonical JavaScript package entrypoint launched by the runtime Node executable.       |
+| Kimi        | `kimi-acp`        | system package                  | Canonical JavaScript package entrypoint launched by the runtime Node executable.       |
+| OpenCode    | `opencode-acp`    | system                          | Provider CLI in ACP mode.                                                              |
+| Qwen        | `qwen-acp`        | system package                  | Canonical JavaScript package entrypoint launched by the runtime Node executable.       |
+| Vibe        | `vibe-acp`        | system                          | Provider executable in ACP mode.                                                       |
 
 System package discovery fails closed unless it can validate the package
 entrypoint. It does not run a PATH-dependent npm wrapper. Cursor likewise
