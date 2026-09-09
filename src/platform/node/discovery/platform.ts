@@ -145,7 +145,7 @@ export const createNodeDiscoveryPlatform = (
       if (executable === undefined) return undefined;
       return (await probeSystemExecutable(
         executable,
-        { args: ['--version'], timeoutMs: 5_000 },
+        { args: ['--version'], timeoutMs: policy.versionProbeTimeoutMs },
         signal,
       ))
         ? executable

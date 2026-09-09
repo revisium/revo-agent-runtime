@@ -13,6 +13,7 @@ export type ExecutableBehavior =
   | 'incompatible-version'
   | 'large-version'
   | 'opencode-acp'
+  | 'slow-version'
   | 'version';
 
 interface SystemExecutableFixture {
@@ -65,6 +66,8 @@ const executableBody = (behavior: ExecutableBehavior): string => {
       return systemAcpBody('acp');
     case 'version':
       return "process.exitCode = process.argv[2] === '--version' ? 0 : 2;";
+    case 'slow-version':
+      return "setTimeout(() => console.log('codex-cli 1.0.0'), 6_000);";
     default: {
       const unsupported: never = behavior;
       throw new Error(`Unsupported executable behavior: ${String(unsupported)}`);
