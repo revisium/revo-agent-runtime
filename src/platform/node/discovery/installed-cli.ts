@@ -7,7 +7,7 @@ import { resolveNodePackageEntrypoint, resolveWindowsPackageBin } from './node-e
 
 const executableFile = (path: string): string | undefined => {
   try {
-    const canonical = realpathSync(path);
+    const canonical = realpathSync.native(path);
     if (!statSync(canonical).isFile()) return undefined;
     accessSync(canonical, constants.R_OK | constants.X_OK);
     return canonical;

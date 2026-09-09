@@ -12,7 +12,7 @@ export const resolveBundledBridge = (
   | { readonly available: true; readonly entrypoint: string }
   | { readonly available: false; readonly reason: string } => {
   try {
-    const entrypoint = realpathSync(join(directory, `${policy.binName}.mjs`));
+    const entrypoint = realpathSync.native(join(directory, `${policy.binName}.mjs`));
     if (!statSync(entrypoint).isFile()) return { available: false, reason: 'entrypoint_invalid' };
     accessSync(entrypoint, constants.R_OK);
     return { available: true, entrypoint };

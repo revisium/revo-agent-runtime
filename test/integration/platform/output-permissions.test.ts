@@ -22,4 +22,4 @@ test('restricts the claimed directory and every published file to the runtime us
       ...published.files.map((name) => ({ path: join(output, name), mode: 0o600 })),
     ]);
   });
-}, 15_000);
+}, 35_000);

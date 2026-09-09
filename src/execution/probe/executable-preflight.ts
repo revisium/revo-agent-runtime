@@ -3,6 +3,8 @@ import type { AgentLaunchEvidence } from '../../contracts/launch.js';
 import type { ExecutableProbePort, ProbeHostPlatform, VersionProbeObservation } from './port.js';
 import { parseVersionOutput, type VersionOutputFailureReason } from './version-output.js';
 
+type SupportedHostPlatform = Exclude<ProbeHostPlatform, 'other'>;
+
 export type ExecutablePreflightFailure = Readonly<{
   status: 'rejected';
   reason:
@@ -40,12 +42,12 @@ const failure = (
 const supportedPlatform = (
   definition: AgentDefinition,
   platform: ProbeHostPlatform,
-): platform is 'darwin' | 'linux' | 'win32' =>
+): platform is SupportedHostPlatform =>
   platform !== 'other' &&
   (definition.constraints?.platforms === undefined ||
     definition.constraints.platforms.includes(platform));
 
-const absoluteForPlatform = (platform: 'darwin' | 'linux' | 'win32', value: string): boolean =>
+const absoluteForPlatform = (platform: SupportedHostPlatform, value: string): boolean =>
   platform === 'win32'
     ? /^(?:[A-Za-z]:[\\/]|\\\\[^\\]+\\[^\\]+)/.test(value)
     : value.startsWith('/');
@@ -134,7 +136,7 @@ const runVersionProbe = async (
 const resolveExecutable = async (
   port: ExecutableProbePort,
   command: string,
-  platform: 'darwin' | 'linux' | 'win32',
+  platform: SupportedHostPlatform,
   signal: AbortSignal,
 ): Promise<string | ExecutablePreflightFailure | Readonly<{ status: 'aborted' }>> => {
   let resolution;
