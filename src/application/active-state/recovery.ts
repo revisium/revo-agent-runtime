@@ -2,7 +2,7 @@ import type {
   ActiveInvocationSnapshot,
   ActiveInvocationStateSink,
 } from '../../contracts/manager.js';
-import type { RecoveredProcessInspector } from '../../execution/process/port.js';
+import type { RecoveredProcessInspector } from '../../process/index.js';
 import { ActiveStateLane } from './lane.js';
 
 interface RecoveryAttempt {

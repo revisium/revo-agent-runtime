@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import type { PublicSessionCommand } from '../../../../../src/execution/session/kernel/command/public.js';
 import type { SessionOpeningDescriptor } from '../../../../../src/execution/session/kernel/model/opening-state.js';
 
@@ -20,10 +22,10 @@ const limits = {
   wallClockTimeoutMs: 60_000,
 } as const;
 const launch = {
-  output: { directory: '/output' },
+  output: { directory: resolve('/output') },
   parameters: {},
   permissions: {},
-  workspace: { directory: '/workspace' },
+  workspace: { directory: resolve('/workspace') },
 } as const;
 const base = {
   acceptedAt: observedAt,

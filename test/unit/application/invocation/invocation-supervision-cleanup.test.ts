@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 
 import { createSealedAgentRegistry } from '../../../../src/definition/index.js';
 import { createInvocationExecutor } from '../../../../src/execution/invocation/executor.js';
-import { ProcessStartError, type ProcessSpawner } from '../../../../src/execution/process/port.js';
+import { ProcessStartError, type ProcessSpawner } from '../../../../src/process/index.js';
 import type { ProtocolDriver } from '../../../../src/protocol/driver.js';
 import { controlledSupervision, remainsPending } from '../../../support/assertions/supervision.js';
 import { agentDefinition } from '../../../support/builders/agent-definition.js';

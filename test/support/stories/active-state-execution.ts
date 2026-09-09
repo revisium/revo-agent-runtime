@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import type { StartAgentInvocation } from '../../../src/contracts/manager.js';
 import type {
   ExecutionAdmission,
@@ -14,12 +16,12 @@ import {
 export const activeStateRequest = (invocationId: string): StartAgentInvocation => ({
   agent: { id: 'codex', version: '1.0.0' },
   invocationId,
-  output: { directory: '/fixture/output' },
+  output: { directory: resolve('/fixture/output') },
   parameters: {},
   permissions: {},
   prompt: 'Return a result.',
   result: { schema: { type: 'object' } },
-  workspace: { directory: '/fixture/workspace' },
+  workspace: { directory: resolve('/fixture/workspace') },
 });
 
 export interface ActiveExecutionStory {

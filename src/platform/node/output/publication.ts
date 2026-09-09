@@ -8,6 +8,7 @@ import type {
   ClaimedOutputPublication,
   ClaimedOutputPublicationResult,
 } from '../../../execution/output/publication.js';
+import { openOutputDirectory } from './platform.js';
 
 const encoder = new TextEncoder();
 
@@ -35,7 +36,7 @@ export const nodeOutputPublicationSystem: NodeOutputPublicationSystem = Object.f
   link,
   open: async (path: string, flags: 'wx', mode: number): Promise<OutputFileHandle> =>
     open(path, flags, mode),
-  openDirectory: async (path: string): Promise<OutputDirectoryHandle> => open(path, 'r'),
+  openDirectory: openOutputDirectory,
   unlink,
 });
 

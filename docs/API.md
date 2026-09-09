@@ -22,7 +22,11 @@ Discovery is deterministic for the same detector set and observations. It does
 not persist definitions, start a session, read credentials, install a CLI, or
 establish account readiness. `DiscoverAgentsOptions` can add or disable
 detectors, pass an abort signal, and provide explicit system executable
-overrides.
+overrides. On Windows, known npm command shims are resolved through the adjacent
+package manifest and its declared Node bin; the shim contents are neither executed
+nor interpreted. Both global npm and local `node_modules/.bin` layouts are supported.
+Version checks use an isolated child environment; operating-system bootstrap
+variables may still be present, but application variables are not inherited.
 
 ## Manager construction
 
@@ -50,6 +54,13 @@ caller-supplied active rows and returns only after recovery completes. Session
 recovery never attaches to an unknown live process: it confirms absence,
 identity mismatch, or termination before owner-fenced row removal, and fails
 closed when cleanup or ownership is ambiguous.
+
+Persist each `ActiveProcessIdentity` unchanged. New identities use `version: 2`
+and `platform: 'linux' | 'darwin' | 'win32'`, alongside `pid`, `fingerprint`,
+and `startedAt`. Linux/macOS identities carry `processGroupId`; Windows identities
+carry `jobName`, and their PID identifies the owned bootstrap. Legacy unversioned
+identities remain readable on Linux. Recovery rejects identities from another
+platform without signalling their processes.
 
 ## Manager methods
 

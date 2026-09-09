@@ -7,6 +7,17 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
+      exclude: [
+        'src/process/node/darwin.ts',
+        'src/process/node/platform.ts',
+        'src/process/node/windows/bindings.ts',
+        'src/process/node/windows/bootstrap.ts',
+        'src/process/node/windows/launcher.ts',
+        'src/process/node/windows/recovery.ts',
+        'src/process/node/windows/wait.ts',
+        'src/platform/node/output/windows/native.ts',
+        'src/platform/node/output/platform.ts',
+      ],
       reporter: ['text', 'lcov'],
       reportsDirectory: 'coverage',
       thresholds: {

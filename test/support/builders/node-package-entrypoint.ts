@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -8,6 +8,8 @@ type EntrypointMutation =
   | 'absolute_bin'
   | 'directory'
   | 'different_bin'
+  | 'different_name'
+  | 'shim_directory'
   | 'escape'
   | 'manifest_array'
   | 'missing'
@@ -24,6 +26,7 @@ interface NodePackageEntrypointFixture {
 }
 
 interface NodePackageEntrypointOptions {
+  readonly windowsShim?: 'global' | 'local';
   readonly versionDelayMs?: number;
   readonly versionOutput?: string;
 }
@@ -33,7 +36,7 @@ export const nodePackageEntrypoint = async (
   mutation: EntrypointMutation = 'valid',
   options: NodePackageEntrypointOptions = {},
 ): Promise<NodePackageEntrypointFixture> => {
-  const directory = await mkdtemp(join(tmpdir(), 'revo-node-package-entrypoint-'));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'revo-node-package-entrypoint-')));
   const packageDirectory = join(directory, 'node_modules', ...policy.packageName.split('/'));
   const declaredBin =
     mutation === 'missing_declared_bin'
@@ -73,7 +76,7 @@ export const nodePackageEntrypoint = async (
         ? { name: policy.packageName }
         : {
             bin: { [policy.binName]: mutation === 'number_bin' ? 1 : declaredBin },
-            name: policy.packageName,
+            name: mutation === 'different_name' ? '@different/agent' : policy.packageName,
           };
   await writeFile(join(packageDirectory, 'package.json'), `${JSON.stringify(manifest)}\n`, 'utf8');
   if (mutation === 'escape') {
@@ -81,9 +84,18 @@ export const nodePackageEntrypoint = async (
     await symlink(entrypoint, packageBin);
   }
 
+  const shimDirectory =
+    options.windowsShim === 'local' ? join(directory, 'node_modules', '.bin') : directory;
+  const shim = join(shimDirectory, `${policy.command}.cmd`);
+  if (options.windowsShim !== undefined) {
+    await mkdir(shimDirectory, { recursive: true });
+    if (mutation === 'shim_directory') await mkdir(shim);
+    else await writeFile(shim, '@exit /b 97\n', 'utf8');
+  }
+
   return {
     dispose: async () => rm(directory, { force: true, recursive: true }),
     entrypoint,
-    packageBin,
+    packageBin: options.windowsShim === undefined ? packageBin : shim,
   };
 };

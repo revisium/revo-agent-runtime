@@ -1,15 +1,16 @@
 import type {
+  ProcessGroupIdentity,
   ProcessIdentity,
+  ProcessIdentityInspector,
   RecoveredProcessInspector,
   RecoveredProcessReconciliation,
-} from '../../../execution/process/port.js';
+} from '../contracts.js';
+import { nodeErrorCode } from '../resources.js';
 import {
   nodeProcessGroupSystem,
   type ProcessGroupSystem,
   processTerminationPolicy,
 } from './cleanup.js';
-import { nodeErrorCode } from './errors.js';
-import { inspectLinuxProcessIdentity, type ProcessIdentityInspector } from './identity.js';
 
 const recoveredProcessIsAbsent = (error: unknown): boolean => {
   const code = nodeErrorCode(error);
@@ -34,8 +35,7 @@ const terminateRecoveredProcessGroup = async (
   system: ProcessGroupSystem,
 ): Promise<RecoveredProcessReconciliation> => {
   if (signal.aborted) return Object.freeze({ status: 'inconclusive' });
-  if (!system.signal(processGroupId, 'SIGTERM'))
-    return Object.freeze({ status: 'termination_unconfirmed' });
+  system.signal(processGroupId, 'SIGTERM');
   const exitedAfterTerm = await waitForRecoveredProcessGroupExit(
     processGroupId,
     system.now() + processTerminationPolicy.terminationGraceMs,
@@ -43,8 +43,8 @@ const terminateRecoveredProcessGroup = async (
     system,
   );
   if (exitedAfterTerm) return Object.freeze({ status: 'terminated' });
-  if (signal.aborted || !system.signal(processGroupId, 'SIGKILL'))
-    return Object.freeze({ status: 'termination_unconfirmed' });
+  if (signal.aborted) return Object.freeze({ status: 'termination_unconfirmed' });
+  system.signal(processGroupId, 'SIGKILL');
   const exitedAfterKill = await waitForRecoveredProcessGroupExit(
     processGroupId,
     system.now() + processTerminationPolicy.postKillConfirmationMs,
@@ -56,8 +56,8 @@ const terminateRecoveredProcessGroup = async (
   });
 };
 
-export const createNodeRecoveredProcessInspector = (
-  inspectIdentity: ProcessIdentityInspector = inspectLinuxProcessIdentity,
+export const createPosixRecovery = (
+  inspectIdentity: ProcessIdentityInspector,
   system: ProcessGroupSystem = nodeProcessGroupSystem,
 ): RecoveredProcessInspector =>
   Object.freeze({
@@ -65,7 +65,8 @@ export const createNodeRecoveredProcessInspector = (
       persisted: ProcessIdentity,
       signal: AbortSignal,
     ) => {
-      let authentic: ProcessIdentity;
+      if (persisted.platform === 'win32') return Object.freeze({ status: 'inconclusive' });
+      let authentic: ProcessGroupIdentity;
       try {
         authentic = await inspectIdentity(persisted.pid);
       } catch (error) {
@@ -78,6 +79,3 @@ export const createNodeRecoveredProcessInspector = (
       return terminateRecoveredProcessGroup(authentic.processGroupId, signal, system);
     },
   });
-
-export const nodeRecoveredProcessInspector: RecoveredProcessInspector =
-  createNodeRecoveredProcessInspector();

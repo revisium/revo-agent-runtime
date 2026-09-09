@@ -70,7 +70,8 @@ test('caller cancellation is idempotent and finishes only after provider cancel 
     expectTerminalFault(result, 'cancelled', 'revo.agent.cancelled');
     expect(JSON.parse(await readFile(traceFile, 'utf8'))).toMatchObject({
       cancelReceived: true,
-      exited: true,
+      // Windows Job termination bypasses JavaScript exit hooks.
+      exited: process.platform !== 'win32',
     });
     expect(events).toEqual([
       'invocation.accepted',

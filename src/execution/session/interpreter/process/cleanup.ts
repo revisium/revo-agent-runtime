@@ -1,5 +1,5 @@
 import type { ActiveProcessIdentity, AgentFault } from '../../../../contracts/manager/core.js';
-import type { ProcessCleanupOutcome } from '../../../process/port.js';
+import type { ProcessCleanupOutcome } from '../../../../process/index.js';
 import type { SessionEffect } from '../../kernel/effect/session-effect.js';
 import type { SessionEffectOutput } from '../../runtime/effects/outcomes.js';
 import type { SessionInterpreterResources } from '../provider/opening/resources.js';
@@ -21,7 +21,11 @@ interface CleanupOptions {
 
 const sameIdentity = (left: ActiveProcessIdentity, right: ActiveProcessIdentity): boolean =>
   left.pid === right.pid &&
-  left.processGroupId === right.processGroupId &&
+  left.version === right.version &&
+  left.platform === right.platform &&
+  (left.platform === 'win32'
+    ? right.platform === 'win32' && left.jobName === right.jobName
+    : right.platform !== 'win32' && left.processGroupId === right.processGroupId) &&
   left.fingerprint === right.fingerprint &&
   left.startedAt === right.startedAt;
 

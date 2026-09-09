@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import type { AgentInvocationResult } from '../../../src/contracts/manager.js';
 import { validateAgentDefinition } from '../../../src/definition/index.js';
 import {
@@ -14,7 +16,7 @@ import type {
   ProcessCleanupOutcome,
   ProcessExit,
   ProcessLaunch,
-} from '../../../src/execution/process/port.js';
+} from '../../../src/process/index.js';
 import type { ProtocolDriver } from '../../../src/protocol/driver.js';
 import { agentDefinition } from './agent-definition.js';
 import { processIdentity } from './process-identity.js';
@@ -152,7 +154,7 @@ export const executionEvidenceStory = (): ExecutionEvidenceStory => {
     prompt: 'Return evidence.',
     resultSchema: { type: 'object' },
     wallClockTimeoutMs: 60_000,
-    workspace: '/fixture/workspace',
+    workspace: resolve('/fixture/workspace'),
   });
   return Object.freeze({
     cleanup: () => cleanupStarted.promise,

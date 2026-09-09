@@ -15,9 +15,14 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  native_verify:
+    name: Verify (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
@@ -38,19 +43,46 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
+        id: install
         run: pnpm install --frozen-lockfile
 
-      - name: Verify
-        run: pnpm verify
+      - name: Static verification
+        timeout-minutes: 4
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && matrix.os == 'ubuntu-24.04' }}
+        run: |
+          pnpm format:check
+          pnpm typecheck
+          pnpm lint
+          pnpm verify:dead-exports
+
+      - name: Tests with coverage
+        timeout-minutes: 6
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && matrix.os == 'ubuntu-24.04' }}
+        run: pnpm test:cov
+
+      - name: Native runtime tests
+        timeout-minutes: 6
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && matrix.os != 'ubuntu-24.04' }}
+        run: pnpm exec vitest run
+
+      - name: Architecture verification
+        timeout-minutes: 2
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && matrix.os == 'ubuntu-24.04' }}
+        run: pnpm verify:architecture
+
+      - name: Packed consumer verification
+        timeout-minutes: 4
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm verify:package
 
       - name: SonarQube branch scan
-        if: ${{ env.SONAR_TOKEN != '' && github.event_name != 'pull_request' }}
+        if: ${{ matrix.os == 'ubuntu-24.04' && env.SONAR_TOKEN != '' && github.event_name != 'pull_request' }}
         uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
         env:
           SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
 
       - name: SonarQube PR Quality Gate
-        if: ${{ env.SONAR_TOKEN != '' && github.event_name == 'pull_request' }}
+        if: ${{ matrix.os == 'ubuntu-24.04' && env.SONAR_TOKEN != '' && github.event_name == 'pull_request' }}
         uses: SonarSource/sonarqube-scan-action@713881670b6b3676cda39549040e2d88c70d582e # v8.2.0
         with:
           args: >-
@@ -60,5 +92,17 @@ jobs:
           SONAR_TOKEN: ${{ env.SONAR_TOKEN }}
 
       - name: Inspect Sonar open issues
-        if: ${{ always() && !cancelled() && env.SONAR_TOKEN != '' && github.event_name == 'pull_request' }}
+        if: ${{ always() && !cancelled() && matrix.os == 'ubuntu-24.04' && env.SONAR_TOKEN != '' && github.event_name == 'pull_request' }}
         run: pnpm sonar:issues:local
+
+  verify:
+    name: verify
+    needs: [native_verify]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every native verification job
+        env:
+          NATIVE_RESULT: ${{ needs.native_verify.result }}
+        run: test "$NATIVE_RESULT" = success

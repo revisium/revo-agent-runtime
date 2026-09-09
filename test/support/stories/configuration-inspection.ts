@@ -1,3 +1,5 @@
+import { resolve as resolvePath } from 'node:path';
+
 import { normalizeAcpConfiguration } from '../../../src/configuration/catalog.js';
 import { validateAgentDefinition } from '../../../src/definition/index.js';
 import type { ConfigurationCatalogFallback } from '../../../src/execution/configuration/fallback.js';
@@ -10,7 +12,7 @@ import {
   type OwnedProcess,
   type ProcessCleanupOutcome,
   type ProcessExit,
-} from '../../../src/execution/process/port.js';
+} from '../../../src/process/index.js';
 import type {
   ProtocolConfigurationDriver,
   ProtocolConfigurationSession,
@@ -178,7 +180,7 @@ export const configurationInspectionStory = (): ConfigurationInspectionStory => 
         redactionSecrets: [],
         signal: controller.signal,
         wallClockTimeoutMs: 10,
-        workspace: '/fixture/workspace',
+        workspace: resolvePath('/fixture/workspace'),
       });
       if (opening === 'exits') await new Promise((resolve) => setTimeout(resolve, 0));
       return outcome;

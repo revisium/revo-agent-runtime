@@ -40,6 +40,27 @@ const providerIsolationRules = providerNames.map((provider) => ({
 module.exports = {
   forbidden: [
     {
+      name: 'process-consumers-use-entrypoints',
+      severity: 'error',
+      from: { path: '^src/(?!process/)' },
+      to: {
+        path: '^src/process/',
+        pathNot: '^src/process/(?:index|node|resources)\\.ts$',
+      },
+    },
+    {
+      name: 'process-module-is-independent',
+      severity: 'error',
+      from: { path: '^src/process/' },
+      to: { dependencyTypes: ['local'], pathNot: '^src/process/' },
+    },
+    {
+      name: 'process-contracts-are-portable',
+      severity: 'error',
+      from: { path: '^src/process/(?!node(?:\\.ts$|/))' },
+      to: { dependencyTypes: ['core', 'npm'] },
+    },
+    {
       name: 'no-cycles',
       severity: 'error',
       from: {},

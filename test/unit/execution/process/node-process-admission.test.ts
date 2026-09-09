@@ -2,16 +2,16 @@ import { join } from 'node:path';
 
 import { expect, test } from 'vitest';
 
-import { ProcessStartError, type ProcessExit } from '../../../../src/execution/process/port.js';
+import { ProcessStartError, type ProcessExit } from '../../../../src/process/index.js';
 import {
   createProcessCleanup,
   nodeProcessGroupSystem,
   type ProcessGroupSystem,
-} from '../../../../src/platform/node/process/cleanup.js';
-import { nodeErrorCode } from '../../../../src/platform/node/process/errors.js';
-import { parseLinuxProcessIdentity } from '../../../../src/platform/node/process/identity.js';
-import { createNodeRecoveredProcessInspector } from '../../../../src/platform/node/process/recovered-process.js';
-import { createNodeProcessSpawner } from '../../../../src/platform/node/process/spawner.js';
+} from '../../../../src/process/node/cleanup.js';
+import { parseLinuxProcessIdentity } from '../../../../src/process/node/linux.js';
+import { createNodeRecoveredProcessInspector } from '../../../../src/process/node/recovered-process.js';
+import { createNodeProcessSpawner } from '../../../../src/process/node/spawner.js';
+import { nodeErrorCode } from '../../../../src/process/resources.js';
 
 const longRunningNode = {
   args: ['-e', 'setInterval(() => undefined, 1_000)'],
@@ -127,28 +127,54 @@ test('a failed OS spawn never reaches identity inspection or exposes a partial o
 
   await expect(
     spawner.start(
-      { ...longRunningNode, command: join(process.cwd(), '.missing-agent-executable') },
+      {
+        ...longRunningNode,
+        command: join(
+          process.cwd(),
+          process.platform === 'win32'
+            ? '.missing-agent-executable.exe'
+            : '.missing-agent-executable',
+        ),
+      },
       new AbortController().signal,
     ),
   ).rejects.toThrow();
   expect(identityInspections).toBe(0);
 });
 
-test('cleanup is uncertain when TERM or KILL cannot be delivered', async () => {
+test('cleanup is uncertain when signalling fails and the group survives', async () => {
   const leaderExit = Promise.resolve<ProcessExit>({ exitCode: null, signal: 'SIGTERM' });
   const termDenied = createProcessCleanup(
     42,
     leaderExit,
-    processGroupScenario({ termAccepted: false }),
+    processGroupScenario({
+      termAccepted: false,
+      killAccepted: false,
+      goneAfterTerm: false,
+      goneAfterKill: false,
+    }),
   );
   const killDenied = createProcessCleanup(
     42,
     leaderExit,
-    processGroupScenario({ goneAfterTerm: false, killAccepted: false }),
+    processGroupScenario({ goneAfterTerm: false, killAccepted: false, goneAfterKill: false }),
   );
 
   await expect(termDenied()).resolves.toEqual({ status: 'uncertain' });
   await expect(killDenied()).resolves.toEqual({ status: 'uncertain' });
+});
+
+test('confirms a naturally reaped group even when a concurrent TERM was refused', async () => {
+  const cleanup = createProcessCleanup(
+    42,
+    Promise.resolve({ exitCode: 0, signal: null }),
+    processGroupScenario({ termAccepted: false, goneAfterTerm: true }),
+  );
+
+  await expect(cleanup()).resolves.toEqual({
+    status: 'confirmed',
+    exit: { exitCode: 0, signal: null },
+  });
 });
 
 test('cleanup requires both descendant exit and leader reap confirmation', async () => {

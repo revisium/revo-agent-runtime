@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import type { EffectOutcomeCommand } from '../../../../../src/execution/session/kernel/command/effect.js';
 import type { InterpretedSessionEffect } from '../../../../../src/execution/session/runtime/effects/dispatcher.js';
 import { permissionInteractionRequest } from '../../builders/kernel/interactions.js';
@@ -205,7 +207,7 @@ export const mandatoryOutcomeCases: readonly OutcomeCase[] = [
     effect: {
       correlation: correlation('publication'),
       maxBytes: 1_024,
-      outputDirectory: '/output',
+      outputDirectory: resolve('/output'),
       publication: {
         acceptedAt: state.acceptedAt,
         cursor,
@@ -223,7 +225,7 @@ export const mandatoryOutcomeCases: readonly OutcomeCase[] = [
       correlation: correlation('publication'),
       output: {
         files: {
-          directory: '/output',
+          directory: resolve('/output'),
           manifest: 'session.json',
           stderr: 'stderr.log',
           stdout: 'stdout.log',

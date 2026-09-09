@@ -1,6 +1,6 @@
+import { ProcessStartError, type OwnedProcess, type ProcessSpawner } from '../../process/index.js';
 import type { ProtocolDriver, ProtocolSession } from '../../protocol/driver.js';
 import { literalArguments } from '../process/literal-launch.js';
-import { ProcessStartError, type OwnedProcess, type ProcessSpawner } from '../process/port.js';
 import { InvocationArtifacts } from './artifacts.js';
 import type {
   ExecutionAdmission,

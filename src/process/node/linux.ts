@@ -1,9 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, readlink } from 'node:fs/promises';
 
-import type { ProcessIdentity } from '../../../execution/process/port.js';
-
-export type ProcessIdentityInspector = (pid: number) => Promise<ProcessIdentity>;
+import type { ProcessGroupIdentity, ProcessIdentityInspector } from '../contracts.js';
 
 export const parseLinuxProcessIdentity = (
   pid: number,
@@ -11,7 +9,7 @@ export const parseLinuxProcessIdentity = (
   executable: string,
   bootSessionIdentity: string,
   startedAt: string,
-): ProcessIdentity => {
+): ProcessGroupIdentity => {
   const fields = stat
     .slice(stat.lastIndexOf(')') + 2)
     .trim()
@@ -29,16 +27,25 @@ export const parseLinuxProcessIdentity = (
 };
 
 export const inspectLinuxProcessIdentity: ProcessIdentityInspector = async (pid) => {
-  const [stat, executable, bootSessionIdentity] = await Promise.all([
+  // A missing procfs/boot identity is unavailable evidence, never an absent process.
+  const bootSessionIdentity = await readFile('/proc/sys/kernel/random/boot_id', 'utf8').catch(
+    (cause: unknown) => {
+      throw new Error('Linux process identity is unavailable.', { cause });
+    },
+  );
+  const [stat, executable] = await Promise.all([
     readFile(`/proc/${pid}/stat`, 'utf8'),
     readlink(`/proc/${pid}/exe`),
-    readFile('/proc/sys/kernel/random/boot_id', 'utf8'),
   ]);
-  return parseLinuxProcessIdentity(
-    pid,
-    stat,
-    executable,
-    bootSessionIdentity,
-    new Date().toISOString(),
-  );
+  return Object.freeze({
+    ...parseLinuxProcessIdentity(
+      pid,
+      stat,
+      executable,
+      bootSessionIdentity,
+      new Date().toISOString(),
+    ),
+    version: 2,
+    platform: 'linux',
+  });
 };

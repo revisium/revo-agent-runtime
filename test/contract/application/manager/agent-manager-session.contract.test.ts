@@ -195,9 +195,15 @@ test('structured initialization safely reconciles an orphaned session row', asyn
           definitionDigest: descriptor.definitionDigest,
         },
         process: {
+          version: 2,
+          ...(process.platform === 'win32'
+            ? { platform: 'win32', jobName: 'revo-00000000-0000-0000-0000-000000000000' }
+            : {
+                platform: process.platform === 'darwin' ? ('darwin' as const) : ('linux' as const),
+                processGroupId: 2_147_483_647,
+              }),
           fingerprint: `sha256:${'0'.repeat(64)}`,
           pid: 2_147_483_647,
-          processGroupId: 2_147_483_647,
           startedAt: '2026-09-05T00:00:01.000Z',
         },
         sessionId: 'dlg_orphan',

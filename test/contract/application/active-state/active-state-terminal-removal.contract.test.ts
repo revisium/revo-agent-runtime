@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 
 import { createAgentManager } from '../../../../src/application/manager/manager.js';
 import type { InvocationExecutor } from '../../../../src/execution/invocation/executor.js';
-import type { RecoveredProcessInspector } from '../../../../src/execution/process/port.js';
+import type { RecoveredProcessInspector } from '../../../../src/process/index.js';
 import { captureRejection, remainsPending } from '../../../support/assertions/supervision.js';
 import { agentDefinition } from '../../../support/builders/agent-definition.js';
 import { acceptedAdmission } from '../../../support/builders/execution-evidence.js';

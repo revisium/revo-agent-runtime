@@ -123,7 +123,8 @@ test('replays the committed ACP NDJSON vector through the official SDK', async (
     await manager.shutdown();
 
     expect(sha256(golden.raw)).toBe(expectedArtifactSha256.trim());
-    expect(trace).toMatchObject({ closeReceived: true, exited: true });
+    // TerminateJobObject does not run JavaScript exit hooks on Windows.
+    expect(trace).toMatchObject({ closeReceived: true, exited: process.platform !== 'win32' });
     expect(withStableWorkspace(trace).inbound).toEqual(golden.value.inbound);
     expect(trace.outbound).toEqual(golden.value.outbound);
     expect(sha256(textAt(trace.inbound[2]!, ['params', 'prompt', '0', 'text']))).toBe(

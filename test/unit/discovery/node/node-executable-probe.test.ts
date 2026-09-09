@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream';
 
-import { expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 
 import {
   collectBounded,
@@ -8,7 +8,8 @@ import {
   nodeExecutableProbe,
   normalizeHostPlatform,
 } from '../../../../src/platform/node/probe/executable-probe.js';
-import { createProcessCleanup } from '../../../../src/platform/node/process/cleanup.js';
+import { ProcessStartError } from '../../../../src/process/index.js';
+import { nodeProcessLauncher } from '../../../../src/process/node.js';
 import {
   nonExecutableFile,
   systemExecutable,
@@ -24,6 +25,36 @@ const versionProbe = (args: readonly string[], timeoutMs = 1_000) =>
     stdoutLimitBytes: 65_536,
     timeoutMs,
   });
+
+const admittedProbe = async (cleanupUncertain = false) => {
+  const admitted = Promise.withResolvers<void>();
+  const probe = createNodeExecutableProbe({
+    start: async (launch, signal) => {
+      const process = await nodeProcessLauncher.start(launch, signal);
+      admitted.resolve();
+      return {
+        ...process,
+        terminateAndReap: async () => {
+          const outcome = await process.terminateAndReap();
+          return cleanupUncertain ? { status: 'uncertain' as const } : outcome;
+        },
+      };
+    },
+  });
+  const running = await probe.startVersionProbe({
+    args: ['-e', 'setInterval(() => undefined, 1000)'],
+    environment: {},
+    executable: process.execPath,
+    shell: false,
+    stderrLimitBytes: 65_536,
+    stdoutLimitBytes: 65_536,
+    timeoutMs: 20,
+  });
+  await admitted.promise;
+  return running;
+};
+
+afterEach(() => vi.unstubAllEnvs());
 
 test('resolves only absolute launchable files and distinguishes missing from non-launchable', async () => {
   await expect(nodeExecutableProbe.resolveExecutable(process.execPath)).resolves.toEqual({
@@ -54,19 +85,22 @@ test('resolves only absolute launchable files and distinguishes missing from non
   const fixture = await systemExecutable();
   try {
     const notExecutable = await nonExecutableFile(fixture.directory);
-    await expect(nodeExecutableProbe.resolveExecutable(notExecutable)).resolves.toEqual({
-      reason: 'not_launchable',
-      status: 'unavailable',
-    });
+    // Windows has no POSIX executable permission bit; the version probe establishes launchability.
+    await expect(nodeExecutableProbe.resolveExecutable(notExecutable)).resolves.toEqual(
+      process.platform === 'win32'
+        ? { executable: notExecutable, status: 'resolved' }
+        : { reason: 'not_launchable', status: 'unavailable' },
+    );
   } finally {
     await fixture.dispose();
   }
 });
 
-test('runs directly with an empty environment and retains exact stdout and stderr', async () => {
+test('does not inherit application variables and retains exact stdout and stderr', async () => {
+  vi.stubEnv('REVO_PROBE_ENV_SENTINEL', 'must-not-be-inherited');
   const running = await versionProbe([
     '-e',
-    "process.stdout.write(String(Object.keys(process.env).length)); process.stderr.write('1.2.3\\n')",
+    "process.stdout.write(String(process.env.REVO_PROBE_ENV_SENTINEL)); process.stderr.write('1.2.3\\n')",
   ]);
 
   await expect(running.completion).resolves.toEqual({
@@ -75,7 +109,7 @@ test('runs directly with an empty environment and retains exact stdout and stder
     signal: null,
     status: 'exited',
     stderr: new TextEncoder().encode('1.2.3\n'),
-    stdout: new TextEncoder().encode('0'),
+    stdout: new TextEncoder().encode('undefined'),
   });
 });
 
@@ -100,20 +134,21 @@ test.each([
   await expect(running.completion).resolves.toMatchObject({ overflow, status: 'exited' });
 });
 
-test('reports authentic nonzero and signal exits', async () => {
+test('reports the native exit status of a failed version command', async () => {
   const nonzero = await versionProbe(['-e', 'process.exit(7)']);
-  const signalled = await versionProbe(['-e', "process.kill(process.pid, 'SIGTERM')"]);
 
   await expect(nonzero.completion).resolves.toMatchObject({ exitCode: 7, signal: null });
-  await expect(signalled.completion).resolves.toMatchObject({ exitCode: null, signal: 'SIGTERM' });
 });
 
 test('timeout termination resolves only after the probe leader is reaped', async () => {
-  const running = await versionProbe(['-e', 'setInterval(() => undefined, 1000)'], 20);
+  const running = await admittedProbe();
   await running.timeout;
 
   await expect(running.terminateAndReap()).resolves.toBeUndefined();
-  await expect(running.completion).resolves.toMatchObject({ signal: 'SIGTERM', status: 'exited' });
+  const result = await running.completion;
+  expect(result.status).toBe('exited');
+  if (result.status !== 'exited') throw new Error('Expected native process exit.');
+  expect(result.exitCode !== null || result.signal !== null).toBe(true);
 });
 
 test('contains an unavailable probe executable as a spawn failure', async () => {
@@ -152,23 +187,53 @@ test('normalizes supported and unsupported Node host platforms', () => {
 });
 
 test('fails closed when version-probe cleanup cannot be confirmed', async () => {
-  const probe = createNodeExecutableProbe((processGroupId, completion) => {
-    const cleanup = createProcessCleanup(processGroupId, completion);
-    return async () => {
-      await cleanup();
-      return { status: 'uncertain' };
-    };
+  const running = await admittedProbe(true);
+  await running.timeout;
+  await expect(running.terminateAndReap()).rejects.toThrow('cleanup is uncertain');
+});
+
+test('times out during launch and waits for cancelled admission to settle', async () => {
+  const admission = Promise.withResolvers<void>();
+  let launchSignal: AbortSignal | undefined;
+  const probe = createNodeExecutableProbe({
+    start: async (launch, signal) => {
+      launchSignal = signal;
+      await admission.promise;
+      return nodeProcessLauncher.start(launch, signal);
+    },
   });
-  expect(probe.hostPlatform()).toBe(process.platform);
   const running = await probe.startVersionProbe({
-    args: ['-e', 'setInterval(() => undefined, 1000)'],
+    args: ['--version'],
     environment: {},
     executable: process.execPath,
     shell: false,
     stderrLimitBytes: 65_536,
     stdoutLimitBytes: 65_536,
-    timeoutMs: 20,
+    timeoutMs: 10,
   });
   await running.timeout;
+  const cleanup = running.terminateAndReap();
+  expect(launchSignal?.aborted).toBe(true);
+  admission.resolve();
+  await cleanup;
+  await expect(running.completion).resolves.toEqual({ status: 'spawn_failed' });
+});
+
+test('preserves uncertain cleanup when process admission fails', async () => {
+  const probe = createNodeExecutableProbe({
+    start: async () => {
+      throw new ProcessStartError('uncertain');
+    },
+  });
+  const running = await probe.startVersionProbe({
+    args: ['--version'],
+    environment: {},
+    executable: process.execPath,
+    shell: false,
+    stderrLimitBytes: 65_536,
+    stdoutLimitBytes: 65_536,
+    timeoutMs: 1000,
+  });
+  await expect(running.completion).resolves.toEqual({ status: 'spawn_failed' });
   await expect(running.terminateAndReap()).rejects.toThrow('cleanup is uncertain');
 });

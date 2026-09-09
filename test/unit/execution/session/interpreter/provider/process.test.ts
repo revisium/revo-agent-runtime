@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, expect, it, test, vi } from 'vitest';
 
-import type { OwnedProcess } from '../../../../../../src/execution/process/port.js';
 import { createProcessStartInterpreter } from '../../../../../../src/execution/session/interpreter/provider/opening/process.js';
 import { createSessionInterpreterResources } from '../../../../../../src/execution/session/interpreter/provider/opening/resources.js';
+import type { OwnedProcess } from '../../../../../../src/process/index.js';
 import type { SessionProtocolSession } from '../../../../../../src/protocol/session/port/session.js';
 import { recordingSessionEffectOutput } from '../../../../../support/session/interpreter/output.js';
 import { registerProtocolSession } from '../../../../../support/session/interpreter/provider.js';

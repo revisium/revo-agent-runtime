@@ -7,12 +7,8 @@ import type {
   StartAgentInvocation,
 } from '../../../src/contracts/manager.js';
 import { createInvocationExecutor } from '../../../src/execution/invocation/executor.js';
-import type {
-  OwnedProcess,
-  ProcessExit,
-  ProcessSpawner,
-} from '../../../src/execution/process/port.js';
-import { nodeProcessSpawner } from '../../../src/platform/node/process/spawner.js';
+import type { OwnedProcess, ProcessExit, ProcessSpawner } from '../../../src/process/index.js';
+import { nodeProcessSpawner } from '../../../src/process/node.js';
 import { acpProtocolDriver } from '../../../src/protocol/acp/driver.js';
 import type { ProtocolDriver, ProtocolSessionRequest } from '../../../src/protocol/driver.js';
 import { agentDefinition } from '../builders/agent-definition.js';

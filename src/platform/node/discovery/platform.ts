@@ -2,7 +2,6 @@ import { constants } from 'node:fs';
 import { access, realpath, stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 
-import { execa } from 'execa';
 import which from 'which';
 
 import type {
@@ -12,9 +11,13 @@ import type {
   NodePackageEntrypointPolicy,
   SystemExecutableProbe,
 } from '../../../discovery/platform.js';
+import { nodeExecutableProbe } from '../probe/executable-probe.js';
 import { resolveAdjacentNodePackage } from './adjacent-node-package.js';
 import { resolveBundledBridge } from './bundled-bridge.js';
-import { resolveNodePackageEntrypoint } from './node-entrypoint.js';
+import {
+  resolveNodePackageEntrypoint,
+  resolveWindowsNodePackageEntrypoint,
+} from './node-entrypoint.js';
 
 const probeSystemExecutable = async (
   executable: string,
@@ -22,18 +25,43 @@ const probeSystemExecutable = async (
   signal?: AbortSignal,
 ): Promise<boolean> => {
   if (signal?.aborted) return false;
-  const result = await execa(executable, probe.args, {
-    ...(signal === undefined ? {} : { cancelSignal: signal }),
-    env: {},
-    extendEnv: false,
-    reject: false,
-    shell: false,
-    stderr: 'ignore',
-    stdout: 'ignore',
-    timeout: probe.timeoutMs,
-    windowsHide: true,
+  let onAbort!: () => void;
+  const cancelled = new Promise<undefined>((resolve) => {
+    onAbort = () => resolve(undefined);
   });
-  return result.exitCode === 0;
+  signal?.addEventListener('abort', onAbort, { once: true });
+  try {
+    const running = await nodeExecutableProbe.startVersionProbe({
+      executable,
+      args: probe.args,
+      environment: {},
+      shell: false,
+      stderrLimitBytes: 65_536,
+      stdoutLimitBytes: 65_536,
+      timeoutMs: probe.timeoutMs,
+    });
+    try {
+      const result = signal?.aborted
+        ? undefined
+        : await Promise.race([
+            running.completion,
+            running.timeout.then(() => undefined),
+            cancelled,
+          ]);
+      return (
+        result?.status === 'exited' &&
+        result.exitCode === 0 &&
+        result.signal === null &&
+        result.overflow === 'none'
+      );
+    } finally {
+      await running.terminateAndReap();
+    }
+  } catch {
+    return false;
+  } finally {
+    signal?.removeEventListener('abort', onAbort);
+  }
 };
 
 const resolveSystemOverride = async (
@@ -76,11 +104,11 @@ const resolveNodePackageEntrypointFor = async (
   signal: AbortSignal | undefined,
   dependencies: NodeDiscoveryPlatformDependencies,
 ): Promise<string | undefined> => {
-  if ((hostPlatform === 'win32' && override === undefined) || signal?.aborted) return undefined;
+  if (signal?.aborted) return undefined;
   const candidate = override ?? (await dependencies.resolveSystemExecutable(policy.command));
-  return candidate === undefined || signal?.aborted
-    ? undefined
-    : resolveNodePackageEntrypoint(policy, candidate);
+  if (candidate === undefined || signal?.aborted) return undefined;
+  if (hostPlatform === 'win32') return resolveWindowsNodePackageEntrypoint(policy, candidate);
+  return resolveNodePackageEntrypoint(policy, candidate);
 };
 
 const resolveAdjacentNodePackageFor = async (

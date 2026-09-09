@@ -1,11 +1,8 @@
 import { expect, it } from 'vitest';
 
-import type {
-  OwnedProcess,
-  ProcessCleanupOutcome,
-} from '../../../../../../src/execution/process/port.js';
 import { createProcessCleanupInterpreter } from '../../../../../../src/execution/session/interpreter/process/cleanup.js';
 import { createSessionInterpreterResources } from '../../../../../../src/execution/session/interpreter/provider/opening/resources.js';
+import type { OwnedProcess, ProcessCleanupOutcome } from '../../../../../../src/process/index.js';
 import { recordingSessionEffectOutput } from '../../../../../support/session/interpreter/output.js';
 import { flushMicrotasks } from '../../../../../support/session/runtime/scheduling/async-steps.js';
 

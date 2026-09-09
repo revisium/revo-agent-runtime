@@ -1,5 +1,5 @@
 import type { AgentFault } from '../../../../../contracts/manager/core.js';
-import type { OwnedProcess, ProcessSpawner } from '../../../../process/port.js';
+import type { OwnedProcess, ProcessSpawner } from '../../../../../process/index.js';
 import type { SessionEffect } from '../../../kernel/effect/session-effect.js';
 import type { SessionEffectOutput } from '../../../runtime/effects/outcomes.js';
 import type { SessionRuntimeIdentitySource } from '../../../runtime/primitives/identity.js';

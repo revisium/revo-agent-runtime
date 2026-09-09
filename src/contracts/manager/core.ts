@@ -1,4 +1,7 @@
+import type { ProcessIdentity as ActiveProcessIdentity } from '../../process/index.js';
 import type { AgentDefinition, AgentRef, JsonObject } from '../agent-definition.js';
+
+export type { ProcessIdentity as ActiveProcessIdentity } from '../../process/index.js';
 export type { AgentLaunchEvidence } from '../launch.js';
 
 export interface AgentDescriptor {
@@ -13,13 +16,6 @@ export interface AgentExecutionPin {
   readonly agentId: string;
   readonly agentVersion: string;
   readonly definitionDigest: string;
-}
-
-export interface ActiveProcessIdentity {
-  readonly pid: number;
-  readonly processGroupId: number;
-  readonly fingerprint: string;
-  readonly startedAt: string;
 }
 
 export interface ActiveInvocationSnapshot {

@@ -19,7 +19,8 @@ application/* -> definition + execution ports -> contracts
 composition/session -> application/session + execution/session + portable ports
 execution/* -> protocol ports + normalized configuration + contracts
 protocol/acp -> protocol ports + normalized configuration + contracts
-platform/node -> execution ports
+platform/node -> execution ports + process entrypoints
+process/node -> process contracts + Node/Execa/Koffi
 ```
 
 Application and execution modules never import a concrete protocol or Node
@@ -27,6 +28,13 @@ adapter. Provider folders never import one another. `src/providers/index.ts`
 is the single composition registration for built-in providers. Shared discovery
 and ACP code remains provider-neutral: equal provider timeout values are
 provider-owned definition data, not a reason to couple provider folders.
+
+`src/process` is an independent internal module. Its `index.ts` exposes portable
+process contracts and persisted identity decoding; `node.ts` exposes launch,
+owned-process admission, and recovery with runtime platform selection.
+`resources.ts` provides the native resource scope also used by private output
+creation. Architecture checks forbid imports from this module into other runtime
+folders, and prevent consumers from reaching its implementation files.
 
 ## Responsibility ledger
 
@@ -71,7 +79,7 @@ provider-owned definition data, not a reason to couple provider folders.
 | `execution/output`                | Bounded streams/events, exclusive output claim, and publication capability                                  | Contracts and redaction channel                                          |
 | `execution/result`                | Raw response evidence, schema validation, and result normalization                                          | Contracts, output snapshots, and redaction channel                       |
 | `execution/probe`                 | Fresh executable/version preflight policy                                                                   | Executable probe port and definition version rules                       |
-| `execution/process`               | Portable owned-process, cleanup, identity, and recovery ports                                               | No concrete platform                                                     |
+| `execution/process`               | Literal launch arguments derived from agent definitions                                                     | Definition contracts                                                     |
 | `execution/session/runtime`       | Per-session actor, bounded mailbox, public-call settlement, timers, and contract-only state projections     | Pure session kernel plus private interpreter dispatch                    |
 | `execution/session/kernel`        | Pure session state machine, commands, effects, events, lifecycle transitions, and projections               | Portable session contracts only                                          |
 | `execution/session/interpreter`   | External effects for provider, process, event/state sinks, output, checkpointing, and cleanup               | Kernel effects and portable ports                                        |
@@ -81,7 +89,8 @@ provider-owned definition data, not a reason to couple provider folders.
 | `protocol/acp`                    | ACP SDK session implementation, stable configuration requester, and compatibility seam                      | Protocol ports, normalized catalog, and official ACP SDK                 |
 | `protocol/session`                | Provider-neutral long-lived session, interaction, update, and continuation ports                            | Portable contracts                                                       |
 | `composition/session`             | Concrete wiring of policy, state machine, actor, interpreters, ACP driver, and platform services            | Session application/execution layers and portable ports                  |
-| `platform/node/process`           | Node child-process spawn, identity, cleanup, and recovered-process inspection                               | Process port; Execa and Node APIs                                        |
+| `process/index`                   | Portable owned-process, cleanup, identity, and recovery contracts                                           | No runtime or platform modules                                           |
+| `process/node`                    | Platform selection, process launch, identity, cleanup, and recovery                                         | Internal process contracts; Node, Execa, and Koffi                       |
 | `platform/node/output`            | Durable, non-replacing filesystem claim and publication                                                     | Output ports; Node filesystem APIs                                       |
 | `platform/node/session`           | Runtime identities and atomic session stdout/stderr/manifest publication                                    | Session runtime and output ports; Node APIs                              |
 | `platform/node/probe`             | Bounded executable resolution/version observation                                                           | Probe and process ports; Execa and Node APIs                             |

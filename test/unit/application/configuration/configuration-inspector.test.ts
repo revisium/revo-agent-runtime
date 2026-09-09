@@ -10,7 +10,7 @@ import type {
   OwnedProcess,
   ProcessCleanupOutcome,
   ProcessSpawner,
-} from '../../../../src/execution/process/port.js';
+} from '../../../../src/process/index.js';
 import type { ProtocolConfigurationDriver } from '../../../../src/protocol/configuration-driver.js';
 import { agentDefinition } from '../../../support/builders/agent-definition.js';
 import { processIdentity } from '../../../support/builders/process-identity.js';

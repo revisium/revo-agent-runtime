@@ -1,5 +1,5 @@
-import type { ProcessCleanupOutcome, ProcessExit } from '../../../execution/process/port.js';
-import { nodeErrorCode } from './errors.js';
+import type { ProcessCleanupOutcome, ProcessExit } from '../contracts.js';
+import { nodeErrorCode } from '../resources.js';
 
 export const processTerminationPolicy = Object.freeze({
   terminationGraceMs: 2_000,
@@ -67,12 +67,12 @@ export const createProcessCleanup = (
         };
         return poll();
       };
-      const termAccepted = system.signal(processGroupId, 'SIGTERM');
-      if (!termAccepted) return Object.freeze({ status: 'uncertain' as const });
+      // A concurrent exit can make signalling fail before the group is reaped
+      // (Darwin can return EPERM for a group containing only zombies).
+      system.signal(processGroupId, 'SIGTERM');
       let groupGone = await waitForExit(processTerminationPolicy.terminationGraceMs);
       if (!groupGone) {
-        const killAccepted = system.signal(processGroupId, 'SIGKILL');
-        if (!killAccepted) return Object.freeze({ status: 'uncertain' as const });
+        system.signal(processGroupId, 'SIGKILL');
         groupGone = await waitForExit(processTerminationPolicy.postKillConfirmationMs);
       }
       const exit = await waitForLeaderReap(

@@ -1,4 +1,4 @@
-import type { OwnedProcess, ProcessSpawner } from '../../../../src/execution/process/port.js';
+import type { OwnedProcess, ProcessSpawner } from '../../../../src/process/index.js';
 import type { FakeSessionProtocolBarriers } from '../fakes/protocol/barriers.js';
 
 export class StoryProcesses implements ProcessSpawner {

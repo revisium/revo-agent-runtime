@@ -1,9 +1,9 @@
 import type { AgentDescriptor } from '../../../contracts/manager/core.js';
 import type { ActiveAgentSessionSnapshot } from '../../../contracts/session/persistence/active-state.js';
+import { snapshotProcessIdentity } from '../../../process/index.js';
 
 const encoder = new TextEncoder();
 const digestPattern = /^[a-f0-9]{64}$/u;
-const fingerprintPattern = /^sha256:[a-f0-9]{64}$/u;
 const sessionState = (value: unknown): value is ActiveAgentSessionSnapshot['state'] =>
   value === 'opening' ||
   value === 'idle' ||
@@ -45,9 +45,6 @@ const validTimestamp = (value: unknown): value is string => {
   return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
 };
 
-const positiveSafeInteger = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
-
 const parseSnapshot = (
   value: unknown,
   agents: readonly AgentDescriptor[],
@@ -61,12 +58,7 @@ const parseSnapshot = (
     'state',
   ]);
   const pin = exactRecord(snapshot?.pin, ['agentId', 'agentVersion', 'definitionDigest']);
-  const process = exactRecord(snapshot?.process, [
-    'fingerprint',
-    'pid',
-    'processGroupId',
-    'startedAt',
-  ]);
+  const process = snapshotProcessIdentity(snapshot?.process);
   if (
     snapshot === undefined ||
     pin === undefined ||
@@ -78,12 +70,7 @@ const parseSnapshot = (
     !boundedText(pin.agentId) ||
     !boundedText(pin.agentVersion) ||
     typeof pin.definitionDigest !== 'string' ||
-    !digestPattern.test(pin.definitionDigest) ||
-    !positiveSafeInteger(process.pid) ||
-    !positiveSafeInteger(process.processGroupId) ||
-    typeof process.fingerprint !== 'string' ||
-    !fingerprintPattern.test(process.fingerprint) ||
-    !validTimestamp(process.startedAt)
+    !digestPattern.test(pin.definitionDigest)
   )
     return undefined;
   if (
@@ -103,12 +90,7 @@ const parseSnapshot = (
       agentVersion: pin.agentVersion,
       definitionDigest: pin.definitionDigest,
     }),
-    process: Object.freeze({
-      fingerprint: process.fingerprint,
-      pid: process.pid,
-      processGroupId: process.processGroupId,
-      startedAt: process.startedAt,
-    }),
+    process,
     sessionId: snapshot.sessionId,
     state: snapshot.state,
   });

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { resolve } from 'node:path';
 
 import { expect, test } from 'vitest';
 
@@ -107,7 +108,7 @@ test('complete real kernel and interpreter composition opens, turns, checkpoints
               expect(publication.status).toBe('closed');
               return {
                 files: {
-                  directory: '/output',
+                  directory: resolve('/output'),
                   manifest: 'session.json',
                   stderr: 'stderr.log',
                   stdout: 'stdout.log',

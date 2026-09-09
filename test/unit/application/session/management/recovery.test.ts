@@ -5,14 +5,14 @@ import {
   recoverAgentSessions,
 } from '../../../../../src/application/session/management/recovery.js';
 import type {
-  RecoveredProcessInspector,
-  RecoveredProcessReconciliation,
-} from '../../../../../src/execution/process/port.js';
-import type {
   AgentDescriptor,
   ActiveAgentSessionSnapshot,
   ActiveAgentSessionStateSink,
 } from '../../../../../src/index.js';
+import type {
+  RecoveredProcessInspector,
+  RecoveredProcessReconciliation,
+} from '../../../../../src/process/index.js';
 
 const definitionDigest = 'a'.repeat(64);
 
