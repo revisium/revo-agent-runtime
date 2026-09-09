@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
+import { execa } from 'execa';
 import koffi from 'koffi';
 
 import { ProcessFixture } from './fixture.js';
@@ -14,6 +16,16 @@ console.info({
 });
 
 const platform = await createPlatform();
+
+await test('a failed OS spawn rejects without terminating its caller', async () => {
+  const result = await execa(
+    process.execPath,
+    ['--import', 'tsx', fileURLToPath(new URL('./spawn-failure.ts', import.meta.url))],
+    { killDescendants: true, reject: false, timeout: 5_000 },
+  );
+
+  assert.equal(result.failed, false, result.shortMessage);
+});
 
 await test('native identity is stable while the same process is alive', async () => {
   const first = await platform.inspect(process.pid);

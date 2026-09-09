@@ -26,6 +26,12 @@ refusal to terminate a live process with mismatched identity. Exit confirmation
 is bounded; sending a signal alone is not success. No provider login or API call
 is involved.
 
+A separate regression case starts the runtime spawner inside an isolated helper
+process and requests a nonexistent executable. The caller must survive and reject
+the launch without inspecting an identity. This exposed a failed-spawn `kill()`
+that could terminate the caller's process group; the runtime now awaits the
+failed launch without signaling it. This is the experiment's only production change.
+
 ## Limits to resolve before production
 
 - Windows assigns an already-running **cooperative test fixture** to a Job.

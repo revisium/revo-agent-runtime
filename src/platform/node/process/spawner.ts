@@ -29,8 +29,7 @@ const startOwnedProcess = async (
     stdio: 'pipe',
   });
   const pid = child.pid;
-  if (pid === undefined || child.stdin === null || child.stdout === null) {
-    child.kill('SIGKILL');
+  if (pid === undefined) {
     await child.catch(() => undefined);
     throw new Error('Owned process did not expose required process resources.');
   }
