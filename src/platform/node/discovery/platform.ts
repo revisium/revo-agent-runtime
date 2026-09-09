@@ -106,11 +106,9 @@ const resolveNodePackageEntrypointFor = async (
 ): Promise<string | undefined> => {
   if (signal?.aborted) return undefined;
   const candidate = override ?? (await dependencies.resolveSystemExecutable(policy.command));
-  return candidate === undefined || signal?.aborted
-    ? undefined
-    : hostPlatform === 'win32'
-      ? resolveWindowsNodePackageEntrypoint(policy, candidate)
-      : resolveNodePackageEntrypoint(policy, candidate);
+  if (candidate === undefined || signal?.aborted) return undefined;
+  if (hostPlatform === 'win32') return resolveWindowsNodePackageEntrypoint(policy, candidate);
+  return resolveNodePackageEntrypoint(policy, candidate);
 };
 
 const resolveAdjacentNodePackageFor = async (

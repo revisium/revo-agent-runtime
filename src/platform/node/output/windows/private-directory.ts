@@ -2,6 +2,7 @@ import { dirname, toNamespacedPath } from 'node:path';
 
 import { withNativeResource } from '../../native-resource.js';
 
+// NOSONAR S6564: native Win32 handles are named for readability at this boundary.
 type Handle = bigint;
 
 /** Native operations needed to create one output leaf with private inherited permissions. */
@@ -52,9 +53,10 @@ export interface WindowsOutputNative {
 
 const windowsError = (native: WindowsOutputNative, operation: string): Error => {
   const code = native.getLastError();
-  return Object.assign(new Error(`${operation} failed: win32=${code}`), {
-    code: code === 183 || code === 80 ? 'EEXIST' : code === 3 || code === 2 ? 'ENOENT' : 'EIO',
-  });
+  let mapped = 'EIO';
+  if (code === 183 || code === 80) mapped = 'EEXIST';
+  else if (code === 3 || code === 2) mapped = 'ENOENT';
+  return Object.assign(new Error(`${operation} failed: win32=${code}`), { code: mapped });
 };
 
 const requireSuccess = (native: WindowsOutputNative, result: number, operation: string): void => {

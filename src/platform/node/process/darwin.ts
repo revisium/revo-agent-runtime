@@ -51,7 +51,10 @@ export const inspectDarwinProcessIdentity = async (pid: number): Promise<Process
   const seconds = buffer.readBigUInt64LE(koffi.offsetof(bsdInfo, 'startSeconds'));
   const microseconds = buffer.readBigUInt64LE(koffi.offsetof(bsdInfo, 'startMicroseconds'));
   const processGroupId = buffer.readUInt32LE(koffi.offsetof(bsdInfo, 'group'));
-  const fingerprint = `sha256:${createHash('sha256').update(`darwin:v2:${bootIdentity()}:${pid}:${processGroupId}:${seconds}:${microseconds}`).digest('hex')}`;
+  const identity = ['darwin:v2', bootIdentity(), pid, processGroupId, seconds, microseconds].join(
+    ':',
+  );
+  const fingerprint = `sha256:${createHash('sha256').update(identity).digest('hex')}`;
   return Object.freeze({
     version: 2,
     platform: 'darwin',
@@ -77,10 +80,8 @@ const bootIdentity = (): string => {
   size.writeBigUInt64LE(BigInt(output.length));
   if (sysctl('kern.bootsessionuuid', output, size, null, 0) !== 0)
     throw new Error(`Cannot read boot identity: errno=${koffi.errno()}`);
-  const value = output
-    .subarray(0, Number(size.readBigUInt64LE()))
-    .toString('utf8')
-    .replace(/\0+$/u, '');
+  const raw = output.subarray(0, Number(size.readBigUInt64LE())).toString('utf8');
+  const value = raw.slice(0, raw.indexOf('\0') < 0 ? raw.length : raw.indexOf('\0'));
   if (!value) throw new Error('Empty boot identity');
   return value;
 };

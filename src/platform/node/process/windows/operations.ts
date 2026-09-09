@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { ProcessIdentity } from '../../../../execution/process/port.js';
 import { withNativeResource } from '../../native-resource.js';
 
+// NOSONAR S6564: native Win32 handles are named for readability at this boundary.
 type Handle = bigint;
 
 export interface WindowsProcessNative {
@@ -61,7 +62,8 @@ const inspectWindowsIdentity = (
       'GetProcessTimes',
     );
     const creation = created.readBigUInt64LE();
-    const fingerprint = `sha256:${createHash('sha256').update(`win32:v2:${jobName}:${pid}:${creation}`).digest('hex')}`;
+    const identity = ['win32:v2', jobName, pid, creation].join(':');
+    const fingerprint = `sha256:${createHash('sha256').update(identity).digest('hex')}`;
     return Object.freeze({
       version: 2,
       platform: 'win32',

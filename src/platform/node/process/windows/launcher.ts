@@ -127,10 +127,8 @@ export const launchWindowsProcess = async (
     10_000,
   );
   try {
-    const identity = windowsOperations.inspectWindowsIdentity(pid, jobName);
     job.assign(pid);
     assigned = true;
-    if (inspectIdentity) await Promise.race([inspectIdentity(pid), admission]);
     if (signal.aborted) throw signal.reason;
     child.nodeChildProcess.send?.(
       {
@@ -144,6 +142,8 @@ export const launchWindowsProcess = async (
       },
     );
     await admission;
+    const identity = windowsOperations.inspectWindowsIdentity(pid, jobName);
+    if (inspectIdentity) await inspectIdentity(pid);
     return Object.freeze({
       identity,
       completion,
