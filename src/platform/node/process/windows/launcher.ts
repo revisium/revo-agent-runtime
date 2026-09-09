@@ -120,6 +120,10 @@ export const launchWindowsProcess = async (
   child.stdout.on('data', (chunk: Uint8Array) => launch.onStdout?.(new Uint8Array(chunk)));
   child.stderr.on('data', (chunk: Uint8Array) => launch.onStderr?.(new Uint8Array(chunk)));
   child.stderr.resume();
+  const transport = Object.freeze({
+    input: Writable.toWeb(child.stdin) as WritableStream<Uint8Array>,
+    output: Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>,
+  });
   const aborted = () => reject(signal.reason);
   signal.addEventListener('abort', aborted, { once: true });
   const timeout = setTimeout(
@@ -129,6 +133,7 @@ export const launchWindowsProcess = async (
   try {
     job.assign(pid);
     assigned = true;
+    const identity = windowsOperations.inspectWindowsIdentity(pid, jobName);
     if (signal.aborted) throw signal.reason;
     child.nodeChildProcess.send?.(
       {
@@ -142,16 +147,13 @@ export const launchWindowsProcess = async (
       },
     );
     await admission;
-    const identity = windowsOperations.inspectWindowsIdentity(pid, jobName);
     if (inspectIdentity) await inspectIdentity(pid);
+    if (signal.aborted) throw signal.reason;
     return Object.freeze({
       identity,
       completion,
       terminateAndReap,
-      transport: Object.freeze({
-        input: Writable.toWeb(child.stdin) as WritableStream<Uint8Array>,
-        output: Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>,
-      }),
+      transport,
     });
   } catch (cause) {
     const cleanup = await terminateAndReap();

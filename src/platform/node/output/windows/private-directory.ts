@@ -2,28 +2,25 @@ import { dirname, toNamespacedPath } from 'node:path';
 
 import { withNativeResource } from '../../native-resource.js';
 
-// NOSONAR S6564: native Win32 handles are named for readability at this boundary.
-type Handle = bigint;
-
 /** Native operations needed to create one output leaf with private inherited permissions. */
 export interface WindowsOutputNative {
   getLastError(): number;
-  closeHandle(handle: Handle): number;
-  localFree(handle: Handle): Handle | null;
-  getCurrentProcess(): Handle;
-  openToken(process: Handle, access: number, token: (Handle | null)[]): number;
+  closeHandle(handle: bigint): number;
+  localFree(handle: bigint): bigint | null;
+  getCurrentProcess(): bigint;
+  openToken(process: bigint, access: number, token: (bigint | null)[]): number;
   getTokenInformation(
-    token: Handle,
+    token: bigint,
     informationClass: number,
     information: Buffer | null,
     length: number,
     required: number[],
   ): number;
-  sidToString(sid: Handle, text: (Handle | null)[]): number;
+  sidToString(sid: bigint, text: (bigint | null)[]): number;
   descriptorFromString(
     text: string,
     revision: number,
-    descriptor: (Handle | null)[],
+    descriptor: (bigint | null)[],
     size: null,
   ): number;
   createDirectory(path: string, attributes: Buffer): number;
@@ -35,9 +32,9 @@ export interface WindowsOutputNative {
     disposition: number,
     flags: number,
     template: null,
-  ): Handle;
+  ): bigint;
   getVolumeInformation(
-    handle: Handle,
+    handle: bigint,
     name: null,
     nameLength: number,
     serial: null,
@@ -47,8 +44,8 @@ export interface WindowsOutputNative {
     fsNameLength: number,
   ): number;
   decodePointer(data: Buffer): unknown;
-  decodeString(pointer: Handle): unknown;
-  encodeSecurityAttributes(descriptor: Handle): Buffer;
+  decodeString(pointer: bigint): unknown;
+  encodeSecurityAttributes(descriptor: bigint): Buffer;
 }
 
 const windowsError = (native: WindowsOutputNative, operation: string): Error => {
@@ -63,12 +60,12 @@ const requireSuccess = (native: WindowsOutputNative, result: number, operation: 
   if (result === 0) throw windowsError(native, operation);
 };
 
-const freeAllocation = (native: WindowsOutputNative, handle: Handle, purpose: string): void => {
+const freeAllocation = (native: WindowsOutputNative, handle: bigint, purpose: string): void => {
   if (native.localFree(handle) !== null) throw windowsError(native, `LocalFree(${purpose})`);
 };
 
 const processUserSid = (native: WindowsOutputNative): string => {
-  const tokens: (Handle | null)[] = [null];
+  const tokens: (bigint | null)[] = [null];
   requireSuccess(
     native,
     native.openToken(native.getCurrentProcess(), 0x0008, tokens),
@@ -92,7 +89,7 @@ const processUserSid = (native: WindowsOutputNative): string => {
       );
       const sid: unknown = native.decodePointer(information);
       if (typeof sid !== 'bigint') throw new Error('Token user returned no SID.');
-      const strings: (Handle | null)[] = [null];
+      const strings: (bigint | null)[] = [null];
       requireSuccess(native, native.sidToString(sid, strings), 'ConvertSidToStringSidW');
       const text = strings[0]!;
       if (text === null) throw new Error('ConvertSidToStringSidW returned no SID.');
@@ -131,7 +128,7 @@ const requirePersistentPermissions = (native: WindowsOutputNative, parent: strin
 export const createWindowsPrivateDirectory = (path: string, native: WindowsOutputNative): void => {
   requirePersistentPermissions(native, dirname(path));
   const sid = processUserSid(native);
-  const descriptors: (Handle | null)[] = [null];
+  const descriptors: (bigint | null)[] = [null];
   // Protected DACL prevents inherited access; child files inherit only the current user's ACE.
   requireSuccess(
     native,

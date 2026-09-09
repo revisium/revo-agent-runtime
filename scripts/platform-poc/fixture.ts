@@ -1,110 +1,92 @@
 import assert from 'node:assert/strict';
-import { fork, type ChildProcess } from 'node:child_process';
-import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 
-import { admitProcess, type AdmittedProcess, type Identity, type Platform } from './platform.js';
+import type { OwnedProcess } from '../../src/execution/process/port.js';
+import { nodeProcessSpawner } from '../../src/platform/node/process/spawner.js';
 
-const deadline = (): AbortSignal => AbortSignal.timeout(5_000);
+export const processExists = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ESRCH') return false;
+    throw error;
+  }
+};
 
 export class ProcessFixture {
-  private stopped = false;
-  private descendant: number | undefined;
+  private readonly input;
+  private readonly output;
 
-  private constructor(
-    private readonly child: ChildProcess,
-    private readonly platform: Platform,
-    private readonly admitted: AdmittedProcess,
-  ) {}
-
-  get identity(): Identity {
-    return this.admitted.identity;
+  private constructor(private readonly process: OwnedProcess) {
+    this.input = process.transport.input.getWriter();
+    this.output = process.transport.output.pipeThrough(new TextDecoderStream()).getReader();
   }
 
-  static async start(platform: Platform): Promise<ProcessFixture> {
-    const child = fork(new URL('./child.ts', import.meta.url), [], {
-      detached: process.platform !== 'win32',
-      execArgv: [],
-      stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
-    });
+  get identity() {
+    return this.process.identity;
+  }
+
+  static async start(): Promise<ProcessFixture> {
+    const owned = await nodeProcessSpawner.start(
+      {
+        command: process.execPath,
+        args: [fileURLToPath(new URL('./child.ts', import.meta.url))],
+        cwd: process.cwd(),
+      },
+      AbortSignal.timeout(5_000),
+    );
+    const fixture = new ProcessFixture(owned);
     try {
-      await once(child, 'message', { signal: deadline() });
-      assert.ok(child.pid);
-      return new ProcessFixture(child, platform, await admitProcess(platform, child.pid));
+      assert.equal(await fixture.read(), 'ready');
+      return fixture;
     } catch (error) {
-      child.kill('SIGKILL');
+      await fixture.close();
       throw error;
     }
+  }
+
+  private async read(text = ''): Promise<unknown> {
+    if (text.includes('\n')) return JSON.parse(text) as unknown;
+    const { value, done } = await this.output.read();
+    if (done) throw new Error('Fixture exited before replying');
+    return this.read(text + value);
+  }
+
+  private async request(command: string): Promise<unknown> {
+    await this.input.write(new TextEncoder().encode(command + '\n'));
+    return this.read();
   }
 
   async spawnDescendant(): Promise<number> {
-    const response = once(this.child, 'message', { signal: deadline() });
-    this.child.send('spawn');
-    const pid: unknown = (await response)[0];
+    const pid = await this.request('spawn');
     if (typeof pid !== 'number') throw new Error('Expected descendant PID');
-    this.descendant = pid;
-    return this.descendant;
+    return pid;
   }
 
-  async ping(): Promise<unknown> {
-    const response = once(this.child, 'message', { signal: deadline() });
-    this.child.send('ping');
-    return (await response)[0] as unknown;
+  ping(): Promise<unknown> {
+    return this.request('ping');
   }
 
-  async stop(expected: Identity = this.identity): Promise<void> {
-    if (this.stopped) return;
-    const waiting = new AbortController();
-    const exited = once(this.child, 'exit', {
-      signal: AbortSignal.any([waiting.signal, deadline()]),
-    });
-    try {
-      await this.admitted.terminate(expected);
-      await exited;
-    } finally {
-      waiting.abort();
-      // Remove the event wait after identity rejection as well as normal termination.
-      await exited.catch(() => undefined);
-    }
-    this.stopped = true;
-    await this.waitForExit(this.identity.pid, deadline());
-    if (this.descendant !== undefined) await this.waitForExit(this.descendant, deadline());
+  async stop(): Promise<void> {
+    assert.equal((await this.process.terminateAndReap()).status, 'confirmed');
   }
 
   async close(): Promise<void> {
-    try {
-      if (!this.stopped) await this.stop();
-    } catch (error) {
-      try {
-        await this.emergencyCleanup();
-      } catch (cleanupError) {
-        throw new AggregateError(
-          [error, cleanupError],
-          'PoC failed and fixture cleanup also failed',
-          { cause: cleanupError },
-        );
-      }
-      throw error;
-    } finally {
-      this.admitted.dispose();
-    }
-  }
-
-  private async emergencyCleanup(): Promise<void> {
-    if (this.child.exitCode !== null || this.child.signalCode !== null) return;
-    const exited = once(this.child, 'exit', { signal: AbortSignal.timeout(2_000) });
-    if (this.child.connected) this.child.send('cleanup');
-    else this.child.kill('SIGKILL');
-    try {
-      await exited;
-    } catch (error) {
-      this.child.kill('SIGKILL');
-      throw error;
-    }
-  }
-  private async waitForExit(pid: number, signal: AbortSignal): Promise<void> {
-    if ((await this.platform.inspect(pid)) === undefined) return;
-    await delay(20, undefined, { signal });
-    await this.waitForExit(pid, signal);
+    await this.stop();
+    await this.output.cancel();
+    this.input.releaseLock();
+    this.output.releaseLock();
   }
 }
+
+export const assertProcessGone = async (
+  pid: number,
+  deadline = Date.now() + 3_000,
+): Promise<void> => {
+  if (!processExists(pid)) return;
+  assert.ok(Date.now() < deadline, 'Owned process must be gone');
+  await delay(20);
+  return assertProcessGone(pid, deadline);
+};

@@ -1,4 +1,5 @@
-import { execa } from 'execa';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 
 import type { ProcessLaunch } from '../../../../execution/process/port.js';
 
@@ -18,29 +19,28 @@ export const runWindowsBootstrap = async (): Promise<void> => {
       process.exit(1);
     });
   });
-  const child = execa(launch.command, [...launch.args], {
+  // Discovery already resolves the executable and Node entrypoint. Node's literal
+  // spawn preserves ENOENT; Execa may launch cmd.exe for a missing Windows command.
+  const child = spawn(launch.command, [...launch.args], {
     cwd: launch.cwd,
     env: launch.environment ?? {},
-    extendEnv: false,
     stdio: 'inherit',
     shell: false,
-    reject: false,
   });
-  child.nodeChildProcess.once('spawn', () => process.send?.({ type: 'spawned' }));
-  const result = await child;
-  if (result.failed && result.code !== undefined) {
-    process.send?.({
-      type: 'failed',
-      message: result.originalMessage,
-      code: result.cause instanceof Error && 'code' in result.cause ? result.cause.code : undefined,
-    });
-  } else {
+  child.once('spawn', () => process.send?.({ type: 'spawned' }));
+  try {
+    await once(child, 'exit');
     process.send?.({
       type: 'exit',
-      exitCode: result.exitCode ?? null,
-      signal: result.signal ?? null,
+      exitCode: child.exitCode,
+      signal: child.signalCode,
+    });
+  } catch (error) {
+    process.send?.({
+      type: 'failed',
+      message: error instanceof Error ? error.message : 'Provider spawn failed.',
+      code: error instanceof Error && 'code' in error ? error.code : undefined,
     });
   }
-  process.exitCode = result.failed ? result.exitCode || 1 : 0;
   process.disconnect?.();
 };

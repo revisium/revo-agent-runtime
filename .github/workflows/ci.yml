@@ -64,6 +64,11 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' && matrix.os == 'ubuntu-24.04' }}
         run: pnpm test:cov
 
+      - name: Native runtime tests
+        timeout-minutes: 6
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && matrix.os != 'ubuntu-24.04' }}
+        run: pnpm exec vitest run
+
       - name: Architecture verification
         timeout-minutes: 2
         if: ${{ !cancelled() && steps.install.outcome == 'success' && matrix.os == 'ubuntu-24.04' }}
@@ -71,7 +76,7 @@ jobs:
 
       - name: Packed consumer verification
         timeout-minutes: 4
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && matrix.os == 'ubuntu-24.04' }}
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm verify:package
 
       - name: SonarQube branch scan

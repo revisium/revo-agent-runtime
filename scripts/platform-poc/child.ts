@@ -1,44 +1,32 @@
 import { fork, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
+import { createInterface } from 'node:readline';
 
-if (!process.send) throw new Error('Fixture requires IPC');
-const send = process.send.bind(process);
 let descendant: ChildProcess | undefined;
 
-// Failure-only harness teardown. Normal SIGTERM below must prove group delivery.
-const emergencyCleanup = async (): Promise<void> => {
-  if (descendant && descendant.exitCode === null && descendant.signalCode === null) {
-    const exited = once(descendant, 'exit');
-    descendant.kill('SIGKILL');
-    await exited;
-  }
-  process.exit(70);
-};
-
-process.on('message', (message: unknown) => {
-  if (message === 'cleanup') void emergencyCleanup();
-  if (message === 'ping') send('alive');
-  if (message === 'spawn') {
-    // Ownership admission has completed before this cooperative fixture forks.
-    const child = fork(import.meta.filename, ['descendant'], { execArgv: [] });
-    descendant = child;
-    child.once('message', () => {
-      if (child.pid === undefined) throw new Error('Missing descendant PID');
-      send(child.pid);
-    });
-  }
-});
-process.on('disconnect', () => {
-  void emergencyCleanup();
-});
-setTimeout(() => {
-  void emergencyCleanup();
-}, 15_000).unref();
 process.on('SIGTERM', () => {
-  if (!descendant || descendant.exitCode !== null || descendant.signalCode !== null)
+  if (!descendant || descendant.exitCode !== null || descendant.signalCode !== null) {
     process.exit(0);
-  // The group signal reaches both processes; reap the child before exiting.
+  }
+  // A group signal reaches both processes. Reap the descendant before exiting.
   void once(descendant, 'exit').then(() => process.exit(0));
 });
-send('ready');
-setInterval(() => {}, 1_000);
+
+if (process.argv[2] === 'descendant') {
+  process.send?.('ready');
+  setInterval(() => {}, 1_000);
+} else {
+  const reply = (value: unknown) => process.stdout.write(JSON.stringify(value) + '\n');
+  const input = createInterface({ input: process.stdin });
+  input.on('line', (command) => {
+    if (command === 'ping') reply('alive');
+    if (command === 'spawn') {
+      descendant = fork(import.meta.filename, ['descendant'], {
+        execArgv: [],
+        stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
+      });
+      descendant.once('message', () => reply(descendant?.pid));
+    }
+  });
+  reply('ready');
+}

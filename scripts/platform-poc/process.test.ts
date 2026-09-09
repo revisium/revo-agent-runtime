@@ -3,59 +3,74 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { execa } from 'execa';
-import koffi from 'koffi';
 
-import { ProcessFixture } from './fixture.js';
-import { createPlatform } from './platform.js';
+import { nodeRecoveredProcessInspector } from '../../src/platform/node/process/recovered-process.js';
+import { nodeProcessLauncher } from '../../src/platform/node/process/spawner.js';
+import { assertProcessGone, ProcessFixture, processExists } from './fixture.js';
 
-console.info({
-  platform: process.platform,
-  arch: process.arch,
-  node: process.version,
-  ffi: koffi.version,
-});
+console.info({ platform: process.platform, arch: process.arch, node: process.version });
 
-const platform = await createPlatform();
-
-await test('a failed OS spawn rejects without terminating its caller', async () => {
-  const result = await execa(
-    process.execPath,
-    ['--import', 'tsx', fileURLToPath(new URL('./spawn-failure.ts', import.meta.url))],
-    { killDescendants: true, reject: false, timeout: 5_000 },
-  );
-
-  assert.equal(result.failed, false, result.message);
-});
-
-await test('native identity is stable while the same process is alive', async () => {
-  const first = await platform.inspect(process.pid);
-  assert.ok(first);
-  assert.deepEqual(await platform.inspect(process.pid), first);
-});
-
-await test('owned shutdown terminates the admitted parent and its child', async () => {
-  const fixture = await ProcessFixture.start(platform);
-  try {
-    const descendant = await fixture.spawnDescendant();
-    assert.ok(await platform.inspect(descendant));
-
-    await fixture.stop();
-
-    assert.equal(await platform.inspect(fixture.identity.pid), undefined);
-    assert.equal(await platform.inspect(descendant), undefined);
-  } finally {
-    await fixture.close();
-  }
-});
-
-await test('a stale identity cannot terminate a live process', async () => {
-  const fixture = await ProcessFixture.start(platform);
-  try {
-    await assert.rejects(
-      fixture.stop({ ...fixture.identity, token: 'a-different-process' }),
-      /Process identity does not match/,
+await test(
+  'a failed OS spawn rejects without terminating its caller',
+  { timeout: 10_000 },
+  async () => {
+    const result = await execa(
+      process.execPath,
+      ['--import', 'tsx', fileURLToPath(new URL('./spawn-failure.ts', import.meta.url))],
+      { killDescendants: true, reject: false, timeout: 5_000 },
     );
+    assert.equal(result.failed, false, result.message);
+  },
+);
 
+await test(
+  'the production launcher accepts a short-lived executable',
+  { timeout: 10_000 },
+  async () => {
+    const child = await nodeProcessLauncher.start(
+      {
+        command: process.execPath,
+        args: ['--version'],
+        cwd: process.cwd(),
+      },
+      AbortSignal.timeout(5_000),
+    );
+    try {
+      await child.transport.input.close();
+      const text = await new Response(child.transport.output).text();
+      assert.equal((await child.completion).exitCode, 0);
+      assert.equal(text.trim(), process.version);
+    } finally {
+      assert.equal((await child.terminateAndReap()).status, 'confirmed');
+    }
+  },
+);
+
+await test(
+  'owned shutdown terminates the admitted parent and its child',
+  { timeout: 10_000 },
+  async () => {
+    const fixture = await ProcessFixture.start();
+    try {
+      const descendant = await fixture.spawnDescendant();
+      assert.equal(processExists(descendant), true);
+      await fixture.stop();
+      await assertProcessGone(fixture.identity.pid);
+      await assertProcessGone(descendant);
+    } finally {
+      await fixture.close();
+    }
+  },
+);
+
+await test('a stale identity cannot terminate a live process', { timeout: 10_000 }, async () => {
+  const fixture = await ProcessFixture.start();
+  try {
+    const outcome = await nodeRecoveredProcessInspector.inspectAndReconcileRecoveredProcess(
+      { ...fixture.identity, fingerprint: 'sha256:a-different-process' },
+      AbortSignal.timeout(5_000),
+    );
+    assert.equal(outcome.status, 'identity_mismatch');
     assert.equal(await fixture.ping(), 'alive');
   } finally {
     await fixture.close();

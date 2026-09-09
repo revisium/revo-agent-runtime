@@ -3,22 +3,19 @@ import { createHash } from 'node:crypto';
 import type { ProcessIdentity } from '../../../../execution/process/port.js';
 import { withNativeResource } from '../../native-resource.js';
 
-// NOSONAR S6564: native Win32 handles are named for readability at this boundary.
-type Handle = bigint;
-
 export interface WindowsProcessNative {
   lastError(): number;
-  closeHandle(handle: Handle): number;
-  openProcess(access: number, inherit: number, pid: number): Handle | null;
-  getTimes(handle: Handle, created: Buffer, exited: Buffer, kernel: Buffer, user: Buffer): number;
-  waitForProcess(handle: Handle, timeout: number): number;
-  createJob(attributes: null, name: string): Handle | null;
-  openJob(access: number, inherit: number, name: string): Handle | null;
-  setJob(job: Handle, kind: number, data: Buffer, size: number): number;
-  queryJob(job: Handle, kind: number, data: Buffer, size: number, returned: null): number;
-  assignJob(job: Handle, process: Handle): number;
-  isInJob(process: Handle, job: Handle, result: Buffer): number;
-  terminateJob(job: Handle, code: number): number;
+  closeHandle(handle: bigint): number;
+  openProcess(access: number, inherit: number, pid: number): bigint | null;
+  getTimes(handle: bigint, created: Buffer, exited: Buffer, kernel: Buffer, user: Buffer): number;
+  waitForProcess(handle: bigint, timeout: number): number;
+  createJob(attributes: null, name: string): bigint | null;
+  openJob(access: number, inherit: number, name: string): bigint | null;
+  setJob(job: bigint, kind: number, data: Buffer, size: number): number;
+  queryJob(job: bigint, kind: number, data: Buffer, size: number, returned: null): number;
+  assignJob(job: bigint, process: bigint): number;
+  isInJob(process: bigint, job: bigint, result: Buffer): number;
+  terminateJob(job: bigint, code: number): number;
   killOnCloseLimits(): Buffer;
   accountingBuffer(): Buffer;
   activeProcesses(data: Buffer): number;
@@ -31,7 +28,7 @@ const withProcess = <T>(
   native: WindowsProcessNative,
   pid: number,
   access: number,
-  use: (handle: Handle) => T,
+  use: (handle: bigint) => T,
 ): T => {
   const handle = native.openProcess(access, 0, pid);
   if (handle === null) {
@@ -82,7 +79,7 @@ export interface WindowsJob {
   close(): void;
 }
 
-const ownedJob = (native: WindowsProcessNative, handle: Handle): WindowsJob => {
+const ownedJob = (native: WindowsProcessNative, handle: bigint): WindowsJob => {
   let closed = false;
   let closeFailure: Error | undefined;
   const requireOpen = (): void => {

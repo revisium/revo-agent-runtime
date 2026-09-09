@@ -81,7 +81,7 @@ const bootIdentity = (): string => {
   if (sysctl('kern.bootsessionuuid', output, size, null, 0) !== 0)
     throw new Error(`Cannot read boot identity: errno=${koffi.errno()}`);
   const raw = output.subarray(0, Number(size.readBigUInt64LE())).toString('utf8');
-  const value = raw.slice(0, raw.indexOf('\0') < 0 ? raw.length : raw.indexOf('\0'));
+  const value = raw.split('\0', 1)[0];
   if (!value) throw new Error('Empty boot identity');
   return value;
 };
