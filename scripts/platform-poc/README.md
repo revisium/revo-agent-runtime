@@ -45,14 +45,27 @@ is involved.
 
 ## CI evidence
 
-`ci.yml` runs this experiment and the full existing `pnpm verify` on real
-Ubuntu x64, macOS arm64, and Windows x64 runners. Experiment, full verification, and package diagnostics have explicit step deadlines.
-Matrix fail-fast is disabled;
-failures remain failures. Full verification runs even if the experiment fails.
-Package verification is also attempted after an earlier failure so platform
-tooling issues remain visible. Sonar analysis stays on Linux to avoid competing
-analyses of the same revision. The existing required `verify` check aggregates
-all native jobs, so a failed platform cannot leave the required check green.
+`ci.yml` exposes the gates from `pnpm verify` as separate steps. Tests with coverage
+and packed-consumer verification run on real Ubuntu x64, macOS arm64, and Windows
+x64 runners. Static checks, architecture, and Sonar run once on Linux. Matrix
+fail-fast is disabled; independent gates run after earlier failures. The existing
+required `verify` check aggregates all native jobs, so a failed platform cannot
+leave the required check green.
+
+The macOS test step temporarily uses `diagnose-tests.ts`: verbose and hanging-process
+reporters, a process snapshot and Node diagnostic report after one minute, and
+an Execa timeout after four minutes. Execa terminates the test process group;
+separately detached runtime fixtures can escape that best-effort cleanup. The
+outer step deadline remains six minutes. Reports exclude environment variables
+and network diagnostics; process snapshots omit command arguments. Artifacts
+are uploaded after the test step, when the runner still responds, and retained
+for three days. A diagnostic failure never turns failed tests into a pass.
+
+For a narrowed diagnostic run, append ordinary Vitest arguments:
+
+```sh
+node --import tsx scripts/platform-poc/diagnose-tests.ts test/unit/execution/process
+```
 
 Existing runtime failures on macOS/Windows are baseline findings, not passing
 support gates. Additional architectures and production integration follow only
