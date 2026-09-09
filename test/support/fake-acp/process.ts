@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { renameSync, writeFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { PassThrough, Readable, Writable } from 'node:stream';
 
 import * as acp from '@agentclientprotocol/sdk';
@@ -92,7 +92,7 @@ process.stdin.on('data', (chunk: Buffer) => inboundChunks.push(chunk.toString('u
 protocolOutput.on('data', (chunk: Buffer) => {
   outboundChunks.push(chunk.toString('utf8'));
   // Persist before forwarding: Windows Job termination bypasses exit hooks.
-  if (traceFile !== undefined && closeReceived) writeFileSync(traceFile, trace(false), 'utf8');
+  if (closeReceived) writeTrace();
 });
 protocolOutput.pipe(process.stdout);
 
@@ -114,21 +114,23 @@ const frames = (chunks: readonly string[]): readonly unknown[] =>
 const trace = (exited: boolean): string =>
   `${JSON.stringify({ cancelCalls, cancelReceived, closeCalls, closeReceived, exited, inbound: frames(inboundChunks), outbound: frames(outboundChunks) })}\n`;
 
-const writeTrace = async (): Promise<void> => {
+const writeTrace = (exited = false): void => {
   if (traceFile === undefined) return;
-  await writeFile(traceFile, trace(false), 'utf8');
+  const temporary = `${traceFile}.tmp`;
+  writeFileSync(temporary, trace(exited), 'utf8');
+  renameSync(temporary, traceFile);
 };
 
 process.on('exit', () => {
   // Windows Job termination can interrupt an exit-hook write after truncation.
   // The close response already persisted the complete trace before being forwarded.
   if (traceFile === undefined || process.platform === 'win32') return;
-  writeFileSync(traceFile, trace(true), 'utf8');
+  writeTrace(true);
 });
 
 process.on('SIGTERM', () => {
   if (mode === 'stubborn-descendant') return;
-  if (traceFile !== undefined) writeFileSync(traceFile, trace(true), 'utf8');
+  writeTrace(true);
   process.exit(0);
 });
 
@@ -191,7 +193,7 @@ acp
     cancelCalls += 1;
     pendingSessionPrompt?.resolve({ stopReason: 'cancelled' });
     pendingSessionPrompt = undefined;
-    await writeTrace();
+    writeTrace();
   })
   .onRequest(acp.methods.agent.session.prompt, async (context) => {
     if (readyFile !== undefined) writeFileSync(readyFile, 'ready\n', 'utf8');
@@ -362,10 +364,10 @@ acp
         }
       : { stopReason: 'end_turn' };
   })
-  .onRequest(acp.methods.agent.session.close, async () => {
+  .onRequest(acp.methods.agent.session.close, () => {
     closeReceived = true;
     closeCalls += 1;
-    await writeTrace();
+    writeTrace();
     return {};
   })
   .connect(stream);
