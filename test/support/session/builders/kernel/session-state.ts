@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import type { SessionState } from '../../../../../src/execution/session/kernel/model/session-state.js';
 
 const limits = {
@@ -38,7 +40,7 @@ export const idleSessionState = (): Extract<SessionState, { readonly status: 'id
   nextEffectSequence: 10,
   nextEventSequence: 3,
   openedAt: '2026-03-21T00:00:01.000Z',
-  outputDirectory: '/output',
+  outputDirectory: resolve('/output'),
   pin,
   process: {
     fingerprint: 'fingerprint',

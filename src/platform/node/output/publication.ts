@@ -10,6 +10,8 @@ import type {
 } from '../../../execution/output/publication.js';
 
 const encoder = new TextEncoder();
+// Windows FlushFileBuffers requires write access, including for directory metadata.
+const directoryOpenFlags = process.platform === 'win32' ? 'r+' : 'r';
 
 interface ClosableOutputHandle {
   close(): Promise<void>;
@@ -35,7 +37,8 @@ export const nodeOutputPublicationSystem: NodeOutputPublicationSystem = Object.f
   link,
   open: async (path: string, flags: 'wx', mode: number): Promise<OutputFileHandle> =>
     open(path, flags, mode),
-  openDirectory: async (path: string): Promise<OutputDirectoryHandle> => open(path, 'r'),
+  openDirectory: async (path: string): Promise<OutputDirectoryHandle> =>
+    open(path, directoryOpenFlags),
   unlink,
 });
 

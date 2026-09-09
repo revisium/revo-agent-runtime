@@ -1,15 +1,13 @@
+import type { ActiveProcessIdentity } from '../../contracts/manager/core.js';
+
 /** Portable execution-process contracts implemented by platform adapters. */
 export interface ProcessExit {
   readonly exitCode: number | null;
   readonly signal: string | null;
 }
 
-export interface ProcessIdentity {
-  readonly pid: number;
-  readonly processGroupId: number;
-  readonly fingerprint: string;
-  readonly startedAt: string;
-}
+export type ProcessIdentity = ActiveProcessIdentity;
+export type ProcessGroupIdentity = Exclude<ProcessIdentity, { readonly platform: 'win32' }>;
 
 export type ProcessCleanupOutcome =
   | { readonly status: 'confirmed'; readonly exit: ProcessExit }
@@ -38,6 +36,12 @@ export interface ProcessSpawner {
   start(launch: ProcessLaunch, signal: AbortSignal): Promise<OwnedProcess>;
 }
 
+/** Ownership for bounded probes which need no durable, live process identity. */
+export type ProcessRun = Omit<OwnedProcess, 'identity'>;
+export interface ProcessLauncher {
+  start(launch: ProcessLaunch, signal: AbortSignal): Promise<ProcessRun>;
+}
+
 export type RecoveredProcessReconciliation =
   | { readonly status: 'absent' }
   | { readonly status: 'identity_mismatch' }
@@ -53,8 +57,11 @@ export interface RecoveredProcessInspector {
 }
 
 export class ProcessStartError extends Error {
-  constructor(readonly cleanup: 'confirmed' | 'uncertain') {
-    super('Owned process start failed.');
+  constructor(
+    readonly cleanup: 'confirmed' | 'uncertain',
+    options?: ErrorOptions,
+  ) {
+    super('Owned process start failed.', options);
     this.name = 'ProcessStartError';
   }
 }

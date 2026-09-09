@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,7 +50,7 @@ const executableBody = (behavior: ExecutableBehavior): string => {
     case 'auth-failure':
       return "if (process.argv[2] === '--version') { console.log('@agentclientprotocol/codex-acp 1.0.0'); } else { console.error('Authorization: Bearer fixture-secret'); process.exitCode = 1; }";
     case 'environment-sensitive-version':
-      return "process.exitCode = process.argv[2] === '--version' && Object.keys(process.env).length === 0 ? 0 : 2;";
+      return "process.exitCode = process.argv[2] === '--version' && process.env.REVO_DISCOVERY_ENV_SENTINEL === undefined ? 0 : 2;";
     case 'gemini-acp':
       return systemAcpBody('--acp');
     case 'goose-version':
@@ -73,13 +73,16 @@ const executableBody = (behavior: ExecutableBehavior): string => {
 };
 
 const sourceFor = (behavior: ExecutableBehavior): string =>
-  `#!${process.execPath}\n${executableBody(behavior)}\n`;
+  `#!${process.platform === 'win32' ? '/usr/bin/env node' : process.execPath}\n${executableBody(behavior)}\n`;
 
 export const systemExecutable = async (
   behavior: ExecutableBehavior = 'version',
 ): Promise<SystemExecutableFixture> => {
-  const directory = await mkdtemp(join(tmpdir(), 'revo-system-executable-'));
-  const executable = join(directory, 'selected-agent');
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'revo-system-executable-')));
+  const executable = join(
+    directory,
+    process.platform === 'win32' ? 'selected-agent.js' : 'selected-agent',
+  );
   const link = join(directory, 'selected-agent-link');
   await writeFile(executable, sourceFor(behavior), 'utf8');
   await chmod(executable, 0o755);

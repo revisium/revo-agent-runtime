@@ -230,7 +230,7 @@
     },
     {
       "name": "execution-process-port",
-      "pattern": "^src/execution/process/port\\.ts$",
+      "pattern": "^src/execution/process/(?:port|identity)\\.ts$",
       "dependencies": ["contracts"]
     },
     {
@@ -250,7 +250,7 @@
     },
     {
       "name": "execution",
-      "pattern": "^src/execution/(?!(?:session/|process/port\\.ts$|security/(?:digest/port\\.ts$|redaction/)|output/session/publication\\.ts$)).+",
+      "pattern": "^src/execution/(?!(?:session/|process/(?:port|identity)\\.ts$|security/(?:digest/port\\.ts$|redaction/)|output/session/publication\\.ts$)).+",
       "dependencies": [
         "configuration",
         "contracts",

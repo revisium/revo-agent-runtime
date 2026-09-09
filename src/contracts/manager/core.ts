@@ -15,12 +15,22 @@ export interface AgentExecutionPin {
   readonly definitionDigest: string;
 }
 
-export interface ActiveProcessIdentity {
+interface ProcessIdentityEvidence {
   readonly pid: number;
-  readonly processGroupId: number;
   readonly fingerprint: string;
   readonly startedAt: string;
 }
+
+export type ActiveProcessIdentity = ProcessIdentityEvidence &
+  (
+    | { readonly version?: never; readonly platform?: never; readonly processGroupId: number }
+    | {
+        readonly version: 2;
+        readonly platform: 'linux' | 'darwin';
+        readonly processGroupId: number;
+      }
+    | { readonly version: 2; readonly platform: 'win32'; readonly jobName: string }
+  );
 
 export interface ActiveInvocationSnapshot {
   readonly invocationId: string;

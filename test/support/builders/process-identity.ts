@@ -1,6 +1,7 @@
 import type { ProcessIdentity } from '../../../src/execution/process/port.js';
 
-export const processIdentity = (overrides: Partial<ProcessIdentity> = {}): ProcessIdentity => ({
+type LegacyIdentity = Extract<ProcessIdentity, { readonly version?: never }>;
+export const processIdentity = (overrides: Partial<LegacyIdentity> = {}): LegacyIdentity => ({
   fingerprint: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   pid: 101,
   processGroupId: 101,

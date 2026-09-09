@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 
-import { describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import { defaultSystemExecutableProbe } from '../../../../../src/discovery/platform.js';
 import {
@@ -16,14 +16,16 @@ import {
   systemExecutable,
 } from '../../../../support/fixtures/system-executable.js';
 
+afterEach(() => vi.unstubAllEnvs());
+
 test('resolves both exact bundled ACP bridge entrypoints', () => {
   const codex = nodeDiscoveryPlatform.resolveBundledBridge(codexProviderPolicy.bridge);
   const claude = nodeDiscoveryPlatform.resolveBundledBridge(claudeProviderPolicy.bridge);
   expect(codex.available).toBe(true);
   expect(claude.available).toBe(true);
   if (!codex.available || !claude.available) throw new Error('Expected exact bundled bridges.');
-  expect(codex.entrypoint).toMatch(/codex-acp\/dist\/index\.js$/);
-  expect(claude.entrypoint).toMatch(/claude-agent-acp\/dist\/index\.js$/);
+  expect(codex.entrypoint).toMatch(/codex-acp[\\/]dist[\\/]index\.js$/);
+  expect(claude.entrypoint).toMatch(/claude-agent-acp[\\/]dist[\\/]index\.js$/);
 });
 
 test('looks up and probes system ACP commands without starting a session', async () => {
@@ -60,7 +62,8 @@ test('looks up and probes system ACP commands without starting a session', async
 });
 
 describe('explicit system override', () => {
-  test('accepts an absolute executable, probes it with an empty environment, and canonicalizes it', async () => {
+  test('probes an absolute override without inheriting application variables and canonicalizes it', async () => {
+    vi.stubEnv('REVO_DISCOVERY_ENV_SENTINEL', 'must-not-be-inherited');
     const fixture = await systemExecutable('environment-sensitive-version');
     try {
       expect(
@@ -138,12 +141,11 @@ describe('explicit system override', () => {
   });
 });
 
-test('fails closed for default Windows npm discovery but accepts an explicit canonical Node entrypoint', async () => {
+test('accepts an explicit canonical Windows Node entrypoint', async () => {
   const policy = { binName: 'fixture', command: 'fixture-agent', packageName: '@fixture/agent' };
   const fixture = await nodePackageEntrypoint(policy);
   try {
     const platform = createNodeDiscoveryPlatform('win32');
-    await expect(platform.resolveNodePackageEntrypoint(policy)).resolves.toBeUndefined();
     await expect(platform.resolveNodePackageEntrypoint(policy, fixture.packageBin)).resolves.toBe(
       fixture.entrypoint,
     );
@@ -206,4 +208,79 @@ test('discards an adjacent package lookup without a candidate', async () => {
       undefined,
     ),
   ).resolves.toBeUndefined();
+});
+
+test.each(['global', 'local'] as const)(
+  'discovers the declared Node bin beside a Windows %s npm shim without executing it',
+  async (windowsShim) => {
+    const policy = { binName: 'fixture', command: 'fixture-agent', packageName: '@fixture/agent' };
+    const fixture = await nodePackageEntrypoint(policy, 'valid', { windowsShim });
+    try {
+      const platform = createNodeDiscoveryPlatform('win32', {
+        resolveSystemExecutable: async () => fixture.packageBin,
+      });
+      await expect(platform.resolveNodePackageEntrypoint(policy)).resolves.toBe(fixture.entrypoint);
+    } finally {
+      await fixture.dispose();
+    }
+  },
+);
+
+test.each([
+  'absolute_bin',
+  'different_name',
+  'shim_directory',
+  'escape',
+  'missing_declared_bin',
+  'no_shebang',
+  'missing_bin',
+] as const)('rejects a Windows npm shim with a %s package bin', async (mutation) => {
+  const policy = { binName: 'fixture', command: 'fixture-agent', packageName: '@fixture/agent' };
+  const fixture = await nodePackageEntrypoint(policy, mutation, { windowsShim: 'global' });
+  try {
+    const platform = createNodeDiscoveryPlatform('win32', {
+      resolveSystemExecutable: async () => fixture.packageBin,
+    });
+    await expect(platform.resolveNodePackageEntrypoint(policy)).resolves.toBeUndefined();
+  } finally {
+    await fixture.dispose();
+  }
+});
+
+test('cancels a pending system version check', async () => {
+  const controller = new AbortController();
+  const result = nodeDiscoveryPlatform.probeSystemExecutable(
+    process.execPath,
+    {
+      args: ['-e', 'setInterval(() => undefined, 1000)'],
+      timeoutMs: 1000,
+    },
+    controller.signal,
+  );
+  controller.abort();
+  await expect(result).resolves.toBe(false);
+});
+
+test('rejects a system version check that exceeds its deadline', async () => {
+  await expect(
+    nodeDiscoveryPlatform.probeSystemExecutable(process.execPath, {
+      args: ['-e', 'setInterval(() => undefined, 1000)'],
+      timeoutMs: 10,
+    }),
+  ).resolves.toBe(false);
+});
+
+test('does not associate an unrelated Windows command with an adjacent package', async () => {
+  const policy = { binName: 'fixture', command: 'fixture-agent', packageName: '@fixture/agent' };
+  const fixture = await nodePackageEntrypoint(policy, 'valid', { windowsShim: 'global' });
+  try {
+    const platform = createNodeDiscoveryPlatform('win32', {
+      resolveSystemExecutable: async () => fixture.packageBin,
+    });
+    await expect(
+      platform.resolveNodePackageEntrypoint({ ...policy, command: 'another-command' }),
+    ).resolves.toBeUndefined();
+  } finally {
+    await fixture.dispose();
+  }
 });

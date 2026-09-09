@@ -1,5 +1,5 @@
 import { mkdir, readdir, stat, symlink, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { expect, test } from 'vitest';
 
@@ -11,6 +11,7 @@ import {
   createNodeOutputClaimPlatform,
   type NodeOutputClaimSystem,
 } from '../../../../src/platform/node/output/claim.js';
+import { expectPrivateOutput } from '../../../support/assertions/private-output.js';
 import { withTemporaryDirectory } from '../../../support/assertions/temporary-directory.js';
 
 const platform = createNodeOutputClaimPlatform();
@@ -35,7 +36,7 @@ test('admits an existing workspace and atomically reserves one fresh output leaf
 
     expect(result.status).toBe('claimed');
     await expect(stat(output).then((entry) => entry.isDirectory())).resolves.toBe(true);
-    await expect(stat(output).then((entry) => entry.mode & 0o777)).resolves.toBe(0o700);
+    await expectPrivateOutput([output], 0o700);
   });
 });
 
@@ -103,7 +104,7 @@ test('prepares without mkdir and permits exactly one later output claim', async 
       },
       inspectDirectory: async () => 'directory' as const,
     },
-    { outputDirectory: '/stable/output', workspace: '/stable' },
+    { outputDirectory: resolve('/stable/output'), workspace: resolve('/stable') },
   );
 
   expect(prepared.status).toBe('prepared');
@@ -124,7 +125,7 @@ test('retains a prepared claim as uncertain when its one allowed mutation reject
       },
       inspectDirectory: async () => 'directory' as const,
     },
-    { outputDirectory: '/stable/output', workspace: '/stable' },
+    { outputDirectory: resolve('/stable/output'), workspace: resolve('/stable') },
   );
 
   if (prepared.status !== 'prepared') throw new Error('Expected prepared output.');
@@ -155,7 +156,9 @@ test('fails closed when the platform cannot determine an admission or mutation o
     stat: async () => ({ isDirectory: () => true }),
   });
 
-  await expect(claimWith(uncertain, '/stable', '/stable/output')).resolves.toEqual({
+  await expect(
+    claimWith(uncertain, resolve('/stable'), resolve('/stable/output')),
+  ).resolves.toEqual({
     status: 'uncertain',
   });
 });
@@ -172,10 +175,14 @@ test('fails closed when either directory inspection is explicitly uncertain', as
     inspectDirectory: async () => inspections[inspectionIndex++] ?? 'uncertain',
   };
 
-  await expect(claimWith(uncertainWorkspace, '/stable', '/stable/output')).resolves.toEqual({
+  await expect(
+    claimWith(uncertainWorkspace, resolve('/stable'), resolve('/stable/output')),
+  ).resolves.toEqual({
     status: 'uncertain',
   });
-  await expect(claimWith(uncertainOutputParent, '/stable', '/stable/output')).resolves.toEqual({
+  await expect(
+    claimWith(uncertainOutputParent, resolve('/stable'), resolve('/stable/output')),
+  ).resolves.toEqual({
     status: 'uncertain',
   });
 });
@@ -194,13 +201,17 @@ test('rejects an output path invalidated after parent inspection and handles rej
     },
   };
 
-  await expect(claimWith(invalidated, '/stable', '/stable/output')).resolves.toEqual({
+  await expect(
+    claimWith(invalidated, resolve('/stable'), resolve('/stable/output')),
+  ).resolves.toEqual({
     reason: 'output_path_invalid',
     status: 'rejected',
   });
-  await expect(claimWith(rejected, '/stable', '/stable/output')).resolves.toEqual({
-    status: 'uncertain',
-  });
+  await expect(claimWith(rejected, resolve('/stable'), resolve('/stable/output'))).resolves.toEqual(
+    {
+      status: 'uncertain',
+    },
+  );
 });
 
 test('maps Node directory and create errors without leaking filesystem failures', async () => {

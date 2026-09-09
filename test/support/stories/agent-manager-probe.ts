@@ -1,3 +1,5 @@
+import { resolve as resolvePath } from 'node:path';
+
 import { createAgentManager } from '../../../src/application/manager/manager.js';
 import type { AgentRef } from '../../../src/contracts/agent-definition.js';
 import type { StartAgentInvocation } from '../../../src/contracts/manager.js';
@@ -98,12 +100,12 @@ const probeDefinition = () =>
 const startRequest = (agent: AgentRef): StartAgentInvocation => ({
   agent,
   invocationId: 'fresh-probe-before-start',
-  output: { directory: '/fixture/probe-output' },
+  output: { directory: resolvePath('/fixture/probe-output') },
   parameters: {},
   permissions: {},
   prompt: 'Return a structured result.',
   result: { schema: { type: 'object' } },
-  workspace: { directory: '/fixture/workspace' },
+  workspace: { directory: resolvePath('/fixture/workspace') },
 });
 
 export interface AgentManagerProbeStory {

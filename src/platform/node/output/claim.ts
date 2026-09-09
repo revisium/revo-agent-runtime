@@ -13,7 +13,14 @@ export interface NodeOutputClaimSystem {
 }
 
 const nodeOutputClaimSystem: NodeOutputClaimSystem = Object.freeze({
-  mkdir,
+  mkdir:
+    process.platform === 'win32'
+      ? async (path: string): Promise<void> => {
+          const { createWindowsPrivateDirectory } = await import('./windows/private-directory.js');
+          const { windowsOutputNative } = await import('./windows/native.js');
+          createWindowsPrivateDirectory(path, windowsOutputNative);
+        }
+      : mkdir,
   stat,
 });
 
