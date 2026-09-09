@@ -1,7 +1,7 @@
 import type { AgentDefinition, JsonObject } from '../../../contracts/agent-definition.js';
 import type { AgentFault } from '../../../contracts/manager/core.js';
+import type { ProcessLaunch } from '../../../process/index.js';
 import type { SessionOutputPublicationTarget } from '../../output/session/publication.js';
-import type { ProcessLaunch } from '../../process/port.js';
 import type { SessionOpeningDescriptor } from '../kernel/model/opening-state.js';
 
 type SessionProcessLaunch = Omit<ProcessLaunch, 'onStdout' | 'onStderr'>;

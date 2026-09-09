@@ -1,11 +1,12 @@
-import { mkdir, stat } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 
 import type {
   DirectoryInspection,
   ExclusiveDirectoryCreation,
   OutputClaimPlatform,
 } from '../../../execution/output/claim.js';
-import { nodeErrorCode } from '../process/errors.js';
+import { nodeErrorCode } from '../../../process/resources.js';
+import { createPrivateDirectory } from './platform.js';
 
 export interface NodeOutputClaimSystem {
   stat(path: string): Promise<{ isDirectory(): boolean }>;
@@ -13,7 +14,7 @@ export interface NodeOutputClaimSystem {
 }
 
 const nodeOutputClaimSystem: NodeOutputClaimSystem = Object.freeze({
-  mkdir,
+  mkdir: createPrivateDirectory,
   stat,
 });
 

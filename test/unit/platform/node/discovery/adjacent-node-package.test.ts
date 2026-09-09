@@ -1,8 +1,13 @@
-import { expect, test } from 'vitest';
+import * as filesystem from 'node:fs';
+import { basename } from 'node:path';
+
+import { expect, test, vi } from 'vitest';
 
 import type { AdjacentNodePackagePolicy } from '../../../../../src/discovery/platform.js';
 import { resolveAdjacentNodePackage } from '../../../../../src/platform/node/discovery/adjacent-node-package.js';
 import { adjacentNodePackage } from '../../../../support/builders/adjacent-node-package.js';
+
+vi.mock('node:fs', { spy: true });
 
 const cursorLayout: AdjacentNodePackagePolicy = Object.freeze({
   command: 'agent',
@@ -13,15 +18,20 @@ const cursorLayout: AdjacentNodePackagePolicy = Object.freeze({
 test('resolves only the adjacent Cursor Node and index layout', async () => {
   const fixture = await adjacentNodePackage();
   try {
-    expect(resolveAdjacentNodePackage(cursorLayout, fixture.launcher, 'node')).toEqual({
+    expect(
+      resolveAdjacentNodePackage(cursorLayout, fixture.launcher, basename(fixture.node)),
+    ).toEqual({
       entrypoint: fixture.entrypoint,
       node: fixture.node,
     });
-    expect(resolveAdjacentNodePackage(cursorLayout, fixture.directory, 'node')).toEqual({
+    expect(
+      resolveAdjacentNodePackage(cursorLayout, fixture.directory, basename(fixture.node)),
+    ).toEqual({
       entrypoint: fixture.entrypoint,
       node: fixture.node,
     });
   } finally {
+    vi.restoreAllMocks();
     await fixture.dispose();
   }
 });
@@ -31,7 +41,9 @@ test.each(['collision', 'escaped_node', 'missing_index'] as const)(
   async (mutation) => {
     const fixture = await adjacentNodePackage(mutation);
     try {
-      expect(resolveAdjacentNodePackage(cursorLayout, fixture.launcher, 'node')).toBeUndefined();
+      expect(
+        resolveAdjacentNodePackage(cursorLayout, fixture.launcher, basename(fixture.node)),
+      ).toBeUndefined();
     } finally {
       await fixture.dispose();
     }
@@ -41,12 +53,20 @@ test.each(['collision', 'escaped_node', 'missing_index'] as const)(
 test('rejects unreadable files and missing candidates without treating them as a package', async () => {
   const fixture = await adjacentNodePackage();
   try {
-    await import('node:fs/promises').then(({ chmod }) => chmod(fixture.launcher, 0o000));
-    expect(resolveAdjacentNodePackage(cursorLayout, fixture.launcher, 'node')).toBeUndefined();
+    const access = filesystem.accessSync;
+    vi.spyOn(filesystem, 'accessSync').mockImplementation((path, mode) => {
+      if (path === fixture.launcher)
+        throw Object.assign(new Error('Read denied'), { code: 'EACCES' });
+      access(path, mode);
+    });
+    expect(
+      resolveAdjacentNodePackage(cursorLayout, fixture.launcher, basename(fixture.node)),
+    ).toBeUndefined();
     expect(
       resolveAdjacentNodePackage(cursorLayout, '/missing/cursor-agent', 'node'),
     ).toBeUndefined();
   } finally {
+    vi.restoreAllMocks();
     await fixture.dispose();
   }
 });

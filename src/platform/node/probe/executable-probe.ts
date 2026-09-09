@@ -1,8 +1,8 @@
 import { constants } from 'node:fs';
 import { access, stat } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
+import { PassThrough } from 'node:stream';
 
-import { execa } from 'execa';
 import which from 'which';
 
 import type {
@@ -12,9 +12,9 @@ import type {
   VersionProbeObservation,
   VersionProbeOverflow,
 } from '../../../execution/probe/port.js';
-import type { ProcessExit } from '../../../execution/process/port.js';
-import { createProcessCleanup } from '../process/cleanup.js';
-import { nodeErrorCode } from '../process/errors.js';
+import { ProcessStartError, type ProcessLauncher } from '../../../process/index.js';
+import { nodeProcessLauncher } from '../../../process/node.js';
+import { nodeErrorCode } from '../../../process/resources.js';
 
 export interface BoundedStream {
   readonly bytes: () => Uint8Array;
@@ -96,62 +96,76 @@ const resolveExecutable = async (command: string): Promise<ExecutableResolution>
   return Object.freeze({ executable: found, status: 'resolved' });
 };
 
-const processExit = (value: {
-  readonly exitCode?: number;
-  readonly signal?: string;
-}): ProcessExit =>
-  Object.freeze({ exitCode: value.exitCode ?? null, signal: value.signal ?? null });
-
-type ProcessCleanupFactory = typeof createProcessCleanup;
 type VersionProbeRequest = Parameters<ExecutableProbePort['startVersionProbe']>[0];
 
 const startVersionProbe = async (
   request: VersionProbeRequest,
-  cleanupProcess: ProcessCleanupFactory,
+  spawner: ProcessLauncher,
 ): Promise<RunningVersionProbe> => {
-  const child = execa(request.executable, [...request.args], {
-    buffer: false,
-    detached: true,
-    env: { ...request.environment },
-    extendEnv: false,
-    reject: false,
-    shell: request.shell,
-    stdin: 'ignore',
-    stderr: 'pipe',
-    stdout: 'pipe',
-    windowsHide: true,
-  });
-  const stdout = collectBounded(child.stdout, request.stdoutLimitBytes);
-  const stderr = collectBounded(child.stderr, request.stderrLimitBytes);
-  const exit: Promise<ProcessExit> = child.then(processExit, processExit);
-  const completion: Promise<VersionProbeObservation> = child.then(async (result) => {
-    await Promise.all([stdout.completion, stderr.completion]);
-    if (child.pid === undefined) return Object.freeze({ status: 'spawn_failed' as const });
-    return Object.freeze({
-      exitCode: result.exitCode ?? null,
-      overflow: overflowFor(stdout.overflowed(), stderr.overflowed()),
-      signal: result.signal ?? null,
-      status: 'exited' as const,
-      stderr: stderr.bytes(),
-      stdout: stdout.bytes(),
-    });
-  });
+  const stdoutStream = new PassThrough();
+  const stderrStream = new PassThrough();
+  const stdout = collectBounded(stdoutStream, request.stdoutLimitBytes);
+  const stderr = collectBounded(stderrStream, request.stderrLimitBytes);
+  const controller = new AbortController();
+  const launched = spawner.start(
+    {
+      command: request.executable,
+      args: request.args,
+      cwd: process.cwd(),
+      environment: request.environment,
+      onStdout: (bytes) => {
+        stdoutStream.write(bytes);
+      },
+      onStderr: (bytes) => {
+        stderrStream.write(bytes);
+      },
+    },
+    controller.signal,
+  );
+  const completion: Promise<VersionProbeObservation> = launched.then(
+    async (owned) => {
+      void owned.transport.input.close().catch(() => undefined);
+      // Output callbacks retain bounded evidence; drain the protocol stream without a second buffer.
+      void owned.transport.output.pipeTo(new WritableStream()).catch(() => undefined);
+      const exit = await owned.completion;
+      // Exit and pipe closure are separate OS events. Retain output through cleanup.
+      await owned.terminateAndReap();
+      stdoutStream.end();
+      stderrStream.end();
+      await Promise.all([stdout.completion, stderr.completion]);
+      return Object.freeze({
+        ...exit,
+        overflow: overflowFor(stdout.overflowed(), stderr.overflowed()),
+        status: 'exited' as const,
+        stderr: stderr.bytes(),
+        stdout: stdout.bytes(),
+      });
+    },
+    () => {
+      stdoutStream.end();
+      stderrStream.end();
+      return { status: 'spawn_failed' };
+    },
+  );
   let timeoutId!: ReturnType<typeof setTimeout>;
   const timeout = new Promise<void>((resolve) => {
     timeoutId = setTimeout(resolve, request.timeoutMs);
   });
-  void completion.finally(() => {
-    clearTimeout(timeoutId);
-  });
-  const pid = child.pid;
+  void completion.then(
+    () => clearTimeout(timeoutId),
+    () => clearTimeout(timeoutId),
+  );
   let cleanup: Promise<void> | undefined;
   const terminateAndReap = (): Promise<void> => {
     cleanup ??= (async () => {
-      if (pid === undefined) {
-        await completion;
-        return;
-      }
-      const outcome = await cleanupProcess(pid, exit)();
+      controller.abort();
+      const owned = await launched.catch((error: unknown) => {
+        if (error instanceof ProcessStartError && error.cleanup === 'uncertain')
+          throw new Error('Version probe cleanup is uncertain.', { cause: error });
+        return undefined;
+      });
+      if (owned === undefined) return;
+      const outcome = await owned.terminateAndReap();
       if (outcome.status !== 'confirmed') throw new Error('Version probe cleanup is uncertain.');
     })();
     return cleanup;
@@ -166,18 +180,11 @@ export const normalizeHostPlatform = (
   return 'other';
 };
 
-export const nodeExecutableProbe: ExecutableProbePort = Object.freeze({
-  hostPlatform: () => normalizeHostPlatform(process.platform),
-  resolveExecutable,
-  startVersionProbe: (request: VersionProbeRequest) =>
-    startVersionProbe(request, createProcessCleanup),
-});
-
-export const createNodeExecutableProbe = (
-  cleanupProcess: ProcessCleanupFactory,
-): ExecutableProbePort =>
+export const createNodeExecutableProbe = (spawner: ProcessLauncher): ExecutableProbePort =>
   Object.freeze({
     hostPlatform: () => normalizeHostPlatform(process.platform),
     resolveExecutable,
-    startVersionProbe: (request: VersionProbeRequest) => startVersionProbe(request, cleanupProcess),
+    startVersionProbe: (request: VersionProbeRequest) => startVersionProbe(request, spawner),
   });
+
+export const nodeExecutableProbe = createNodeExecutableProbe(nodeProcessLauncher);

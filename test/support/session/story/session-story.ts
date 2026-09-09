@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { resolve } from 'node:path';
 
 import { createManagedAgentSessions } from '../../../../src/application/session/management/managed-sessions.js';
 import type { AgentDescriptor } from '../../../../src/contracts/manager.js';
@@ -164,10 +165,10 @@ export const createAgentSessionStory = (options: AgentSessionStoryOptions): Agen
     runtimeFactory,
   });
   const launch = {
-    output: { directory: '/output' },
+    output: { directory: resolve('/output') },
     parameters: {},
     permissions: {},
-    workspace: { directory: '/workspace' },
+    workspace: { directory: resolve('/workspace') },
   } as const;
   const story: AgentSessionStory = {
     close: async (session) => {

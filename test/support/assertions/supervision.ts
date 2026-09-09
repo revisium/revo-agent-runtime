@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import type { AgentArgumentTemplate } from '../../../src/contracts/agent-definition.js';
 import { createSealedAgentRegistry } from '../../../src/definition/index.js';
 import {
@@ -10,7 +12,7 @@ import type {
   ProcessExit,
   ProcessLaunch,
   ProcessSpawner,
-} from '../../../src/execution/process/port.js';
+} from '../../../src/process/index.js';
 import type {
   ProtocolDriver,
   ProtocolObserver,
@@ -149,7 +151,7 @@ export const controlledSupervision = (
     prompt: 'Wait for controlled supervision.',
     resultSchema: { type: 'object' },
     wallClockTimeoutMs: options.wallClockTimeoutMs ?? 60_000,
-    workspace: '/fixture/workspace',
+    workspace: resolve('/fixture/workspace'),
   });
 
   return {

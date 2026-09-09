@@ -1,3 +1,5 @@
+import { basename } from 'node:path';
+
 import { expect, test } from 'vitest';
 
 import { ClaimedInvocationOutput } from '../../../../../src/execution/output/claim.js';
@@ -17,7 +19,7 @@ const fakeSystem = (options: FakeSystemOptions = {}) => {
   let lastLinked = '';
   const system: NodeOutputPublicationSystem = {
     link: async (_temporary, final) => {
-      const filename = final.split('/').at(-1) ?? '';
+      const filename = basename(final);
       if (options.failLink?.filename === filename)
         throw Object.assign(new Error('link failed'), {
           code: options.failLink.existing ? 'EEXIST' : 'EIO',
@@ -26,12 +28,9 @@ const fakeSystem = (options: FakeSystemOptions = {}) => {
       lastLinked = filename;
     },
     open: async (path) => {
-      const filename =
-        path
-          .split('/')
-          .at(-1)
-          ?.replace(/^\./u, '')
-          .replace(/\.revo-tmp$/u, '') ?? '';
+      const filename = basename(path)
+        .replace(/^\./u, '')
+        .replace(/\.revo-tmp$/u, '');
       if (options.failOpen === filename) throw new Error('open failed');
       return {
         close: async () => undefined,

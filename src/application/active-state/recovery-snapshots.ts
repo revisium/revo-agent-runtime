@@ -1,8 +1,8 @@
 import type { ActiveInvocationSnapshot } from '../../contracts/manager.js';
 import type { SealedAgentRegistry } from '../../definition/index.js';
+import { snapshotProcessIdentity } from '../../process/index.js';
 
 const encoder = new TextEncoder();
-const fingerprintPattern = /^sha256:[a-f0-9]{64}$/;
 const digestPattern = /^[a-f0-9]{64}$/;
 
 const exactRecord = (
@@ -32,27 +32,13 @@ const boundedText = (value: unknown, maximumBytes = 256): value is string =>
   !value.includes('\u0000') &&
   encoder.encode(value).byteLength <= maximumBytes;
 
-const validIsoTimestamp = (value: unknown): value is string => {
-  if (typeof value !== 'string') return false;
-  const time = Date.parse(value);
-  return Number.isFinite(time) && new Date(time).toISOString() === value;
-};
-
-const positiveSafeInteger = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
-
 const snapshotOne = (
   value: unknown,
   registry: SealedAgentRegistry,
 ): ActiveInvocationSnapshot | undefined => {
   const snapshot = exactRecord(value, ['invocationId', 'pin', 'process', 'state']);
   const pin = exactRecord(snapshot?.pin, ['agentId', 'agentVersion', 'definitionDigest']);
-  const process = exactRecord(snapshot?.process, [
-    'pid',
-    'processGroupId',
-    'fingerprint',
-    'startedAt',
-  ]);
+  const process = snapshotProcessIdentity(snapshot?.process);
   if (
     snapshot === undefined ||
     pin === undefined ||
@@ -62,12 +48,7 @@ const snapshotOne = (
     !boundedText(pin.agentId) ||
     !boundedText(pin.agentVersion) ||
     typeof pin.definitionDigest !== 'string' ||
-    !digestPattern.test(pin.definitionDigest) ||
-    !positiveSafeInteger(process.pid) ||
-    !positiveSafeInteger(process.processGroupId) ||
-    typeof process.fingerprint !== 'string' ||
-    !fingerprintPattern.test(process.fingerprint) ||
-    !validIsoTimestamp(process.startedAt)
+    !digestPattern.test(pin.definitionDigest)
   )
     return undefined;
   const definition = registry.get({ id: pin.agentId, version: pin.agentVersion });
@@ -79,12 +60,7 @@ const snapshotOne = (
       agentVersion: pin.agentVersion,
       definitionDigest: pin.definitionDigest,
     }),
-    process: Object.freeze({
-      pid: process.pid,
-      processGroupId: process.processGroupId,
-      fingerprint: process.fingerprint,
-      startedAt: process.startedAt,
-    }),
+    process,
     state: snapshot.state,
   });
 };

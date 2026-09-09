@@ -1,6 +1,6 @@
 import type { ActiveInvocationStateSink } from '../../contracts/manager.js';
 import type { SealedAgentRegistry } from '../../definition/index.js';
-import type { RecoveredProcessInspector } from '../../execution/process/port.js';
+import type { RecoveredProcessInspector } from '../../process/index.js';
 import { recoverySnapshots } from '../active-state/recovery-snapshots.js';
 import { beginActiveStateRecovery } from '../active-state/recovery.js';
 import { activeStateError } from '../faults/agent-faults.js';

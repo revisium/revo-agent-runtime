@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import { expect, test, vi } from 'vitest';
 
 import { createSessionOpeningPreparer } from '../../../../../src/application/session/admission/preparer.js';
@@ -44,11 +46,11 @@ const opening = (overrides: Partial<SessionOpeningDescriptor> = {}): SessionOpen
       kind: 'fresh',
       request: {
         agent: { id: definition.id, version: definition.version },
-        output: { directory: '/output/session' },
+        output: { directory: resolve('/output/session') },
         parameters: { model: 'fast' },
         permissions: { write: true },
         sessionId: 'session_01',
-        workspace: { directory: '/workspace' },
+        workspace: { directory: resolve('/workspace') },
       },
     },
     ...overrides,
@@ -135,7 +137,7 @@ test('prepares a pinned literal launch with immutable effective inputs and optio
       launch: {
         args: ['bridge.mjs'],
         command: '/usr/bin/node',
-        cwd: '/workspace',
+        cwd: resolve('/workspace'),
         environment: { TOKEN: 'secret' },
       },
       output: story.target,
@@ -146,7 +148,10 @@ test('prepares a pinned literal launch with immutable effective inputs and optio
   const withoutEnvironment = setup();
   await expect(
     withoutEnvironment.preparer.prepare(opening(), { signal: new AbortController().signal }),
-  ).resolves.toMatchObject({ status: 'prepared', value: { launch: { cwd: '/workspace' } } });
+  ).resolves.toMatchObject({
+    status: 'prepared',
+    value: { launch: { cwd: resolve('/workspace') } },
+  });
 });
 
 test('rejects a missing or stale definition pin', async () => {

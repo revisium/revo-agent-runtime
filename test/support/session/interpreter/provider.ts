@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import { validateAgentDefinition } from '../../../../src/definition/index.js';
 import type { SessionOutputPublicationTarget } from '../../../../src/execution/output/session/publication.js';
 import { SessionOutputCollector } from '../../../../src/execution/session/interpreter/output/collect.js';
@@ -47,11 +49,11 @@ export const registerProtocolSession = (
     prepared: {
       definition,
       inputs: { parameters: {}, permissions: {} },
-      launch: { args: [], command: 'agent', cwd: '/workspace' },
+      launch: { args: [], command: 'agent', cwd: resolve('/workspace') },
       output: options.output ?? {
         publish: async () => ({
           files: {
-            directory: '/output',
+            directory: resolve('/output'),
             manifest: 'session.json',
             stderr: 'stderr.log',
             stdout: 'stdout.log',

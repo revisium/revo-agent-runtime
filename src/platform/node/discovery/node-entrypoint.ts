@@ -8,7 +8,7 @@ import {
   realpathSync,
   statSync,
 } from 'node:fs';
-import { dirname, isAbsolute, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 
 import type { NodePackageEntrypointPolicy } from '../../../discovery/platform.js';
 
@@ -82,6 +82,39 @@ export const resolveNodePackageEntrypoint = (
     if (entrypoint !== packageRoot.candidate || !statSync(entrypoint).isFile()) return undefined;
     accessSync(entrypoint, constants.R_OK);
     return hasNodeShebang(entrypoint) ? entrypoint : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/** Uses known npm layout and package metadata, never the contents of a Windows shim. */
+export const resolveWindowsNodePackageEntrypoint = (
+  policy: NodePackageEntrypointPolicy,
+  candidate: string,
+): string | undefined => {
+  const direct = resolveNodePackageEntrypoint(policy, candidate);
+  if (direct !== undefined) return direct;
+  try {
+    const shim = realpathSync(candidate);
+    if (
+      basename(shim).toLowerCase() !== `${policy.command}.cmd`.toLowerCase() ||
+      !statSync(shim).isFile()
+    )
+      return undefined;
+    const directory = dirname(shim);
+    const modules =
+      basename(directory) === '.bin' && basename(dirname(directory)) === 'node_modules'
+        ? dirname(directory)
+        : join(directory, 'node_modules');
+    const root = realpathSync(join(modules, policy.packageName));
+    const manifest = readManifest(join(root, 'package.json'));
+    if (manifest?.name !== policy.packageName) return undefined;
+    const declaredBin = packageBin(manifest, policy);
+    if (declaredBin === undefined) return undefined;
+    const entrypoint = realpathSync(join(root, declaredBin));
+    const fromRoot = relative(root, entrypoint);
+    if (fromRoot === '' || fromRoot.startsWith('..') || isAbsolute(fromRoot)) return undefined;
+    return resolveNodePackageEntrypoint(policy, entrypoint);
   } catch {
     return undefined;
   }

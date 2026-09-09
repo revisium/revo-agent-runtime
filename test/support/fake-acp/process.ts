@@ -89,7 +89,11 @@ const fakeConfigurationOptions = async (): Promise<acp.SessionConfigOption[]> =>
 };
 
 process.stdin.on('data', (chunk: Buffer) => inboundChunks.push(chunk.toString('utf8')));
-protocolOutput.on('data', (chunk: Buffer) => outboundChunks.push(chunk.toString('utf8')));
+protocolOutput.on('data', (chunk: Buffer) => {
+  outboundChunks.push(chunk.toString('utf8'));
+  // Persist before forwarding: Windows Job termination bypasses exit hooks.
+  if (traceFile !== undefined && closeReceived) writeFileSync(traceFile, trace(false), 'utf8');
+});
 protocolOutput.pipe(process.stdout);
 
 const stream = acp.ndJsonStream(Writable.toWeb(protocolOutput), Readable.toWeb(process.stdin));
@@ -99,7 +103,13 @@ const frames = (chunks: readonly string[]): readonly unknown[] =>
     .join('')
     .split('\n')
     .filter((line) => line.length > 0)
-    .map((line) => JSON.parse(line) as unknown);
+    .map((line): unknown => {
+      try {
+        return JSON.parse(line) as unknown;
+      } catch {
+        return { malformedFrame: line };
+      }
+    });
 
 const trace = (exited: boolean): string =>
   `${JSON.stringify({ cancelCalls, cancelReceived, closeCalls, closeReceived, exited, inbound: frames(inboundChunks), outbound: frames(outboundChunks) })}\n`;

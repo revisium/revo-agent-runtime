@@ -1,5 +1,5 @@
+import type { ProcessSpawner } from '../../../../process/index.js';
 import type { SessionProtocolDriver } from '../../../../protocol/session/port/driver.js';
-import type { ProcessSpawner } from '../../../process/port.js';
 import type { SessionOpeningPreparer } from '../../port/opening-preparation.js';
 import type { SessionRuntimeIdentitySource } from '../../runtime/primitives/identity.js';
 import type { SessionEffectHandler } from '../shared/effect/handler.js';

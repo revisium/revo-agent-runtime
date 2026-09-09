@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+
 import { createAgentManager } from '../../../src/application/manager/manager.js';
 import type {
   ExecutionOutcome,
@@ -49,12 +51,12 @@ export class InvocationQueryStory {
         agent: { id: agentId, version: agentId === 'alpha' ? '2.0.0' : '1.0.0' },
         invocationId,
         metadata: { reader: 'query contract' },
-        output: { directory: `/fixture/output/${invocationId}` },
+        output: { directory: resolve(`/fixture/output/${invocationId}`) },
         parameters: {},
         permissions: {},
         prompt: 'Return a structured result.',
         result: { schema: { type: 'object' } },
-        workspace: { directory: '/fixture/workspace' },
+        workspace: { directory: resolve('/fixture/workspace') },
       });
     } finally {
       this.startingInvocationId = undefined;

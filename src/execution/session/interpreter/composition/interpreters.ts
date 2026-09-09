@@ -1,7 +1,7 @@
 import type { AgentSessionEventSink } from '../../../../contracts/session/events/sink.js';
 import type { ActiveAgentSessionStateSink } from '../../../../contracts/session/persistence/active-state.js';
+import type { ProcessSpawner } from '../../../../process/index.js';
 import type { SessionProtocolDriver } from '../../../../protocol/session/port/driver.js';
-import type { ProcessSpawner } from '../../../process/port.js';
 import type { Sha256Digest } from '../../../security/digest/port.js';
 import type { SessionEffect } from '../../kernel/effect/session-effect.js';
 import type { SessionOpeningPreparer } from '../../port/opening-preparation.js';

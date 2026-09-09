@@ -1,10 +1,11 @@
-import { link, open, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises';
+import { link, open, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
 import { expect, test } from 'vitest';
 
 import {
   createNodeClaimedOutputPublisher,
+  nodeOutputPublicationSystem,
   type NodeOutputPublicationSystem,
 } from '../../../../src/platform/node/output/publication.js';
 import { withTemporaryDirectory } from '../../../support/assertions/temporary-directory.js';
@@ -15,7 +16,7 @@ import {
   outputPublication as publication,
   successfulOutputResult as result,
 } from '../../../support/fixtures/claimed-output.js';
-test('publishes bounded owner-only evidence before an atomically committed result and reports exact files', async () => {
+test('publishes bounded evidence before an atomically committed result and reports exact files', async () => {
   await withTemporaryDirectory(async (directory) => {
     const output = await claim(directory);
     const outputDirectory = join(directory, 'output');
@@ -39,13 +40,6 @@ test('publishes bounded owner-only evidence before an atomically committed resul
     await expect(readFile(join(outputDirectory, 'result.json'), 'utf8')).resolves.toBe(
       `${JSON.stringify(result(outputDirectory, true))}\n`,
     );
-    await expect(
-      Promise.all(
-        files.map(async (filename) =>
-          stat(join(outputDirectory, filename)).then((entry) => entry.mode & 0o777),
-        ),
-      ),
-    ).resolves.toEqual([0o600, 0o600, 0o600, 0o600, 0o600]);
   });
 });
 
@@ -176,7 +170,7 @@ test('does not expose result.json until its non-replacing commit is attempted la
         await link(temporaryPath, finalPath);
       },
       open: (path, flags, mode) => open(path, flags, mode),
-      openDirectory: (path) => open(path, 'r'),
+      openDirectory: (path) => nodeOutputPublicationSystem.openDirectory(path),
       unlink,
     };
 

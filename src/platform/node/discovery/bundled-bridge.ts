@@ -1,9 +1,18 @@
 import assert from 'node:assert/strict';
-import { constants, existsSync, realpathSync, readFileSync, statSync, accessSync } from 'node:fs';
+import {
+  constants,
+  existsSync,
+  realpathSync as fsRealpathSync,
+  readFileSync,
+  statSync,
+  accessSync,
+} from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, parse, relative } from 'node:path';
 
 import type { BridgePackagePolicy } from '../../../discovery/platform.js';
+
+const realpathSync = fsRealpathSync.native;
 
 export type BundledBridgeResolution =
   | { readonly available: true; readonly entrypoint: string }

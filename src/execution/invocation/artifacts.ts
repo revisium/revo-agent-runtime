@@ -1,6 +1,6 @@
 import type { AgentLaunchEvidence } from '../../contracts/launch.js';
+import type { ProcessExit } from '../../process/index.js';
 import { createBoundedOutput } from '../output/bounded-output.js';
-import type { ProcessExit } from '../process/port.js';
 import type { ExecutionEvidence, InvocationExecutionRequest } from './contracts.js';
 
 const emptyOutput = (): Readonly<{ stdout: Uint8Array; stderr: Uint8Array }> =>

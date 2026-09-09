@@ -188,7 +188,9 @@ assert.deepEqual(result.launch, {
 });
 assert.equal(result.durationMs, Date.parse(result.finishedAt) - Date.parse(result.acceptedAt));
 assert.ok(result.startedAt === undefined || Date.parse(result.startedAt) >= Date.parse(result.acceptedAt));
-assert.deepEqual(result.exit, { code: null, signal: 'SIGTERM' });
+assert.deepEqual(result.exit, process.platform === 'win32'
+  ? { code: 1, signal: null }
+  : { code: null, signal: 'SIGTERM' });
 assert.deepEqual(result.files, {
   directory: outputDirectory,
   events: 'events.ndjson',
