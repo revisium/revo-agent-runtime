@@ -27,7 +27,7 @@ is bounded; sending a signal alone is not success. No provider login or API call
 is involved.
 
 A separate regression case starts the runtime spawner inside an isolated helper
-process and requests a nonexistent executable. The caller must survive and reject
+process and forces an OS spawn failure. The caller must survive and reject
 the launch without inspecting an identity. This exposed a failed-spawn `kill()`
 that could terminate the caller's process group; the runtime now awaits the
 failed launch without signaling it. This is the experiment's only production change.
@@ -58,16 +58,16 @@ fail-fast is disabled; independent gates run after earlier failures. The existin
 required `verify` check aggregates all native jobs, so a failed platform cannot
 leave the required check green.
 
-The macOS test step temporarily uses `diagnose-tests.ts`: verbose and hanging-process
-reporters, a process snapshot and Node diagnostic report after one minute, and
-an Execa timeout after four minutes. Execa terminates the test process group;
-separately detached runtime fixtures can escape that best-effort cleanup. The
-outer step deadline remains six minutes. Reports exclude environment variables
-and network diagnostics; process snapshots omit command arguments. Artifacts
-are uploaded after the test step, when the runner still responds, and retained
-for three days. A diagnostic failure never turns failed tests into a pass.
+Tests use Vitest's normal worker parallelism on each native runner. The temporary
+single-worker diagnostic setting is removed; the full suite runs once with coverage.
 
-For a narrowed diagnostic run, append ordinary Vitest arguments:
+For a manual diagnostic run, `diagnose-tests.ts` adds verbose/hanging-process
+reporters, a process snapshot and Node report after one minute, and an Execa timeout
+after four minutes. Separately detached runtime fixtures can escape Execa's
+best-effort process-group cleanup. Reports exclude environment variables and
+network diagnostics; process snapshots omit command arguments. Output is written
+to `.revisium-actions/native-diagnostics`. This heavier diagnostic path does not
+run in ordinary CI. Append ordinary Vitest arguments to narrow the run:
 
 ```sh
 node --import tsx scripts/platform-poc/diagnose-tests.ts test/unit/execution/process

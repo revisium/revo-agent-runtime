@@ -24,7 +24,7 @@ await test('a failed OS spawn rejects without terminating its caller', async () 
     { killDescendants: true, reject: false, timeout: 5_000 },
   );
 
-  assert.equal(result.failed, false, result.shortMessage);
+  assert.equal(result.failed, false, result.message);
 });
 
 await test('native identity is stable while the same process is alive', async () => {

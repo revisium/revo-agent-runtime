@@ -25,7 +25,6 @@ jobs:
     timeout-minutes: 25
     env:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      VITEST_MAX_WORKERS: 1
 
     steps:
       - name: Check out repository
@@ -62,24 +61,8 @@ jobs:
 
       - name: Tests with coverage
         timeout-minutes: 6
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && matrix.os != 'macos-15' }}
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm test:cov
-
-      - name: Diagnose macOS tests with coverage
-        timeout-minutes: 6
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && matrix.os == 'macos-15' }}
-        run: node --import tsx scripts/platform-poc/diagnose-tests.ts
-
-      - name: Upload macOS test diagnostics
-        timeout-minutes: 2
-        if: ${{ !cancelled() && steps.install.outcome == 'success' && matrix.os == 'macos-15' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: macos-test-diagnostics-${{ github.run_attempt }}
-          path: .revisium-actions/native-diagnostics
-          include-hidden-files: true
-          retention-days: 3
-          if-no-files-found: error
 
       - name: Architecture verification
         timeout-minutes: 2
