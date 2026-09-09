@@ -8,12 +8,14 @@ import type {
   AdjacentNodePackage,
   AdjacentNodePackagePolicy,
   DiscoveryPlatform,
+  InstalledCliPolicy,
   NodePackageEntrypointPolicy,
   SystemExecutableProbe,
 } from '../../../discovery/platform.js';
 import { nodeExecutableProbe } from '../probe/executable-probe.js';
 import { resolveAdjacentNodePackage } from './adjacent-node-package.js';
 import { resolveBundledBridge } from './bundled-bridge.js';
+import { installedCliExecutable } from './installed-cli.js';
 import {
   resolveNodePackageEntrypoint,
   resolveWindowsNodePackageEntrypoint,
@@ -131,6 +133,24 @@ export const createNodeDiscoveryPlatform = (
 ): DiscoveryPlatform =>
   Object.freeze({
     probeSystemExecutable,
+    resolveInstalledCli: async (
+      policy: InstalledCliPolicy,
+      override: string | undefined,
+      signal: AbortSignal | undefined,
+    ) => {
+      if (signal?.aborted) return undefined;
+      const candidate = override ?? (await dependencies.resolveSystemExecutable(policy.command));
+      if (candidate === undefined || signal?.aborted) return undefined;
+      const executable = installedCliExecutable(policy, candidate, hostPlatform);
+      if (executable === undefined) return undefined;
+      return (await probeSystemExecutable(
+        executable,
+        { args: ['--version'], timeoutMs: 5_000 },
+        signal,
+      ))
+        ? executable
+        : undefined;
+    },
     resolveAdjacentNodePackage: (
       policy: AdjacentNodePackagePolicy,
       override: string | undefined,

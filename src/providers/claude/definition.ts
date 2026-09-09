@@ -5,11 +5,9 @@ export const claudeProviderPolicy: BundledAcpProviderPolicy = Object.freeze({
   bridge: Object.freeze({
     binName: 'claude-agent-acp',
     bridgeName: '@agentclientprotocol/claude-agent-acp',
-    bridgeVersion: '0.70.0',
-    vendorDependencyRange: '0.3.232',
-    vendorName: '@anthropic-ai/claude-agent-sdk',
-    vendorVersion: '0.3.232',
   }),
+  cli: Object.freeze({ command: 'claude', packageName: '@anthropic-ai/claude-code' }),
+  cliEnvironmentVariable: 'CLAUDE_CODE_EXECUTABLE',
   detectorId: 'claude',
   displayName: 'Claude ACP',
   id: 'claude-acp',

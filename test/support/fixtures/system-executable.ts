@@ -48,7 +48,7 @@ const executableBody = (behavior: ExecutableBehavior): string => {
     case 'antigravity-version':
       return "if (process.argv[2] === '--version') { console.log('ACP server ready'); console.log('Build label: agy_acp_server_20260818_01_RC01'); } else { process.exitCode = 2; }";
     case 'auth-failure':
-      return "if (process.argv[2] === '--version') { console.log('@agentclientprotocol/codex-acp 1.0.0'); } else { console.error('Authorization: Bearer fixture-secret'); process.exitCode = 1; }";
+      return "if (process.argv[2] === '--version') { console.log('codex-cli 1.0.0'); } else { console.error('Authorization: Bearer fixture-secret'); process.exitCode = 1; }";
     case 'environment-sensitive-version':
       return "process.exitCode = process.argv[2] === '--version' && process.env.REVO_DISCOVERY_ENV_SENTINEL === undefined ? 0 : 2;";
     case 'gemini-acp':

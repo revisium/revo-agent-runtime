@@ -46,6 +46,9 @@ jobs:
         id: install
         run: pnpm install --frozen-lockfile
 
+      - name: Build ACP adapters without vendor CLIs
+        run: pnpm build:adapters
+
       - name: Static verification
         timeout-minutes: 4
         if: ${{ !cancelled() && steps.install.outcome == 'success' && matrix.os == 'ubuntu-24.04' }}
@@ -74,6 +77,11 @@ jobs:
         timeout-minutes: 4
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: pnpm verify:package
+
+      - name: Installed Codex and Claude CLI discovery
+        timeout-minutes: 5
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm smoke:installed-clis
 
       - name: SonarQube branch scan
         if: ${{ matrix.os == 'ubuntu-24.04' && env.SONAR_TOKEN != '' && github.event_name != 'pull_request' }}

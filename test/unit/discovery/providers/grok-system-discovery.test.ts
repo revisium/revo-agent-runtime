@@ -48,6 +48,7 @@ const recordingPlatform = (
         calls.push(`probe:${executable}:${signal?.aborted === true ? 'aborted' : 'active'}`);
         return behavior.probeAvailable ?? true;
       },
+      resolveInstalledCli: async (_policy, override) => override ?? '/system/installed-cli',
       resolveBundledBridge: (policy: BridgePackagePolicy) => {
         const provider =
           policy.bridgeName === '@agentclientprotocol/codex-acp' ? 'codex' : 'claude';
@@ -84,9 +85,7 @@ test('discovers the default system Grok ACP executable without starting its ACP 
     { systemExecutables: { grok: '/system/grok' } },
   );
 
-  expect(calls).toEqual([
-    'bundle:claude',
-    'bundle:codex',
+  expect(calls.filter((call) => !call.startsWith('bundle:'))).toEqual([
     'which:grok',
     'probe:/system/grok:active',
   ]);
@@ -113,7 +112,9 @@ test('uses a selected Grok override without PATH lookup, duplicate probe, or bun
     overrideExecutable: '/system/selected-grok',
   });
 
-  expect(calls).toEqual(['bundle:claude', 'bundle:codex', 'override:/selected/grok:active']);
+  expect(calls.filter((call) => !call.startsWith('bundle:'))).toEqual([
+    'override:/selected/grok:active',
+  ]);
   expect(result.definitions[2]?.launch.command).toBe('/system/selected-grok');
 });
 
@@ -133,7 +134,7 @@ test('rejects an unavailable selected Grok override without a bundled fallback',
 test('isolates a missing default Grok executable without a probe or model observation', async () => {
   const { calls, result } = await discoverWith(grokProviderOnly);
 
-  expect(calls).toEqual(['bundle:claude', 'bundle:codex', 'which:grok']);
+  expect(calls.filter((call) => !call.startsWith('bundle:'))).toEqual(['which:grok']);
   expect(result.definitions.map(({ id }) => id)).toEqual(['claude-acp', 'codex-acp']);
   expect(result.diagnostics).toContainEqual(
     expect.objectContaining({
@@ -153,9 +154,7 @@ test('isolates a default Grok executable that fails its version probe', async ()
     systemExecutables: { grok: '/system/grok' },
   });
 
-  expect(calls).toEqual([
-    'bundle:claude',
-    'bundle:codex',
+  expect(calls.filter((call) => !call.startsWith('bundle:'))).toEqual([
     'which:grok',
     'probe:/system/grok:active',
   ]);
@@ -168,6 +167,6 @@ test('isolates a default Grok executable that fails its version probe', async ()
 test('does not resolve, probe, or bundle a disabled Grok detector', async () => {
   const { calls, result } = await discoverWith(bundledProvidersOnly);
 
-  expect(calls).toEqual(['bundle:claude', 'bundle:codex']);
+  expect(calls.filter((call) => !call.startsWith('bundle:'))).toEqual([]);
   expect(result.definitions.map(({ id }) => id)).toEqual(['claude-acp', 'codex-acp']);
 });

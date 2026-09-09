@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 import * as runtime from '${packageName}';
@@ -21,113 +22,42 @@ await assert.rejects(
   (error) => error instanceof Error && 'code' in error && error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED',
 );
 
+const require = createRequire(import.meta.url);
+for (const name of ['@openai/codex', '@anthropic-ai/claude-agent-sdk', '@agentclientprotocol/codex-acp', '@agentclientprotocol/claude-agent-acp']) {
+  assert.throws(() => require.resolve(name), { code: 'MODULE_NOT_FOUND' });
+}
+const disabledDetectorIds = ['antigravity', 'cline', 'copilot', 'cursor', 'gemini', 'goose', 'grok', 'hermes', 'kilo', 'kimi', 'opencode', 'qwen', 'vibe'];
+const originalPath = process.env.PATH;
+try {
+  process.env.PATH = '';
+  const missing = await runtime.discoverAgents({ disabledDetectorIds });
+  assert.deepEqual(missing.definitions, []);
+  assert.deepEqual(missing.diagnostics.map(({ code }) => code), ['system_executable_unavailable', 'system_executable_unavailable']);
+} finally {
+  if (originalPath === undefined) delete process.env.PATH;
+  else process.env.PATH = originalPath;
+}
 const discovered = await runtime.discoverAgents({
-  disabledDetectorIds: [
-    'antigravity',
-    'cline',
-    'copilot',
-    'cursor',
-    'gemini',
-    'goose',
-    'grok',
-    'hermes',
-    'kilo',
-    'kimi',
-    'opencode',
-    'qwen',
-    'vibe',
-  ],
+  disabledDetectorIds,
+  systemExecutableOverrides: { codex: process.execPath, claude: process.execPath },
 });
 assert.deepEqual(discovered.definitions.map(({ id, version }) => [id, version]), [
-  ['claude-acp', '0.70.0'],
-  ['codex-acp', '1.7.0'],
+  ['claude-acp', '0.70.0'], ['codex-acp', '1.7.0'],
 ]);
 for (const definition of discovered.definitions) {
   assert.equal(definition.launch.command, process.execPath);
-  assert.equal(definition.launch.args.length, 1);
-  assert.deepEqual(definition.launch.versionProbe, {
-    args: ['--version'],
-    prefix: 'v',
-    stream: 'stdout',
-    timeoutMs: 1000,
-  });
+  assert.equal(definition.launch.versionProbe.command, process.execPath);
   const entrypoint = definition.launch.args[0]?.value;
   assert.equal(typeof entrypoint, 'string');
   assert.ok(isAbsolute(entrypoint));
-  const bridgeDirectory =
-    definition.id === 'codex-acp'
-      ? '@agentclientprotocol/codex-acp'
-      : '@agentclientprotocol/claude-agent-acp';
-  assert.ok(entrypoint.endsWith(join(bridgeDirectory, 'dist', 'index.js')));
-  execFileSync(process.execPath, ['--check', entrypoint], {
-    env: {},
-    shell: false,
-    stdio: 'pipe',
-  });
+  const variable = definition.id === 'codex-acp' ? 'CODEX_PATH' : 'CLAUDE_CODE_EXECUTABLE';
+  assert.equal(definition.launch.environment[variable], process.execPath);
+  const reported = execFileSync(process.execPath, [entrypoint, '--version'], { env: {}, encoding: 'utf8', shell: false }).trim();
+  assert.equal(reported, definition.id === 'codex-acp' ? '@agentclientprotocol/codex-acp ' + definition.version : definition.version);
 }
-
-const invalidOverrides = await runtime.discoverAgents({
-  disabledDetectorIds: [
-    'antigravity',
-    'cline',
-    'copilot',
-    'cursor',
-    'goose',
-    'grok',
-    'hermes',
-    'kilo',
-    'kimi',
-    'qwen',
-    'vibe',
-  ],
-  systemExecutableOverrides: {
-    claude: process.cwd(),
-    codex: 'relative-codex',
-    gemini: process.cwd(),
-    opencode: process.cwd(),
-  },
-});
-assert.deepEqual(invalidOverrides.definitions, []);
-assert.deepEqual(
-  invalidOverrides.diagnostics.map(({ code, detectorId }) => [detectorId, code]),
-  [
-    ['claude', 'system_override_unavailable'],
-    ['codex', 'system_override_unavailable'],
-    ['gemini', 'system_override_unavailable'],
-    ['opencode', 'system_override_unavailable'],
-  ],
-);
-
-const validOverrides = await runtime.discoverAgents({
-  disabledDetectorIds: [
-    'antigravity',
-    'cline',
-    'copilot',
-    'cursor',
-    'goose',
-    'grok',
-    'hermes',
-    'kilo',
-    'kimi',
-    'qwen',
-    'vibe',
-  ],
-  systemExecutableOverrides: {
-    claude: process.execPath,
-    codex: process.execPath,
-    gemini: process.execPath,
-    opencode: process.execPath,
-  },
-});
-assert.deepEqual(
-  validOverrides.definitions.map(({ launch }) => launch),
-  [
-    { command: process.execPath, args: [], versionProbe: { args: ['--version'], stream: 'stdout', timeoutMs: 1000 } },
-    { command: process.execPath, args: [], versionProbe: { args: ['--version'], prefix: '@agentclientprotocol/codex-acp ', stream: 'stdout', timeoutMs: 1000 } },
-    { command: process.execPath, args: [{ kind: 'literal', value: '--acp' }], versionProbe: { args: ['--version'], stream: 'stdout', timeoutMs: 1000 } },
-    { command: process.execPath, args: [{ kind: 'literal', value: 'acp' }], versionProbe: { args: ['--version'], stream: 'stdout', timeoutMs: 3000 } },
-  ],
-);
+const invalid = await runtime.discoverAgents({ disabledDetectorIds, systemExecutableOverrides: { claude: process.cwd(), codex: 'relative-codex' } });
+assert.deepEqual(invalid.definitions, []);
+assert.deepEqual(invalid.diagnostics.map(({ code }) => code), ['system_override_unavailable', 'system_override_unavailable']);
 
 const bridgePath = fileURLToPath(new URL('./fake-acp-bridge.mjs', import.meta.url));
 await writeFile(bridgePath, ${JSON.stringify(fakeAcpBridge)}, 'utf8');

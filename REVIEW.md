@@ -13,8 +13,9 @@ Block a change when it:
   future contracts, concrete adapters from application/execution, application
   from discovery, or otherwise violates the directed dependency map enforced
   by the architecture gate;
-- uses floating dependency ranges, peer/optional bridge dependencies, a global
-  bridge requirement, implicit `latest`, credentials, or machine-local paths;
+- uses floating dependency ranges, peer/optional adapter dependencies, a global
+  adapter requirement, bundled vendor CLIs, implicit `latest`, credentials, or
+  checked-in machine-local paths;
 - claims a local, remote, live, or package gate passed without command evidence.
 
 Apply the authoritative iteration delivery sequence in `VERIFICATION.md`; review

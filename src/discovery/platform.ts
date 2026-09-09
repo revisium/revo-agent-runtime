@@ -11,10 +11,6 @@ export const defaultSystemExecutableProbe: SystemExecutableProbe = Object.freeze
 export interface BridgePackagePolicy {
   readonly binName: string;
   readonly bridgeName: string;
-  readonly bridgeVersion: string;
-  readonly vendorDependencyRange: string;
-  readonly vendorName: string;
-  readonly vendorVersion: string;
 }
 
 export interface NodePackageEntrypointPolicy {
@@ -34,7 +30,19 @@ export interface AdjacentNodePackage {
   readonly node: string;
 }
 
+export interface InstalledCliPolicy {
+  readonly command: string;
+  readonly packageName: string;
+  readonly nativePackagePrefix?: string;
+  readonly nativeTargets?: Readonly<Record<string, string>>;
+}
+
 export interface DiscoveryPlatform {
+  resolveInstalledCli(
+    policy: InstalledCliPolicy,
+    override?: string,
+    signal?: AbortSignal,
+  ): Promise<string | undefined>;
   resolveSystemExecutable(command: string): Promise<string | undefined>;
   resolveSystemOverride(
     executable: string,

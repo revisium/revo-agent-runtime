@@ -28,6 +28,24 @@ nor interpreted. Both global npm and local `node_modules/.bin` layouts are suppo
 Version checks use an isolated child environment; operating-system bootstrap
 variables may still be present, but application variables are not inherited.
 
+Codex and Claude use packaged ACP adapters and separately installed user CLIs.
+Discovery looks up `codex`/`claude` in the backend process's `PATH`; an absolute
+`systemExecutableOverrides.codex`/`.claude` selects that vendor CLI instead.
+These two overrides no longer select an ACP adapter executable. Rediscover and
+replace persisted definitions from the earlier bundled-CLI setup when upgrading. Missing or
+unlaunchable CLIs produce diagnostics and no definition; there is no bundled CLI
+fallback. No authentication check is performed during discovery.
+
+A discovered definition binds the canonical CLI path through `launch.environment`.
+These non-secret, definition-owned variables take precedence over launch-context
+variables, including differently cased names on Windows. `launch.versionProbe.command`
+optionally selects the executable whose version is checked (by default, the launch
+command). For adapter-backed CLIs, `AgentLaunchEvidence.executable` identifies the
+Node launcher, `versionProbeExecutable` identifies the selected CLI, and
+`reportedVersion` is that CLI's output. `probeAgent()` returns the same fields.
+The definition's `version` remains the packaged ACP adapter version. CLI versions
+are observed afresh, not pinned to the dependency graph.
+
 ## Manager construction
 
 ```ts

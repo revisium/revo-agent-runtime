@@ -88,7 +88,7 @@ export const resolveNodePackageEntrypoint = (
 };
 
 /** Uses known npm layout and package metadata, never the contents of a Windows shim. */
-export const resolveWindowsNodePackageEntrypoint = (
+export const resolveWindowsPackageBin = (
   policy: NodePackageEntrypointPolicy,
   candidate: string,
 ): string | undefined => {
@@ -114,8 +114,18 @@ export const resolveWindowsNodePackageEntrypoint = (
     const entrypoint = realpathSync(join(root, declaredBin));
     const fromRoot = relative(root, entrypoint);
     if (fromRoot === '' || fromRoot.startsWith('..') || isAbsolute(fromRoot)) return undefined;
-    return resolveNodePackageEntrypoint(policy, entrypoint);
+    if (!statSync(entrypoint).isFile()) return undefined;
+    accessSync(entrypoint, constants.R_OK);
+    return entrypoint;
   } catch {
     return undefined;
   }
+};
+
+export const resolveWindowsNodePackageEntrypoint = (
+  policy: NodePackageEntrypointPolicy,
+  candidate: string,
+): string | undefined => {
+  const entrypoint = resolveWindowsPackageBin(policy, candidate);
+  return entrypoint === undefined ? undefined : resolveNodePackageEntrypoint(policy, entrypoint);
 };

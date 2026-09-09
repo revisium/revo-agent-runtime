@@ -51,8 +51,8 @@ test('resolves both exact bundled ACP bridge entrypoints', () => {
   expect(codex.available).toBe(true);
   expect(claude.available).toBe(true);
   if (!codex.available || !claude.available) throw new Error('Expected exact bundled bridges.');
-  expect(codex.entrypoint).toMatch(/codex-acp[\\/]dist[\\/]index\.js$/);
-  expect(claude.entrypoint).toMatch(/claude-agent-acp[\\/]dist[\\/]index\.js$/);
+  expect(codex.entrypoint).toMatch(/codex-acp\.mjs$/);
+  expect(claude.entrypoint).toMatch(/claude-agent-acp\.mjs$/);
 });
 
 test('looks up and probes system ACP commands without starting a session', async () => {

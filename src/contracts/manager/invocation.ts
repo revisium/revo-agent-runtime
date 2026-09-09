@@ -148,6 +148,7 @@ export interface AgentProbeAvailable {
   readonly agent: AgentRef;
   readonly definitionDigest: string;
   readonly executable: string;
+  readonly versionProbeExecutable?: string;
   readonly reportedVersion?: string;
 }
 

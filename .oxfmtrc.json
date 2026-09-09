@@ -5,7 +5,8 @@
     "coverage/**",
     "dist/**",
     "node_modules/**",
-    "test/contract/fixtures/session/public-contract/*.golden.json"
+    "test/contract/fixtures/session/public-contract/*.golden.json",
+    "adapters/**"
   ],
   "printWidth": 100,
   "singleQuote": true,

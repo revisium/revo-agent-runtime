@@ -19,6 +19,7 @@ export type AgentArgumentTemplate =
   | { readonly kind: 'permission'; readonly name: string; readonly omitIfMissing?: boolean };
 
 interface AgentVersionProbe {
+  readonly command?: string;
   readonly args: readonly string[];
   readonly stream: 'stdout' | 'stderr';
   readonly prefix?: string;
@@ -49,6 +50,7 @@ export interface AgentDefinition {
   readonly description?: string;
   readonly launch: {
     readonly command: string;
+    readonly environment?: Readonly<Record<string, string>>;
     readonly args: readonly AgentArgumentTemplate[];
     readonly versionProbe: AgentVersionProbe;
   };
