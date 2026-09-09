@@ -58,7 +58,7 @@ export const bundledBridgeDetector = (
               version: policy.version,
               environment: { [policy.cliEnvironmentVariable]: executable },
               versionProbeCommand: executable,
-              versionProbeTimeoutMs: 5_000,
+              versionProbeTimeoutMs: policy.cli.versionProbeTimeoutMs,
               ...(policy.cliVersionPrefix === undefined
                 ? {}
                 : { versionProbePrefix: policy.cliVersionPrefix }),

@@ -134,7 +134,8 @@ export const launchWindowsProcess = async (
   signal.addEventListener('abort', aborted, { once: true });
   const timeout = setTimeout(
     () => reject(new Error('Process bootstrap admission timed out.')),
-    10_000,
+    // Cold executable creation can block inside Windows for several seconds.
+    30_000,
   );
   try {
     job.assign(pid);
