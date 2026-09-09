@@ -127,7 +127,15 @@ test('a failed OS spawn never reaches identity inspection or exposes a partial o
 
   await expect(
     spawner.start(
-      { ...longRunningNode, command: join(process.cwd(), '.missing-agent-executable') },
+      {
+        ...longRunningNode,
+        command: join(
+          process.cwd(),
+          process.platform === 'win32'
+            ? '.missing-agent-executable.exe'
+            : '.missing-agent-executable',
+        ),
+      },
       new AbortController().signal,
     ),
   ).rejects.toThrow();

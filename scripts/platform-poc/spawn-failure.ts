@@ -9,7 +9,7 @@ const directory = await mkdtemp(join(tmpdir(), 'revo-missing-process-'));
 // Windows can spawn cmd.exe for a missing command; a missing cwd forces OS spawn failure.
 const launch =
   process.platform === 'win32'
-    ? { command: process.execPath, args: [], cwd: join(directory, 'missing') }
+    ? { command: join(directory, 'missing.exe'), args: [], cwd: directory }
     : { command: join(directory, 'missing'), args: [], cwd: directory };
 let inspections = 0;
 const spawner = createNodeProcessSpawner(async () => {
