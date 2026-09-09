@@ -3,10 +3,12 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 
 import { defaultSystemExecutableProbe } from '../../../../../src/discovery/platform.js';
+import { ProcessStartError } from '../../../../../src/execution/process/port.js';
 import {
   createNodeDiscoveryPlatform,
   nodeDiscoveryPlatform,
 } from '../../../../../src/platform/node/discovery/platform.js';
+import { nodeProcessLauncher } from '../../../../../src/platform/node/process/spawner.js';
 import { claudeProviderPolicy } from '../../../../../src/providers/claude/definition.js';
 import { codexProviderPolicy } from '../../../../../src/providers/codex/definition.js';
 import { adjacentNodePackage } from '../../../../support/builders/adjacent-node-package.js';
@@ -16,7 +18,32 @@ import {
   systemExecutable,
 } from '../../../../support/fixtures/system-executable.js';
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
+
+test('does not advertise an executable whose probe cleanup is uncertain', async () => {
+  vi.spyOn(nodeProcessLauncher, 'start').mockRejectedValueOnce(new ProcessStartError('uncertain'));
+
+  await expect(
+    nodeDiscoveryPlatform.probeSystemExecutable(process.execPath, defaultSystemExecutableProbe),
+  ).resolves.toBe(false);
+});
+
+test('does not look up an npm entrypoint after cancellation', async () => {
+  const lookup = vi.fn(async () => undefined);
+  const platform = createNodeDiscoveryPlatform('linux', { resolveSystemExecutable: lookup });
+
+  await expect(
+    platform.resolveNodePackageEntrypoint(
+      { binName: 'fixture', command: 'fixture', packageName: '@fixture/agent' },
+      undefined,
+      AbortSignal.abort(),
+    ),
+  ).resolves.toBeUndefined();
+  expect(lookup).not.toHaveBeenCalled();
+});
 
 test('resolves both exact bundled ACP bridge entrypoints', () => {
   const codex = nodeDiscoveryPlatform.resolveBundledBridge(codexProviderPolicy.bridge);

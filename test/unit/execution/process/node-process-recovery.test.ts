@@ -1,7 +1,52 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 
 import { type ProcessGroupSystem } from '../../../../src/platform/node/process/cleanup.js';
-import { createNodeRecoveredProcessInspector } from '../../../../src/platform/node/process/recovered-process.js';
+import {
+  createNodeRecoveredProcessInspector,
+  nodeRecoveredProcessInspector,
+} from '../../../../src/platform/node/process/recovered-process.js';
+
+const windowsIdentity = {
+  version: 2,
+  platform: 'win32',
+  pid: 2_147_483_647,
+  jobName: 'revo-00000000-0000-0000-0000-000000000000',
+  fingerprint: `sha256:${'0'.repeat(64)}`,
+  startedAt: '2026-01-01T00:00:00.000Z',
+} as const;
+
+test('POSIX recovery never inspects a Windows process identity', async () => {
+  const inspect = vi.fn(async (pid: number) => confirmedIdentity(pid));
+  const recovery = createNodeRecoveredProcessInspector(inspect);
+
+  await expect(
+    recovery.inspectAndReconcileRecoveredProcess(windowsIdentity, AbortSignal.timeout(1000)),
+  ).resolves.toEqual({ status: 'inconclusive' });
+  expect(inspect).not.toHaveBeenCalled();
+});
+
+test('platform routing rejects foreign process identities before native inspection', async () => {
+  const identity =
+    process.platform === 'win32'
+      ? { ...confirmedIdentity(2_147_483_647), version: 2 as const, platform: 'darwin' as const }
+      : windowsIdentity;
+
+  await expect(
+    nodeRecoveredProcessInspector.inspectAndReconcileRecoveredProcess(
+      identity,
+      AbortSignal.timeout(1000),
+    ),
+  ).resolves.toEqual({ status: 'inconclusive' });
+});
+
+test('legacy process identities are reconciled only on Linux', async () => {
+  await expect(
+    nodeRecoveredProcessInspector.inspectAndReconcileRecoveredProcess(
+      confirmedIdentity(2_147_483_647),
+      AbortSignal.timeout(1000),
+    ),
+  ).resolves.toEqual({ status: process.platform === 'linux' ? 'absent' : 'inconclusive' });
+});
 
 const confirmedIdentity = (pid: number) => ({
   fingerprint: 'sha256:fixture',
