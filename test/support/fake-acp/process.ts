@@ -11,6 +11,7 @@ import { resultTextForMode } from './result.js';
 const { configurationStateFile, descendantPidFile, mode, readyFile, traceFile } = fakeAcpOptions();
 const inboundChunks: string[] = [];
 const outboundChunks: string[] = [];
+const stderrChunks: string[] = [];
 const protocolOutput = new PassThrough();
 let closeReceived = false;
 let cancelReceived = false;
@@ -111,17 +112,17 @@ const frames = (chunks: readonly string[]): readonly unknown[] =>
       }
     });
 
-const trace = (exited: boolean): string =>
-  `${JSON.stringify({ cancelCalls, cancelReceived, closeCalls, closeReceived, exited, inbound: frames(inboundChunks), outbound: frames(outboundChunks) })}\n`;
+const trace = (exited: boolean, exitCode?: number): string =>
+  `${JSON.stringify({ cancelCalls, cancelReceived, closeCalls, closeReceived, exited, ...(exitCode === undefined ? {} : { exitCode }), inbound: frames(inboundChunks), outbound: frames(outboundChunks), stderr: stderrChunks })}\n`;
 
-const writeTrace = (exited = false): void => {
+const writeTrace = (exited = false, exitCode?: number): void => {
   if (traceFile === undefined) return;
   const temporary = `${traceFile}.tmp`;
-  writeFileSync(temporary, trace(exited), 'utf8');
+  writeFileSync(temporary, trace(exited, exitCode), 'utf8');
   renameSync(temporary, traceFile);
 };
 
-process.on('exit', () => writeTrace(true));
+process.on('exit', (code) => writeTrace(true, code));
 
 process.on('SIGTERM', () => {
   if (mode === 'stubborn-descendant') return;
@@ -192,6 +193,23 @@ acp
   })
   .onRequest(acp.methods.agent.session.prompt, async (context) => {
     if (readyFile !== undefined) writeFileSync(readyFile, 'ready\n', 'utf8');
+    if (mode === 'rpc-error') {
+      const frame = {
+        error: {
+          code: -32042,
+          data: {
+            provider: { name: 'claude', error: { message: 'nested provider failure' } },
+          },
+          message: 'Provider rejected the prompt.',
+        },
+        id: context.requestId,
+        jsonrpc: '2.0',
+      };
+      const serialized = `${JSON.stringify(frame)}\n`;
+      protocolOutput.write(serialized.slice(0, 17));
+      protocolOutput.write(serialized.slice(17), () => process.exit(0));
+      return new Promise<never>(() => undefined);
+    }
     if (mode === 'malformed') {
       protocolOutput.write('{not-json}\n', () => process.exit(0));
       return new Promise<never>(() => undefined);
@@ -342,7 +360,12 @@ acp
         },
       });
     }
-    if (mode === 'literal-secret-result') process.stderr.write('stderr literal-secret\n');
+    if (mode === 'literal-secret-result') {
+      const stderr = 'stderr API_KEY=private-secret\n';
+      stderrChunks.push(stderr.slice(0, 12), stderr.slice(12));
+      process.stderr.write(stderr.slice(0, 12));
+      process.stderr.write(stderr.slice(12));
+    }
     const resultText = resultTextForMode(mode);
     if (mode !== 'missing-result')
       await context.client.notify(acp.methods.client.session.update, {
