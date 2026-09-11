@@ -28,8 +28,8 @@ test('inspects live session options and applies an explicit configuration before
         currentModel: 'provider-a/alpha',
         currentProvider: { id: 'provider-a', name: 'Provider A' },
         providers: [
-          { id: 'provider-a', models: [{ value: 'provider-a/alpha' }] },
-          { id: 'provider-b', models: [{ value: 'provider-b/beta' }] },
+          { id: 'provider-a', models: [{ value: 'provider-a/alpha', name: 'Alpha' }] },
+          { id: 'provider-b', models: [{ value: 'provider-b/beta', name: 'Beta' }] },
         ],
       },
       options: [
@@ -37,7 +37,7 @@ test('inspects live session options and applies an explicit configuration before
         { category: 'thought_level', currentValue: 'medium', id: 'reasoning_effort' },
         { currentValue: true, id: 'fast', type: 'boolean' },
       ],
-      schemaVersion: 'agent-configuration-catalog/v1',
+      schemaVersion: 'agent-configuration-catalog/v2',
     });
     expect(result).toMatchObject({ status: 'succeeded' });
     expect(methods.filter((method) => method === 'session/set_config_option')).toHaveLength(3);

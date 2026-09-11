@@ -258,9 +258,17 @@ it does not reconstruct an agent conversation from the event journal.
 ## Configuration
 
 `inspectConfiguration()` returns an immutable
-`AgentConfigurationCatalog`: a definition pin, launch evidence, catalog
-revision, select/boolean options, and an optional model view. Select values are
-opaque strings; a provider may use an empty string as an explicit value.
+`AgentConfigurationCatalog` (`agent-configuration-catalog/v2`): a definition
+pin, launch evidence, catalog revision, select/boolean options, and an optional
+model view. Select values are opaque strings; a provider may use an empty string
+as an explicit value. The model view keeps the current session-selectable
+values separately from its provider/model catalog. Catalog entries may include
+`connected` configuration evidence; this is not a health, authentication, or
+entitlement check. ACP providers without such evidence report their known
+selectable models as connected and do not synthesize entries for unknown models.
+Known model entries retain the ordinary select-value shape (`value`, `name`,
+optional description/group) and add `connected`; OpenCode values are
+provider-qualified opaque values such as `openrouter/xai/grok`.
 
 Pass a catalog revision and explicit selections to `start()`:
 

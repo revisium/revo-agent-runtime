@@ -88,7 +88,7 @@ const configuration = await manager.inspectConfiguration({
   agent: { id: 'fake', version: '1' },
   workspace: { directory: process.cwd() },
 });
-assert.equal(configuration.schemaVersion, 'agent-configuration-catalog/v1');
+assert.equal(configuration.schemaVersion, 'agent-configuration-catalog/v2');
 assert.equal(configuration.model?.currentModel, 'packed/model');
 assert.deepEqual(configuration.options.map(({ id, currentValue }) => [id, currentValue]), [
   ['model', 'packed/model'],
