@@ -171,6 +171,33 @@ test.each([
   });
 });
 
+test('redacts configured secrets from a failed checkpoint fault', async () => {
+  const resources = createSessionInterpreterResources();
+  registerProtocolSession(
+    resources,
+    {
+      ...sessionWithCheckpoint({}),
+      checkpoint: async () => ({
+        failure: {
+          code: 'transport_failed',
+          message: 'provider rejected opaque-secret',
+          details: { provider: { message: 'opaque-secret' } },
+          retryable: false,
+        },
+        status: 'failed',
+      }),
+    },
+    { secrets: { provider: 'opaque-secret' } },
+  );
+  const recorded = recordingSessionEffectOutput();
+  createCheckpointCaptureInterpreter({ clock, digest, resources }).execute(
+    effect('checkpoint'),
+    recorded.output,
+  );
+  await flushMicrotasks(8);
+  expect(JSON.stringify(recorded.outcomes)).not.toContain('opaque-secret');
+});
+
 test.each(['throw', 'reject'] as const)('contains provider checkpoint %s failure', async (mode) => {
   const resources = createSessionInterpreterResources();
   registerProtocolSession(resources, {

@@ -1,13 +1,16 @@
 import * as acp from '@agentclientprotocol/sdk';
 
-import type {
-  ProtocolConfigurationDriver,
-  ProtocolConfigurationSession,
-  ProtocolConfigurationRequest,
+import { protocolFailureDetails } from '../../diagnostics/diagnostic.js';
+import {
+  ProtocolConfigurationError,
+  type ProtocolConfigurationDriver,
+  type ProtocolConfigurationSession,
+  type ProtocolConfigurationRequest,
 } from '../configuration-driver.js';
 import type { AcpConfigurationCompatibilityResolver } from './compatibility.js';
 import { acpConfigurationRequester } from './configuration-requester.js';
 import { acpClientCapabilities, applyAcpConfiguration } from './configuration.js';
+import { acpFailureMessage } from './failure.js';
 import { boundAcpInput } from './frame-boundary.js';
 import { AcpSessionFrameCapture } from './session-frame-capture.js';
 
@@ -59,7 +62,12 @@ const inspectAcpConfiguration = async (
       }
     });
   void connection.catch((error: unknown) => {
-    ready.reject(error);
+    ready.reject(
+      new ProtocolConfigurationError(
+        acpFailureMessage(error, 'ACP configuration inspection failed.'),
+        protocolFailureDetails(error),
+      ),
+    );
     released.resolve();
   });
   const inspected = await ready.promise;

@@ -12,6 +12,7 @@ import type {
   ProcessSpawner,
 } from '../../../../src/process/index.js';
 import type { ProtocolConfigurationDriver } from '../../../../src/protocol/configuration-driver.js';
+import { ProtocolConfigurationError } from '../../../../src/protocol/configuration-driver.js';
 import { agentDefinition } from '../../../support/builders/agent-definition.js';
 import { processIdentity } from '../../../support/builders/process-identity.js';
 import { configurationInspectionStory } from '../../../support/stories/configuration-inspection.js';
@@ -222,7 +223,7 @@ test('keeps the deadline active until a failed opening process is reaped', async
     idleTimeoutMs: 1_000,
     launch: { executable: '/fixture/agent', reportedVersion: '1.0.0' },
     maxOutputBytes: 1_024,
-    redactionSecrets: [],
+    redactionSecrets: ['inspection-secret'],
     signal: controller.signal,
     wallClockTimeoutMs: 1_000,
     workspace: '/fixture/workspace',
@@ -271,6 +272,116 @@ test('preserves structured and redacted opening diagnostics', async () => {
     status: 'failed',
   });
   expect(JSON.stringify(outcome)).not.toContain('inspection-secret');
+});
+
+test('preserves the safe structured ACP reason for configuration inspection failures', async () => {
+  const process: OwnedProcess = {
+    completion: never(),
+    identity: processIdentity(),
+    terminateAndReap: async () => ({
+      exit: { exitCode: 0, signal: null },
+      status: 'confirmed' as const,
+    }),
+    transport: { input: new WritableStream(), output: new ReadableStream() },
+  };
+  const inspector = createConfigurationInspector(
+    { start: async () => process },
+    {
+      inspect: async () =>
+        Promise.reject(
+          new ProtocolConfigurationError(
+            `Provider rejected configuration inspection-secret ${'x'.repeat(10_000)}`,
+            { error: { message: 'Provider rejected configuration.' } },
+          ),
+        ),
+    },
+    () => undefined,
+  );
+  const outcome = await inspector.inspect({
+    definition: validateAgentDefinition(agentDefinition()).definition,
+    environment: {},
+    idleTimeoutMs: 1_000,
+    launch: { executable: '/fixture/agent', reportedVersion: '1.0.0' },
+    maxOutputBytes: 1_024,
+    redactionSecrets: ['inspection-secret'],
+    signal: new AbortController().signal,
+    wallClockTimeoutMs: 1_000,
+    workspace: '/fixture/workspace',
+  });
+  expect(outcome).toMatchObject({
+    status: 'failed',
+    error: {
+      message: expect.stringContaining('Provider rejected configuration'),
+      details: {
+        diagnostic: { provider: { error: { message: 'Provider rejected configuration.' } } },
+      },
+    },
+  });
+  expect(JSON.stringify(outcome)).not.toContain('inspection-secret');
+  expect((outcome as { error?: { message?: string } }).error?.message?.length).toBeLessThanOrEqual(
+    2_048,
+  );
+
+  const largeInspector = createConfigurationInspector(
+    { start: async () => process },
+    {
+      inspect: async () =>
+        Promise.reject(
+          new ProtocolConfigurationError('Provider configuration failed.', {
+            payload: 'x'.repeat(10_000),
+          }),
+        ),
+    },
+    () => undefined,
+  );
+  const largeOutcome = await largeInspector.inspect({
+    definition: validateAgentDefinition(agentDefinition()).definition,
+    environment: {},
+    idleTimeoutMs: 1_000,
+    launch: { executable: '/fixture/agent', reportedVersion: '1.0.0' },
+    maxOutputBytes: 1_024,
+    redactionSecrets: [],
+    signal: new AbortController().signal,
+    wallClockTimeoutMs: 1_000,
+    workspace: '/fixture/workspace',
+  });
+  const diagnostic = (largeOutcome as { error?: { details?: { diagnostic?: unknown } } }).error
+    ?.details?.diagnostic;
+  expect(new TextEncoder().encode(JSON.stringify(diagnostic)).byteLength).toBeLessThanOrEqual(
+    8_192,
+  );
+});
+
+test('uses the generic message for a blank configuration failure reason', async () => {
+  const process: OwnedProcess = {
+    completion: never(),
+    identity: processIdentity(),
+    terminateAndReap: async () => ({
+      exit: { exitCode: 0, signal: null },
+      status: 'confirmed' as const,
+    }),
+    transport: { input: new WritableStream(), output: new ReadableStream() },
+  };
+  const inspector = createConfigurationInspector(
+    { start: async () => process },
+    {
+      inspect: async () => Promise.reject(new ProtocolConfigurationError('   ', {})),
+    },
+    () => undefined,
+  );
+  await expect(
+    inspector.inspect({
+      definition: validateAgentDefinition(agentDefinition()).definition,
+      environment: {},
+      idleTimeoutMs: 1_000,
+      launch: { executable: '/fixture/agent', reportedVersion: '1.0.0' },
+      maxOutputBytes: 1_024,
+      redactionSecrets: [],
+      signal: new AbortController().signal,
+      wallClockTimeoutMs: 1_000,
+      workspace: '/fixture/workspace',
+    }),
+  ).resolves.toMatchObject({ error: { message: 'Agent configuration inspection failed.' } });
 });
 
 test('maps catalog enrichment failure after confirmed cleanup', async () => {
