@@ -36,7 +36,7 @@ const catalog = {
     },
     { currentValue: true, id: 'fast', name: 'Fast', type: 'boolean' },
   ],
-  schemaVersion: 'agent-configuration-catalog/v1',
+  schemaVersion: 'agent-configuration-catalog/v2',
 } as const satisfies AgentConfigurationCatalog;
 
 test('selects an explicit supported live model and cheapest thought level', () => {

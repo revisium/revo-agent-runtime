@@ -32,10 +32,17 @@ export type AgentConfigurationOption =
   | AgentConfigurationSelectOption
   | AgentConfigurationBooleanOption;
 
+export interface AgentConfigurationKnownModel extends AgentConfigurationValue {
+  /** Configuration evidence for the provider. */
+  readonly connected: boolean;
+}
+
 export interface AgentConfigurationProviderModels {
   readonly id: string;
   readonly name: string;
-  readonly models: readonly AgentConfigurationValue[];
+  /** Configuration evidence for the provider. */
+  readonly connected: boolean;
+  readonly models: readonly AgentConfigurationKnownModel[];
 }
 
 export interface AgentConfigurationModelView {
@@ -47,7 +54,7 @@ export interface AgentConfigurationModelView {
 }
 
 export interface AgentConfigurationCatalog {
-  readonly schemaVersion: 'agent-configuration-catalog/v1';
+  readonly schemaVersion: 'agent-configuration-catalog/v2';
   readonly agent: AgentRef;
   readonly definitionDigest: string;
   readonly launch: AgentLaunchEvidence;
