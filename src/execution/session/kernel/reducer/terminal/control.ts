@@ -39,7 +39,7 @@ export const settleRunningSession = (
   intent: Exclude<TerminalIntent, { readonly outcome: 'closed' }>,
 ): SessionTransition<TerminalizingSession> => {
   let turnOutcome: AgentSessionTurnOutcome;
-  if (intent.outcome === 'timed_out') turnOutcome = { status: 'timed_out' };
+  if (intent.outcome === 'timed_out') turnOutcome = { error: intent.error, status: 'timed_out' };
   else if (intent.outcome === 'failed') turnOutcome = { error: intent.error, status: 'failed' };
   else turnOutcome = { status: 'interrupted' };
   if (state.turn.status === 'settling') {
@@ -80,6 +80,7 @@ export const settleRunningSession = (
       correlation: cancellationCorrelation,
       ...(reason === undefined ? {} : { reason }),
       providerResourceId: state.providerResourceId,
+      ...(intent.outcome === 'timed_out' ? { timedOut: true } : {}),
       timeoutMs: state.limits.operationTimeoutMs,
       turnId: state.turn.turnId,
       type: 'provider.turn.cancel',

@@ -43,14 +43,17 @@ const session: SessionProtocolSession = {
   respond: async () => ({ status: 'accepted' }),
 };
 
-const setup = (opening: SessionProtocolOpening) => {
+const setup = (opening: SessionProtocolOpening, secrets: Readonly<Record<string, string>> = {}) => {
   const resources = createSessionInterpreterResources();
-  const openingDescriptor = sessionOpeningCommand().opening;
+  const openingDescriptor = {
+    ...sessionOpeningCommand().opening,
+    environment: { secrets: Object.values(secrets), values: secrets },
+  };
   const definition = validateAgentDefinition(agentDefinition({ version: '1' })).definition;
   resources.preparations.register('preparation-1', {
     correlation: { effectId: 'prepare-effect', epoch: 1, sessionId: 'session_01' },
     opening: openingDescriptor,
-    output: new SessionOutputCollector(4_096, []),
+    output: new SessionOutputCollector(4_096, Object.values(secrets)),
     prepared: {
       definition,
       inputs: { parameters: {}, permissions: {} },
@@ -175,6 +178,27 @@ test('maps rejected and failed protocol opening settlements and contains close f
     expect(story.output.outcomes.at(-1)).toMatchObject({ type: scenario.type });
   }
   expect(close).toHaveBeenCalled();
+});
+
+test('redacts configured secrets from a rejected protocol opening diagnostic', async () => {
+  const story = setup(
+    opening(
+      Promise.resolve({
+        failure: {
+          code: 'transport_failed' as const,
+          details: { message: 'Bearer connect-secret', token: 'connect-secret' },
+          message: 'connect-secret',
+          retryable: false,
+        },
+        status: 'failed' as const,
+      }),
+    ),
+    { TOKEN: 'connect-secret' },
+  );
+  story.handler.execute(effect, story.output.output);
+  await flushMicrotasks(12);
+  expect(JSON.stringify(story.output.outcomes.at(-1))).not.toContain('connect-secret');
+  expect(story.output.outcomes.at(-1)).toMatchObject({ type: 'provider.open_failed' });
 });
 
 test('times out an unsettled opening and reports a timeout after bounded cleanup', async () => {

@@ -160,6 +160,29 @@ test('a failed provider cancellation overrides provisional terminal turn outcome
   });
 });
 
+test('a failed timeout cancellation preserves the timed-out terminal outcome', () => {
+  const state = cancelling({ status: 'timed_out' });
+  if (state.progress.stage !== 'settling_turn') throw new Error('expected settling turn');
+  if (state.progress.turn.status !== 'settling') throw new Error('expected settling turn state');
+  if (state.progress.turn.progress.stage !== 'awaiting_provider')
+    throw new Error('expected provider cancellation');
+  const fault = {
+    code: 'revo.agent.protocol_failed' as const,
+    message: 'cancel failed',
+    phase: 'session_running' as const,
+    retryable: false,
+  };
+  const transition = reduceTerminalTurn(state, {
+    ...observed,
+    correlation: state.progress.turn.progress.cancellationCorrelation,
+    fault,
+    type: 'provider.prompt.failed',
+  })!;
+  expect(effectOf(transition.effects, 'event.append').event).toMatchObject({
+    outcome: { error: fault, status: 'timed_out' },
+  });
+});
+
 test.each([
   { status: 'completed' as const },
   {

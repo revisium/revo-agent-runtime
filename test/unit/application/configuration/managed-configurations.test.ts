@@ -46,6 +46,29 @@ test.each([
   await manager.shutdown();
 });
 
+test('preserves diagnostics when a configuration deadline carries a provider fault', async () => {
+  const manager = managerFor(
+    inspectorFor({
+      error: {
+        code: 'revo.agent.protocol_failed',
+        details: { diagnostic: { provider: { message: 'rate limit exceeded' } } },
+        message: 'inspection failed',
+        phase: 'execution',
+        retryable: false,
+      },
+      status: 'timed_out',
+    }),
+  );
+  await manager.initialize([]);
+  await expect(manager.inspectConfiguration(request())).rejects.toMatchObject({
+    fault: {
+      code: 'revo.agent.timeout',
+      details: { diagnostic: { provider: { message: 'rate limit exceeded' } } },
+    },
+  });
+  await manager.shutdown();
+});
+
 test('validates the request, definition, environment, and executable before inspection', async () => {
   const manager = managerFor(
     inspectorFor({

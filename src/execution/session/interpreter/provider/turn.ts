@@ -1,4 +1,5 @@
 import type { JsonObject } from '../../../../contracts/agent-definition.js';
+import { protocolFailureDetails } from '../../../../protocol/session/errors/protocol-error.js';
 import type { SessionProtocolPromptOutcome } from '../../../../protocol/session/model/outcome.js';
 import type { SessionProtocolPrompt } from '../../../../protocol/session/port/session.js';
 import type { Sha256Digest } from '../../../security/digest/port.js';
@@ -7,7 +8,7 @@ import type { SessionEffectOutput } from '../../runtime/effects/outcomes.js';
 import { SessionMessageStream } from '../event/message-stream.js';
 import type { SessionEffectHandler } from '../shared/effect/handler.js';
 import type { SessionObservationClock } from '../shared/observation/clock.js';
-import { protocolFault } from './fault.js';
+import { protocolFault, withStderrDiagnostic } from './fault.js';
 import type { SessionInterpreterResources } from './opening/resources.js';
 import {
   publishMessageCompletion,
@@ -69,6 +70,7 @@ const promptProvider = async (
       secrets: Object.values(provider.preparation.opening.environment?.secrets ?? {}),
     }),
   };
+  provider.preparation.output.beginDiagnosticWindow();
   let prompt;
   try {
     if (effect.input.metadata !== undefined && !isJsonObject(effect.input.metadata))
@@ -99,10 +101,11 @@ const promptProvider = async (
   });
   const resource = options.resources.prompts.get(effect.providerResourceId, effect.input.turnId)!;
   const outcome = await Promise.race([
-    prompt.completion.catch((): SessionProtocolPromptOutcome => ({
+    prompt.completion.catch((error: unknown): SessionProtocolPromptOutcome => ({
       status: 'failed',
       failure: {
         code: 'transport_failed',
+        details: protocolFailureDetails(error),
         message: 'Provider prompt failed.',
         retryable: false,
       },
@@ -152,10 +155,17 @@ const emitFailure = (
   options: TurnOptions,
   failure?: Parameters<typeof protocolFault>[0],
 ): void => {
+  const provider = options.resources.providers.get(effect.providerResourceId);
+  const preparation = provider?.preparation;
+  const fault = withStderrDiagnostic(
+    protocolFault(failure, 'session_running'),
+    preparation?.output.diagnostic() ?? { stderr: '', truncated: false },
+    preparation?.output.redactDiagnostic.bind(preparation.output),
+  );
   output.outcome({
     ...observed(options),
     correlation: effect.correlation,
-    fault: protocolFault(failure, 'session_running'),
+    fault,
     type: 'provider.prompt.failed',
   });
 };

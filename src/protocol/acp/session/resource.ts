@@ -1,5 +1,6 @@
 import * as acp from '@agentclientprotocol/sdk';
 
+import { protocolFailureDetails } from '../../session/errors/protocol-error.js';
 import type {
   SessionProtocolCancellationOutcome,
   SessionProtocolCapabilities,
@@ -17,8 +18,9 @@ import type {
 import { normalizeAcpUsage } from '../usage.js';
 import { AcpSessionInteractionBroker } from './interaction/broker.js';
 
-const protocolFailure = (message: string) => ({
+const protocolFailure = (message: string, error?: unknown) => ({
   code: 'transport_failed' as const,
+  ...(error === undefined ? {} : { details: protocolFailureDetails(error) }),
   message,
   retryable: false,
 });
@@ -62,8 +64,8 @@ export class AcpSessionResource implements SessionProtocolSession {
         await this.options.flushUpdates();
         return promptOutcome(response);
       })
-      .catch(() => ({
-        failure: protocolFailure('ACP prompt transport failed.'),
+      .catch((error: unknown) => ({
+        failure: protocolFailure('ACP prompt transport failed.', error),
         status: 'failed' as const,
       }))
       .finally(() => this.options.setObserver(undefined));
@@ -108,8 +110,11 @@ export class AcpSessionResource implements SessionProtocolSession {
         sessionId: this.options.providerSessionId,
       });
       return { status: 'requested' };
-    } catch {
-      return { failure: protocolFailure('ACP prompt cancellation failed.'), status: 'failed' };
+    } catch (error: unknown) {
+      return {
+        failure: protocolFailure('ACP prompt cancellation failed.', error),
+        status: 'failed',
+      };
     }
   }
 
@@ -125,8 +130,8 @@ export class AcpSessionResource implements SessionProtocolSession {
           sessionId: this.options.providerSessionId,
         });
       return { status: 'closed' };
-    } catch {
-      return { failure: protocolFailure('ACP session close failed.'), status: 'failed' };
+    } catch (error: unknown) {
+      return { failure: protocolFailure('ACP session close failed.', error), status: 'failed' };
     } finally {
       this.options.release();
     }

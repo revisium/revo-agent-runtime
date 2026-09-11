@@ -132,6 +132,9 @@ Turn lookup is available through `getTurn(sessionId, turnId)` and
 and `cancel`. A turn result is `completed`, `failed`, `cancelled`, `timed_out`,
 or `interrupted`. Passing an `AbortSignal` to `send()` cancels that turn; manager
 shutdown cancels and drains all sessions it owns.
+Failed and timed-out turn results may include the same typed `AgentFault` in
+`error`. Its stable `code`, `phase`, and `retryable` fields remain independent
+from optional bounded `details.diagnostic` provider and process evidence.
 
 ### Turn lookup and retention
 

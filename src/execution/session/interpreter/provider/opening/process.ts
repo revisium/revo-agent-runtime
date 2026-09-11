@@ -1,5 +1,6 @@
 import type { AgentFault } from '../../../../../contracts/manager/core.js';
 import type { OwnedProcess, ProcessSpawner } from '../../../../../process/index.js';
+import { protocolFailureDetails } from '../../../../../protocol/session/errors/protocol-error.js';
 import type { SessionEffect } from '../../../kernel/effect/session-effect.js';
 import type { SessionEffectOutput } from '../../../runtime/effects/outcomes.js';
 import type { SessionRuntimeIdentitySource } from '../../../runtime/primitives/identity.js';
@@ -14,8 +15,15 @@ import type { SessionInterpreterResources } from './resources.js';
 
 type ProcessStartEffect = Extract<SessionEffect, { readonly type: 'process.start' }>;
 
-const processFault = (timedOut: boolean): AgentFault => ({
+const processFault = (
+  timedOut: boolean,
+  error?: unknown,
+  redact?: (value: string) => string,
+): AgentFault => ({
   code: timedOut ? 'revo.agent.timeout' : 'revo.agent.protocol_failed',
+  ...(error === undefined
+    ? {}
+    : { details: { diagnostic: { process: protocolFailureDetails(error, redact) } } }),
   message: timedOut ? 'Session process start timed out.' : 'Session process start failed.',
   phase: 'session_opening',
   retryable: false,
@@ -94,11 +102,14 @@ const emitProcessSettlement = async (
   },
 ): Promise<void> => {
   if (settlement.state !== 'fulfilled') {
+    const preparation = options.resources.preparations.get(effect.preparationId);
     emitProcessFailure(
       effect,
       output,
       options.clock,
       settlement.state === 'unknown' || settlement.phase === 'late',
+      settlement.state === 'rejected' ? settlement.error : undefined,
+      preparation?.output.redactDiagnostic.bind(preparation.output),
     );
     return;
   }
@@ -146,11 +157,13 @@ const emitProcessFailure = (
   output: SessionEffectOutput,
   clock: SessionObservationClock,
   timedOut: boolean,
+  error?: unknown,
+  redact?: (value: string) => string,
 ): void => {
   const observed = clock.now();
   output.outcome({
     correlation: effect.correlation,
-    fault: processFault(timedOut),
+    fault: processFault(timedOut, error, redact),
     observedAt: observed.iso,
     observedAtMs: observed.milliseconds,
     type: timedOut ? 'process.timed_out' : 'process.failed',

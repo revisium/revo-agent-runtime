@@ -40,6 +40,7 @@ interface CancelProviderTurnEffect extends ProviderEffectBase<TurnEffectCorrelat
   readonly type: 'provider.turn.cancel';
   readonly providerResourceId: string;
   readonly turnId: string;
+  readonly timedOut?: boolean;
   readonly reason?: string;
 }
 
