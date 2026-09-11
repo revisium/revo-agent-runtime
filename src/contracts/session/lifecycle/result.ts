@@ -16,12 +16,14 @@ export type AgentSessionTurnResult =
       readonly message: AgentSessionMessage;
       readonly usage?: AgentSessionUsage;
     }
-  | { readonly status: 'cancelled' | 'timed_out' | 'interrupted' }
+  | { readonly status: 'cancelled' | 'interrupted' }
+  | { readonly status: 'timed_out'; readonly error?: AgentFault }
   | { readonly status: 'failed'; readonly error: AgentFault };
 
 export type AgentSessionTurnOutcome =
   | { readonly status: 'completed'; readonly usage?: AgentSessionUsage }
-  | { readonly status: 'cancelled' | 'timed_out' | 'interrupted' }
+  | { readonly status: 'cancelled' | 'interrupted' }
+  | { readonly status: 'timed_out'; readonly error?: AgentFault }
   | { readonly status: 'failed'; readonly error: AgentFault };
 
 export interface AgentSessionOutputFiles {

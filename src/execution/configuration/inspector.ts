@@ -1,11 +1,14 @@
 import type { NormalizedAcpConfiguration } from '../../configuration/catalog.js';
-import type { AgentDefinition } from '../../contracts/agent-definition.js';
+import type { AgentDefinition, JsonObject } from '../../contracts/agent-definition.js';
 import type { AgentLaunchEvidence } from '../../contracts/launch.js';
+import type { AgentFault } from '../../contracts/manager/core.js';
+import { protocolFailureDetails } from '../../diagnostics/diagnostic.js';
 import { ProcessStartError, type OwnedProcess, type ProcessSpawner } from '../../process/index.js';
 import type { ProtocolConfigurationDriver } from '../../protocol/configuration-driver.js';
 import { createBoundedOutput } from '../output/bounded-output.js';
 import { launchEnvironment } from '../process/launch-environment.js';
 import { literalArguments } from '../process/literal-launch.js';
+import { createRedactionChannel } from '../security/redaction/channel.js';
 import { ConfigurationDeadline, type ConfigurationDeadlineOutcome } from './deadline.js';
 import type {
   ConfigurationCatalogFallback,
@@ -19,8 +22,8 @@ export type ConfigurationInspectionOutcome =
       readonly launch: AgentLaunchEvidence;
     }>
   | Readonly<{ readonly status: 'cancelled' }>
-  | Readonly<{ readonly status: 'timed_out' }>
-  | Readonly<{ readonly status: 'failed' }>
+  | Readonly<{ readonly status: 'timed_out'; readonly error?: AgentFault }>
+  | Readonly<{ readonly status: 'failed'; readonly error?: AgentFault }>
   | Readonly<{ readonly status: 'cleanup_uncertain' }>;
 
 export interface ConfigurationInspectionRequest {
@@ -76,7 +79,8 @@ type OpeningOutcome =
       readonly status: 'opened';
       readonly session: Awaited<ReturnType<ProtocolConfigurationDriver['inspect']>>;
     }>
-  | Readonly<{ readonly status: 'failed' | 'process_exited' }>
+  | Readonly<{ readonly status: 'failed'; readonly error: unknown }>
+  | Readonly<{ readonly status: 'process_exited' }>
   | Readonly<{ readonly status: ConfigurationDeadlineOutcome }>;
 
 type OpenedOpening = Extract<OpeningOutcome, { readonly status: 'opened' }>;
@@ -88,6 +92,29 @@ interface OpeningAttempt {
 
 const cleanupConfirmed = async (process: OwnedProcess): Promise<boolean> =>
   (await process.terminateAndReap()).status === 'confirmed';
+
+const inspectionFault = (error: unknown, secrets: readonly string[] = []): AgentFault => ({
+  code: 'revo.agent.protocol_failed',
+  details: {
+    diagnostic: { provider: inspectionDetails(error, secrets) },
+  },
+  message: 'Agent configuration inspection failed.',
+  phase: 'execution',
+  retryable: false,
+});
+
+const inspectionDetails = (error: unknown, secrets: readonly string[]): JsonObject =>
+  protocolFailureDetails(error, (value) => redact(value, secrets));
+
+const redact = (value: string, secrets: readonly string[]): string => {
+  const channel = createRedactionChannel(secrets);
+  try {
+    const first = channel.feed(new TextEncoder().encode(value));
+    return new TextDecoder().decode(new Uint8Array([...first, ...channel.flush()]));
+  } finally {
+    channel.dispose();
+  }
+};
 
 const primaryLaunch = (
   request: ConfigurationInspectionRequest,
@@ -107,10 +134,14 @@ const primaryLaunch = (
 const primaryStartFailure = (
   error: unknown,
   deadline: ConfigurationDeadline,
+  secrets: readonly string[],
 ): ConfigurationInspectionOutcome => {
   if (error instanceof ProcessStartError && error.cleanup === 'uncertain')
     return Object.freeze({ status: 'cleanup_uncertain' });
-  return Object.freeze({ status: deadline.current() ?? 'failed' });
+  return Object.freeze({
+    status: deadline.current() ?? 'failed',
+    error: inspectionFault(error, secrets),
+  });
 };
 
 const inspectOpening = (
@@ -128,7 +159,7 @@ const inspectOpening = (
   const completion: Promise<OpeningOutcome> = Promise.race([
     opening.then(
       (session) => Object.freeze({ session, status: 'opened' as const }),
-      () => Object.freeze({ status: 'failed' as const }),
+      (error: unknown) => Object.freeze({ error, status: 'failed' as const }),
     ),
     process.completion.then(() => Object.freeze({ status: 'process_exited' as const })),
     deadline.completion().then((status) => Object.freeze({ status })),
@@ -147,11 +178,13 @@ const prepareUnopenedOpening = (
 const closeSession = (
   session: Awaited<ReturnType<ProtocolConfigurationDriver['inspect']>>,
   deadline: ConfigurationDeadline,
-): Promise<'closed' | 'failed' | ConfigurationDeadlineOutcome> =>
+): Promise<
+  'closed' | { readonly status: 'failed'; readonly error: unknown } | ConfigurationDeadlineOutcome
+> =>
   Promise.race([
     session.close().then(
       () => 'closed' as const,
-      () => 'failed' as const,
+      (error: unknown) => ({ error, status: 'failed' as const }),
     ),
     deadline.completion(),
   ]);
@@ -181,7 +214,10 @@ const fallbackInspection = async (
   } catch (error) {
     if (error instanceof ProcessStartError && error.cleanup === 'uncertain')
       return Object.freeze({ status: 'cleanup_uncertain' });
-    return Object.freeze({ status: deadline.current() ?? 'failed' });
+    return Object.freeze({
+      status: deadline.current() ?? 'failed',
+      error: inspectionFault(error, request.redactionSecrets),
+    });
   }
   deadline.activity();
   const completed = await Promise.race([
@@ -199,8 +235,11 @@ const fallbackInspection = async (
       launch: request.launch,
       status: 'completed',
     });
-  } catch {
-    return Object.freeze({ status: 'failed' });
+  } catch (error) {
+    return Object.freeze({
+      error: inspectionFault(error, request.redactionSecrets),
+      status: 'failed',
+    });
   }
 };
 
@@ -215,7 +254,14 @@ const completeOpenedInspection = async (
 ): Promise<ConfigurationInspectionOutcome> => {
   const close = await closeSession(opening.session, deadline);
   if (!(await cleanupConfirmed(process))) return Object.freeze({ status: 'cleanup_uncertain' });
-  if (close !== 'closed') return Object.freeze({ status: close === 'failed' ? 'failed' : close });
+  if (close !== 'closed') {
+    if (typeof close === 'object')
+      return Object.freeze({
+        error: inspectionFault(close.error, request.redactionSecrets),
+        status: 'failed' as const,
+      });
+    return Object.freeze({ status: close });
+  }
   const fallback = fallbackFor(request.definition.id);
   if (opening.session.catalog.options.length === 0 && fallback !== undefined)
     return fallbackInspection(processes, fallback, request, deadline);
@@ -227,7 +273,10 @@ const completeOpenedInspection = async (
     } catch (error) {
       if (error instanceof Error && 'cleanupUncertain' in error && error.cleanupUncertain === true)
         return Object.freeze({ status: 'cleanup_uncertain' });
-      return Object.freeze({ status: deadline.current() ?? 'failed' });
+      return Object.freeze({
+        status: deadline.current() ?? 'failed',
+        error: inspectionFault(error, request.redactionSecrets),
+      });
     }
   }
   return Object.freeze({ catalog, launch: request.launch, status: 'completed' });
@@ -252,7 +301,7 @@ const runInspection = async (
     try {
       process = await processes.start(primaryLaunch(request, args), deadline.signal);
     } catch (error) {
-      return primaryStartFailure(error, deadline);
+      return primaryStartFailure(error, deadline, request.redactionSecrets);
     }
     deadline.activity();
     const attempt = inspectOpening(protocol, request, process, deadline);
@@ -260,7 +309,12 @@ const runInspection = async (
     if (first.status !== 'opened') {
       const status = prepareUnopenedOpening(first, attempt.opening);
       if (!(await cleanupConfirmed(process))) return Object.freeze({ status: 'cleanup_uncertain' });
-      return Object.freeze({ status });
+      return Object.freeze({
+        status,
+        ...(first.status === 'failed'
+          ? { error: inspectionFault(first.error, request.redactionSecrets) }
+          : {}),
+      });
     }
     return await completeOpenedInspection(
       processes,

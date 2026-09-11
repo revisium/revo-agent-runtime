@@ -1,3 +1,10 @@
+import type { JsonObject } from '../../../contracts/agent-definition.js';
+export {
+  protocolFailureDetails,
+  redactDiagnosticDetails,
+  sanitizeDiagnosticDetails,
+} from '../../../diagnostics/diagnostic.js';
+
 type SessionProtocolFailureCode =
   | 'capability_unsupported'
   | 'configuration_stale'
@@ -11,5 +18,6 @@ type SessionProtocolFailureCode =
 export interface SessionProtocolFailure {
   readonly code: SessionProtocolFailureCode;
   readonly message: string;
+  readonly details?: JsonObject;
   readonly retryable: boolean;
 }
