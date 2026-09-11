@@ -235,3 +235,85 @@ test('keeps the deadline active until a failed opening process is reaped', async
 
   await expect(outcomePromise).resolves.toMatchObject({ status: 'failed' });
 });
+
+test('maps catalog enrichment failure after confirmed cleanup', async () => {
+  const controller = new AbortController();
+  const process: OwnedProcess = {
+    completion: never(),
+    identity: processIdentity(),
+    terminateAndReap: async () => ({
+      exit: { exitCode: 0, signal: null },
+      status: 'confirmed' as const,
+    }),
+    transport: { input: new WritableStream(), output: new ReadableStream() },
+  };
+  const protocol: ProtocolConfigurationDriver = {
+    inspect: async () => ({
+      catalog: normalizeAcpConfiguration([]),
+      close: async () => undefined,
+    }),
+  };
+  const inspector = createConfigurationInspector(
+    { start: async () => process },
+    protocol,
+    () => undefined,
+    () => ({
+      enrich: async () => {
+        throw new Error('enrichment failed');
+      },
+    }),
+  );
+  const outcome = await inspector.inspect({
+    definition: validateAgentDefinition(agentDefinition()).definition,
+    environment: {},
+    idleTimeoutMs: 1_000,
+    launch: { executable: '/fixture/agent', reportedVersion: '1.0.0' },
+    maxOutputBytes: 1_024,
+    redactionSecrets: [],
+    signal: controller.signal,
+    wallClockTimeoutMs: 1_000,
+    workspace: '/fixture/workspace',
+  });
+  expect(outcome.status).toBe('failed');
+});
+
+test('reports uncertain cleanup from an enricher failure', async () => {
+  const controller = new AbortController();
+  const inspector = createConfigurationInspector(
+    {
+      start: async () => ({
+        completion: never(),
+        identity: processIdentity(),
+        terminateAndReap: async () => ({
+          exit: { exitCode: 0, signal: null },
+          status: 'confirmed' as const,
+        }),
+        transport: { input: new WritableStream(), output: new ReadableStream() },
+      }),
+    },
+    {
+      inspect: async () => ({
+        catalog: normalizeAcpConfiguration([]),
+        close: async () => undefined,
+      }),
+    },
+    () => undefined,
+    () => ({
+      enrich: async () => {
+        throw Object.assign(new Error('cleanup'), { cleanupUncertain: true });
+      },
+    }),
+  );
+  const outcome = await inspector.inspect({
+    definition: validateAgentDefinition(agentDefinition()).definition,
+    environment: {},
+    idleTimeoutMs: 1_000,
+    launch: { executable: '/fixture/agent', reportedVersion: '1.0.0' },
+    maxOutputBytes: 1_024,
+    redactionSecrets: [],
+    signal: controller.signal,
+    wallClockTimeoutMs: 1_000,
+    workspace: '/fixture/workspace',
+  });
+  expect(outcome.status).toBe('cleanup_uncertain');
+});
