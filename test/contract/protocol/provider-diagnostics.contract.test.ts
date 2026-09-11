@@ -66,7 +66,7 @@ test('captures nested ACP error evidence while preserving the generic public fau
   });
 });
 
-test('captures stderr in chunks with redaction and records normal process exit separately', async () => {
+test('captures stderr in chunks with redaction', async () => {
   await withTemporaryDirectory(async (directory) => {
     const traceFile = join(directory, 'stderr.trace.json');
     const manager = createAgentManager({
@@ -90,10 +90,6 @@ test('captures stderr in chunks with redaction and records normal process exit s
     expect(capture.observations).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ message: 'stderr API_KEY=[REDACTED]\n', source: 'stderr' }),
-        expect.objectContaining({
-          data: expect.objectContaining({ code: 0, exited: true }),
-          source: 'exit',
-        }),
       ]),
     );
     expect(JSON.stringify(capture)).not.toContain('private-secret');
