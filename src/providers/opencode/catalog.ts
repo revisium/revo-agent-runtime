@@ -158,10 +158,9 @@ const startServer = async (
   });
   const environment = launchEnvironment(request.definition, request.environment);
   const password = environment.OPENCODE_SERVER_PASSWORD;
+  const credentials = `${environment.OPENCODE_SERVER_USERNAME ?? 'opencode'}:${password ?? ''}`;
   const authorization =
-    password === undefined
-      ? undefined
-      : `Basic ${globalThis.btoa(`${environment.OPENCODE_SERVER_USERNAME ?? 'opencode'}:${password}`)}`;
+    password === undefined ? undefined : `Basic ${globalThis.btoa(credentials)}`;
   let process: ConfigurationServerProcess;
   try {
     process = await processes.start(
