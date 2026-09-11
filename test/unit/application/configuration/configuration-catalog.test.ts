@@ -40,14 +40,24 @@ test('normalizes grouped, flat, boolean, and unknown-category ACP options withou
     optionId: 'model',
     providers: [
       {
+        connected: true,
         id: 'x',
-        models: [{ group: { id: 'x', name: 'Provider X' }, name: 'One', value: 'x/one' }],
+        models: [
+          {
+            connected: true,
+            group: { id: 'x', name: 'Provider X' },
+            name: 'One',
+            value: 'x/one',
+          },
+        ],
         name: 'Provider X',
       },
       {
+        connected: true,
         id: 'y',
         models: [
           {
+            connected: true,
             description: 'Second model',
             group: { id: 'y', name: 'Provider Y' },
             name: 'Two',
@@ -61,6 +71,8 @@ test('normalizes grouped, flat, boolean, and unknown-category ACP options withou
   });
   expect(catalog.catalogRevision).toMatch(/^[a-f0-9]{64}$/);
   expect(Object.isFrozen(catalog.options)).toBe(true);
+  expect(Object.isFrozen(catalog.model?.providers[0])).toBe(true);
+  expect(Object.isFrozen(catalog.model?.providers[0]?.models[0])).toBe(true);
 });
 
 test('rejects duplicate ids and oversized catalogs instead of guessing', () => {

@@ -96,7 +96,7 @@ export class ManagedConfigurations {
         launch: outcome.launch,
         ...(outcome.catalog.model === undefined ? {} : { model: outcome.catalog.model }),
         options: outcome.catalog.options,
-        schemaVersion: 'agent-configuration-catalog/v1',
+        schemaVersion: 'agent-configuration-catalog/v2',
       });
     } finally {
       pending.finish();

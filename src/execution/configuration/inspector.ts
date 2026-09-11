@@ -39,6 +39,38 @@ export interface AgentConfigurationInspector {
   inspect(request: ConfigurationInspectionRequest): Promise<ConfigurationInspectionOutcome>;
 }
 
+export interface ConfigurationCatalogEnricher {
+  enrich(
+    catalog: NormalizedAcpConfiguration,
+    request: ConfigurationInspectionRequest,
+    deadline: ConfigurationDeadline,
+  ): Promise<NormalizedAcpConfiguration>;
+}
+
+export type ConfigurationCatalogEnricherResolver = (
+  definitionId: string,
+) => ConfigurationCatalogEnricher | undefined;
+
+export interface ConfigurationServerProcess {
+  readonly completion: Promise<unknown>;
+  terminateAndReap(): Promise<{ readonly status: 'confirmed' | 'uncertain' }>;
+}
+
+export interface ConfigurationServerStartRequest {
+  readonly args: readonly string[];
+  readonly command: string;
+  readonly cwd: string;
+  readonly environment: Readonly<Record<string, string>>;
+  readonly onStdout: (chunk: Uint8Array) => void;
+}
+
+export interface ConfigurationServerSpawner {
+  start(
+    request: ConfigurationServerStartRequest,
+    signal: AbortSignal,
+  ): Promise<ConfigurationServerProcess>;
+}
+
 type OpeningOutcome =
   | Readonly<{
       readonly status: 'opened';
@@ -176,6 +208,7 @@ const runInspection = async (
   processes: ProcessSpawner,
   protocol: ProtocolConfigurationDriver,
   fallbackFor: ConfigurationCatalogFallbackResolver,
+  enrichFor: ConfigurationCatalogEnricherResolver,
   request: ConfigurationInspectionRequest,
 ): Promise<ConfigurationInspectionOutcome> => {
   const args = literalArguments(request.definition);
@@ -206,8 +239,23 @@ const runInspection = async (
     const fallback = fallbackFor(request.definition.id);
     if (first.session.catalog.options.length === 0 && fallback !== undefined)
       return fallbackInspection(processes, fallback, request, deadline);
+    const enricher = enrichFor(request.definition.id);
+    let catalog = first.session.catalog;
+    if (enricher !== undefined) {
+      try {
+        catalog = await enricher.enrich(catalog, request, deadline);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          'cleanupUncertain' in error &&
+          error.cleanupUncertain === true
+        )
+          return Object.freeze({ status: 'cleanup_uncertain' });
+        return Object.freeze({ status: deadline.current() ?? 'failed' });
+      }
+    }
     return Object.freeze({
-      catalog: first.session.catalog,
+      catalog,
       launch: request.launch,
       status: 'completed',
     });
@@ -220,8 +268,9 @@ export const createConfigurationInspector = (
   processes: ProcessSpawner,
   protocol: ProtocolConfigurationDriver,
   fallbackFor: ConfigurationCatalogFallbackResolver,
+  enrichFor: ConfigurationCatalogEnricherResolver = () => undefined,
 ): AgentConfigurationInspector =>
   Object.freeze({
     inspect: (request: ConfigurationInspectionRequest) =>
-      runInspection(processes, protocol, fallbackFor, request),
+      runInspection(processes, protocol, fallbackFor, enrichFor, request),
   });
