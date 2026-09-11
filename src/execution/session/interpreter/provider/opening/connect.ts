@@ -159,11 +159,16 @@ const emitOpenSettlement = async (
   }
   if (settlement.value.status !== 'opened') {
     if (opening !== undefined) await closeProvider(opening, 'Provider opening failed.');
+    const preparation = options.resources.preparations.get(effect.preparationId);
     emitOpenFailure(
       effect,
       output,
       options.clock,
-      protocolFault(settlement.value.failure, 'session_opening'),
+      protocolFault(
+        settlement.value.failure,
+        'session_opening',
+        preparation?.output.redactDiagnostic.bind(preparation.output),
+      ),
     );
     return;
   }

@@ -1,3 +1,4 @@
+import type { AgentFault } from '../../../../contracts/manager/core.js';
 import type { SessionProtocolCancellationOutcome } from '../../../../protocol/session/model/outcome.js';
 import type { SessionEffect } from '../../kernel/effect/session-effect.js';
 import type { SessionEffectOutput } from '../../runtime/effects/outcomes.js';
@@ -8,7 +9,7 @@ import {
   systemSessionOperationTimer,
   type SessionOperationTimer,
 } from '../shared/operation/timer.js';
-import { protocolFault } from './fault.js';
+import { protocolFault, withStderrDiagnostic } from './fault.js';
 import type { SessionInterpreterResources } from './opening/resources.js';
 
 type CancelEffect = Extract<SessionEffect, { readonly type: 'provider.turn.cancel' }>;
@@ -65,6 +66,15 @@ const cancelTurn = async (
     timer: options.timer ?? systemSessionOperationTimer,
   });
   if (
+    settlement.state === 'fulfilled' &&
+    settlement.phase === 'initial' &&
+    settlement.value.status === 'requested' &&
+    effect.timedOut
+  ) {
+    emitCancellationFailure(effect, output, options, true);
+    return;
+  }
+  if (
     settlement.state !== 'fulfilled' ||
     settlement.phase !== 'initial' ||
     settlement.value.status !== 'requested'
@@ -89,16 +99,27 @@ const emitCancellationFailure = (
   failure?: Parameters<typeof protocolFault>[0],
 ): void => {
   const now = options.clock.now();
+  const provider = options.resources.providers.get(effect.providerResourceId);
+  const diagnostic = provider?.preparation.output.diagnostic() ?? {
+    stderr: '',
+    truncated: false,
+  };
+  const redact = provider?.preparation.output.redactDiagnostic.bind(provider.preparation.output);
+  const timeoutFault: AgentFault = withStderrDiagnostic(
+    {
+      code: 'revo.agent.timeout',
+      message: 'The agent prompt exceeded its deadline.',
+      phase: 'session_running',
+      retryable: false,
+    },
+    diagnostic,
+    redact,
+  );
   output.outcome({
     correlation: effect.correlation,
     fault: timedOut
-      ? {
-          code: 'revo.agent.timeout',
-          message: 'Provider prompt cancellation timed out.',
-          phase: 'session_running',
-          retryable: false,
-        }
-      : protocolFault(failure, 'session_running'),
+      ? timeoutFault
+      : withStderrDiagnostic(protocolFault(failure, 'session_running'), diagnostic, redact),
     observedAt: now.iso,
     observedAtMs: now.milliseconds,
     type: timedOut ? 'provider.prompt.timed_out' : 'provider.prompt.failed',

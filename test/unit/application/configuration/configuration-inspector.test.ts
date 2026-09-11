@@ -235,3 +235,40 @@ test('keeps the deadline active until a failed opening process is reaped', async
 
   await expect(outcomePromise).resolves.toMatchObject({ status: 'failed' });
 });
+
+test('preserves structured and redacted opening diagnostics', async () => {
+  const process: OwnedProcess = {
+    completion: never(),
+    identity: processIdentity(),
+    terminateAndReap: async () => ({
+      exit: { exitCode: 0, signal: null },
+      status: 'confirmed' as const,
+    }),
+    transport: { input: new WritableStream(), output: new ReadableStream() },
+  };
+  const error = Object.assign(new Error('Bearer inspection-secret'), {
+    code: -32000,
+    data: { message: 'inspection-secret', token: 'inspection-secret' },
+  });
+  const inspector = createConfigurationInspector(
+    { start: async () => process },
+    { inspect: async () => Promise.reject(error) },
+    () => undefined,
+  );
+  const outcome = await inspector.inspect({
+    definition: validateAgentDefinition(agentDefinition()).definition,
+    environment: {},
+    idleTimeoutMs: 1_000,
+    launch: { executable: '/fixture/agent', reportedVersion: '1.0.0' },
+    maxOutputBytes: 1_024,
+    redactionSecrets: ['inspection-secret'],
+    signal: new AbortController().signal,
+    wallClockTimeoutMs: 1_000,
+    workspace: '/fixture/workspace',
+  });
+  expect(outcome).toMatchObject({
+    error: { details: { diagnostic: { provider: { code: -32000 } } } },
+    status: 'failed',
+  });
+  expect(JSON.stringify(outcome)).not.toContain('inspection-secret');
+});

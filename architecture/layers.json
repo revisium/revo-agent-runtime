@@ -24,6 +24,11 @@
       "dependencies": ["process-contracts"]
     },
     {
+      "name": "diagnostics",
+      "pattern": "^src/diagnostics/",
+      "dependencies": ["contracts"]
+    },
+    {
       "name": "configuration",
       "pattern": "^src/configuration/",
       "dependencies": ["contracts", "definition"]
@@ -253,6 +258,7 @@
       "pattern": "^src/execution/(?!(?:session/|security/(?:digest/port\\.ts$|redaction/)|output/session/publication\\.ts$)).+",
       "dependencies": [
         "configuration",
+        "diagnostics",
         "contracts",
         "definition",
         "process-contracts",
@@ -263,7 +269,7 @@
     {
       "name": "protocol-session",
       "pattern": "^src/protocol/session/",
-      "dependencies": ["configuration", "contracts"]
+      "dependencies": ["configuration", "contracts", "diagnostics"]
     },
     {
       "name": "protocol-acp-session",

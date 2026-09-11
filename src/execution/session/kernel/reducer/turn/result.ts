@@ -13,7 +13,7 @@ export const projectTurnResult = (turn: SettlingTurn): AgentSessionTurnResult =>
       ...(turn.usage === undefined ? {} : { usage: turn.usage }),
     };
   if (turn.progress.outcome.status === 'failed') return turn.progress.outcome;
-  return { status: turn.progress.outcome.status };
+  return turn.progress.outcome;
 };
 
 // oxlint-disable-next-line typescript/consistent-return -- the checked discriminated union is exhaustive
@@ -39,6 +39,6 @@ export const terminalTurn = (
     case 'interrupted':
       return { ...base, result: { status: 'interrupted' }, status: 'interrupted' };
     case 'timed_out':
-      return { ...base, result: { status: 'timed_out' }, status: 'timed_out' };
+      return { ...base, result, status: 'timed_out' };
   }
 };

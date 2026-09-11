@@ -32,7 +32,9 @@ const publishCompletion = (
     return unchangedTransition(state);
   const outcome =
     matchesCancel && command.type !== 'provider.prompt.completed'
-      ? ({ error: command.fault, status: 'failed' } as const)
+      ? turn.progress.outcome.status === 'timed_out'
+        ? ({ error: command.fault, status: 'timed_out' } as const)
+        : ({ error: command.fault, status: 'failed' } as const)
       : turn.progress.outcome;
   const event: TurnCompletedEvent = {
     eventId: nextSessionEventId(state),

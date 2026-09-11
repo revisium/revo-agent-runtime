@@ -94,7 +94,7 @@ const promptEffect = {
   type: 'provider.prompt' as const,
 };
 
-test('contains asynchronous prompt failure without leaking the provider error', async () => {
+test('preserves a bounded provider failure diagnostic', async () => {
   const { resources } = await prepare([]);
   resources.providers.get('provider-1')!.session.prompt = () => ({
     cancel: async () => ({ status: 'requested' }),
@@ -107,7 +107,11 @@ test('contains asynchronous prompt failure without leaking the provider error', 
   );
   await flushMicrotasks(16);
   expect(recorded.outcomes.at(-1)).toMatchObject({ type: 'provider.prompt.failed' });
-  expect(JSON.stringify(recorded.outcomes)).not.toContain('private provider detail');
+  expect(recorded.outcomes.at(-1)).toMatchObject({
+    fault: {
+      details: { diagnostic: { provider: { message: 'private provider detail' } } },
+    },
+  });
 });
 
 test('publishes non-message updates without an environment snapshot', async () => {
