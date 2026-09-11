@@ -1,5 +1,15 @@
 import type { NormalizedAcpConfiguration } from '../configuration/catalog.js';
-import type { AgentDefinition } from '../contracts/agent-definition.js';
+import type { AgentDefinition, JsonObject } from '../contracts/agent-definition.js';
+
+export class ProtocolConfigurationError extends Error {
+  constructor(
+    message: string,
+    readonly details: JsonObject,
+  ) {
+    super(message);
+    this.name = 'ProtocolConfigurationError';
+  }
+}
 
 interface ConfigurationTransport {
   readonly input: WritableStream<Uint8Array>;

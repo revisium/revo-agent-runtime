@@ -135,6 +135,10 @@ shutdown cancels and drains all sessions it owns.
 Failed and timed-out turn results may include the same typed `AgentFault` in
 `error`. Its stable `code`, `phase`, and `retryable` fields remain independent
 from optional bounded `details.diagnostic` provider and process evidence.
+When an ACP request supplies an explicit structured provider reason, `message`
+contains that bounded, redacted reason; unstructured transport errors retain the
+stable provider-neutral fallback message. Diagnostic provider fields remain
+opaque JSON and are available through the typed `AgentFaultDetails` contract.
 
 ### Turn lookup and retention
 
@@ -278,6 +282,12 @@ configuration: {
   selections: { model: 'provider/model', reasoning_effort: 'high' },
 }
 ```
+
+For untrusted input, `decodeAgentConfigurationSelection(value)` returns a
+defensive immutable `AgentConfigurationSelection` copy or throws `TypeError`.
+It accepts only plain objects with `selections` and an optional
+`catalogRevision`; selection keys and values are bounded by their UTF-8 byte
+limits. The same decoder is used at invocation and session boundaries.
 
 Each invocation opens a fresh session. Selections are validated and applied in
 order against that session's current option list. A missing value fails before a

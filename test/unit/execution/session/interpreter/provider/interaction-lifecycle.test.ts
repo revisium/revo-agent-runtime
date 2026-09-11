@@ -32,6 +32,7 @@ const setup = async (options: {
     typeof createControllableSessionProtocolDriver
   >[0]['cancellations'];
   readonly closes?: Parameters<typeof createControllableSessionProtocolDriver>[0]['closes'];
+  readonly secrets?: readonly string[];
 }) => {
   const driver = createControllableSessionProtocolDriver({
     cancellations: options.cancellations ?? [],
@@ -59,7 +60,7 @@ const setup = async (options: {
   const preparation: PreparedSessionResource = {
     correlation: { effectId: 'prepare', epoch: 1, sessionId: 'session_01' },
     opening: descriptor,
-    output: new SessionOutputCollector(descriptor.limits.maxOutputBytes, []),
+    output: new SessionOutputCollector(descriptor.limits.maxOutputBytes, options.secrets ?? []),
     prepared: {
       definition,
       inputs: { parameters: {}, permissions: {} },
@@ -135,6 +136,34 @@ it('maps failed interaction delivery to a stable provider fault', async () => {
     fault: { code: 'revo.agent.protocol_failed' },
     type: 'provider.interaction.failed',
   });
+});
+
+it('redacts configured secrets from a failed interaction fault', async () => {
+  const failure = {
+    code: 'transport_failed' as const,
+    message: 'provider rejected opaque-secret',
+    details: { provider: { message: 'opaque-secret' } },
+    retryable: true,
+  };
+  const { resources } = await setup({
+    interactions: [{ failure, status: 'failed' }],
+    secrets: ['opaque-secret'],
+  });
+  const recorded = recordingSessionEffectOutput();
+  createProviderInteractionInterpreter({ clock, resources }).execute(
+    {
+      correlation: { effectId: 'respond', epoch: 1, sessionId: 'session_01' },
+      providerResourceId: 'provider-1',
+      request: { action: { kind: 'read' }, kind: 'permission', options: [], requestId: 'p' },
+      response: { kind: 'permission', outcome: 'denied' },
+      scope: { kind: 'opening' },
+      timeoutMs: 100,
+      type: 'provider.interaction.respond',
+    },
+    recorded.output,
+  );
+  await flushMicrotasks(8);
+  expect(JSON.stringify(recorded.outcomes)).not.toContain('opaque-secret');
 });
 
 it('cancels and closes a provider without synthesizing prompt completion', async () => {
@@ -226,6 +255,33 @@ test.each([
   cancel?.execute(cancelEffect, recorded.output);
   await flushMicrotasks(12);
   expect(recorded.outcomes.at(-1)).toMatchObject({ type });
+});
+
+test('redacts configured secrets from a failed cancellation fault', async () => {
+  const { driver, resources } = await setup({
+    cancellations: [
+      {
+        failure: { code: 'transport_failed', message: 'opaque-secret', retryable: false },
+        status: 'failed',
+      },
+    ],
+    secrets: ['opaque-secret'],
+  });
+  resources.prompts.register('provider-1', 'turn-1', {
+    effectId: 'prompt',
+    prompt: {
+      cancel: (reason?: string) => driver.cancelPrompt(reason),
+      completion: new Promise<never>(() => undefined),
+    },
+  });
+  const recorded = recordingSessionEffectOutput();
+  const [cancel] = createProviderLifecycleInterpreters({ clock, resources });
+  cancel?.execute(cancelEffect, recorded.output);
+  await flushMicrotasks(12);
+  expect(recorded.outcomes.at(-1)).toMatchObject({
+    fault: { message: '[REDACTED]' },
+    type: 'provider.prompt.failed',
+  });
 });
 
 test('records a timed-out cancellation as a timed-out provider failure', async () => {
