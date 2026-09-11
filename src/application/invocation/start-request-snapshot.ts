@@ -1,6 +1,6 @@
+import { decodeAgentConfigurationSelection } from '../../configuration/selection.js';
 import { AgentManagerError, type StartAgentInvocation } from '../../contracts/manager.js';
 import { snapshotPlainJsonObject } from '../../execution/output/plain-json-snapshot.js';
-import { snapshotConfigurationSelection } from '../configuration/request.js';
 import { fault } from '../faults/agent-faults.js';
 
 const requestKeys = [
@@ -123,7 +123,10 @@ export const snapshotStartRequest = (value: unknown): StartAgentInvocation => {
     ]);
     const result = exactDataObject(input.result, ['schema'], ['schema']);
     const limits = snapshotLimits(input.limits);
-    const configuration = snapshotConfigurationSelection(input.configuration);
+    const configuration =
+      input.configuration === undefined
+        ? undefined
+        : decodeAgentConfigurationSelection(input.configuration);
     const metadata =
       input.metadata === undefined ? undefined : snapshotRecord(input.metadata, 65_536);
     return Object.freeze({

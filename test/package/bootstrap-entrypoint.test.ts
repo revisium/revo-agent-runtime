@@ -19,6 +19,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 test('manager iteration root exposes only the planned public runtime functions', () => {
   expect(Object.keys(packageEntry)).toEqual([
+    'decodeAgentConfigurationSelection',
     'AgentManagerError',
     'createAgentManager',
     'discoverAgents',
