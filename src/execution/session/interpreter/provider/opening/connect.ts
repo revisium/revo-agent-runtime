@@ -21,6 +21,8 @@ import { SessionUsageAccumulator } from '../usage.js';
 import type { SessionInterpreterResources } from './resources.js';
 
 type ProviderOpenEffect = Extract<SessionEffect, { readonly type: 'provider.open' }>;
+
+const genericOpeningFault = () => protocolFault(undefined, 'session_opening', undefined);
 type ClosableProvider = Pick<SessionProtocolOpening, 'close'>;
 
 const closeProvider = async (provider: ClosableProvider, reason: string): Promise<void> => {
@@ -66,7 +68,7 @@ const connectProvider = async (
   const preparation = options.resources.preparations.get(effect.preparationId);
   const process = options.resources.processes.get(effect.processResourceId);
   if (preparation === undefined || process === undefined) {
-    emitOpenFailure(effect, output, options.clock, protocolFault(undefined, 'session_opening'));
+    emitOpenFailure(effect, output, options.clock, genericOpeningFault());
     return;
   }
   const providerResourceId = options.identities.next('provider');
@@ -114,7 +116,7 @@ const connectProvider = async (
             kind: 'resume',
           });
   } catch {
-    emitOpenFailure(effect, output, options.clock, protocolFault(undefined, 'session_opening'));
+    emitOpenFailure(effect, output, options.clock, genericOpeningFault());
     return;
   }
   if (
@@ -125,7 +127,7 @@ const connectProvider = async (
     )
   ) {
     void closeProvider(opening, 'Provider resource identity collision.');
-    emitOpenFailure(effect, output, options.clock, protocolFault(undefined, 'session_opening'));
+    emitOpenFailure(effect, output, options.clock, genericOpeningFault());
     return;
   }
   const settlement = await settleOperation({
@@ -183,7 +185,7 @@ const emitOpenSettlement = async (
     })
   ) {
     await closeProvider(settlement.value.session, 'Provider session could not be registered.');
-    emitOpenFailure(effect, output, options.clock, protocolFault(undefined, 'session_opening'));
+    emitOpenFailure(effect, output, options.clock, genericOpeningFault());
     return;
   }
   const observed = options.clock.now();

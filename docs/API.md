@@ -135,6 +135,10 @@ shutdown cancels and drains all sessions it owns.
 Failed and timed-out turn results may include the same typed `AgentFault` in
 `error`. Its stable `code`, `phase`, and `retryable` fields remain independent
 from optional bounded `details.diagnostic` provider and process evidence.
+When an ACP request supplies an explicit structured provider reason, `message`
+contains that bounded, redacted reason; unstructured transport errors retain the
+stable provider-neutral fallback message. Diagnostic provider fields remain
+opaque JSON and are available through the typed `AgentFaultDetails` contract.
 
 ### Turn lookup and retention
 

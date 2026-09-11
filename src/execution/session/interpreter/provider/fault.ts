@@ -9,29 +9,38 @@ import {
 export const protocolFault = (
   failure: SessionProtocolFailure | undefined,
   phase: AgentFault['phase'],
-  redact?: (value: string) => string,
+  redact: ((value: string) => string) | undefined,
 ): AgentFault => {
   let code: AgentFault['code'] = 'revo.agent.protocol_failed';
   if (failure?.code === 'configuration_stale') code = 'revo.agent.configuration_stale';
   if (failure?.code === 'configuration_value_unsupported')
     code = 'revo.agent.configuration_value_unsupported';
   if (failure?.code === 'capability_unsupported') code = 'revo.agent.session_unsupported';
+  const message = sanitizeDiagnosticDetails({
+    message:
+      redact?.(failure?.message ?? 'The provider session protocol operation failed.') ??
+      failure?.message ??
+      'The provider session protocol operation failed.',
+  }).message;
   return {
     code,
     ...(failure?.details === undefined
       ? {}
       : {
           details: {
-            diagnostic: {
+            diagnostic: sanitizeDiagnosticDetails({
               provider: sanitizeDiagnosticDetails(
                 redact === undefined
                   ? failure.details
                   : redactDiagnosticDetails(failure.details, redact),
               ),
-            },
+            }),
           },
         }),
-    message: 'The provider session protocol operation failed.',
+    message:
+      typeof message === 'string' && message.trim().length > 0
+        ? message
+        : 'The provider session protocol operation failed.',
     phase,
     retryable: failure?.retryable ?? false,
   };

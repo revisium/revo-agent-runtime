@@ -108,9 +108,35 @@ test('preserves a bounded provider failure diagnostic', async () => {
   await flushMicrotasks(16);
   expect(recorded.outcomes.at(-1)).toMatchObject({ type: 'provider.prompt.failed' });
   expect(recorded.outcomes.at(-1)).toMatchObject({
-    fault: {
-      details: { diagnostic: { provider: { message: 'private provider detail' } } },
+    fault: { details: { diagnostic: { provider: { message: 'private provider detail' } } } },
+  });
+});
+
+test('redacts configured secrets from a failed turn fault', async () => {
+  const { resources } = await prepare([
+    {
+      outcome: {
+        failure: {
+          code: 'transport_failed',
+          details: { provider: { message: 'private provider detail' } },
+          message: 'secret',
+          retryable: false,
+        },
+        status: 'failed',
+      },
+      steps: [],
     },
+  ]);
+  const recorded = recordingSessionEffectOutput();
+  createProviderTurnInterpreter({ clock, digest, resources }).execute(
+    promptEffect,
+    recorded.output,
+  );
+  await flushMicrotasks(16);
+  expect(JSON.stringify(recorded.outcomes)).not.toContain('secret');
+  expect(recorded.outcomes.at(-1)).toMatchObject({
+    fault: { message: '[REDACTED]' },
+    type: 'provider.prompt.failed',
   });
 });
 

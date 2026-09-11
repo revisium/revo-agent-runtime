@@ -146,7 +146,9 @@ const emitFailure = (
   status: CaptureFailureStatus,
   failure?: Parameters<typeof protocolFault>[0],
 ): void => {
-  const fault = captureFault(status, failure);
+  const provider = options.resources.providers.get(effect.providerResourceId);
+  const redact = provider?.preparation.output.redactDiagnostic.bind(provider.preparation.output);
+  const fault = captureFault(status, failure, redact);
   const now = options.clock.now();
   output.outcome({
     correlation: effect.correlation,
@@ -160,8 +162,9 @@ const emitFailure = (
 const captureFault = (
   status: CaptureFailureStatus,
   failure?: Parameters<typeof protocolFault>[0],
+  redact?: (value: string) => string,
 ): AgentFault => {
-  if (status === 'failed') return protocolFault(failure, 'session_checkpointing');
+  if (status === 'failed') return protocolFault(failure, 'session_checkpointing', redact);
   const details = {
     invalid: ['revo.agent.checkpoint_invalid', 'Provider continuation is invalid.'],
     timed_out: ['revo.agent.timeout', 'Checkpoint capture timed out.'],

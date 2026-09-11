@@ -2,9 +2,16 @@ import type { NormalizedAcpConfiguration } from '../../configuration/catalog.js'
 import type { AgentDefinition, JsonObject } from '../../contracts/agent-definition.js';
 import type { AgentLaunchEvidence } from '../../contracts/launch.js';
 import type { AgentFault } from '../../contracts/manager/core.js';
-import { protocolFailureDetails } from '../../diagnostics/diagnostic.js';
+import {
+  protocolFailureDetails,
+  redactDiagnosticDetails,
+  sanitizeDiagnosticDetails,
+} from '../../diagnostics/diagnostic.js';
 import { ProcessStartError, type OwnedProcess, type ProcessSpawner } from '../../process/index.js';
-import type { ProtocolConfigurationDriver } from '../../protocol/configuration-driver.js';
+import {
+  ProtocolConfigurationError,
+  type ProtocolConfigurationDriver,
+} from '../../protocol/configuration-driver.js';
 import { createBoundedOutput } from '../output/bounded-output.js';
 import { launchEnvironment } from '../process/launch-environment.js';
 import { literalArguments } from '../process/literal-launch.js';
@@ -96,15 +103,38 @@ const cleanupConfirmed = async (process: OwnedProcess): Promise<boolean> =>
 const inspectionFault = (error: unknown, secrets: readonly string[] = []): AgentFault => ({
   code: 'revo.agent.protocol_failed',
   details: {
-    diagnostic: { provider: inspectionDetails(error, secrets) },
+    diagnostic: {
+      ...sanitizeDiagnosticDetails({
+        provider:
+          error instanceof ProtocolConfigurationError
+            ? redactDiagnostic(error.details, secrets)
+            : inspectionDetails(error, secrets),
+      }),
+    },
   },
-  message: 'Agent configuration inspection failed.',
+  message: inspectionMessage(error, secrets),
   phase: 'execution',
   retryable: false,
 });
 
 const inspectionDetails = (error: unknown, secrets: readonly string[]): JsonObject =>
   protocolFailureDetails(error, (value) => redact(value, secrets));
+
+const redactDiagnostic = (details: JsonObject, secrets: readonly string[]): JsonObject =>
+  sanitizeDiagnosticDetails(redactDiagnosticDetails(details, (value) => redact(value, secrets)));
+
+const inspectionMessage = (error: unknown, secrets: readonly string[]): string => {
+  const candidate =
+    error instanceof ProtocolConfigurationError
+      ? error.message
+      : 'Agent configuration inspection failed.';
+  const message = sanitizeDiagnosticDetails(
+    redactDiagnosticDetails({ message: candidate }, (value) => redact(value, secrets)),
+  ).message;
+  return typeof message === 'string' && message.trim().length > 0
+    ? message
+    : 'Agent configuration inspection failed.';
+};
 
 const redact = (value: string, secrets: readonly string[]): string => {
   const channel = createRedactionChannel(secrets);
