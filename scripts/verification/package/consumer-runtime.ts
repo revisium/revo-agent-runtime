@@ -8,7 +8,13 @@ import { fileURLToPath } from 'node:url';
 
 import * as runtime from '${packageName}';
 
-assert.deepEqual(Object.keys(runtime), ['AgentManagerError', 'createAgentManager', 'decodeAgentConfigurationSelection', 'discoverAgents']);
+assert.deepEqual(Object.keys(runtime), [
+  'AgentManagerError',
+  'createAgentManager',
+  'decodeAgentConfigurationSelection',
+  'discoverAgents',
+  'projectSelectableAgentConfiguration',
+]);
 await assert.rejects(
   import('${packageName}/dist/index.js'),
   (error) => error instanceof Error && 'code' in error && error.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED',
