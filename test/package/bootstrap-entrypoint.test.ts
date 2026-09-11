@@ -12,6 +12,7 @@ import type {
   AgentInvocationStatus,
   AgentResultLookup,
 } from '../../src/index.js';
+import { projectSelectableAgentConfiguration } from '../../src/index.js';
 import * as packageEntry from '../../src/index.js';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -20,10 +21,14 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 test('manager iteration root exposes only the planned public runtime functions', () => {
   expect(Object.keys(packageEntry)).toEqual([
     'decodeAgentConfigurationSelection',
+    'projectSelectableAgentConfiguration',
     'AgentManagerError',
     'createAgentManager',
     'discoverAgents',
   ]);
+  expect(packageEntry.projectSelectableAgentConfiguration).toBe(
+    projectSelectableAgentConfiguration,
+  );
 });
 
 test('root exposes definition and discovery contracts at this iteration', () => {
