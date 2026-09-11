@@ -204,6 +204,35 @@ const fallbackInspection = async (
   }
 };
 
+const completeOpenedInspection = async (
+  processes: ProcessSpawner,
+  fallbackFor: ConfigurationCatalogFallbackResolver,
+  enrichFor: ConfigurationCatalogEnricherResolver,
+  request: ConfigurationInspectionRequest,
+  process: OwnedProcess,
+  opening: OpenedOpening,
+  deadline: ConfigurationDeadline,
+): Promise<ConfigurationInspectionOutcome> => {
+  const close = await closeSession(opening.session, deadline);
+  if (!(await cleanupConfirmed(process))) return Object.freeze({ status: 'cleanup_uncertain' });
+  if (close !== 'closed') return Object.freeze({ status: close === 'failed' ? 'failed' : close });
+  const fallback = fallbackFor(request.definition.id);
+  if (opening.session.catalog.options.length === 0 && fallback !== undefined)
+    return fallbackInspection(processes, fallback, request, deadline);
+  const enricher = enrichFor(request.definition.id);
+  let catalog = opening.session.catalog;
+  if (enricher !== undefined) {
+    try {
+      catalog = await enricher.enrich(catalog, request, deadline);
+    } catch (error) {
+      if (error instanceof Error && 'cleanupUncertain' in error && error.cleanupUncertain === true)
+        return Object.freeze({ status: 'cleanup_uncertain' });
+      return Object.freeze({ status: deadline.current() ?? 'failed' });
+    }
+  }
+  return Object.freeze({ catalog, launch: request.launch, status: 'completed' });
+};
+
 const runInspection = async (
   processes: ProcessSpawner,
   protocol: ProtocolConfigurationDriver,
@@ -233,32 +262,15 @@ const runInspection = async (
       if (!(await cleanupConfirmed(process))) return Object.freeze({ status: 'cleanup_uncertain' });
       return Object.freeze({ status });
     }
-    const close = await closeSession(first.session, deadline);
-    if (!(await cleanupConfirmed(process))) return Object.freeze({ status: 'cleanup_uncertain' });
-    if (close !== 'closed') return Object.freeze({ status: close === 'failed' ? 'failed' : close });
-    const fallback = fallbackFor(request.definition.id);
-    if (first.session.catalog.options.length === 0 && fallback !== undefined)
-      return fallbackInspection(processes, fallback, request, deadline);
-    const enricher = enrichFor(request.definition.id);
-    let catalog = first.session.catalog;
-    if (enricher !== undefined) {
-      try {
-        catalog = await enricher.enrich(catalog, request, deadline);
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          'cleanupUncertain' in error &&
-          error.cleanupUncertain === true
-        )
-          return Object.freeze({ status: 'cleanup_uncertain' });
-        return Object.freeze({ status: deadline.current() ?? 'failed' });
-      }
-    }
-    return Object.freeze({
-      catalog,
-      launch: request.launch,
-      status: 'completed',
-    });
+    return await completeOpenedInspection(
+      processes,
+      fallbackFor,
+      enrichFor,
+      request,
+      process,
+      first,
+      deadline,
+    );
   } finally {
     deadline.finish(request.signal);
   }

@@ -130,7 +130,8 @@ const readResponse = async (response: Response, signal: AbortSignal): Promise<un
 };
 
 const findAddress = (text: string): string | undefined => {
-  const match = text.match(/https?:\/\/127\.0\.0\.1:(\d+)/u);
+  const addressPattern = /https?:\/\/127\.0\.0\.1:(\d+)/u;
+  const match = addressPattern.exec(text);
   return match === null ? undefined : `http://127.0.0.1:${match[1]}`;
 };
 
@@ -171,9 +172,8 @@ const startServer = async (
         environment,
         onStdout: (chunk) => {
           output.write(chunk);
-          buffer = `${buffer}${new TextDecoder().decode(chunk, { stream: true })}`.slice(
-            -maximumServerOutputBytes,
-          );
+          const text = new TextDecoder().decode(chunk, { stream: true });
+          buffer = (buffer + text).slice(-maximumServerOutputBytes);
           const found = findAddress(buffer);
           if (found !== undefined) resolveAddress?.(found);
         },
