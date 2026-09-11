@@ -33,6 +33,17 @@ export interface ActiveInvocationStateSink {
   remove(invocationId: string, context: { readonly signal: AbortSignal }): Promise<void>;
 }
 
+export type AgentFaultDiagnostic = JsonObject & {
+  readonly provider?: JsonObject;
+  readonly process?: JsonObject;
+  readonly stderr?: string;
+  readonly stderrTruncated?: boolean;
+};
+
+export type AgentFaultDetails = JsonObject & {
+  readonly diagnostic?: AgentFaultDiagnostic;
+};
+
 export interface AgentManagerLimits {
   readonly activeStateOperationTimeoutMs?: number;
   readonly initializationTimeoutMs?: number;
@@ -108,7 +119,7 @@ export interface AgentFault {
     | 'revo.agent.event_sink_failed'
     | 'revo.agent.session_output_too_large';
   readonly message: string;
-  readonly details?: JsonObject;
+  readonly details?: AgentFaultDetails;
   readonly phase:
     | 'construction'
     | 'execution'

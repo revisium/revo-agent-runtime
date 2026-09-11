@@ -9,6 +9,7 @@ test('attaches bounded stderr to faults with and without existing diagnostics', 
   const base = protocolFault(
     { code: 'transport_failed', message: 'failed', retryable: false },
     'session_running',
+    undefined,
   );
   expect(withStderrDiagnostic(base, { stderr: 'provider failed', truncated: false })).toMatchObject(
     {
@@ -71,6 +72,56 @@ test('maps configuration selection protocol failures to stable fault codes', () 
     protocolFault(
       { code: 'configuration_value_unsupported', message: 'unsupported', retryable: false },
       'session_running',
+      undefined,
     ),
   ).toMatchObject({ code: 'revo.agent.configuration_value_unsupported' });
+});
+
+test('uses a structured provider reason as the actionable fault message', () => {
+  expect(
+    protocolFault(
+      {
+        code: 'transport_failed',
+        message: 'Provider rejected the request. configured-secret',
+        retryable: false,
+      },
+      'session_running',
+      (value) => value.replace('configured-secret', '[redacted]'),
+    ),
+  ).toMatchObject({ message: 'Provider rejected the request. [redacted]' });
+});
+
+test('keeps the generic fault message for blank structured reasons', () => {
+  expect(
+    protocolFault(
+      { code: 'transport_failed', message: '   ', retryable: false },
+      'session_running',
+      undefined,
+    ),
+  ).toMatchObject({ message: 'The provider session protocol operation failed.' });
+});
+
+test('bounds a structured reason before it becomes a public fault message', () => {
+  const result = protocolFault(
+    { code: 'transport_failed', message: 'x'.repeat(10_000), retryable: false },
+    'session_running',
+    undefined,
+  );
+  expect(result.message).toHaveLength(2_048);
+});
+
+test('bounds the complete diagnostic envelope', () => {
+  const result = protocolFault(
+    {
+      code: 'transport_failed',
+      message: 'Provider rejected the request.',
+      details: { data: { payload: 'x'.repeat(10_000) } },
+      retryable: false,
+    },
+    'session_running',
+    undefined,
+  );
+  expect(
+    new TextEncoder().encode(JSON.stringify(result.details?.diagnostic)).byteLength,
+  ).toBeLessThanOrEqual(8_192);
 });

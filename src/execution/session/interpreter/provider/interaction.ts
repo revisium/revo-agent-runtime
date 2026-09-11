@@ -87,6 +87,10 @@ const emit = (
     return;
   }
   const phase = effect.scope.kind === 'opening' ? 'session_opening' : 'session_running';
+  const provider = options.resources.providers.get(effect.providerResourceId);
+  const preparation =
+    provider?.preparation ?? options.resources.preparations.forSession(effect.correlation);
+  const redact = preparation?.output.redactDiagnostic.bind(preparation.output);
   const fault: AgentFault =
     status === 'timed_out'
       ? {
@@ -95,6 +99,6 @@ const emit = (
           phase,
           retryable: false,
         }
-      : protocolFault(failure, phase);
+      : protocolFault(failure, phase, redact);
   output.outcome({ ...base, fault, type: `provider.interaction.${status}` });
 };

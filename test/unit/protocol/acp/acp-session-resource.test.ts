@@ -1,4 +1,4 @@
-import type * as acp from '@agentclientprotocol/sdk';
+import * as acp from '@agentclientprotocol/sdk';
 import { expect, test, vi } from 'vitest';
 
 import { AcpSessionInteractionBroker } from '../../../../src/protocol/acp/session/interaction/broker.js';
@@ -82,6 +82,86 @@ test('contains prompt transport and cancellation failures', async () => {
   expect(
     (story.broker as unknown as { cancelPending: ReturnType<typeof vi.fn> }).cancelPending,
   ).toHaveBeenCalled();
+});
+
+test('uses an explicit ACP structured reason', async () => {
+  const structured = setup({
+    request: async () =>
+      Promise.reject(
+        acp.RequestError.internalError({ error: { message: 'Provider rejected this request.' } }),
+      ),
+  });
+  await expect(
+    structured.resource.prompt({ observer, prompt: 'work' }).completion,
+  ).resolves.toMatchObject({
+    failure: {
+      message: 'Provider rejected this request.',
+      details: {
+        code: -32603,
+        data: { error: { message: 'Provider rejected this request.' } },
+        message: 'Internal error',
+        name: 'RequestError',
+      },
+    },
+    status: 'failed',
+  });
+});
+
+test('uses a non-blank ACP reason when the first reason field is blank', async () => {
+  const story = setup({
+    request: async () =>
+      Promise.reject(
+        acp.RequestError.internalError({
+          error: { message: '  ', reason: 'Provider is offline.' },
+        }),
+      ),
+  });
+  await expect(
+    story.resource.prompt({ observer, prompt: 'work' }).completion,
+  ).resolves.toMatchObject({
+    failure: { message: 'Provider is offline.' },
+    status: 'failed',
+  });
+});
+
+test('uses the ACP request message when structured auth data has no reason', async () => {
+  const auth = setup({ request: async () => Promise.reject(acp.RequestError.authRequired()) });
+  await expect(
+    auth.resource.prompt({ observer, prompt: 'work' }).completion,
+  ).resolves.toMatchObject({
+    failure: { message: 'Authentication required' },
+    status: 'failed',
+  });
+
+  const authData = setup({
+    request: async () =>
+      Promise.reject(acp.RequestError.authRequired({ reason: 'login required' })),
+  });
+  await expect(
+    authData.resource.prompt({ observer, prompt: 'work' }).completion,
+  ).resolves.toMatchObject({
+    failure: { message: 'Authentication required' },
+    status: 'failed',
+  });
+});
+
+test('keeps the generic fallback for unstructured and empty ACP errors', async () => {
+  const plain = setup({
+    request: async () => Promise.reject(new Error('private provider detail')),
+  });
+  await expect(
+    plain.resource.prompt({ observer, prompt: 'work' }).completion,
+  ).resolves.toMatchObject({
+    failure: { message: 'ACP prompt transport failed.' },
+    status: 'failed',
+  });
+  const empty = setup({ request: async () => Promise.reject(new acp.RequestError(-32603, '')) });
+  await expect(
+    empty.resource.prompt({ observer, prompt: 'work' }).completion,
+  ).resolves.toMatchObject({
+    failure: { message: 'ACP prompt transport failed.' },
+    status: 'failed',
+  });
 });
 
 test('delegates interaction responses and successful prompt cancellation', async () => {

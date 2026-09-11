@@ -21,6 +21,7 @@ import type { SessionProtocolObserver } from '../../session/port/session.js';
 import type { AcpConfigurationCompatibilityResolver } from '../compatibility.js';
 import { acpConfigurationRequester } from '../configuration-requester.js';
 import { AcpConfigurationSelectionError, applyAcpConfiguration } from '../configuration.js';
+import { acpFailureMessage } from '../failure.js';
 import { boundAcpInput } from '../frame-boundary.js';
 import { AcpSessionFrameCapture } from '../session-frame-capture.js';
 import { acpSessionClientCapabilities, negotiateAcpSessionCapabilities } from './capabilities.js';
@@ -49,7 +50,7 @@ const connectionFailure = (error: unknown): SessionProtocolOpeningResult => {
   if (!(error instanceof AcpConfigurationSelectionError))
     return failure(
       'transport_failed',
-      'ACP session transport failed.',
+      acpFailureMessage(error, 'ACP session transport failed.'),
       protocolFailureDetails(error),
     );
   const code =

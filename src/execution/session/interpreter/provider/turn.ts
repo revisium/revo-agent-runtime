@@ -157,10 +157,11 @@ const emitFailure = (
 ): void => {
   const provider = options.resources.providers.get(effect.providerResourceId);
   const preparation = provider?.preparation;
+  const redact = preparation?.output.redactDiagnostic.bind(preparation.output);
   const fault = withStderrDiagnostic(
-    protocolFault(failure, 'session_running'),
+    protocolFault(failure, 'session_running', redact),
     preparation?.output.diagnostic() ?? { stderr: '', truncated: false },
-    preparation?.output.redactDiagnostic.bind(preparation.output),
+    redact,
   );
   output.outcome({
     ...observed(options),

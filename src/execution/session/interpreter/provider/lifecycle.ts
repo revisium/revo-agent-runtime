@@ -119,7 +119,7 @@ const emitCancellationFailure = (
     correlation: effect.correlation,
     fault: timedOut
       ? timeoutFault
-      : withStderrDiagnostic(protocolFault(failure, 'session_running'), diagnostic, redact),
+      : withStderrDiagnostic(protocolFault(failure, 'session_running', redact), diagnostic, redact),
     observedAt: now.iso,
     observedAtMs: now.milliseconds,
     type: timedOut ? 'provider.prompt.timed_out' : 'provider.prompt.failed',

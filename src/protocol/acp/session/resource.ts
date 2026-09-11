@@ -15,13 +15,14 @@ import type {
   SessionProtocolSession,
   SessionProtocolObserver,
 } from '../../session/port/session.js';
+import { acpFailureMessage } from '../failure.js';
 import { normalizeAcpUsage } from '../usage.js';
 import { AcpSessionInteractionBroker } from './interaction/broker.js';
 
 const protocolFailure = (message: string, error?: unknown) => ({
   code: 'transport_failed' as const,
   ...(error === undefined ? {} : { details: protocolFailureDetails(error) }),
-  message,
+  message: acpFailureMessage(error, message),
   retryable: false,
 });
 

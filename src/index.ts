@@ -47,6 +47,8 @@ export type {
   AgentManager,
   AgentManagerInitialization,
   AgentFault,
+  AgentFaultDetails,
+  AgentFaultDiagnostic,
   AgentManagerLimits,
   AgentManagerOptions,
   AgentStartContext,
