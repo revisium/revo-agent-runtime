@@ -58,32 +58,45 @@ export const protocolFailureDetails = (
   error: unknown,
   redact?: (value: string) => string,
 ): JsonObject => {
-  const finish = (details: JsonObject): JsonObject =>
-    sanitizeDiagnosticDetails(
-      redact === undefined ? details : redactDiagnosticDetails(details, redact),
-    );
   const budget = { remaining: maxDiagnosticBytes };
-  if (error instanceof Error) {
-    const details: Record<string, JsonValue> = {
-      name: boundedWithBudget(error.name, budget, redact),
-      message: boundedWithBudget(error.message, budget, redact, maxDiagnosticBytes),
-    };
-    if ('code' in error) {
-      const code = error.code;
-      if (typeof code === 'string' || typeof code === 'number') details.code = code;
-    }
-    if ('data' in error && error.data !== undefined)
-      details.data = safeValue(error.data, 0, budget, redact);
-    return finish(details);
-  }
-  if (typeof error === 'string')
-    return {
-      message: boundedWithBudget(error, budget, redact),
-    };
+  if (error instanceof Error) return finishDiagnostic(errorDetails(error, budget, redact), redact);
+  if (typeof error === 'string') return { message: boundedWithBudget(error, budget, redact) };
   if (typeof error !== 'object' || error === null)
-    return {
-      message: boundedWithBudget(String(error), budget, redact),
-    };
+    return { message: boundedWithBudget(String(error), budget, redact) };
+  const details = objectDetails(error, budget, redact);
+  return Object.keys(details).length === 0
+    ? { message: 'Provider request failed.' }
+    : finishDiagnostic(details, redact);
+};
+
+const finishDiagnostic = (details: JsonObject, redact?: (value: string) => string): JsonObject =>
+  sanitizeDiagnosticDetails(
+    redact === undefined ? details : redactDiagnosticDetails(details, redact),
+  );
+
+const errorDetails = (
+  error: Error,
+  budget: { remaining: number },
+  redact?: (value: string) => string,
+): JsonObject => {
+  const details: Record<string, JsonValue> = {
+    name: boundedWithBudget(error.name, budget, redact),
+    message: boundedWithBudget(error.message, budget, redact, maxDiagnosticBytes),
+  };
+  if ('code' in error) {
+    const code = error.code;
+    if (typeof code === 'string' || typeof code === 'number') details.code = code;
+  }
+  if ('data' in error && error.data !== undefined)
+    details.data = safeValue(error.data, 0, budget, redact);
+  return details;
+};
+
+const objectDetails = (
+  error: object,
+  budget: { remaining: number },
+  redact?: (value: string) => string,
+): JsonObject => {
   const details: Record<string, JsonValue> = {};
   for (const key of ['code', 'message', 'name'] as const) {
     const value = providerField(error, key);
@@ -92,9 +105,7 @@ export const protocolFailureDetails = (
   }
   if ('data' in error && error.data !== undefined)
     details.data = safeValue(error.data, 0, budget, redact);
-  return Object.keys(details).length === 0
-    ? { message: 'Provider request failed.' }
-    : finish(details);
+  return details;
 };
 
 const providerField = (error: object, key: 'code' | 'message' | 'name'): unknown => {

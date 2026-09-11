@@ -1,11 +1,9 @@
 import type { JsonObject } from '../../../contracts/agent-definition.js';
-import {
+export {
   protocolFailureDetails,
   redactDiagnosticDetails,
   sanitizeDiagnosticDetails,
 } from '../../../diagnostics/diagnostic.js';
-
-export { protocolFailureDetails, redactDiagnosticDetails, sanitizeDiagnosticDetails };
 
 type SessionProtocolFailureCode =
   | 'capability_unsupported'

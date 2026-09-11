@@ -1,7 +1,9 @@
 import * as acp from '@agentclientprotocol/sdk';
 
-import type { JsonObject } from '../../../contracts/agent-definition.js';
-import type { AgentDefinitionSessionCapabilities } from '../../../contracts/agent-definition.js';
+import type {
+  AgentDefinitionSessionCapabilities,
+  JsonObject,
+} from '../../../contracts/agent-definition.js';
 import type { AgentConfigurationSelection } from '../../../contracts/configuration.js';
 import { protocolFailureDetails } from '../../session/errors/protocol-error.js';
 import type { SessionProtocolOpeningOutcome } from '../../session/model/outcome.js';

@@ -44,13 +44,13 @@ export const withStderrDiagnostic = (
 ): AgentFault => {
   if (diagnostic.stderr.length === 0 && !diagnostic.truncated && redact === undefined) return fault;
   const existing = fault.details?.diagnostic;
-  const diagnosticDetails: JsonObject = isJsonObject(existing) ? existing : {};
+  const diagnosticDetails = isJsonObject(existing) ? existing : undefined;
   return {
     ...fault,
     details: {
-      ...(fault.details ?? {}),
+      ...fault.details,
       diagnostic: sanitizeDiagnosticDetails({
-        ...redactObject(diagnosticDetails, redact),
+        ...(diagnosticDetails === undefined ? undefined : redactObject(diagnosticDetails, redact)),
         stderr: redact?.(diagnostic.stderr) ?? diagnostic.stderr,
         ...(diagnostic.truncated ? { stderrTruncated: true } : {}),
       }),

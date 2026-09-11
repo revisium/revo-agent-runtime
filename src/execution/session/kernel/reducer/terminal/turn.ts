@@ -30,12 +30,12 @@ const publishCompletion = (
     turn.progress.cancellationCorrelation.effectId === command.correlation.effectId;
   if ((!matchesPrompt && !matchesCancel) || command.type === 'provider.prompt.accepted')
     return unchangedTransition(state);
-  const outcome =
-    matchesCancel && command.type !== 'provider.prompt.completed'
-      ? turn.progress.outcome.status === 'timed_out'
-        ? ({ error: command.fault, status: 'timed_out' } as const)
-        : ({ error: command.fault, status: 'failed' } as const)
-      : turn.progress.outcome;
+  let outcome = turn.progress.outcome;
+  if (matchesCancel && command.type !== 'provider.prompt.completed') {
+    if (turn.progress.outcome.status === 'timed_out')
+      outcome = { error: command.fault, status: 'timed_out' };
+    else outcome = { error: command.fault, status: 'failed' };
+  }
   const event: TurnCompletedEvent = {
     eventId: nextSessionEventId(state),
     observedAt: command.observedAt,
