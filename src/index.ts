@@ -16,6 +16,7 @@ export type {
   AgentConfigurationValue,
   InspectAgentConfiguration,
 } from './contracts/configuration.js';
+export { decodeAgentConfigurationSelection } from './configuration/selection.js';
 export type {
   ActiveInvocationSnapshot,
   ActiveInvocationStateSink,

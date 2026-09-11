@@ -1,3 +1,4 @@
+import { decodeAgentConfigurationSelection } from '../../../../configuration/selection.js';
 import type { JsonObject } from '../../../../contracts/agent-definition.js';
 import type { AgentConfigurationSelection } from '../../../../contracts/configuration.js';
 import { AgentManagerError } from '../../../../contracts/manager/core.js';
@@ -58,34 +59,11 @@ const jsonObject = (value: unknown, maximumBytes: number): Readonly<JsonObject> 
 
 const configuration = (value: unknown): AgentConfigurationSelection | undefined => {
   if (value === undefined) return undefined;
-  if (
-    !isJsonObject(value) ||
-    !hasExactJsonKeys(value, ['selections'], ['catalogRevision']) ||
-    !isJsonObject(value.selections)
-  )
+  try {
+    return decodeAgentConfigurationSelection(value);
+  } catch {
     return invalidSessionRequest();
-  const selections: Record<string, boolean | string> = {};
-  const entries = Object.entries(value.selections);
-  if (entries.length > 128) return invalidSessionRequest();
-  for (const [key, selected] of entries) {
-    if (
-      key.length === 0 ||
-      encoder.encode(key).byteLength > 256 ||
-      (typeof selected !== 'boolean' && typeof selected !== 'string')
-    )
-      return invalidSessionRequest();
-    if (typeof selected === 'string' && encoder.encode(selected).byteLength > 4_096)
-      return invalidSessionRequest();
-    selections[key] = selected;
   }
-  const revision =
-    value.catalogRevision === undefined
-      ? undefined
-      : boundedSessionString(value.catalogRevision, 128);
-  return Object.freeze({
-    ...(revision === undefined ? {} : { catalogRevision: revision }),
-    selections: Object.freeze(selections),
-  });
 };
 
 export const decodeAgentSessionLaunchInput = (

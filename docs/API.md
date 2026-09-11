@@ -283,6 +283,12 @@ configuration: {
 }
 ```
 
+For untrusted input, `decodeAgentConfigurationSelection(value)` returns a
+defensive immutable `AgentConfigurationSelection` copy or throws `TypeError`.
+It accepts only plain objects with `selections` and an optional
+`catalogRevision`; selection keys and values are bounded by their UTF-8 byte
+limits. The same decoder is used at invocation and session boundaries.
+
 Each invocation opens a fresh session. Selections are validated and applied in
 order against that session's current option list. A missing value fails before a
 prompt with `revo.agent.configuration_value_unsupported`; a missing value from
