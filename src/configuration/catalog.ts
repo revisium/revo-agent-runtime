@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { SessionConfigOption, SessionConfigSelectOption } from '@agentclientprotocol/sdk';
 
 import type {
+  AgentConfigurationKnownModel,
   AgentConfigurationModelView,
   AgentConfigurationOption,
   AgentConfigurationSelectOption,
@@ -86,20 +87,38 @@ const normalizeOption = (option: SessionConfigOption): AgentConfigurationOption 
 const providerGroups = (model: AgentConfigurationSelectOption) => {
   const providers = new Map<
     string,
-    { readonly id: string; readonly name: string; readonly models: AgentConfigurationValue[] }
+    {
+      readonly connected: boolean;
+      readonly id: string;
+      readonly name: string;
+      readonly models: AgentConfigurationKnownModel[];
+    }
   >();
   for (const value of model.values) {
     if (value.group === undefined) continue;
     const existing = providers.get(value.group.id);
     if (existing === undefined)
       providers.set(value.group.id, {
+        connected: true,
         id: value.group.id,
-        models: [value],
+        models: [
+          Object.freeze({
+            connected: true,
+            ...value,
+            name: value.name,
+          }),
+        ],
         name: value.group.name,
       });
     else {
       if (existing.name !== value.group.name) return invalidCatalog();
-      existing.models.push(value);
+      existing.models.push(
+        Object.freeze({
+          connected: true,
+          ...value,
+          name: value.name,
+        }),
+      );
     }
   }
   return Object.freeze(

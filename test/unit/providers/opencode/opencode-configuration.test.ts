@@ -27,10 +27,13 @@ test('preserves OpenCode session-available provider groups from its stable flat 
     providers: [
       {
         id: 'openrouter',
-        models: [{ value: 'openrouter/anthropic/claude' }, { value: 'openrouter/xai/grok' }],
+        models: [
+          { value: 'openrouter/anthropic/claude', name: 'OpenRouter/Claude' },
+          { value: 'openrouter/xai/grok', name: 'OpenRouter/Grok' },
+        ],
       },
-      { id: 'opencode', models: [{ value: 'opencode/big-pickle' }] },
-      { id: 'xai', models: [{ value: 'xai/grok-4.6' }] },
+      { id: 'opencode', models: [{ value: 'opencode/big-pickle', name: 'OpenCode/Big Pickle' }] },
+      { id: 'xai', models: [{ value: 'xai/grok-4.6', name: 'xAI/Grok 4.6' }] },
     ],
   });
 });

@@ -129,7 +129,7 @@ test('ignores unrelated effects and fails when preparation is missing', async ()
 
 test.each(['throw', 'reject'] as const)('contains process spawner %s failure', async (mode) => {
   const resources = createSessionInterpreterResources();
-  registerProtocolSession(resources, session);
+  registerProtocolSession(resources, session, { secrets: { TOKEN: 'process-secret' } });
   const recorded = recordingSessionEffectOutput();
   createProcessStartInterpreter({
     clock,
@@ -137,13 +137,24 @@ test.each(['throw', 'reject'] as const)('contains process spawner %s failure', a
     resources,
     spawner: {
       start: () => {
-        if (mode === 'throw') throw new Error('spawn failed');
-        return Promise.reject(new Error('spawn failed'));
+        const error = Object.assign(new Error('Bearer process-secret'), {
+          code: -32000,
+          data: { token: 'process-secret' },
+        });
+        if (mode === 'throw') throw error;
+        return Promise.reject(error);
       },
     },
   }).execute(effect, recorded.output);
   await flushMicrotasks(8);
-  expect(recorded.outcomes.at(-1)).toMatchObject({ type: 'process.failed' });
+  expect(recorded.outcomes.at(-1)).toMatchObject({
+    fault: {
+      details: {
+        diagnostic: { process: { message: expect.not.stringContaining('process-secret') } },
+      },
+    },
+    type: 'process.failed',
+  });
 });
 
 test('starts and registers a process while wiring bounded stdout and stderr collection', async () => {

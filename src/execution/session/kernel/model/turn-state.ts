@@ -65,7 +65,7 @@ interface CancelledTurnState extends TurnStateBase {
 
 interface TimedOutTurnState extends TurnStateBase {
   readonly status: 'timed_out';
-  readonly result: { readonly status: 'timed_out' };
+  readonly result: Extract<AgentSessionTurnResult, { readonly status: 'timed_out' }>;
 }
 
 interface InterruptedTurnState extends TurnStateBase {

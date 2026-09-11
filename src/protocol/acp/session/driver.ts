@@ -1,7 +1,11 @@
 import * as acp from '@agentclientprotocol/sdk';
 
-import type { AgentDefinitionSessionCapabilities } from '../../../contracts/agent-definition.js';
+import type {
+  AgentDefinitionSessionCapabilities,
+  JsonObject,
+} from '../../../contracts/agent-definition.js';
 import type { AgentConfigurationSelection } from '../../../contracts/configuration.js';
+import { protocolFailureDetails } from '../../session/errors/protocol-error.js';
 import type { SessionProtocolOpeningOutcome } from '../../session/model/outcome.js';
 import type { SessionProtocolContinuation } from '../../session/model/request.js';
 import type {
@@ -35,14 +39,19 @@ const failure = (
     | 'protocol_invalid'
     | 'transport_failed',
   message: string,
+  details?: JsonObject,
 ): Exclude<SessionProtocolOpeningOutcome, { readonly status: 'opened' }> => ({
-  failure: { code, message, retryable: false },
+  failure: { code, message, ...(details === undefined ? {} : { details }), retryable: false },
   status: 'failed',
 });
 
 const connectionFailure = (error: unknown): SessionProtocolOpeningResult => {
   if (!(error instanceof AcpConfigurationSelectionError))
-    return failure('transport_failed', 'ACP session transport failed.');
+    return failure(
+      'transport_failed',
+      'ACP session transport failed.',
+      protocolFailureDetails(error),
+    );
   const code =
     error.code === 'revo.agent.configuration_stale'
       ? 'configuration_stale'

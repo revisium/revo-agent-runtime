@@ -48,3 +48,40 @@ it('retains untruncated stdout and stderr without markers', () => {
   expect(new TextDecoder().decode(result.stderr)).toBe('err');
   expect(result.truncated).toEqual({ stderr: false, stdout: false });
 });
+
+it('provides a bounded redacted stderr snapshot before publication', () => {
+  const collector = new SessionOutputCollector(128, ['secret']);
+  collector.writeStderr(new TextEncoder().encode('provider secret failure'));
+
+  expect(collector.diagnostic()).toEqual({
+    stderr: 'provider [REDACTED] failure',
+    truncated: false,
+  });
+});
+
+it('starts a fresh diagnostic window for each provider turn and retains its tail', () => {
+  const collector = new SessionOutputCollector(8_192, []);
+  collector.writeStderr(new TextEncoder().encode('startup '.repeat(2_000)));
+  collector.beginDiagnosticWindow();
+  collector.writeStderr(new TextEncoder().encode('CURRENT_TURN_FAILURE'));
+
+  expect(collector.diagnostic().stderr).toContain('CURRENT_TURN_FAILURE');
+});
+
+it('ignores stderr after finalization and reports an empty diagnostic after disposal', () => {
+  const collector = new SessionOutputCollector(128, []);
+  collector.writeStdout(new TextEncoder().encode('out'));
+  collector.finalize();
+  collector.writeStderr(new TextEncoder().encode('late'));
+  collector.dispose();
+  expect(collector.diagnostic()).toEqual({ stderr: '', truncated: false });
+});
+
+it('redacts configured secrets from structured diagnostic text at fault egress', () => {
+  const collector = new SessionOutputCollector(128, ['opaque-configured-secret']);
+  expect(
+    collector.redactDiagnostic(
+      'Authorization: Basic abc Cookie: session=opaque-configured-secret private=opaque-configured-secret',
+    ),
+  ).not.toContain('opaque-configured-secret');
+});

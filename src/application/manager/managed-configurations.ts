@@ -70,7 +70,11 @@ export class ManagedConfigurations {
         workspace: request.workspace.directory,
       });
       if (outcome.status === 'cancelled') throw new AgentManagerError(cancellationFailure());
-      if (outcome.status === 'timed_out') throw new AgentManagerError(timeoutFailure());
+      if (outcome.status === 'timed_out')
+        throw new AgentManagerError({
+          ...timeoutFailure(),
+          ...(outcome.error?.details === undefined ? {} : { details: outcome.error.details }),
+        });
       if (outcome.status === 'cleanup_uncertain')
         throw new AgentManagerError(
           fault(
@@ -81,11 +85,12 @@ export class ManagedConfigurations {
         );
       if (outcome.status === 'failed')
         throw new AgentManagerError(
-          fault(
-            'revo.agent.protocol_failed',
-            'Agent configuration inspection failed.',
-            'execution',
-          ),
+          outcome.error ??
+            fault(
+              'revo.agent.protocol_failed',
+              'Agent configuration inspection failed.',
+              'execution',
+            ),
         );
       if (this.isClosed())
         throw managerError('revo.agent.manager_closed', 'Agent manager is closed.');
@@ -96,7 +101,7 @@ export class ManagedConfigurations {
         launch: outcome.launch,
         ...(outcome.catalog.model === undefined ? {} : { model: outcome.catalog.model }),
         options: outcome.catalog.options,
-        schemaVersion: 'agent-configuration-catalog/v1',
+        schemaVersion: 'agent-configuration-catalog/v2',
       });
     } finally {
       pending.finish();

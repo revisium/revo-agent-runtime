@@ -228,6 +228,22 @@ test.each([
   expect(recorded.outcomes.at(-1)).toMatchObject({ type });
 });
 
+test('records a timed-out cancellation as a timed-out provider failure', async () => {
+  const { driver, resources } = await setup({ cancellations: [{ status: 'requested' }] });
+  resources.prompts.register('provider-1', 'turn-1', {
+    effectId: 'prompt',
+    prompt: {
+      cancel: (reason?: string) => driver.cancelPrompt(reason),
+      completion: Promise.resolve({ status: 'completed' as const }),
+    },
+  });
+  const recorded = recordingSessionEffectOutput();
+  const [cancel] = createProviderLifecycleInterpreters({ clock, resources });
+  cancel?.execute({ ...cancelEffect, timedOut: true }, recorded.output);
+  await flushMicrotasks(12);
+  expect(recorded.outcomes.at(-1)).toMatchObject({ type: 'provider.prompt.timed_out' });
+});
+
 test('contains a thrown prompt cancellation and maps it to protocol failure', async () => {
   const resources = createSessionInterpreterResources();
   resources.prompts.register('provider-1', 'turn-1', {

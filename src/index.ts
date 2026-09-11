@@ -6,6 +6,7 @@ export type {
 export type {
   AgentConfigurationBooleanOption,
   AgentConfigurationCatalog,
+  AgentConfigurationKnownModel,
   AgentConfigurationModelView,
   AgentConfigurationOption,
   AgentConfigurationProviderModels,
@@ -126,6 +127,7 @@ export type {
 import { createAgentManager as createManager } from './application/manager/manager.js';
 import { createAgentSessionComposer } from './composition/session/manager.js';
 import { createConfigurationInspector } from './execution/configuration/inspector.js';
+import { createConfigurationServerSpawner } from './execution/configuration/server-process.js';
 import { createInvocationExecutor } from './execution/invocation/executor.js';
 import { createExecutablePreflight } from './execution/probe/executable-preflight.js';
 import { nodeOutputClaimPlatform } from './platform/node/output/claim.js';
@@ -142,9 +144,16 @@ import {
   builtInConfigurationCompatibility,
   builtInConfigurationFallback,
 } from './providers/index.js';
+import { createOpenCodeCatalogEnricher } from './providers/opencode/catalog.js';
 
 const acpProtocolDriver = createAcpProtocolDriver(builtInConfigurationCompatibility);
 const acpConfigurationDriver = createAcpConfigurationDriver(builtInConfigurationCompatibility);
+const configurationEnrichers = new Map([
+  [
+    'opencode-acp',
+    createOpenCodeCatalogEnricher(createConfigurationServerSpawner(nodeProcessSpawner)),
+  ],
+]);
 const sessionComposer = createAgentSessionComposer({
   hostEnvironment: () => process.env,
   digest: nodeSha256Digest,
@@ -163,6 +172,7 @@ export const createAgentManager = (options: import('./contracts/manager.js').Age
       nodeProcessSpawner,
       acpConfigurationDriver,
       builtInConfigurationFallback,
+      (definitionId) => configurationEnrichers.get(definitionId),
     ),
     executablePreflight: createExecutablePreflight(nodeExecutableProbe),
     executor: createInvocationExecutor(nodeProcessSpawner, acpProtocolDriver),
