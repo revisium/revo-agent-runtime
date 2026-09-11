@@ -2,6 +2,7 @@
 
 `@revisium/revo-agent-runtime` exports only its package root. Deep imports are
 private. The root exports `discoverAgents`, `createAgentManager`,
+`projectSelectableAgentConfiguration`, `decodeAgentConfigurationSelection`,
 `AgentManagerError`, and the public TypeScript contracts.
 
 ## Discovery
@@ -273,6 +274,14 @@ selectable models as connected and do not synthesize entries for unknown models.
 Known model entries retain the ordinary select-value shape (`value`, `name`,
 optional description/group) and add `connected`; OpenCode values are
 provider-qualified opaque values such as `openrouter/xai/grok`.
+
+`projectSelectableAgentConfiguration(catalog)` returns the catalog projected to
+models selectable from the inspected catalog. It returns `undefined` when a
+provider-backed catalog has no model satisfying the provider, option, and
+session evidence. The projection keeps the catalog revision and metadata,
+updates the model option and current model when the inspected current model is
+unavailable, and removes disconnected providers and models. Catalogs without
+provider evidence are returned unchanged.
 
 Pass a catalog revision and explicit selections to `start()`:
 
