@@ -59,6 +59,7 @@
       "name": "application-session-boundary",
       "pattern": "^src/application/session/boundary/",
       "dependencies": [
+        "configuration",
         "contracts",
         "contracts-session",
         "contracts-session-envelope",
@@ -120,6 +121,7 @@
         "application-admission",
         "application-session-management",
         "application-session-policy",
+        "configuration",
         "contracts",
         "contracts-manager-surface",
         "contracts-session",
@@ -313,6 +315,7 @@
       "dependencies": [
         "application",
         "composition-session",
+        "configuration",
         "contracts",
         "contracts-manager-surface",
         "contracts-session",
