@@ -8,7 +8,12 @@ import type { SessionState } from '../../../../../src/execution/session/kernel/m
 declare const opening: SessionOpeningDescriptor;
 
 const correlation = { effectId: 'effect_01', epoch: 1, sessionId: 'session_01' } as const;
-const pin = { agentId: 'codex', agentVersion: '1', definitionDigest: 'digest' } as const;
+const pin = {
+  agentId: 'codex',
+  agentVersion: '1',
+  definitionDigest: 'digest',
+  installationId: 'fixture-installation',
+} as const;
 const limits = {
   eventSinkTimeoutMs: 1_000,
   idleTimeoutMs: 10_000,

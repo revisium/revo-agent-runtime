@@ -53,7 +53,7 @@ test.skipIf(process.platform !== 'linux')(
       });
       await manager.initialize([]);
       const handle = await manager.start({
-        agent: { id: 'codex', version: '1.0.0' },
+        agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
         invocationId: 'stubborn-descendant',
         output: { directory: invocationOutputDirectory(directory, 'stubborn-descendant') },
         parameters: {},

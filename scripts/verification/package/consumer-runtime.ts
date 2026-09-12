@@ -47,8 +47,8 @@ const discovered = await runtime.discoverAgents({
   disabledDetectorIds,
   systemExecutableOverrides: { codex: process.execPath, claude: process.execPath },
 });
-assert.deepEqual(discovered.definitions.map(({ id, version }) => [id, version]), [
-  ['claude-acp', '0.70.0'], ['codex-acp', '1.7.0'],
+assert.deepEqual(discovered.definitions.map(({ id, version, installationId }) => [id, version, installationId]), [
+  ['claude-acp', '0.70.0', process.execPath], ['codex-acp', '1.7.0', process.execPath],
 ]);
 for (const definition of discovered.definitions) {
   assert.equal(definition.launch.command, process.execPath);
@@ -75,6 +75,7 @@ const manager = runtime.createAgentManager({
       schemaVersion: 'agent-definition/v1',
       id: 'fake',
       version: '1',
+      installationId: 'fake-installation',
       displayName: 'Fake ACP',
       launch: {
         command: process.execPath,
@@ -91,7 +92,7 @@ const manager = runtime.createAgentManager({
 });
 await manager.initialize([]);
 const configuration = await manager.inspectConfiguration({
-  agent: { id: 'fake', version: '1' },
+  agent: { id: 'fake', version: '1', installationId: 'fake-installation' },
   workspace: { directory: process.cwd() },
 });
 assert.equal(configuration.schemaVersion, 'agent-configuration-catalog/v2');
@@ -101,7 +102,7 @@ assert.deepEqual(configuration.options.map(({ id, currentValue }) => [id, curren
 ]);
 const outputDirectory = join(process.cwd(), 'invocation-output');
 const handle = await manager.start({
-  agent: { id: 'fake', version: '1' },
+  agent: { id: 'fake', version: '1', installationId: 'fake-installation' },
   configuration: {
     catalogRevision: configuration.catalogRevision,
     selections: { model: 'packed/model' },

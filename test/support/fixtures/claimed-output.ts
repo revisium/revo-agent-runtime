@@ -6,7 +6,12 @@ import { createNodeOutputClaimPlatform } from '../../../src/platform/node/output
 
 const event: AgentEvent = Object.freeze({
   invocationId: 'invocation',
-  pin: { agentId: 'codex', agentVersion: '1.0.0', definitionDigest: 'digest' },
+  pin: {
+    agentId: 'codex',
+    agentVersion: '1.0.0',
+    definitionDigest: 'digest',
+    installationId: 'fixture-installation',
+  },
   schemaVersion: 'agent-event/v1',
   sequence: 1,
   timestamp: '2026-08-30T00:00:00.000Z',

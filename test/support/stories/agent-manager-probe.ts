@@ -121,7 +121,11 @@ export interface AgentManagerProbeStory {
 }
 
 export const agentManagerProbeStory = (): AgentManagerProbeStory => {
-  const agent = Object.freeze({ id: 'runtime-agent', version: '2.0.0' });
+  const agent = Object.freeze({
+    id: 'runtime-agent',
+    version: '2.0.0',
+    installationId: 'fixture-installation',
+  });
   const preflight = new ProbePreflightStory();
   const manager = createAgentManager(
     managerOptions([probeDefinition()]),

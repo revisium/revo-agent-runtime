@@ -14,7 +14,12 @@ import { flushMicrotasks } from '../../../../../support/session/runtime/scheduli
 
 const clock = { now: () => ({ iso: '2026-09-05T00:00:04.000Z', milliseconds: 4_000 }) };
 const digest = { digest: (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex') };
-const pin = { agentId: 'codex', agentVersion: '1', definitionDigest: 'definition-sha256' };
+const pin = {
+  agentId: 'codex',
+  agentVersion: '1',
+  definitionDigest: 'definition-sha256',
+  installationId: 'fixture-installation',
+};
 const cursor = { eventId: 'session_01:1:event:4', sequence: 4, streamId: 'stream_01' };
 
 type CaptureEffect = Extract<SessionEffect, { readonly type: 'checkpoint.capture' }>;

@@ -4,7 +4,11 @@ import type { SealedAgentRegistry, ValidatedAgentDefinition } from '../../defini
 
 const descriptorFrom = ({ definition, digest }: ValidatedAgentDefinition): AgentDescriptor =>
   Object.freeze({
-    agent: Object.freeze({ id: definition.id, version: definition.version }),
+    agent: Object.freeze({
+      id: definition.id,
+      version: definition.version,
+      installationId: definition.installationId,
+    }),
     capabilities: definition.capabilities,
     definitionDigest: digest,
     displayName: definition.displayName,

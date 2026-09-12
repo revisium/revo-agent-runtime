@@ -60,7 +60,7 @@ const requestFor = (
   directory: string,
   prompt: string,
 ) => ({
-  agent: { id: definition.id, version: definition.version },
+  agent: { id: definition.id, version: definition.version, installationId: 'fixture-installation' },
   invocationId,
   output: { directory: invocationOutputDirectory(directory, invocationId) },
   parameters: {},
@@ -78,7 +78,12 @@ const probeSummary = (name: string, probe: AgentProbeResult) =>
 const probeAgent = async (
   manager: ReturnType<typeof createAgentManager>,
   definition: AgentDefinitionInput,
-) => manager.probeAgent({ id: definition.id, version: definition.version });
+) =>
+  manager.probeAgent({
+    id: definition.id,
+    version: definition.version,
+    installationId: 'fixture-installation',
+  });
 
 interface SmokeOutcome {
   readonly eventCount: number;

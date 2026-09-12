@@ -15,6 +15,7 @@ export interface AgentDescriptor {
 export interface AgentExecutionPin {
   readonly agentId: string;
   readonly agentVersion: string;
+  readonly installationId: string;
   readonly definitionDigest: string;
 }
 

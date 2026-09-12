@@ -9,9 +9,9 @@ test('does not fall back when an explicit CLI override is unavailable', async ()
     { systemExecutableOverrides: { codex: '/missing/codex' } },
     {
       ...nodeDiscoveryPlatform,
-      resolveInstalledCli: async (_policy, override) => {
+      resolveInstalledClis: async (_policy, override) => {
         selected.push(override);
-        return undefined;
+        return [];
       },
     },
   );
@@ -30,7 +30,7 @@ test('reports a missing packaged adapter separately from a missing CLI', async (
     {},
     {
       ...nodeDiscoveryPlatform,
-      resolveInstalledCli: async () => '/installed/codex',
+      resolveInstalledClis: async () => ['/installed/codex'],
       resolveBundledBridge: () => ({ available: false, reason: 'entrypoint_invalid' }),
     },
   );
@@ -41,4 +41,27 @@ test('reports a missing packaged adapter separately from a missing CLI', async (
   expect(result.diagnostics).toContainEqual(
     expect.objectContaining({ code: 'bundled_bridge_unavailable' }),
   );
+});
+
+test('creates one independently selectable definition per installed CLI', async () => {
+  const detector = createCodexDetector(
+    {},
+    {
+      ...nodeDiscoveryPlatform,
+      resolveInstalledClis: async () => ['/installed/codex-one', '/installed/codex-two'],
+      resolveBundledBridge: () => ({ available: true, entrypoint: '/packaged/codex-acp.mjs' }),
+    },
+  );
+
+  const result = await detector.detect({ signal: new AbortController().signal });
+
+  expect(
+    result.candidates.map(({ definition }) => ({
+      installationId: definition.installationId,
+      selectedCli: definition.launch.environment?.CODEX_PATH,
+    })),
+  ).toEqual([
+    { installationId: '/installed/codex-one', selectedCli: '/installed/codex-one' },
+    { installationId: '/installed/codex-two', selectedCli: '/installed/codex-two' },
+  ]);
 });

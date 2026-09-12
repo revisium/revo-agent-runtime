@@ -14,7 +14,12 @@ const saveEffect = {
   snapshot: {
     acceptedAt: '2026-09-05T00:00:00.000Z',
     incarnationId: 'incarnation-1',
-    pin: { agentId: 'codex', agentVersion: '1.0.0', definitionDigest: 'digest' },
+    pin: {
+      agentId: 'codex',
+      agentVersion: '1.0.0',
+      definitionDigest: 'digest',
+      installationId: 'fixture-installation',
+    },
     process: {
       fingerprint: 'process',
       pid: 42,

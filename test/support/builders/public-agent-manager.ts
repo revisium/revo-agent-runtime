@@ -19,7 +19,7 @@ export const publicInvocationRequest = (
   directory: string,
   invocationId: string,
 ): StartAgentInvocation => ({
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
   invocationId,
   output: { directory: invocationOutputDirectory(directory, invocationId) },
   parameters: {},

@@ -10,6 +10,7 @@ import { builtInProviderIds } from './support/provider-selection.js';
 
 // Test installations only: these versions never enter the runtime dependency graph.
 const versions = { codex: '0.153.3', claude: '2.1.263' };
+const providers = ['claude', 'codex'] as const;
 const directory = await mkdtemp(join(tmpdir(), 'revo-installed-cli-smoke-'));
 const originalPath = process.env.PATH;
 const selection = {
@@ -35,10 +36,31 @@ try {
   assert.deepEqual((await discoverAgents(selection)).definitions, []);
   process.env.PATH = `${join(directory, 'node_modules', '.bin')}${delimiter}${originalPath ?? ''}`;
   const discovery = await discoverAgents(selection);
-  assert.deepEqual(
-    discovery.definitions.map(({ id }) => id),
-    ['claude-acp', 'codex-acp'],
-    JSON.stringify(discovery.diagnostics),
+  const selectedDefinitions = await Promise.all(
+    providers.map(async (provider) => {
+      const explicit = await discoverAgents({
+        disabledDetectorIds: builtInProviderIds.filter((id) => id !== provider),
+        systemExecutableOverrides: {
+          [provider]: join(
+            directory,
+            'node_modules',
+            '.bin',
+            `${provider}${process.platform === 'win32' ? '.cmd' : ''}`,
+          ),
+        },
+      });
+      assert.equal(explicit.definitions.length, 1, JSON.stringify(explicit.diagnostics));
+      const definition = explicit.definitions[0];
+      assert.ok(definition);
+      assert.ok(
+        discovery.definitions.some(
+          ({ id, installationId }) =>
+            id === definition.id && installationId === definition.installationId,
+        ),
+        JSON.stringify(discovery.diagnostics),
+      );
+      return definition;
+    }),
   );
   const manager = createAgentManager({
     definitions: discovery.definitions,
@@ -47,27 +69,16 @@ try {
   try {
     await manager.initialize([]);
     await Promise.all(
-      discovery.definitions.map(async (definition) => {
+      selectedDefinitions.map(async (definition) => {
         const provider = definition.id === 'codex-acp' ? 'codex' : 'claude';
-        const probe = await manager.probeAgent({ id: definition.id, version: definition.version });
+        const probe = await manager.probeAgent({
+          id: definition.id,
+          version: definition.version,
+          installationId: definition.installationId,
+        });
         assert.equal(probe.status, 'available');
         assert.equal(probe.versionProbeExecutable, definition.launch.versionProbe.command);
         assert.ok(probe.reportedVersion?.startsWith(versions[provider]));
-        const explicit = await discoverAgents({
-          ...selection,
-          systemExecutableOverrides: {
-            [provider]: join(
-              directory,
-              'node_modules',
-              '.bin',
-              `${provider}${process.platform === 'win32' ? '.cmd' : ''}`,
-            ),
-          },
-        });
-        assert.deepEqual(
-          explicit.definitions.find(({ id }) => id === definition.id),
-          definition,
-        );
         console.log(
           `${provider}: CLI ${probe.reportedVersion}; adapter ${definition.version}; executable ${probe.versionProbeExecutable}`,
         );

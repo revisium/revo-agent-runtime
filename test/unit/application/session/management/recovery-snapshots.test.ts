@@ -6,7 +6,7 @@ import type { ActiveAgentSessionSnapshot, AgentDescriptor } from '../../../../..
 const definitionDigest = 'a'.repeat(64);
 const agents: readonly AgentDescriptor[] = [
   {
-    agent: { id: 'fake', version: '1' },
+    agent: { id: 'fake', version: '1', installationId: 'fixture-installation' },
     capabilities: { cancellation: true, structuredResult: true, usage: false },
     definitionDigest,
     displayName: 'Fake',
@@ -16,7 +16,12 @@ const agents: readonly AgentDescriptor[] = [
 const valid = (): ActiveAgentSessionSnapshot => ({
   acceptedAt: '2026-09-05T00:00:00.000Z',
   incarnationId: 'inc_valid',
-  pin: { agentId: 'fake', agentVersion: '1', definitionDigest },
+  pin: {
+    agentId: 'fake',
+    agentVersion: '1',
+    installationId: 'fixture-installation',
+    definitionDigest,
+  },
   process: {
     fingerprint: `sha256:${'b'.repeat(64)}`,
     pid: 42,

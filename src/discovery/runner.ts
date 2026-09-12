@@ -76,7 +76,7 @@ interface DiscoveryState {
   readonly definitions: AgentDiscoveryResult['definitions'][number][];
   readonly diagnostics: AgentDiscoveryResult['diagnostics'][number][];
   readonly modelObservations: ModelObservation[];
-  readonly identities: Map<string, Set<string>>;
+  readonly identities: Map<string, Map<string, Set<string>>>;
 }
 
 interface CandidateRecord extends Record<string, unknown> {
@@ -149,7 +149,8 @@ const appendCandidate = (
   const definition = validateAgentDefinition(candidate.definition).definition;
   const models = normalizedModels(candidate.models);
   const knownVersions = state.identities.get(definition.id);
-  if (knownVersions?.has(definition.version) === true) {
+  const knownInstallations = knownVersions?.get(definition.version);
+  if (knownInstallations?.has(definition.installationId) === true) {
     state.diagnostics.push(
       diagnosticFor(detectorId, {
         code: 'duplicate_definition',
@@ -160,8 +161,13 @@ const appendCandidate = (
     return;
   }
   if (knownVersions === undefined)
-    state.identities.set(definition.id, new Set([definition.version]));
-  else knownVersions.add(definition.version);
+    state.identities.set(
+      definition.id,
+      new Map([[definition.version, new Set([definition.installationId])]]),
+    );
+  else if (knownInstallations === undefined)
+    knownVersions.set(definition.version, new Set([definition.installationId]));
+  else knownInstallations.add(definition.installationId);
   const definitionIndex = state.definitions.length;
   state.definitions.push(definition);
   const defaultModelId =

@@ -32,7 +32,7 @@ declare const checkpoint: AgentSessionCheckpoint;
 declare const readonlyOpenRequest: OpenAgentSession;
 
 const openRequest = {
-  agent: { id: 'codex-acp', version: '1.7.0' },
+  agent: { id: 'codex-acp', version: '1.7.0', installationId: 'fixture-installation' },
   output: { directory: '/output' },
   parameters: {},
   permissions: {},
@@ -195,7 +195,7 @@ void invalidOptionalPresence;
 
 const invalidResume = {
   // @ts-expect-error Resume identity and pin come only from the token.
-  agent: { id: 'codex-acp', version: '1.7.0' },
+  agent: { id: 'codex-acp', version: '1.7.0', installationId: 'fixture-installation' },
   output: { directory: '/output/resumed' },
   parameters: {},
   permissions: {},

@@ -11,7 +11,11 @@ const registry = createSealedAgentRegistry([agentDefinition()]);
 const invocation = recoverySnapshot('inv_existing');
 const agents: readonly AgentDescriptor[] = [
   {
-    agent: { id: invocation.pin.agentId, version: invocation.pin.agentVersion },
+    agent: {
+      id: invocation.pin.agentId,
+      version: invocation.pin.agentVersion,
+      installationId: 'fixture-installation',
+    },
     capabilities: { cancellation: true, structuredResult: true, usage: false },
     definitionDigest: invocation.pin.definitionDigest,
     displayName: 'Fixture agent',

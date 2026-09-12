@@ -8,8 +8,8 @@ test('discovers an installed CLI whose first version check takes longer than fiv
   const fixture = await systemExecutable('slow-version');
   try {
     await expect(
-      nodeDiscoveryPlatform.resolveInstalledCli(codexProviderPolicy.cli, fixture.executable),
-    ).resolves.toBe(fixture.executable);
+      nodeDiscoveryPlatform.resolveInstalledClis(codexProviderPolicy.cli, fixture.executable),
+    ).resolves.toEqual([fixture.executable]);
   } finally {
     await fixture.dispose();
   }

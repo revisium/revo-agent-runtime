@@ -21,7 +21,7 @@ const requestFor = (
   directory: string,
   prompt: string,
 ) => ({
-  agent: { id: definition.id, version: definition.version },
+  agent: { id: definition.id, version: definition.version, installationId: 'fixture-installation' },
   invocationId,
   output: { directory: outputDirectory(directory, invocationId) },
   parameters: {},

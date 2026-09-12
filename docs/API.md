@@ -30,14 +30,17 @@ Version checks use an isolated child environment; operating-system bootstrap
 variables may still be present, but application variables are not inherited.
 
 Codex and Claude use packaged ACP adapters and separately installed user CLIs.
-Discovery looks up `codex`/`claude` in the backend process's `PATH`; an absolute
-`systemExecutableOverrides.codex`/`.claude` selects that vendor CLI instead.
+Discovery resolves every `codex`/`claude` occurrence in the backend process's
+`PATH`, canonicalizes the vendor executables, and emits one definition per distinct
+installation. An absolute `systemExecutableOverrides.codex`/`.claude` selects
+exactly that vendor CLI instead.
 These two overrides no longer select an ACP adapter executable. Rediscover and
 replace persisted definitions from the earlier bundled-CLI setup when upgrading. Missing or
 unlaunchable CLIs produce diagnostics and no definition; there is no bundled CLI
 fallback. No authentication check is performed during discovery.
 
-A discovered definition binds the canonical CLI path through `launch.environment`.
+A discovered definition uses the canonical CLI path as `installationId` and binds
+the same path through `launch.environment`.
 These non-secret, definition-owned variables take precedence over launch-context
 variables, including differently cased names on Windows. `launch.versionProbe.command`
 optionally selects the executable whose version is checked (by default, the launch
@@ -63,7 +66,8 @@ const manager = createAgentManager({
 ```
 
 `definitions` and `activeStateSink` are required. Definitions are validated,
-canonicalized, copied, frozen, and registered by exact `{ id, version }`
+canonicalized, copied, frozen, and registered by exact
+`{ id, version, installationId }`
 identity. `ActiveInvocationStateSink` is caller-owned: the manager serializes
 its `save` and `remove` calls but never reads it.
 
@@ -109,7 +113,11 @@ await manager.initialize({
 });
 
 const session = await manager.sessions.open({
-  agent: { id: 'codex-acp', version: '1.7.0' },
+  agent: {
+    id: 'codex-acp',
+    version: '1.7.0',
+    installationId: '/opt/codex/bin/codex',
+  },
   output: { directory: sessionOutputDirectory },
   parameters: {},
   permissions: {},

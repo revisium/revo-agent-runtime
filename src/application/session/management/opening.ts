@@ -29,6 +29,7 @@ const pinOf = (descriptor: AgentDescriptor): AgentExecutionPin =>
   Object.freeze({
     agentId: descriptor.agent.id,
     agentVersion: descriptor.agent.version,
+    installationId: descriptor.agent.installationId,
     definitionDigest: descriptor.definitionDigest,
   });
 

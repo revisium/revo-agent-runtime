@@ -7,7 +7,7 @@ import {
 } from '../../smoke/session/configuration.js';
 
 const catalog = {
-  agent: { id: 'claude-acp', version: '0.70.0' },
+  agent: { id: 'claude-acp', version: '0.70.0', installationId: 'fixture-installation' },
   catalogRevision: 'revision',
   definitionDigest: 'digest',
   launch: { executable: 'claude', reportedVersion: '0.70.0' },

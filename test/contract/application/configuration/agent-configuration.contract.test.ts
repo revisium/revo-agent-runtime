@@ -23,7 +23,7 @@ test('inspects live session options and applies an explicit configuration before
     await story.shutdown();
 
     expect(catalog).toMatchObject({
-      agent: { id: 'codex', version: '1.0.0' },
+      agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
       model: {
         currentModel: 'provider-a/alpha',
         currentProvider: { id: 'provider-a', name: 'Provider A' },
@@ -224,7 +224,7 @@ test('uses the bounded grok models command only when session metadata is absent'
 
     await story.shutdown();
     expect(catalog).toMatchObject({
-      agent: { id: 'grok-acp', version: '1.0.0' },
+      agent: { id: 'grok-acp', version: '1.0.0', installationId: 'fixture-installation' },
       model: {
         currentModel: 'grok-4.6',
         sessionAvailable: [{ value: 'grok-4.6' }, { value: 'grok-4.5' }],

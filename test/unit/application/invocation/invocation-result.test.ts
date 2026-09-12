@@ -5,7 +5,7 @@ import type { AgentExecutionPin, StartAgentInvocation } from '../../../../src/co
 import type { ExecutionEvidence } from '../../../../src/execution/invocation/executor.js';
 
 const request: StartAgentInvocation = {
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
   invocationId: 'result-fixture',
   output: { directory: '/fixture/output' },
   parameters: {},
@@ -19,6 +19,7 @@ const pin: AgentExecutionPin = {
   agentId: 'codex',
   agentVersion: '1.0.0',
   definitionDigest: 'sha256:fixture',
+  installationId: 'fixture-installation',
 };
 
 const evidence: ExecutionEvidence = {

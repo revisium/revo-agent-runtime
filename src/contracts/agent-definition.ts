@@ -46,6 +46,7 @@ export interface AgentDefinition {
   readonly schemaVersion: 'agent-definition/v1';
   readonly id: string;
   readonly version: string;
+  readonly installationId: string;
   readonly displayName: string;
   readonly description?: string;
   readonly launch: {
@@ -90,4 +91,5 @@ export type AgentDefinitionInput = Omit<AgentDefinition, 'protocol'> & {
 export interface AgentRef {
   readonly id: string;
   readonly version: string;
+  readonly installationId: string;
 }

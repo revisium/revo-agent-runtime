@@ -52,8 +52,14 @@ test('probes a discovered Copilot Node entrypoint through the public manager', a
     });
     try {
       await manager.initialize([]);
+      const definition = discovery.definitions[0];
+      expect(definition).toBeDefined();
       await expect(
-        manager.probeAgent({ id: 'copilot-acp', version: '1.0.0' }),
+        manager.probeAgent({
+          id: 'copilot-acp',
+          version: '1.0.0',
+          installationId: definition?.installationId ?? '',
+        }),
       ).resolves.toMatchObject({
         reportedVersion: '1.0.82.',
         status: 'available',
@@ -86,8 +92,14 @@ test('bounds a delayed Copilot version probe through the public manager', async 
     });
     try {
       await manager.initialize([]);
+      const definition = discovery.definitions[0];
+      expect(definition).toBeDefined();
       await expect(
-        manager.probeAgent({ id: 'copilot-acp', version: '1.0.0' }),
+        manager.probeAgent({
+          id: 'copilot-acp',
+          version: '1.0.0',
+          installationId: definition?.installationId ?? '',
+        }),
       ).resolves.toMatchObject({
         error: { code: 'revo.agent.probe_timeout', phase: 'probing' },
         status: 'unavailable',

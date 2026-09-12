@@ -9,7 +9,12 @@ const call = { callId: 'call_01', epoch: 1, sessionId: 'session_01' } as const;
 const turnCall = { ...call, turnId: 'turn_01' } as const;
 const correlation = { effectId: 'effect_01', epoch: 1, sessionId: 'session_01' } as const;
 const turnCorrelation = { ...correlation, turnId: 'turn_01' } as const;
-const pin = { agentId: 'codex', agentVersion: '1', definitionDigest: 'digest' } as const;
+const pin = {
+  agentId: 'codex',
+  agentVersion: '1',
+  definitionDigest: 'digest',
+  installationId: 'fixture-installation',
+} as const;
 const limits = {
   eventSinkTimeoutMs: 1_000,
   idleTimeoutMs: 10_000,
@@ -45,7 +50,11 @@ const freshOpening = {
   ...openingBase,
   request: {
     kind: 'fresh',
-    request: { ...launch, agent: { id: 'codex', version: '1' }, sessionId: 'session_01' },
+    request: {
+      ...launch,
+      agent: { id: 'codex', version: '1', installationId: 'fixture-installation' },
+      sessionId: 'session_01',
+    },
   },
 } satisfies SessionOpeningDescriptor;
 const resumeOpening = {

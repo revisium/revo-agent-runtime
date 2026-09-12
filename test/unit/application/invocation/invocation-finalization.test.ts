@@ -12,7 +12,7 @@ import { ClaimedInvocationOutput } from '../../../../src/execution/output/claim.
 import { RawResponseEvidence } from '../../../../src/execution/result/raw-response.js';
 
 const request: StartAgentInvocation = {
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
   invocationId: 'publication-failure',
   output: { directory: '/fixture/output' },
   parameters: {},
@@ -25,6 +25,7 @@ const pin: AgentExecutionPin = {
   agentId: 'codex',
   agentVersion: '1.0.0',
   definitionDigest: 'sha256:fixture',
+  installationId: 'fixture-installation',
 };
 const finished: AgentEvent = {
   schemaVersion: 'agent-event/v1',

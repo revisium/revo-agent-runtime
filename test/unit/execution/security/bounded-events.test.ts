@@ -5,7 +5,12 @@ import { encodeBoundedEvents } from '../../../../src/execution/output/bounded-ev
 
 const event = (invocationId: string, sequence = 1): AgentEvent => ({
   invocationId,
-  pin: { agentId: 'codex', agentVersion: '1.0.0', definitionDigest: 'digest' },
+  pin: {
+    agentId: 'codex',
+    agentVersion: '1.0.0',
+    definitionDigest: 'digest',
+    installationId: 'fixture-installation',
+  },
   schemaVersion: 'agent-event/v1',
   sequence,
   timestamp: '2026-08-30T00:00:00.000Z',

@@ -42,7 +42,7 @@ const readTrace = async (path: string): Promise<AcpWireTrace> => {
 };
 
 const request = (directory: string) => ({
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
   invocationId: 'wire-replay',
   output: { directory: invocationOutputDirectory(directory, 'wire-replay') },
   parameters: {},

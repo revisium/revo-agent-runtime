@@ -9,6 +9,7 @@ export const fakeAcpAgentDefinition = (
   schemaVersion: 'agent-definition/v1',
   id: options.id ?? 'codex',
   version: '1.0.0',
+  installationId: 'fixture-installation',
   displayName: options.displayName ?? 'Codex',
   launch: fakeAcpLaunch(options),
   protocol: { driver: 'acp/v1', permissionStrategy: 'acp/v1' },

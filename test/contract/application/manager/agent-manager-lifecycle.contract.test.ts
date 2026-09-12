@@ -137,7 +137,7 @@ test('rejects invalid options and invalid starts before accepting an invocation'
     await expect(
       manager.start({
         ...requestFor(directory, 'unknown-agent'),
-        agent: { id: 'unknown', version: '1' },
+        agent: { id: 'unknown', version: '1', installationId: 'fixture-installation' },
       }),
     ).rejects.toMatchObject({ fault: { code: 'revo.agent.agent_unknown' } });
     await manager.shutdown();

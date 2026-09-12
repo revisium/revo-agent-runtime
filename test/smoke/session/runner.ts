@@ -111,7 +111,11 @@ const requireAvailable = async (
   manager: ReturnType<typeof createAgentManager>,
   definition: AgentDefinitionInput,
 ): Promise<void> => {
-  const probe = await manager.probeAgent({ id: definition.id, version: definition.version });
+  const probe = await manager.probeAgent({
+    id: definition.id,
+    version: definition.version,
+    installationId: 'fixture-installation',
+  });
   if (probe.status !== 'available') throw new Error('Selected session provider is unavailable.');
 };
 
@@ -168,14 +172,22 @@ export const runSessionContinuityScenario = async ({
     await requireAvailable(manager, definition);
     const catalog = await manager.inspectConfiguration(
       {
-        agent: { id: definition.id, version: definition.version },
+        agent: {
+          id: definition.id,
+          version: definition.version,
+          installationId: 'fixture-installation',
+        },
         workspace: { directory: workspaceDirectory },
       },
       context,
     );
     const session = await manager.sessions.open(
       {
-        agent: { id: definition.id, version: definition.version },
+        agent: {
+          id: definition.id,
+          version: definition.version,
+          installationId: 'fixture-installation',
+        },
         configuration: configurationForSessionSmoke(catalog, preferredModel),
         limits: { idleTimeoutMs: 30_000, wallClockTimeoutMs: 90_000 },
         output: { directory: outputDirectory },
@@ -263,14 +275,22 @@ export const runSessionCancellationScenario = async ({
     await requireAvailable(manager, definition);
     const catalog = await manager.inspectConfiguration(
       {
-        agent: { id: definition.id, version: definition.version },
+        agent: {
+          id: definition.id,
+          version: definition.version,
+          installationId: 'fixture-installation',
+        },
         workspace: { directory: workspaceDirectory },
       },
       context,
     );
     const session = await manager.sessions.open(
       {
-        agent: { id: definition.id, version: definition.version },
+        agent: {
+          id: definition.id,
+          version: definition.version,
+          installationId: 'fixture-installation',
+        },
         configuration: configurationForSessionSmoke(catalog, preferredModel),
         limits: { idleTimeoutMs: 30_000, wallClockTimeoutMs: 60_000 },
         output: { directory: outputDirectory },
@@ -327,14 +347,22 @@ export const runSessionInteractionScenario = async ({
     await requireAvailable(manager, definition);
     const catalog = await manager.inspectConfiguration(
       {
-        agent: { id: definition.id, version: definition.version },
+        agent: {
+          id: definition.id,
+          version: definition.version,
+          installationId: 'fixture-installation',
+        },
         workspace: { directory: workspaceDirectory },
       },
       context,
     );
     const session = await manager.sessions.open(
       {
-        agent: { id: definition.id, version: definition.version },
+        agent: {
+          id: definition.id,
+          version: definition.version,
+          installationId: 'fixture-installation',
+        },
         configuration: configurationForSessionSmoke(catalog, preferredModel),
         limits: { idleTimeoutMs: 30_000, wallClockTimeoutMs: 60_000 },
         output: { directory: outputDirectory },

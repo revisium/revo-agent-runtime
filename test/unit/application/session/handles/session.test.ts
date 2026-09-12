@@ -14,7 +14,12 @@ const capabilities = {
   resume: 'native',
   updates: { message: true, plan: true, progress: true, tool: true, usage: true },
 } as const;
-const pin = { agentId: 'fake', agentVersion: '1', definitionDigest: 'digest' };
+const pin = {
+  agentId: 'fake',
+  agentVersion: '1',
+  definitionDigest: 'digest',
+  installationId: 'fixture-installation',
+};
 
 class ImmediateRuntime implements SessionCommandRuntime {
   readonly commands: PublicSessionCommand[] = [];

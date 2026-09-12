@@ -20,6 +20,7 @@ const pin = {
   agentId: 'codex-acp',
   agentVersion: '1.7.0',
   definitionDigest: 'definition-digest',
+  installationId: 'fixture-installation',
 } satisfies AgentExecutionPin;
 const envelope = {
   provider: { data: { sessionId: 'native-session' }, format: 'acp/v1' },
@@ -84,7 +85,7 @@ describe('resume token boundary', () => {
 
     expect(decoded.token.cursor.sequence).toBe(10);
     expect(decoded.token.sha256).toBe(
-      'e7eb2b89aef2640522cb175f87b95c8b33fce329706c8dd8f4ade22d367effcf',
+      '28d5c155561aa418476a771447b9f9f5d3b0d84dd1a44f2dfa759f196f71a8eb',
     );
     expect(decoded.envelope).toEqual(envelope);
     expect(Object.isFrozen(decoded.envelope.provider.data)).toBe(true);

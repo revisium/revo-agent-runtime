@@ -148,10 +148,41 @@ test('rejects a Windows package bin that is a directory', async () => {
 test('probes a CLI discovered through PATH without requiring credentials', async () => {
   const platform = createNodeDiscoveryPlatform(process.platform, {
     resolveSystemExecutable: async () => process.execPath,
+    resolveSystemExecutables: async () => [process.execPath],
   });
-  await expect(platform.resolveInstalledCli(claudeProviderPolicy.cli)).resolves.toBe(
+  await expect(platform.resolveInstalledClis(claudeProviderPolicy.cli)).resolves.toEqual([
     await realpath(process.execPath),
-  );
+  ]);
+});
+
+test('uses the platform PATH resolver when no multi-installation resolver is injected', async () => {
+  const platform = createNodeDiscoveryPlatform(process.platform, {
+    resolveSystemExecutable: async () => undefined,
+  });
+  await expect(
+    platform.resolveInstalledClis({
+      ...codex,
+      command: 'revo-agent-runtime-definitely-missing-cli',
+    }),
+  ).resolves.toEqual([]);
+});
+
+test('returns every distinct CLI installation discovered through PATH', async () => {
+  const first = await systemExecutable();
+  const second = await systemExecutable();
+  try {
+    const platform = createNodeDiscoveryPlatform(process.platform, {
+      resolveSystemExecutable: async () => first.executable,
+      resolveSystemExecutables: async () => [first.executable, first.link, second.executable],
+    });
+
+    await expect(platform.resolveInstalledClis(claudeProviderPolicy.cli)).resolves.toEqual([
+      first.executable,
+      second.executable,
+    ]);
+  } finally {
+    await Promise.all([first.dispose(), second.dispose()]);
+  }
 });
 
 test('does not search PATH after cancellation', async () => {
@@ -159,37 +190,58 @@ test('does not search PATH after cancellation', async () => {
     resolveSystemExecutable: async () => {
       throw new Error('Unexpected lookup');
     },
+    resolveSystemExecutables: async () => {
+      throw new Error('Unexpected lookup');
+    },
   });
   await expect(
-    platform.resolveInstalledCli(codex, undefined, AbortSignal.abort()),
-  ).resolves.toBeUndefined();
+    platform.resolveInstalledClis(codex, undefined, AbortSignal.abort()),
+  ).resolves.toEqual([]);
 });
 
 test('discards a CLI lookup cancelled while PATH resolution is pending', async () => {
   const controller = new AbortController();
   const platform = createNodeDiscoveryPlatform(process.platform, {
-    resolveSystemExecutable: async () => {
+    resolveSystemExecutable: async () => process.execPath,
+    resolveSystemExecutables: async () => {
       controller.abort();
-      return process.execPath;
+      return [process.execPath];
     },
   });
-  await expect(
-    platform.resolveInstalledCli(codex, undefined, controller.signal),
-  ).resolves.toBeUndefined();
+  await expect(platform.resolveInstalledClis(codex, undefined, controller.signal)).resolves.toEqual(
+    [],
+  );
+});
+
+test('discards completed probes when cancellation arrives during version checks', async () => {
+  const fixture = await systemExecutable('slow-version');
+  try {
+    const controller = new AbortController();
+    const platform = createNodeDiscoveryPlatform(process.platform, {
+      resolveSystemExecutable: async () => fixture.executable,
+      resolveSystemExecutables: async () => [fixture.executable],
+    });
+    const resolution = platform.resolveInstalledClis(codex, undefined, controller.signal);
+    setTimeout(() => controller.abort(), 10);
+
+    await expect(resolution).resolves.toEqual([]);
+  } finally {
+    await fixture.dispose();
+  }
 });
 
 test('rejects an explicit CLI path that cannot identify an executable', async () => {
   await expect(
-    createNodeDiscoveryPlatform().resolveInstalledCli(codex, 'relative-codex'),
-  ).resolves.toBeUndefined();
+    createNodeDiscoveryPlatform().resolveInstalledClis(codex, 'relative-codex'),
+  ).resolves.toEqual([]);
 });
 
 test('omits a CLI whose version command fails', async () => {
   const fixture = await systemExecutable('incompatible-version');
   try {
     await expect(
-      createNodeDiscoveryPlatform().resolveInstalledCli(codex, fixture.executable),
-    ).resolves.toBeUndefined();
+      createNodeDiscoveryPlatform().resolveInstalledClis(codex, fixture.executable),
+    ).resolves.toEqual([]);
   } finally {
     await fixture.dispose();
   }

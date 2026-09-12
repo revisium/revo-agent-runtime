@@ -37,7 +37,12 @@ const snapshotOne = (
   registry: SealedAgentRegistry,
 ): ActiveInvocationSnapshot | undefined => {
   const snapshot = exactRecord(value, ['invocationId', 'pin', 'process', 'state']);
-  const pin = exactRecord(snapshot?.pin, ['agentId', 'agentVersion', 'definitionDigest']);
+  const pin = exactRecord(snapshot?.pin, [
+    'agentId',
+    'agentVersion',
+    'installationId',
+    'definitionDigest',
+  ]);
   const process = snapshotProcessIdentity(snapshot?.process);
   if (
     snapshot === undefined ||
@@ -47,17 +52,23 @@ const snapshotOne = (
     (snapshot.state !== 'running' && snapshot.state !== 'cancelling') ||
     !boundedText(pin.agentId) ||
     !boundedText(pin.agentVersion) ||
+    !boundedText(pin.installationId, 16_384) ||
     typeof pin.definitionDigest !== 'string' ||
     !digestPattern.test(pin.definitionDigest)
   )
     return undefined;
-  const definition = registry.get({ id: pin.agentId, version: pin.agentVersion });
+  const definition = registry.get({
+    id: pin.agentId,
+    version: pin.agentVersion,
+    installationId: pin.installationId,
+  });
   if (definition?.digest !== pin.definitionDigest) return undefined;
   return Object.freeze({
     invocationId: snapshot.invocationId,
     pin: Object.freeze({
       agentId: pin.agentId,
       agentVersion: pin.agentVersion,
+      installationId: pin.installationId,
       definitionDigest: pin.definitionDigest,
     }),
     process,

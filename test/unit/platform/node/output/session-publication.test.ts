@@ -62,7 +62,12 @@ const input = (withOptionalFields: boolean = true) => ({
       }
     : {}),
   finishedAt: '2026-09-05T00:01:00.000Z',
-  pin: { agentId: 'fake', agentVersion: '1', definitionDigest: 'digest' },
+  pin: {
+    agentId: 'fake',
+    agentVersion: '1',
+    definitionDigest: 'digest',
+    installationId: 'fixture-installation',
+  },
   sessionId: 'dlg_output',
   status: 'closed' as const,
   stderr: new TextEncoder().encode('stderr'),

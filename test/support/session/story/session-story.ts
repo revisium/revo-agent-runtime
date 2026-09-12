@@ -64,7 +64,11 @@ export interface AgentSessionStory {
 
 const descriptorFrom = (definition: ReturnType<typeof validateAgentDefinition>): AgentDescriptor =>
   Object.freeze({
-    agent: Object.freeze({ id: definition.definition.id, version: definition.definition.version }),
+    agent: Object.freeze({
+      id: definition.definition.id,
+      version: definition.definition.version,
+      installationId: definition.definition.installationId,
+    }),
     capabilities: definition.definition.capabilities,
     definitionDigest: definition.digest,
     displayName: definition.definition.displayName,
@@ -82,6 +86,7 @@ export const createAgentSessionStory = (options: AgentSessionStoryOptions): Agen
       },
       id: 'fake-session-agent',
       version: '1',
+      installationId: 'fixture-installation',
     }),
   );
   const driver = createControllableSessionProtocolDriver(
@@ -204,7 +209,7 @@ export const createAgentSessionStory = (options: AgentSessionStoryOptions): Agen
       sessions.open(
         {
           ...launch,
-          agent: { id: 'fake-session-agent', version: '1' },
+          agent: { id: 'fake-session-agent', version: '1', installationId: 'fixture-installation' },
           ...(options.eventSinkTimeoutMs === undefined
             ? {}
             : { limits: { eventSinkTimeoutMs: options.eventSinkTimeoutMs } }),

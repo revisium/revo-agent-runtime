@@ -42,8 +42,14 @@ test('probes a discovered Cursor adjacent Node package through the public manage
     });
     try {
       await manager.initialize([]);
+      const definition = discovery.definitions[0];
+      expect(definition).toBeDefined();
       await expect(
-        manager.probeAgent({ id: 'cursor-acp', version: '1.0.0' }),
+        manager.probeAgent({
+          id: 'cursor-acp',
+          version: '1.0.0',
+          installationId: definition?.installationId ?? '',
+        }),
       ).resolves.toMatchObject({
         reportedVersion: '2026.08.11-e8db854',
         status: 'available',

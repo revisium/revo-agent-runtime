@@ -86,12 +86,19 @@ const resolveSystemOverride = async (
 const resolveSystemExecutable = async (command: string): Promise<string | undefined> =>
   (await which(command, { nothrow: true })) ?? undefined;
 
+const resolveSystemExecutables = async (command: string): Promise<readonly string[]> => {
+  const resolved = await which(command, { all: true, nothrow: true });
+  return resolved ?? [];
+};
+
 interface NodeDiscoveryPlatformDependencies {
   readonly resolveSystemExecutable: typeof resolveSystemExecutable;
+  readonly resolveSystemExecutables?: typeof resolveSystemExecutables;
 }
 
 const defaultNodeDiscoveryPlatformDependencies: NodeDiscoveryPlatformDependencies = Object.freeze({
   resolveSystemExecutable,
+  resolveSystemExecutables,
 });
 
 const nodeExecutableName = (hostPlatform: NodeJS.Platform): string => {
@@ -133,23 +140,41 @@ export const createNodeDiscoveryPlatform = (
 ): DiscoveryPlatform =>
   Object.freeze({
     probeSystemExecutable,
-    resolveInstalledCli: async (
+    resolveInstalledClis: async (
       policy: InstalledCliPolicy,
       override: string | undefined,
       signal: AbortSignal | undefined,
     ) => {
-      if (signal?.aborted) return undefined;
-      const candidate = override ?? (await dependencies.resolveSystemExecutable(policy.command));
-      if (candidate === undefined || signal?.aborted) return undefined;
-      const executable = installedCliExecutable(policy, candidate, hostPlatform);
-      if (executable === undefined) return undefined;
-      return (await probeSystemExecutable(
-        executable,
-        { args: ['--version'], timeoutMs: policy.versionProbeTimeoutMs },
-        signal,
-      ))
-        ? executable
-        : undefined;
+      if (signal?.aborted) return [];
+      const candidates =
+        override === undefined
+          ? await (dependencies.resolveSystemExecutables ?? resolveSystemExecutables)(
+              policy.command,
+            )
+          : [override];
+      const executables: string[] = [];
+      const seen = new Set<string>();
+      for (const candidate of candidates) {
+        if (signal?.aborted) return [];
+        const executable = installedCliExecutable(policy, candidate, hostPlatform);
+        if (executable === undefined || seen.has(executable)) continue;
+        seen.add(executable);
+        executables.push(executable);
+      }
+      const probes = await Promise.all(
+        executables.map(async (executable) => ({
+          available: await probeSystemExecutable(
+            executable,
+            { args: ['--version'], timeoutMs: policy.versionProbeTimeoutMs },
+            signal,
+          ),
+          executable,
+        })),
+      );
+      if (signal?.aborted) return [];
+      return Object.freeze(
+        probes.filter(({ available }) => available).map(({ executable }) => executable),
+      );
     },
     resolveAdjacentNodePackage: (
       policy: AdjacentNodePackagePolicy,

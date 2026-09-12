@@ -21,7 +21,10 @@ export class SessionAgentCatalog {
 
   require(agent: AgentRef): AgentSessionAgentDescriptor {
     const descriptor = this.#agents.find(
-      (candidate) => candidate.agent.id === agent.id && candidate.agent.version === agent.version,
+      (candidate) =>
+        candidate.agent.id === agent.id &&
+        candidate.agent.version === agent.version &&
+        candidate.agent.installationId === agent.installationId,
     );
     if (descriptor === undefined)
       throw sessionManagerError('revo.agent.agent_unknown', 'The requested agent is unknown.');
@@ -34,7 +37,11 @@ export class SessionAgentCatalog {
   }
 
   requirePin(pin: AgentExecutionPin): AgentSessionAgentDescriptor {
-    const descriptor = this.require({ id: pin.agentId, version: pin.agentVersion });
+    const descriptor = this.require({
+      id: pin.agentId,
+      version: pin.agentVersion,
+      installationId: pin.installationId,
+    });
     if (descriptor.definitionDigest !== pin.definitionDigest)
       throw sessionManagerError(
         'revo.agent.continuation_pin_mismatch',

@@ -58,7 +58,7 @@ test('one public manager owns a hot multi-turn session and its lifecycle', async
 
   expect(manager.sessions.listAgents()).toHaveLength(1);
   const session = await manager.sessions.open({
-    agent: { id: 'codex', version: '1.0.0' },
+    agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
     output: { directory: join(directory, 'session-output') },
     parameters: {},
     permissions: {},
@@ -123,7 +123,7 @@ test('manager shutdown cancels and drains an active session turn', async () => {
   });
   await manager.initialize({ invocations: [], sessions: [] });
   const session = await manager.sessions.open({
-    agent: { id: 'codex', version: '1.0.0' },
+    agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
     output: { directory: join(directory, 'shutdown-output') },
     parameters: {},
     permissions: {},
@@ -154,7 +154,7 @@ test('manager shutdown cancels and drains an active session turn', async () => {
   );
   await expect(
     manager.sessions.open({
-      agent: { id: 'codex', version: '1.0.0' },
+      agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
       output: { directory: join(directory, 'after-shutdown') },
       parameters: {},
       permissions: {},
@@ -192,6 +192,7 @@ test('structured initialization safely reconciles an orphaned session row', asyn
         pin: {
           agentId: descriptor.agent.id,
           agentVersion: descriptor.agent.version,
+          installationId: descriptor.agent.installationId,
           definitionDigest: descriptor.definitionDigest,
         },
         process: {
@@ -254,6 +255,7 @@ test('the session facet remains discoverable but fails closed without session st
           agentId: descriptor.agent.id,
           agentVersion: descriptor.agent.version,
           definitionDigest: descriptor.definitionDigest,
+          installationId: 'fixture-installation',
         },
         resumeTokenId: 'tok_missing',
         schemaVersion: 'agent-session-resume-token/v1',
@@ -285,6 +287,7 @@ test('rejects session recovery rows when session storage is not configured', asy
             agentId: descriptor.agent.id,
             agentVersion: descriptor.agent.version,
             definitionDigest: descriptor.definitionDigest,
+            installationId: 'fixture-installation',
           },
           process: {
             fingerprint: `sha256:${'0'.repeat(64)}`,

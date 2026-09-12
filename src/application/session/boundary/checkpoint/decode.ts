@@ -95,11 +95,15 @@ const boundedString = (value: unknown, maximum = 256): string => {
 };
 
 const decodePin = (value: unknown): AgentExecutionPin => {
-  if (!isJsonObject(value) || !exactKeys(value, ['agentId', 'agentVersion', 'definitionDigest']))
+  if (
+    !isJsonObject(value) ||
+    !exactKeys(value, ['agentId', 'agentVersion', 'installationId', 'definitionDigest'])
+  )
     return invalidToken();
   return Object.freeze({
     agentId: boundedString(value.agentId),
     agentVersion: boundedString(value.agentVersion),
+    installationId: boundedString(value.installationId, 16_384),
     definitionDigest: boundedString(value.definitionDigest),
   });
 };

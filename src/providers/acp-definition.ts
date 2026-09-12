@@ -7,6 +7,7 @@ export interface AcpDefinitionDetails {
   readonly command: string;
   readonly displayName: string;
   readonly id: string;
+  readonly installationId?: string;
   readonly version: string;
   readonly environment?: Readonly<Record<string, string>>;
   readonly versionProbeCommand?: string;
@@ -24,6 +25,7 @@ export const acpDefinition = ({
   version,
   environment,
   versionProbeCommand,
+  installationId = versionProbeCommand ?? command,
   versionProbeArgs = ['--version'],
   versionProbePrefix,
   versionProbeTimeoutMs = 1_000,
@@ -31,6 +33,7 @@ export const acpDefinition = ({
   schemaVersion: 'agent-definition/v1',
   id,
   version,
+  installationId,
   displayName,
   launch: {
     command,

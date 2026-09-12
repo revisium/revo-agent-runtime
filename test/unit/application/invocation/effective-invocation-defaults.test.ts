@@ -53,7 +53,7 @@ const invocation = (
     readonly permissions?: Record<string, unknown>;
   }> = {},
 ): StartAgentInvocation => ({
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
   invocationId,
   output: { directory: resolve('/fixture/output') },
   parameters: inputs.parameters ?? {},
@@ -180,13 +180,13 @@ test('uses the validator for the exact requested definition version', async () =
   await expect(
     subject.manager.start({
       ...invocation('old-version', { parameters: { answer: 42 } }),
-      agent: { id: 'codex', version: '1.0.0' },
+      agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
     }),
   ).rejects.toMatchObject({ fault: { code: 'revo.agent.parameters_invalid' } });
   await expect(
     subject.manager.start({
       ...invocation('new-version', { parameters: { answer: 42 } }),
-      agent: { id: 'codex', version: '2.0.0' },
+      agent: { id: 'codex', version: '2.0.0', installationId: 'fixture-installation' },
     }),
   ).resolves.toMatchObject({ pin: { agentVersion: '2.0.0' } });
   await subject.manager.shutdown();

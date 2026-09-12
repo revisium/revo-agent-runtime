@@ -10,7 +10,7 @@ import { AgentManagerError } from '../../../../../../src/contracts/manager.js';
 const limits = resolveAgentSessionLimits(undefined);
 
 const openRequest = () => ({
-  agent: { id: 'codex-acp', version: '1.7.0' },
+  agent: { id: 'codex-acp', version: '1.7.0', installationId: 'fixture-installation' },
   configuration: { catalogRevision: 'revision', selections: { model: 'provider/model' } },
   limits: { maxPromptBytes: 128 },
   metadata: { project: 'runtime' },
@@ -113,7 +113,12 @@ describe('session request boundaries', () => {
         cursor: { eventId: 'evt_10', sequence: 10, streamId: 'stream_01' },
         eligibility: 'hibernated',
         payload: 'payload',
-        pin: { agentId: 'codex-acp', agentVersion: '1.7.0', definitionDigest: 'digest' },
+        pin: {
+          agentId: 'codex-acp',
+          agentVersion: '1.7.0',
+          definitionDigest: 'digest',
+          installationId: 'fixture-installation',
+        },
         resumeTokenId: 'tok_01',
         schemaVersion: 'agent-session-resume-token/v1',
         sessionId: 'dlg_01',
@@ -132,7 +137,7 @@ describe('session request boundaries', () => {
     expect(() =>
       decodeResumeAgentSession({
         ...input,
-        agent: { id: 'codex-acp', version: '1.7.0' },
+        agent: { id: 'codex-acp', version: '1.7.0', installationId: 'fixture-installation' },
       }),
     ).toThrow(AgentManagerError);
   });

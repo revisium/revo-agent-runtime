@@ -59,7 +59,8 @@ const platform = (): { readonly calls: string[]; readonly value: DiscoveryPlatfo
             ? { entrypoint: '/cursor/index.js', node: '/cursor/node' }
             : undefined;
       },
-      resolveInstalledCli: async (_policy, override) => override ?? '/system/installed-cli',
+      resolveInstalledClis: async (_policy, override) =>
+        override === undefined ? ['/system/installed-cli'] : [override],
       resolveBundledBridge: () => ({ available: false, reason: 'package_unavailable' }),
       resolveNodePackageEntrypoint: async (
         _policy: NodePackageEntrypointPolicy,

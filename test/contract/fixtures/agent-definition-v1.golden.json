@@ -6,6 +6,7 @@
         "schemaVersion": "agent-definition/v1",
         "id": "claude-é",
         "version": "1.0.0",
+        "installationId": "/opt/claude/bin/claude",
         "displayName": "Claude é",
         "launch": {
           "command": "node",
@@ -34,8 +35,8 @@
         "capabilities": { "cancellation": true, "structuredResult": true, "usage": false },
         "constraints": { "platforms": ["linux", "darwin"] }
       },
-      "canonicalUtf8Base64": "eyJjYXBhYmlsaXRpZXMiOnsiY2FuY2VsbGF0aW9uIjp0cnVlLCJzdHJ1Y3R1cmVkUmVzdWx0Ijp0cnVlLCJ1c2FnZSI6ZmFsc2V9LCJjb25zdHJhaW50cyI6eyJwbGF0Zm9ybXMiOlsibGludXgiLCJkYXJ3aW4iXX0sImRlbGl2ZXJ5Ijp7InByb21wdCI6InByb3RvY29sIiwicmVzdWx0IjoicHJvdG9jb2wiLCJyZXN1bHRTY2hlbWEiOiJwcm90b2NvbCJ9LCJkaXNwbGF5TmFtZSI6IkNsYXVkZSDDqSIsImlkIjoiY2xhdWRlLWXMgSIsImxhdW5jaCI6eyJhcmdzIjpbeyJraW5kIjoibGl0ZXJhbCIsInZhbHVlIjoiYnJpZGdlLm1qcyJ9XSwiY29tbWFuZCI6Im5vZGUiLCJ2ZXJzaW9uUHJvYmUiOnsiYXJncyI6WyItLXZlcnNpb24iXSwic3RyZWFtIjoic3Rkb3V0IiwidGltZW91dE1zIjoxMDAwfX0sInBhcmFtZXRlcnMiOnsiZGVmYXVsdHMiOnsieiI6MC4wMDAwMDF9LCJzY2hlbWEiOnsiJHNjaGVtYSI6Imh0dHBzOi8vanNvbi1zY2hlbWEub3JnL2RyYWZ0LzIwMjAtMTIvc2NoZW1hIiwicHJvcGVydGllcyI6eyJhIjp7InR5cGUiOiJzdHJpbmcifSwieiI6eyJtaW5pbXVtIjoxZS03LCJ0eXBlIjoibnVtYmVyIn19LCJ0eXBlIjoib2JqZWN0In19LCJwZXJtaXNzaW9ucyI6eyJzY2hlbWEiOnsiJHNjaGVtYSI6Imh0dHBzOi8vanNvbi1zY2hlbWEub3JnL2RyYWZ0LzIwMjAtMTIvc2NoZW1hIiwidHlwZSI6Im9iamVjdCJ9fSwicHJvdG9jb2wiOnsiZHJpdmVyIjoiYWNwL3YxIiwicGVybWlzc2lvblN0cmF0ZWd5IjoiYWNwL3YxIn0sInNjaGVtYVZlcnNpb24iOiJhZ2VudC1kZWZpbml0aW9uL3YxIiwidmVyc2lvbiI6IjEuMC4wIn0=",
-      "sha256": "4a0e4f52628582dab71a28889c4dba2e381da40e1124e64f835fdbf41e1d32ba"
+      "canonicalUtf8Base64": "eyJjYXBhYmlsaXRpZXMiOnsiY2FuY2VsbGF0aW9uIjp0cnVlLCJzdHJ1Y3R1cmVkUmVzdWx0Ijp0cnVlLCJ1c2FnZSI6ZmFsc2V9LCJjb25zdHJhaW50cyI6eyJwbGF0Zm9ybXMiOlsibGludXgiLCJkYXJ3aW4iXX0sImRlbGl2ZXJ5Ijp7InByb21wdCI6InByb3RvY29sIiwicmVzdWx0IjoicHJvdG9jb2wiLCJyZXN1bHRTY2hlbWEiOiJwcm90b2NvbCJ9LCJkaXNwbGF5TmFtZSI6IkNsYXVkZSDDqSIsImlkIjoiY2xhdWRlLWXMgSIsImluc3RhbGxhdGlvbklkIjoiL29wdC9jbGF1ZGUvYmluL2NsYXVkZSIsImxhdW5jaCI6eyJhcmdzIjpbeyJraW5kIjoibGl0ZXJhbCIsInZhbHVlIjoiYnJpZGdlLm1qcyJ9XSwiY29tbWFuZCI6Im5vZGUiLCJ2ZXJzaW9uUHJvYmUiOnsiYXJncyI6WyItLXZlcnNpb24iXSwic3RyZWFtIjoic3Rkb3V0IiwidGltZW91dE1zIjoxMDAwfX0sInBhcmFtZXRlcnMiOnsiZGVmYXVsdHMiOnsieiI6MC4wMDAwMDF9LCJzY2hlbWEiOnsiJHNjaGVtYSI6Imh0dHBzOi8vanNvbi1zY2hlbWEub3JnL2RyYWZ0LzIwMjAtMTIvc2NoZW1hIiwicHJvcGVydGllcyI6eyJhIjp7InR5cGUiOiJzdHJpbmcifSwieiI6eyJtaW5pbXVtIjoxZS03LCJ0eXBlIjoibnVtYmVyIn19LCJ0eXBlIjoib2JqZWN0In19LCJwZXJtaXNzaW9ucyI6eyJzY2hlbWEiOnsiJHNjaGVtYSI6Imh0dHBzOi8vanNvbi1zY2hlbWEub3JnL2RyYWZ0LzIwMjAtMTIvc2NoZW1hIiwidHlwZSI6Im9iamVjdCJ9fSwicHJvdG9jb2wiOnsiZHJpdmVyIjoiYWNwL3YxIiwicGVybWlzc2lvblN0cmF0ZWd5IjoiYWNwL3YxIn0sInNjaGVtYVZlcnNpb24iOiJhZ2VudC1kZWZpbml0aW9uL3YxIiwidmVyc2lvbiI6IjEuMC4wIn0=",
+      "sha256": "cdbcb3733a9e23dee1e48f4fb4a8fcba12d3535b3f649d3e105d22db410118a5"
     }
   ]
 }

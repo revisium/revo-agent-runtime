@@ -31,8 +31,8 @@ export const bundledBridgeDetector = (
   Object.freeze({
     id: policy.detectorId,
     detect: async ({ signal }: AgentDetectorContext) => {
-      const executable = await platform.resolveInstalledCli(policy.cli, override, signal);
-      if (executable === undefined)
+      const executables = await platform.resolveInstalledClis(policy.cli, override, signal);
+      if (executables.length === 0)
         return {
           candidates: [],
           diagnostics: [
@@ -48,24 +48,23 @@ export const bundledBridgeDetector = (
       const bridge = platform.resolveBundledBridge(policy.bridge);
       if (!bridge.available) return { candidates: [], diagnostics: [bundledBridgeUnavailable()] };
       return {
-        candidates: [
-          {
-            definition: acpDefinition({
-              args: [bridge.entrypoint],
-              command: process.execPath,
-              displayName: policy.displayName,
-              id: policy.id,
-              version: policy.version,
-              environment: { [policy.cliEnvironmentVariable]: executable },
-              versionProbeCommand: executable,
-              versionProbeTimeoutMs: policy.cli.versionProbeTimeoutMs,
-              ...(policy.cliVersionPrefix === undefined
-                ? {}
-                : { versionProbePrefix: policy.cliVersionPrefix }),
-            }),
-            models: [],
-          },
-        ],
+        candidates: executables.map((executable) => ({
+          definition: acpDefinition({
+            args: [bridge.entrypoint],
+            command: process.execPath,
+            displayName: policy.displayName,
+            id: policy.id,
+            installationId: executable,
+            version: policy.version,
+            environment: { [policy.cliEnvironmentVariable]: executable },
+            versionProbeCommand: executable,
+            versionProbeTimeoutMs: policy.cli.versionProbeTimeoutMs,
+            ...(policy.cliVersionPrefix === undefined
+              ? {}
+              : { versionProbePrefix: policy.cliVersionPrefix }),
+          }),
+          models: [],
+        })),
         diagnostics: [unavailableModels],
       };
     },

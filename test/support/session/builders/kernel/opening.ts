@@ -5,7 +5,12 @@ import type { SessionOpeningDescriptor } from '../../../../../src/execution/sess
 
 const observedAt = '2026-03-21T00:00:00.000Z';
 const observedAtMs = 1_000;
-const pin = { agentId: 'codex', agentVersion: '1', definitionDigest: 'digest' } as const;
+const pin = {
+  agentId: 'codex',
+  agentVersion: '1',
+  definitionDigest: 'digest',
+  installationId: 'fixture-installation',
+} as const;
 const limits = {
   eventSinkTimeoutMs: 1_000,
   idleTimeoutMs: 10_000,
@@ -41,7 +46,11 @@ const freshOpening = {
   ...base,
   request: {
     kind: 'fresh',
-    request: { ...launch, agent: { id: 'codex', version: '1' }, sessionId: 'session_01' },
+    request: {
+      ...launch,
+      agent: { id: 'codex', version: '1', installationId: 'fixture-installation' },
+      sessionId: 'session_01',
+    },
   },
 } satisfies SessionOpeningDescriptor;
 

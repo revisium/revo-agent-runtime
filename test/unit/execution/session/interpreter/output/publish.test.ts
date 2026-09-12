@@ -27,7 +27,12 @@ const effect = {
   publication: {
     acceptedAt: '2026-09-05T00:00:00.000Z',
     finishedAt: '2026-09-05T00:00:06.000Z',
-    pin: { agentId: 'codex', agentVersion: '1', definitionDigest: 'digest' },
+    pin: {
+      agentId: 'codex',
+      agentVersion: '1',
+      definitionDigest: 'digest',
+      installationId: 'fixture-installation',
+    },
     sessionId: 'session_01',
     status: 'closed' as const,
   },

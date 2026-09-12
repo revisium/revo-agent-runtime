@@ -51,7 +51,10 @@ test('invocation filters and ordering use provider-neutral public fields', async
     const story = await new InvocationStory().ready();
     const seen: string[] = [];
     story.manager.subscribe(
-      { agent: { id: 'alpha', version: '2.0.0' }, types: ['invocation.started'] },
+      {
+        agent: { id: 'alpha', version: '2.0.0', installationId: 'fixture-installation' },
+        types: ['invocation.started'],
+      },
       ({ invocationId }) => seen.push(invocationId),
     );
 
@@ -65,7 +68,10 @@ test('invocation filters and ordering use provider-neutral public fields', async
     ]);
     expect(
       story.manager
-        .listInvocations({ agent: { id: 'alpha', version: '2.0.0' }, statuses: ['running'] })
+        .listInvocations({
+          agent: { id: 'alpha', version: '2.0.0', installationId: 'fixture-installation' },
+          statuses: ['running'],
+        })
         .map(({ invocationId }) => invocationId),
     ).toEqual(['alpha-second']);
     expect(seen).toEqual(['alpha-second']);
@@ -118,10 +124,14 @@ test('query and event filters reject accessors and caller-owned array extensions
   const nonStandardStatuses = ['running'];
   Object.setPrototypeOf(nonStandardStatuses, null);
   const malformedAgent = { id: 'alpha' };
-  const accessorAgent = Object.defineProperty({ version: '2.0.0' }, 'id', {
-    enumerable: true,
-    get: () => 'alpha',
-  });
+  const accessorAgent = Object.defineProperty(
+    { installationId: 'fixture-installation', version: '2.0.0' },
+    'id',
+    {
+      enumerable: true,
+      get: () => 'alpha',
+    },
+  );
 
   await expectManagerFault(
     () => listInvocationsUnchecked(story.manager, accessorFilter),

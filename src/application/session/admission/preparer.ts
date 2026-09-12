@@ -1,4 +1,4 @@
-import type { AgentFault } from '../../../contracts/manager/core.js';
+import type { AgentExecutionPin, AgentFault } from '../../../contracts/manager/core.js';
 import type { SealedAgentRegistry, ValidatedAgentDefinition } from '../../../definition/index.js';
 import type {
   ClaimedInvocationOutput,
@@ -57,9 +57,13 @@ const admissionFault = (
 
 const pinnedDefinition = (
   definitions: SealedAgentRegistry,
-  pin: Readonly<{ agentId: string; agentVersion: string; definitionDigest: string }>,
+  pin: AgentExecutionPin,
 ): ValidatedAgentDefinition | undefined => {
-  const definition = definitions.get({ id: pin.agentId, version: pin.agentVersion });
+  const definition = definitions.get({
+    id: pin.agentId,
+    version: pin.agentVersion,
+    installationId: pin.installationId,
+  });
   return definition?.digest === pin.definitionDigest ? definition : undefined;
 };
 
