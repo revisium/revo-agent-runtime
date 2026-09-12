@@ -18,6 +18,7 @@ export const recoverySnapshot = (
       agentId: definition.definition.id,
       agentVersion: definition.definition.version,
       definitionDigest: definition.digest,
+      installationId: 'fixture-installation',
     },
     process: processIdentity(),
     state: 'running',

@@ -88,6 +88,7 @@ export const fixtureInvocationResult = (directory: string): AgentInvocationResul
       agentId: 'codex',
       agentVersion: '1.0.0',
       definitionDigest: 'sha256:fixture',
+      installationId: 'fixture-installation',
     }),
     schemaVersion: 'agent-invocation-result/v1' as const,
     status: 'succeeded' as const,

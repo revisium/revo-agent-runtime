@@ -17,7 +17,12 @@ const limits = {
   operationTimeoutMs: 1_000,
   wallClockTimeoutMs: 60_000,
 } as const;
-const pin = { agentId: 'codex', agentVersion: '1', definitionDigest: 'digest' } as const;
+const pin = {
+  agentId: 'codex',
+  agentVersion: '1',
+  definitionDigest: 'digest',
+  installationId: 'fixture-installation',
+} as const;
 
 export const idleSessionState = (): Extract<SessionState, { readonly status: 'idle' }> => ({
   acceptedAt: '2026-03-21T00:00:00.000Z',

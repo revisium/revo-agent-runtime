@@ -71,24 +71,37 @@ test('returns a fresh copy of the canonical bytes on every read', () => {
   expect(validated.canonicalBytes()[0]).toBe(originalFirstByte);
 });
 
-test('seals a deterministic exact-version registry', () => {
+test('seals a deterministic exact-installation registry', () => {
   const registry = createSealedAgentRegistry([
-    agentDefinition({ id: 'zeta', version: '1.0.0' }),
-    agentDefinition({ id: 'alpha', version: '2.0.0' }),
-    agentDefinition({ id: 'alpha', version: '1.0.0' }),
+    agentDefinition({ id: 'zeta', version: '1.0.0', installationId: '/zeta' }),
+    agentDefinition({ id: 'alpha', version: '2.0.0', installationId: '/alpha-new' }),
+    agentDefinition({ id: 'alpha', version: '1.0.0', installationId: '/alpha-b' }),
+    agentDefinition({ id: 'alpha', version: '1.0.0', installationId: '/alpha-a' }),
   ]);
 
-  expect(registry.list().map(({ definition }) => [definition.id, definition.version])).toEqual([
-    ['alpha', '1.0.0'],
-    ['alpha', '2.0.0'],
-    ['zeta', '1.0.0'],
+  expect(
+    registry
+      .list()
+      .map(({ definition }) => [definition.id, definition.version, definition.installationId]),
+  ).toEqual([
+    ['alpha', '1.0.0', '/alpha-a'],
+    ['alpha', '1.0.0', '/alpha-b'],
+    ['alpha', '2.0.0', '/alpha-new'],
+    ['zeta', '1.0.0', '/zeta'],
   ]);
-  expect(registry.get({ id: 'alpha', version: '2.0.0' })?.definition.displayName).toBe('Codex');
-  expect(registry.get({ id: 'alpha', version: '9.9.9' })).toBeUndefined();
+  expect(
+    registry.get({ id: 'alpha', version: '2.0.0', installationId: '/alpha-new' })?.definition
+      .displayName,
+  ).toBe('Codex');
+  expect(
+    registry.get({ id: 'alpha', version: '9.9.9', installationId: '/alpha-new' }),
+  ).toBeUndefined();
   expect(registry.get({ id: 'alpha' })).toBeUndefined();
   expect(registry.get(null)).toBeUndefined();
-  expect(registry.get({ id: 'alpha', version: '1.0.0', latest: true })).toBeUndefined();
-  expect(registry.get({ id: 1, version: '1.0.0' })).toBeUndefined();
+  expect(
+    registry.get({ id: 'alpha', version: '1.0.0', installationId: '/alpha-a', latest: true }),
+  ).toBeUndefined();
+  expect(registry.get({ id: 1, version: '1.0.0', installationId: '/alpha-a' })).toBeUndefined();
 });
 
 test('rejects duplicate exact identity before sealing the registry', () => {
@@ -108,6 +121,19 @@ test('rejects duplicate exact identity before sealing the registry', () => {
     if (!(error instanceof DuplicateAgentDefinitionError)) throw error;
     expect(error.firstIndex).toBe(0);
     expect(error.duplicateIndex).toBe(1);
-    expect(error.agent).toEqual({ id: 'codex', version: '1.0.0' });
+    expect(error.agent).toEqual({
+      id: 'codex',
+      version: '1.0.0',
+      installationId: 'fixture-installation',
+    });
   }
+});
+
+test('accepts the same adapter identity from distinct installations', () => {
+  const registry = createSealedAgentRegistry([
+    agentDefinition({ id: 'codex', version: '1.0.0', installationId: '/one/codex' }),
+    agentDefinition({ id: 'codex', version: '1.0.0', installationId: '/two/codex' }),
+  ]);
+
+  expect(registry.list()).toHaveLength(2);
 });

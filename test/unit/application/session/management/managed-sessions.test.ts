@@ -28,7 +28,7 @@ const sessionCapabilities = {
   updates: { message: true, plan: true, progress: true, tool: true, usage: true },
 } as const;
 const descriptor: AgentSessionAgentDescriptor = {
-  agent: { id: 'fake', version: '1' },
+  agent: { id: 'fake', version: '1', installationId: 'fixture-installation' },
   capabilities: {
     cancellation: true,
     session: sessionCapabilities,
@@ -198,6 +198,7 @@ test('resume validates a token before passing its native continuation to the run
     agentId: descriptor.agent.id,
     agentVersion: descriptor.agent.version,
     definitionDigest: descriptor.definitionDigest,
+    installationId: 'fixture-installation',
   };
   const payload = encodeContinuationPayload({
     provider: { data: { providerSessionId: 'native-1' }, format: 'fake/v1' },

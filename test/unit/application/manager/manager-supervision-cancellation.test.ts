@@ -14,7 +14,7 @@ import { managerServices } from '../../../support/builders/manager-services.js';
 import { noOpActiveStateSink } from '../../../support/stories/active-state.js';
 
 const request = (invocationId: string) => ({
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
   invocationId,
   output: { directory: resolvePath('/fixture/output') },
   parameters: {},

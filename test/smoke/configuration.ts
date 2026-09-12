@@ -95,7 +95,11 @@ const run = async (
     const context = live ? { environment } : undefined;
     const catalog = await manager.inspectConfiguration(
       {
-        agent: { id: definition.id, version: definition.version },
+        agent: {
+          id: definition.id,
+          version: definition.version,
+          installationId: 'fixture-installation',
+        },
         workspace: { directory },
       },
       context,
@@ -105,7 +109,11 @@ const run = async (
     const result = await (
       await manager.start(
         {
-          agent: { id: definition.id, version: definition.version },
+          agent: {
+            id: definition.id,
+            version: definition.version,
+            installationId: 'fixture-installation',
+          },
           configuration: selectionFor(catalog),
           invocationId,
           output: {

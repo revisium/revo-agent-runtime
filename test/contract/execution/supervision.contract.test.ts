@@ -11,7 +11,7 @@ import { fakeAcpDefinition } from '../../support/fakes/fake-acp.js';
 import { noOpActiveStateSink } from '../../support/stories/active-state.js';
 
 const invocationRequest = (directory: string, invocationId: string) => ({
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
   invocationId,
   output: { directory: invocationOutputDirectory(directory, invocationId) },
   parameters: {},

@@ -86,7 +86,7 @@ const textAt = (frame: AcpFrame, path: readonly string[]): string => {
 };
 
 const request = (directory: string) => ({
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
   invocationId: 'wire-replay',
   output: { directory: invocationOutputDirectory(directory, 'wire-replay') },
   parameters: {},

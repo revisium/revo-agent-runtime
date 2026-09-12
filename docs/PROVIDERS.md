@@ -35,6 +35,12 @@ entrypoint. It does not run a PATH-dependent npm wrapper. Cursor likewise
 rejects unrelated `agent` launchers. Explicit overrides are consumer-selected
 absolute executables; an invalid override fails rather than falling back.
 
+Codex and Claude discovery retains every distinct canonical vendor executable
+found in `PATH`. Each definition carries that executable as its `installationId`
+and binds it to the packaged bridge. Aliases and symlinks resolving to the same
+installation are emitted once; an explicit override intentionally narrows
+discovery to one installation.
+
 ## Configuration
 
 `manager.inspectConfiguration()` uses stable ACP `configOptions` when a provider

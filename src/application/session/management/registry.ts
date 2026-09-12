@@ -25,7 +25,10 @@ const matchesAgent = (
   pin: AgentSessionSnapshot['pin'],
   agent: AgentSessionFilter['agent'],
 ): boolean =>
-  agent === undefined || (pin.agentId === agent.id && pin.agentVersion === agent.version);
+  agent === undefined ||
+  (pin.agentId === agent.id &&
+    pin.agentVersion === agent.version &&
+    pin.installationId === agent.installationId);
 
 export class ManagedSessionRegistry {
   readonly #active = new Map<string, ManagedSessionEntry>();

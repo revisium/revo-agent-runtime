@@ -80,10 +80,15 @@ const boundedString = (value: unknown, maximumBytes: number): string => {
 };
 
 const snapshotAgent = (value: unknown): StartAgentInvocation['agent'] => {
-  const agent = exactDataObject(value, ['id', 'version'], ['id', 'version']);
+  const agent = exactDataObject(
+    value,
+    ['id', 'version', 'installationId'],
+    ['id', 'version', 'installationId'],
+  );
   return Object.freeze({
     id: boundedString(agent.id, 256),
     version: boundedString(agent.version, 256),
+    installationId: boundedString(agent.installationId, 16_384),
   });
 };
 

@@ -36,6 +36,7 @@ test('root exposes definition and discovery contracts at this iteration', () => 
     schemaVersion: 'agent-definition/v1',
     id: 'agent',
     version: '1',
+    installationId: 'fixture-installation',
     displayName: 'Agent',
     launch: {
       command: 'agent',
@@ -63,11 +64,11 @@ test('root exposes definition and discovery contracts at this iteration', () => 
 test('root exposes the v1 manager query contracts without another runtime export', () => {
   const status: AgentInvocationStatus = 'running';
   const filter: AgentInvocationFilter = {
-    agent: { id: 'agent', version: '1' },
+    agent: { id: 'agent', version: '1', installationId: 'fixture-installation' },
     statuses: [status],
   };
   const descriptor: AgentDescriptor = {
-    agent: { id: 'agent', version: '1' },
+    agent: { id: 'agent', version: '1', installationId: 'fixture-installation' },
     capabilities: { cancellation: true, structuredResult: true, usage: false },
     definitionDigest: 'digest',
     displayName: 'Agent',
@@ -76,7 +77,12 @@ test('root exposes the v1 manager query contracts without another runtime export
     acceptedAt: '2026-08-30T00:00:00.000Z',
     invocationId: 'invocation',
     outputDirectory: '/output',
-    pin: { agentId: 'agent', agentVersion: '1', definitionDigest: 'digest' },
+    pin: {
+      agentId: 'agent',
+      agentVersion: '1',
+      definitionDigest: 'digest',
+      installationId: 'fixture-installation',
+    },
     status,
   };
   const lookup: AgentResultLookup = { invocation: snapshot, state: 'running' };

@@ -9,7 +9,12 @@ import type {
 } from '../../../../../src/contracts/session.js';
 import type { SessionCommandRuntime } from '../../../../../src/execution/session/runtime/actor/port.js';
 
-const pin = { agentId: 'fake', agentVersion: '1', definitionDigest: 'digest' } as const;
+const pin = {
+  agentId: 'fake',
+  agentVersion: '1',
+  definitionDigest: 'digest',
+  installationId: 'fixture-installation',
+} as const;
 
 const snapshot = (
   sessionId: string,
@@ -77,8 +82,12 @@ test('registry exposes active handles, runtimes, snapshots, and exact filters', 
   expect(subject.inspect('dlg_one')).toEqual(snapshot('dlg_one'));
   expect(subject.list()).toEqual([snapshot('dlg_one')]);
   expect(subject.list({ sessionId: 'other' })).toEqual([]);
-  expect(subject.list({ agent: { id: 'other', version: '1' } })).toEqual([]);
-  expect(subject.list({ agent: { id: 'fake', version: '1' } })).toHaveLength(1);
+  expect(
+    subject.list({ agent: { id: 'other', version: '1', installationId: 'fixture-installation' } }),
+  ).toEqual([]);
+  expect(
+    subject.list({ agent: { id: 'fake', version: '1', installationId: 'fixture-installation' } }),
+  ).toHaveLength(1);
   expect(subject.list({ statuses: ['running'] })).toEqual([]);
   expect(subject.list({ statuses: ['idle'] })).toHaveLength(1);
   expect(subject.activeEntries()).toHaveLength(1);
@@ -98,13 +107,21 @@ test('registry reconciles terminal records, filters them, and evicts the oldest'
   expect(subject.listTerminal({ statuses: ['closed'] })).toHaveLength(1);
   expect(subject.listTerminal({ statuses: ['cancelled'] })).toEqual([]);
   expect(subject.listTerminal({ sessionId: 'other' })).toEqual([]);
-  expect(subject.listTerminal({ agent: { id: 'other', version: '1' } })).toEqual([]);
+  expect(
+    subject.listTerminal({
+      agent: { id: 'other', version: '1', installationId: 'fixture-installation' },
+    }),
+  ).toEqual([]);
 
   subject.register('dlg_two', 1, runtime(snapshot('dlg_two'), terminal('dlg_two', 'cancelled')));
   subject.reconcileAll();
   expect(subject.terminal('dlg_one')).toBeUndefined();
   expect(subject.terminal('dlg_two')).toEqual(terminal('dlg_two', 'cancelled'));
-  expect(subject.listTerminal({ agent: { id: 'fake', version: '1' } })).toHaveLength(1);
+  expect(
+    subject.listTerminal({
+      agent: { id: 'fake', version: '1', installationId: 'fixture-installation' },
+    }),
+  ).toHaveLength(1);
 });
 
 test('registry enforces active, opening, and identity capacities', () => {

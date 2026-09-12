@@ -7,6 +7,7 @@ export const agentDefinition = (
   schemaVersion: 'agent-definition/v1',
   id: 'codex',
   version: '1.0.0',
+  installationId: 'fixture-installation',
   displayName: 'Codex',
   launch: {
     command: 'node',

@@ -141,8 +141,10 @@ build install and are absent from the consumer dependency graph. These generated
 assets retain upstream license notices and are outside runtime source analysis.
 
 Provider policies own CLI names, npm layouts, adapter identity, and the path
-binding variable. Node discovery resolves installed executables and known npm
-shims. Portable preflight independently checks the launcher and CLI; shared launch
+binding variable. Node discovery resolves every installed executable from `PATH`,
+canonicalizes known npm shims, and removes aliases of the same installation.
+Definitions and execution pins identify the selected installation independently
+from the packaged adapter version. Portable preflight independently checks the launcher and CLI; shared launch
 environment composition preserves the selected CLI across inspection, invocation,
 and long-lived sessions. No provider-specific selection logic enters the process
 ownership module or ACP session engine.

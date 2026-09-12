@@ -26,7 +26,12 @@ const capabilities = {
   updates: { message: true, plan: true, progress: true, tool: true, usage: true },
 } as const;
 const cursor = { eventId: 'event_01', sequence: 1, streamId: 'stream_01' } as const;
-const pin = { agentId: 'codex', agentVersion: '1', definitionDigest: 'digest' } as const;
+const pin = {
+  agentId: 'codex',
+  agentVersion: '1',
+  definitionDigest: 'digest',
+  installationId: 'fixture-installation',
+} as const;
 const continuation = {
   cursor,
   eligibility: 'observation_only',

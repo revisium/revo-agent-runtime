@@ -41,11 +41,20 @@ const opening = (overrides: Partial<SessionOpeningDescriptor> = {}): SessionOpen
   const base = sessionOpeningCommand().opening;
   return {
     ...base,
-    pin: { agentId: definition.id, agentVersion: definition.version, definitionDigest: 'digest' },
+    pin: {
+      agentId: definition.id,
+      agentVersion: definition.version,
+      definitionDigest: 'digest',
+      installationId: 'fixture-installation',
+    },
     request: {
       kind: 'fresh',
       request: {
-        agent: { id: definition.id, version: definition.version },
+        agent: {
+          id: definition.id,
+          version: definition.version,
+          installationId: 'fixture-installation',
+        },
         output: { directory: resolve('/output/session') },
         parameters: { model: 'fast' },
         permissions: { write: true },
@@ -157,8 +166,18 @@ test('prepares a pinned literal launch with immutable effective inputs and optio
 test('rejects a missing or stale definition pin', async () => {
   const story = setup();
   for (const pin of [
-    { agentId: 'missing', agentVersion: definition.version, definitionDigest: 'digest' },
-    { agentId: definition.id, agentVersion: definition.version, definitionDigest: 'stale' },
+    {
+      agentId: 'missing',
+      agentVersion: definition.version,
+      definitionDigest: 'digest',
+      installationId: 'fixture-installation',
+    },
+    {
+      agentId: definition.id,
+      agentVersion: definition.version,
+      definitionDigest: 'stale',
+      installationId: 'fixture-installation',
+    },
   ]) {
     // oxlint-disable-next-line no-await-in-loop -- the table shares one preflight story and verifies ordered rejection
     await expect(

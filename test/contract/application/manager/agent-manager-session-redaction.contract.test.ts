@@ -32,7 +32,7 @@ test('manager redaction protects session results, durable events and process out
   try {
     await manager.initialize([]);
     const session = await manager.sessions.open({
-      agent: { id: 'codex', version: '1.0.0' },
+      agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
       sessionId: 'dlg_redaction',
       workspace: { directory },
       output: { directory: join(directory, 'output') },

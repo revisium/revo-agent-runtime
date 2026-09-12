@@ -25,7 +25,7 @@ export class DuplicateAgentDefinitionError extends Error {
     readonly firstIndex: number,
     readonly duplicateIndex: number,
   ) {
-    super(`Agent definition ${agent.id}@${agent.version} is duplicated.`);
+    super(`Agent definition ${agent.id}@${agent.version} (${agent.installationId}) is duplicated.`);
     this.name = 'DuplicateAgentDefinitionError';
     this.agent = Object.freeze({ ...agent });
   }

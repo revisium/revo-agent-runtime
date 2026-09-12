@@ -99,7 +99,8 @@ export class EventSubscriptions {
           subscription.filter.invocationId === event.invocationId) &&
         (subscription.filter.agent === undefined ||
           (subscription.filter.agent.id === event.pin.agentId &&
-            subscription.filter.agent.version === event.pin.agentVersion)) &&
+            subscription.filter.agent.version === event.pin.agentVersion &&
+            subscription.filter.agent.installationId === event.pin.installationId)) &&
         (subscription.filter.types === undefined || subscription.filter.types.includes(event.type))
       )
         try {

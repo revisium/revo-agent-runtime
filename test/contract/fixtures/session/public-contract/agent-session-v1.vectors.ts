@@ -41,6 +41,7 @@ const pin = {
   agentId: 'codex-acp',
   agentVersion: '1.7.0',
   definitionDigest: 'definition-sha256',
+  installationId: 'fixture-installation',
 } satisfies AgentExecutionPin;
 
 const cursor = { eventId: 'evt_01', sequence: 1, streamId: 'stream_01' } as const;
@@ -195,7 +196,7 @@ const snapshots = (
 export const agentSessionPublicContractVectors = {
   agents: [
     {
-      agent: { id: 'codex-acp', version: '1.7.0' },
+      agent: { id: 'codex-acp', version: '1.7.0', installationId: 'fixture-installation' },
       capabilities: {
         cancellation: true,
         session: capabilities,
@@ -349,12 +350,12 @@ export const agentSessionPublicContractVectors = {
   ] satisfies readonly AgentSessionEvent[],
   filters: {
     active: {
-      agent: { id: 'codex-acp', version: '1.7.0' },
+      agent: { id: 'codex-acp', version: '1.7.0', installationId: 'fixture-installation' },
       sessionId: 'dlg_01',
       statuses: ['idle'],
     } satisfies AgentSessionFilter,
     terminal: {
-      agent: { id: 'codex-acp', version: '1.7.0' },
+      agent: { id: 'codex-acp', version: '1.7.0', installationId: 'fixture-installation' },
       statuses: ['hibernated'],
     } satisfies AgentSessionTerminalFilter,
   },
@@ -449,7 +450,7 @@ export const agentSessionPublicContractVectors = {
   },
   launch: {
     open: {
-      agent: { id: 'codex-acp', version: '1.7.0' },
+      agent: { id: 'codex-acp', version: '1.7.0', installationId: 'fixture-installation' },
       limits: { maxPendingInteractions: 8 },
       metadata: { project: 'runtime' },
       output: { directory: '/output' },

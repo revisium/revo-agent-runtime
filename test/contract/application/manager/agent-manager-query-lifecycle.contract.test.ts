@@ -33,14 +33,26 @@ test('sealed agent reads stay deterministic before readiness and after shutdown'
   const story = new InvocationStory();
 
   expect(story.manager.listAgents().map(({ agent }) => agent)).toEqual([
-    { id: 'alpha', version: '2.0.0' },
-    { id: 'zeta', version: '1.0.0' },
+    { id: 'alpha', version: '2.0.0', installationId: 'fixture-installation' },
+    { id: 'zeta', version: '1.0.0', installationId: 'fixture-installation' },
   ]);
-  expect(story.manager.getAgent({ id: 'zeta', version: '1.0.0' })).toMatchObject({
+  expect(
+    story.manager.getAgent({
+      id: 'zeta',
+      version: '1.0.0',
+      installationId: 'fixture-installation',
+    }),
+  ).toMatchObject({
     description: 'A second agent.',
     displayName: 'Zeta',
   });
-  expect(story.manager.getAgent({ id: 'missing', version: '1.0.0' })).toBeUndefined();
+  expect(
+    story.manager.getAgent({
+      id: 'missing',
+      version: '1.0.0',
+      installationId: 'fixture-installation',
+    }),
+  ).toBeUndefined();
   expect(Object.isFrozen(story.manager.listAgents())).toBe(true);
   expect(Object.isFrozen(story.manager.listAgents()[0]?.agent)).toBe(true);
   expect(Object.isFrozen(story.manager.listAgents()[0]?.capabilities)).toBe(true);
@@ -57,7 +69,13 @@ test('sealed agent reads stay deterministic before readiness and after shutdown'
   await story.manager.shutdown();
 
   expect(story.manager.listAgents()).toHaveLength(2);
-  expect(story.manager.getAgent({ id: 'alpha', version: '2.0.0' })?.displayName).toBe('Alpha');
+  expect(
+    story.manager.getAgent({
+      id: 'alpha',
+      version: '2.0.0',
+      installationId: 'fixture-installation',
+    })?.displayName,
+  ).toBe('Alpha');
 });
 
 test('process-local reads require successful initialization', async () => {
@@ -97,7 +115,11 @@ test('query methods expose one active snapshot and the same retained result', as
   });
   expect(story.manager.listInvocations({ statuses: ['running'] })).toHaveLength(1);
   expect(story.manager.listInvocations({ invocationId: 'another-invocation' })).toEqual([]);
-  expect(story.manager.listInvocations({ agent: { id: 'zeta', version: '1.0.0' } })).toEqual([]);
+  expect(
+    story.manager.listInvocations({
+      agent: { id: 'zeta', version: '1.0.0', installationId: 'fixture-installation' },
+    }),
+  ).toEqual([]);
   expect(story.manager.listInvocations({ statuses: ['failed'] })).toEqual([]);
   const activeSnapshot = story.manager.getInvocation(handle.invocationId);
   expect(Object.isFrozen(activeSnapshot)).toBe(true);

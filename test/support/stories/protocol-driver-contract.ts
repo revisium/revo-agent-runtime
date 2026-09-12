@@ -80,7 +80,7 @@ const contractRequest = (
   scenario: ProtocolDriverContractScenario,
   resultSchema: Readonly<Record<string, unknown>>,
 ): StartAgentInvocation => ({
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
   invocationId: `protocol-driver-${scenario}`,
   output: { directory },
   parameters: { format: 'structured', maxTurns: 1 },

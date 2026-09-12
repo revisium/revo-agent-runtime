@@ -39,11 +39,11 @@ export interface InstalledCliPolicy {
 }
 
 export interface DiscoveryPlatform {
-  resolveInstalledCli(
+  resolveInstalledClis(
     policy: InstalledCliPolicy,
     override?: string,
     signal?: AbortSignal,
-  ): Promise<string | undefined>;
+  ): Promise<readonly string[]>;
   resolveSystemExecutable(command: string): Promise<string | undefined>;
   resolveSystemOverride(
     executable: string,

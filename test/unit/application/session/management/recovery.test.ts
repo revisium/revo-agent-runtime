@@ -21,7 +21,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 const agent: AgentDescriptor = {
-  agent: { id: 'fake', version: '1.0.0' },
+  agent: { id: 'fake', version: '1.0.0', installationId: 'fixture-installation' },
   capabilities: { cancellation: true, structuredResult: true, usage: false },
   definitionDigest,
   displayName: 'Fake',
@@ -33,7 +33,12 @@ const snapshot = (
 ): ActiveAgentSessionSnapshot => ({
   acceptedAt: '2026-09-05T00:00:00.000Z',
   incarnationId: `inc-${sessionId}`,
-  pin: { agentId: 'fake', agentVersion: '1.0.0', definitionDigest },
+  pin: {
+    agentId: 'fake',
+    agentVersion: '1.0.0',
+    installationId: 'fixture-installation',
+    definitionDigest,
+  },
   process: {
     fingerprint: `sha256:${'b'.repeat(64)}`,
     pid: 101,
@@ -123,7 +128,12 @@ test.each([
     label: 'unknown definition pin',
     snapshots: [
       snapshot('bad-pin', {
-        pin: { agentId: 'fake', agentVersion: '1.0.0', definitionDigest: 'c'.repeat(64) },
+        pin: {
+          agentId: 'fake',
+          agentVersion: '1.0.0',
+          definitionDigest: 'c'.repeat(64),
+          installationId: 'fixture-installation',
+        },
       }),
     ],
   },

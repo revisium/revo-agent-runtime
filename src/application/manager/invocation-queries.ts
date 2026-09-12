@@ -118,7 +118,9 @@ const matchesFilter = (
     return false;
   if (
     filter?.agent !== undefined &&
-    (filter.agent.id !== snapshot.pin.agentId || filter.agent.version !== snapshot.pin.agentVersion)
+    (filter.agent.id !== snapshot.pin.agentId ||
+      filter.agent.version !== snapshot.pin.agentVersion ||
+      filter.agent.installationId !== snapshot.pin.installationId)
   )
     return false;
   return filter?.statuses === undefined || filter.statuses.includes(snapshot.status);

@@ -33,11 +33,11 @@ const exactRecord = (
   return record;
 };
 
-const boundedText = (value: unknown): value is string =>
+const boundedText = (value: unknown, maximumBytes = 256): value is string =>
   typeof value === 'string' &&
   value.length > 0 &&
   !value.includes('\u0000') &&
-  encoder.encode(value).byteLength <= 256;
+  encoder.encode(value).byteLength <= maximumBytes;
 
 const validTimestamp = (value: unknown): value is string => {
   if (typeof value !== 'string') return false;
@@ -57,7 +57,12 @@ const parseSnapshot = (
     'sessionId',
     'state',
   ]);
-  const pin = exactRecord(snapshot?.pin, ['agentId', 'agentVersion', 'definitionDigest']);
+  const pin = exactRecord(snapshot?.pin, [
+    'agentId',
+    'agentVersion',
+    'installationId',
+    'definitionDigest',
+  ]);
   const process = snapshotProcessIdentity(snapshot?.process);
   if (
     snapshot === undefined ||
@@ -69,6 +74,7 @@ const parseSnapshot = (
     !sessionState(snapshot.state) ||
     !boundedText(pin.agentId) ||
     !boundedText(pin.agentVersion) ||
+    !boundedText(pin.installationId, 16_384) ||
     typeof pin.definitionDigest !== 'string' ||
     !digestPattern.test(pin.definitionDigest)
   )
@@ -78,6 +84,7 @@ const parseSnapshot = (
       ({ agent, definitionDigest }) =>
         agent.id === pin.agentId &&
         agent.version === pin.agentVersion &&
+        agent.installationId === pin.installationId &&
         definitionDigest === pin.definitionDigest,
     )
   )
@@ -88,6 +95,7 @@ const parseSnapshot = (
     pin: Object.freeze({
       agentId: pin.agentId,
       agentVersion: pin.agentVersion,
+      installationId: pin.installationId,
       definitionDigest: pin.definitionDigest,
     }),
     process,

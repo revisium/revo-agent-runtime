@@ -29,7 +29,12 @@ const fault = {
   phase: 'session_running',
   retryable: false,
 } satisfies AgentFault;
-const pin = { agentId: 'codex', agentVersion: '1', definitionDigest: 'digest' } as const;
+const pin = {
+  agentId: 'codex',
+  agentVersion: '1',
+  definitionDigest: 'digest',
+  installationId: 'fixture-installation',
+} as const;
 const cursor = { eventId: 'event_01', sequence: 1, streamId: 'stream_01' } as const;
 const timeoutMs = 1_000;
 

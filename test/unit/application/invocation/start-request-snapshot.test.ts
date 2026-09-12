@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { snapshotStartRequest } from '../../../../src/application/invocation/start-request-snapshot.js';
 
 const request = () => ({
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
   invocationId: 'bounded-request',
   metadata: { source: 'unit' },
   output: { directory: '/tmp/output' },

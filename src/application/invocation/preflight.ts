@@ -43,6 +43,7 @@ export const prepareInvocationRequest = (
     pin: Object.freeze({
       agentId: definition.definition.id,
       agentVersion: definition.definition.version,
+      installationId: definition.definition.installationId,
       definitionDigest: definition.digest,
     }),
     request,

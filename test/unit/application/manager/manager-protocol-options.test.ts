@@ -28,7 +28,7 @@ const executorFor = (outcome: ExecutionOutcome): InvocationExecutor => ({
 });
 
 const requestFor = (invocationId: string): StartAgentInvocation => ({
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
   invocationId,
   output: { directory: process.cwd() },
   parameters: {},

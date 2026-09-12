@@ -25,7 +25,7 @@ export const decodeOpenAgentSession = (input: unknown): DecodedOpenAgentSession 
         ['configuration', 'limits', 'metadata'],
       ) ||
       !isJsonObject(value.agent) ||
-      !hasExactJsonKeys(value.agent, ['id', 'version'])
+      !hasExactJsonKeys(value.agent, ['id', 'version', 'installationId'])
     )
       return invalidSessionRequest();
     const launch = decodeAgentSessionLaunchInput(value);
@@ -34,6 +34,7 @@ export const decodeOpenAgentSession = (input: unknown): DecodedOpenAgentSession 
       agent: Object.freeze({
         id: boundedSessionString(value.agent.id, 256),
         version: boundedSessionString(value.agent.version, 256),
+        installationId: boundedSessionString(value.agent.installationId, 16_384),
       }),
       sessionId: boundedSessionString(value.sessionId, 256),
     });

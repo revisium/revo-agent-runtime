@@ -5,7 +5,7 @@ import { createUnavailableAgentSessions } from '../../../../../src/application/s
 import type { AgentDescriptor } from '../../../../../src/index.js';
 
 const sessionDescriptor: AgentDescriptor = {
-  agent: { id: 'session', version: '1' },
+  agent: { id: 'session', version: '1', installationId: 'fixture-installation' },
   capabilities: {
     cancellation: true,
     session: {
@@ -22,7 +22,7 @@ const sessionDescriptor: AgentDescriptor = {
 };
 
 const invocationDescriptor: AgentDescriptor = {
-  agent: { id: 'invocation', version: '1' },
+  agent: { id: 'invocation', version: '1', installationId: 'fixture-installation' },
   capabilities: { cancellation: true, structuredResult: true, usage: false },
   definitionDigest: 'invocation-digest',
   displayName: 'Invocation agent',
@@ -38,9 +38,12 @@ test('session catalog filters agents and enforces exact identity and pinning', (
       agentId: 'session',
       agentVersion: '1',
       definitionDigest: 'session-digest',
+      installationId: 'fixture-installation',
     }),
   ).toBe(sessionDescriptor);
-  expect(() => catalog.require({ id: 'missing', version: '1' })).toThrowError(
+  expect(() =>
+    catalog.require({ id: 'missing', version: '1', installationId: 'fixture-installation' }),
+  ).toThrowError(
     expect.objectContaining({
       fault: expect.objectContaining({ code: 'revo.agent.agent_unknown' }),
     }),
@@ -55,6 +58,7 @@ test('session catalog filters agents and enforces exact identity and pinning', (
       agentId: 'session',
       agentVersion: '1',
       definitionDigest: 'stale',
+      installationId: 'fixture-installation',
     }),
   ).toThrowError(
     expect.objectContaining({

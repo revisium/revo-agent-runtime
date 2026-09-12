@@ -14,7 +14,7 @@ import {
 } from '../builders/execution-evidence.js';
 
 export const activeStateRequest = (invocationId: string): StartAgentInvocation => ({
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
   invocationId,
   output: { directory: resolve('/fixture/output') },
   parameters: {},

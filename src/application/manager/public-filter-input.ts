@@ -16,14 +16,27 @@ export const readDataProperty = (value: object, key: string): DataProperty => {
 export const readExactAgentRef = (value: unknown): AgentRef | undefined => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
   const keys = Reflect.ownKeys(value);
-  if (keys.length !== 2 || !keys.includes('id') || !keys.includes('version')) return undefined;
+  if (
+    keys.length !== 3 ||
+    !keys.includes('id') ||
+    !keys.includes('version') ||
+    !keys.includes('installationId')
+  )
+    return undefined;
   const id = readDataProperty(value, 'id');
   const version = readDataProperty(value, 'version');
+  const installationId = readDataProperty(value, 'installationId');
   return id.status === 'present' &&
     version.status === 'present' &&
+    installationId.status === 'present' &&
     typeof id.value === 'string' &&
-    typeof version.value === 'string'
-    ? Object.freeze({ id: id.value, version: version.value })
+    typeof version.value === 'string' &&
+    typeof installationId.value === 'string'
+    ? Object.freeze({
+        id: id.value,
+        version: version.value,
+        installationId: installationId.value,
+      })
     : undefined;
 };
 

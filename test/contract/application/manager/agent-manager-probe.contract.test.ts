@@ -40,11 +40,18 @@ test('rejects an unknown exact agent reference without beginning a probe', async
   const subject = agentManagerProbeStory();
   await subject.manager.initialize([]);
 
-  await expectManagerFault(subject.manager.probeAgent({ id: 'missing', version: '2.0.0' }), {
-    code: 'revo.agent.agent_unknown',
-    phase: 'probing',
-    retryable: false,
-  });
+  await expectManagerFault(
+    subject.manager.probeAgent({
+      id: 'missing',
+      version: '2.0.0',
+      installationId: 'fixture-installation',
+    }),
+    {
+      code: 'revo.agent.agent_unknown',
+      phase: 'probing',
+      retryable: false,
+    },
+  );
   expect(subject.probeCalls()).toBe(0);
 
   await subject.manager.shutdown();
@@ -58,7 +65,7 @@ test('returns a package-owned observation instead of executable facts from the d
   const result = await subject.manager.probeAgent(subject.agent);
 
   expect(result).toEqual({
-    agent: { id: 'runtime-agent', version: '2.0.0' },
+    agent: { id: 'runtime-agent', version: '2.0.0', installationId: 'fixture-installation' },
     definitionDigest: subject.definitionDigest(),
     executable: '/resolved/runtime-agent',
     reportedVersion: '2.4.0',

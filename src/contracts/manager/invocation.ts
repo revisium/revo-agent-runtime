@@ -5,7 +5,7 @@ import type { AgentFault, AgentExecutionPin } from './core.js';
 
 export interface StartAgentInvocation {
   readonly invocationId: string;
-  readonly agent: { readonly id: string; readonly version: string };
+  readonly agent: AgentRef;
   readonly prompt: string;
   readonly configuration?: AgentConfigurationSelection;
   readonly workspace: { readonly directory: string };

@@ -46,8 +46,14 @@ test.each([
       });
       try {
         await manager.initialize([]);
+        const definition = discovery.definitions[0];
+        if (definition === undefined) throw new Error('Expected one discovered agent.');
         await expect(
-          manager.probeAgent({ id: `${provider}-acp`, version: '1.0.0' }),
+          manager.probeAgent({
+            id: `${provider}-acp`,
+            version: '1.0.0',
+            installationId: definition.installationId,
+          }),
         ).resolves.toMatchObject({
           reportedVersion,
           status: 'available',

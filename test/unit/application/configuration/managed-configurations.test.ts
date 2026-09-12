@@ -10,7 +10,7 @@ import { agentDefinition } from '../../../support/builders/agent-definition.js';
 import { managerOptions, managerServices } from '../../../support/builders/manager-services.js';
 
 const request = (): InspectAgentConfiguration => ({
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
   workspace: { directory: '/workspace' },
 });
 
@@ -83,7 +83,10 @@ test('validates the request, definition, environment, and executable before insp
     fault: { code: 'revo.agent.definition_invalid' },
   });
   await expect(
-    manager.inspectConfiguration({ ...request(), agent: { id: 'missing', version: '1.0.0' } }),
+    manager.inspectConfiguration({
+      ...request(),
+      agent: { id: 'missing', version: '1.0.0', installationId: 'fixture-installation' },
+    }),
   ).rejects.toMatchObject({ fault: { code: 'revo.agent.agent_unknown' } });
   await expect(
     manager.inspectConfiguration(request(), {

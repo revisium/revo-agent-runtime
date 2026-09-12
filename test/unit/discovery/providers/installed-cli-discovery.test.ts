@@ -16,7 +16,7 @@ for (const { detector, provider, variable } of cases) {
       { systemExecutableOverrides: { [provider]: cli } },
       {
         ...nodeDiscoveryPlatform,
-        resolveInstalledCli: async () => cli,
+        resolveInstalledClis: async () => [cli],
       },
     ).detect({ signal: new AbortController().signal });
 
@@ -36,7 +36,7 @@ for (const { detector, provider, variable } of cases) {
       {},
       {
         ...nodeDiscoveryPlatform,
-        resolveInstalledCli: async () => undefined,
+        resolveInstalledClis: async () => [],
       },
     ).detect({ signal: new AbortController().signal });
 

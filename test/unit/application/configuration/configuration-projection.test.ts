@@ -36,7 +36,7 @@ const catalog = (
     { currentValue: true, id: 'effort', name: 'Effort', type: 'boolean' },
   ],
 ): AgentConfigurationCatalog => ({
-  agent: { id: 'agent', version: '1' },
+  agent: { id: 'agent', version: '1', installationId: 'fixture-installation' },
   catalogRevision: 'revision',
   definitionDigest: 'digest',
   launch: { executable: 'agent', reportedVersion: '1' },

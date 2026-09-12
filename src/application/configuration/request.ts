@@ -34,10 +34,15 @@ const boundedString = (value: unknown, maximum: number): string => {
 };
 
 const agentRef = (value: unknown) => {
-  const agent = exactRecord(value, ['id', 'version'], ['id', 'version']);
+  const agent = exactRecord(
+    value,
+    ['id', 'version', 'installationId'],
+    ['id', 'version', 'installationId'],
+  );
   return Object.freeze({
     id: boundedString(agent.id, 256),
     version: boundedString(agent.version, 256),
+    installationId: boundedString(agent.installationId, 16_384),
   });
 };
 

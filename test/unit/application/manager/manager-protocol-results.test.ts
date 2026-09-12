@@ -29,7 +29,7 @@ const executorFor = (outcome: ExecutionOutcome): InvocationExecutor => ({
 });
 
 const requestFor = (invocationId: string): StartAgentInvocation => ({
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
   invocationId,
   output: { directory: process.cwd() },
   parameters: {},
@@ -67,7 +67,7 @@ test('normalizes a rejected protocol-port call into a failed terminal result', a
 
   const result = await (
     await manager.start({
-      agent: { id: 'codex', version: '1.0.0' },
+      agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
       invocationId: 'rejected-driver',
       output: { directory: process.cwd() },
       parameters: {},
@@ -90,7 +90,7 @@ test('owns a deeply frozen snapshot instead of returning a mutable driver value'
 
   const result = await (
     await manager.start({
-      agent: { id: 'codex', version: '1.0.0' },
+      agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
       invocationId: 'owned-driver-value',
       metadata: requestMetadata,
       output: { directory: process.cwd() },
@@ -126,7 +126,7 @@ test('normalizes an uncloneable driver result into a failed terminal result', as
 
   const result = await (
     await manager.start({
-      agent: { id: 'codex', version: '1.0.0' },
+      agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
       invocationId: 'uncloneable-driver-value',
       output: { directory: process.cwd() },
       parameters: {},
@@ -149,7 +149,7 @@ test('normalizes a driver result with mutable non-data values into a failed term
 
   const result = await (
     await manager.start({
-      agent: { id: 'codex', version: '1.0.0' },
+      agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
       invocationId: 'non-data-driver-value',
       output: { directory: process.cwd() },
       parameters: {},

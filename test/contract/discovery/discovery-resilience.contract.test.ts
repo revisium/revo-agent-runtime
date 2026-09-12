@@ -142,7 +142,7 @@ test('does not retain a definition when its model observation is malformed', asy
   ]);
 });
 
-test('treats definition identity as an exact id and version pair', async () => {
+test('treats definition identity as an exact id, version, and installation triple', async () => {
   const detector: AgentDetector = {
     id: 'identity-pairs',
     detect: async () => ({
@@ -150,6 +150,13 @@ test('treats definition identity as an exact id and version pair', async () => {
         { definition: detectedDefinition('a\u0000b'), models: [] },
         { definition: detectedDefinition('a', 'b\u00001.0.0'), models: [] },
         { definition: detectedDefinition('a', '2.0.0'), models: [] },
+        {
+          definition: {
+            ...detectedDefinition('a', '2.0.0'),
+            installationId: 'second-installation',
+          },
+          models: [],
+        },
       ],
       diagnostics: [],
     }),
@@ -160,10 +167,17 @@ test('treats definition identity as an exact id and version pair', async () => {
     includeBuiltInDetectors: false,
   });
 
-  expect(result.definitions.map(({ id, version }) => ({ id, version }))).toEqual([
-    { id: 'a\u0000b', version: '1.0.0' },
-    { id: 'a', version: 'b\u00001.0.0' },
-    { id: 'a', version: '2.0.0' },
+  expect(
+    result.definitions.map(({ id, installationId, version }) => ({
+      id,
+      installationId,
+      version,
+    })),
+  ).toEqual([
+    { id: 'a\u0000b', version: '1.0.0', installationId: 'fixture-installation' },
+    { id: 'a', version: 'b\u00001.0.0', installationId: 'fixture-installation' },
+    { id: 'a', version: '2.0.0', installationId: 'fixture-installation' },
+    { id: 'a', version: '2.0.0', installationId: 'second-installation' },
   ]);
   expect(result.diagnostics).toEqual([]);
 });

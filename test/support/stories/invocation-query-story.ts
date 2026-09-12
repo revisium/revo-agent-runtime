@@ -30,6 +30,7 @@ export class InvocationQueryStory {
         agentDefinition({
           id: 'zeta',
           version: '1.0.0',
+          installationId: 'fixture-installation',
           displayName: 'Zeta',
           description: 'A second agent.',
         }),
@@ -48,7 +49,11 @@ export class InvocationQueryStory {
     this.startingInvocationId = invocationId;
     try {
       return await this.manager.start({
-        agent: { id: agentId, version: agentId === 'alpha' ? '2.0.0' : '1.0.0' },
+        agent: {
+          id: agentId,
+          version: agentId === 'alpha' ? '2.0.0' : '1.0.0',
+          installationId: 'fixture-installation',
+        },
         invocationId,
         metadata: { reader: 'query contract' },
         output: { directory: resolve(`/fixture/output/${invocationId}`) },

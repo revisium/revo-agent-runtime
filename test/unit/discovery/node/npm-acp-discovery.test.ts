@@ -38,7 +38,8 @@ const platform = (
     value: {
       probeSystemExecutable: async () => true,
       resolveAdjacentNodePackage: async () => undefined,
-      resolveInstalledCli: async (_policy, override) => override ?? '/system/installed-cli',
+      resolveInstalledClis: async (_policy, override) =>
+        override === undefined ? ['/system/installed-cli'] : [override],
       resolveBundledBridge: () => ({ available: false, reason: 'package_unavailable' }),
       resolveNodePackageEntrypoint: async (
         policy: NodePackageEntrypointPolicy,

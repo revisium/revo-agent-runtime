@@ -27,7 +27,7 @@ test('validates, owns, and digests an optional session capability', () => {
 
   expect(validated.definition.capabilities.session).toEqual(sessionCapability);
   expect(Object.isFrozen(validated.definition.capabilities.session)).toBe(true);
-  expect(validated.digest).toBe('76c32d2e9bc42c1415706183b548b2b3056e3098c20e7f7e33ee733fe56d3b26');
+  expect(validated.digest).toBe('e4443d4d427ab821e9c6c2993bc494138f11af18ec9f00f590febfe8f96ac0c0');
   expect(validated.digest).not.toBe(withoutSession.digest);
   expect(withoutSession.definition.capabilities.session).toBeUndefined();
 });

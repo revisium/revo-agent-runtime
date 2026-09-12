@@ -75,6 +75,7 @@ const agentDefinitionSchema = z.strictObject({
   schemaVersion: z.literal('agent-definition/v1'),
   id: boundedString(1, runtimeLimits.agentIdentityBytes),
   version: boundedString(1, runtimeLimits.agentIdentityBytes),
+  installationId: boundedString(1, runtimeLimits.argumentBytes),
   displayName: boundedString(1, runtimeLimits.displayNameBytes),
   description: boundedString(0, runtimeLimits.descriptionBytes).exactOptional(),
   launch: z.strictObject({

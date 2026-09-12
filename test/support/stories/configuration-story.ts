@@ -77,7 +77,7 @@ export const configurationStory = (directory: string, options: ConfigurationStor
     inspect: (context?: AgentStartContext) =>
       manager.inspectConfiguration(
         {
-          agent: { id: definitionId, version: '1.0.0' },
+          agent: { id: definitionId, version: '1.0.0', installationId: 'fixture-installation' },
           workspace: { directory },
         },
         context,
@@ -89,7 +89,7 @@ export const configurationStory = (directory: string, options: ConfigurationStor
         ready: () => waitForFile(readyFile),
         result: manager.inspectConfiguration(
           {
-            agent: { id: definitionId, version: '1.0.0' },
+            agent: { id: definitionId, version: '1.0.0', installationId: 'fixture-installation' },
             workspace: { directory },
           },
           { signal: cancellation.signal },

@@ -75,7 +75,11 @@ test('keeps an override provider failure bounded and never changes the selected 
         await manager.initialize([]);
         const result = await (
           await manager.start({
-            agent: { id: 'codex-acp', version: '1.7.0' },
+            agent: {
+              id: 'codex-acp',
+              installationId: definition?.installationId ?? '',
+              version: '1.7.0',
+            },
             invocationId: 'selected-override-auth-failure',
             output: {
               directory: invocationOutputDirectory(directory, 'selected-override-auth-failure'),
@@ -130,7 +134,10 @@ for (const story of systemAcpStories) {
           await manager.initialize([]);
           const result = await (
             await manager.start({
-              agent: story.agent,
+              agent: {
+                ...story.agent,
+                installationId: definition?.installationId ?? '',
+              },
               invocationId: story.invocationId,
               output: {
                 directory: invocationOutputDirectory(directory, story.invocationId),

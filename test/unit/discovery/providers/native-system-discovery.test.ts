@@ -45,7 +45,8 @@ const recordingPlatform = (
         calls.push(`probe:${executable}:${signal?.aborted === true ? 'aborted' : 'active'}`);
         return behavior.probeAvailable ?? true;
       },
-      resolveInstalledCli: async (_policy, override) => override ?? '/system/installed-cli',
+      resolveInstalledClis: async (_policy, override) =>
+        override === undefined ? ['/system/installed-cli'] : [override],
       resolveBundledBridge: (policy: BridgePackagePolicy) => {
         const provider =
           policy.bridgeName === '@agentclientprotocol/codex-acp' ? 'codex' : 'claude';

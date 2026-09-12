@@ -4,7 +4,7 @@ import { snapshotConfigurationInspection } from '../../../../src/application/con
 import { decodeAgentConfigurationSelection } from '../../../../src/configuration/selection.js';
 
 const inspection = () => ({
-  agent: { id: 'codex', version: '1.0.0' },
+  agent: { id: 'codex', version: '1.0.0', installationId: 'fixture-installation' },
   workspace: { directory: '/workspace' },
 });
 
@@ -34,8 +34,8 @@ test.each([
   { ...inspection(), extra: true },
   { agent: inspection().agent },
   { ...inspection(), [Symbol('extra')]: true },
-  { ...inspection(), agent: { id: '', version: '1.0.0' } },
-  { ...inspection(), agent: { id: 'codex', version: 1 } },
+  { ...inspection(), agent: { id: '', version: '1.0.0', installationId: 'fixture-installation' } },
+  { ...inspection(), agent: { id: 'codex', version: 1, installationId: 'fixture-installation' } },
   { ...inspection(), workspace: { directory: '' } },
   { ...inspection(), workspace: { directory: '/workspace', extra: true } },
 ])('rejects malformed inspection input %#', (value) => {
