@@ -9,14 +9,6 @@ export interface AcpConfigurationRequester {
 }
 
 export interface AcpConfigurationCompatibility {
-  /** Provider-owned interpretation of explicit caller grants; omission keeps host policy. */
-  readonly approveMcpPermission?: (
-    request: acp.RequestPermissionRequest,
-    permissions: Readonly<Record<string, unknown>>,
-    servers: readonly AgentMcpServer[],
-  ) => string | undefined;
-  /** Execute task and result formatting as separate turns in the same session. */
-  readonly finalResultTurn?: boolean;
   readonly decorate?: (
     options: readonly acp.SessionConfigOption[],
   ) => readonly acp.SessionConfigOption[];
@@ -32,6 +24,18 @@ export interface AcpConfigurationCompatibility {
   ) => Promise<readonly acp.SessionConfigOption[]>;
 }
 
-export type AcpConfigurationCompatibilityResolver = (
+/** Provider protocol quirks; configuration clients depend only on the narrower base. */
+export interface AcpProviderCompatibility extends AcpConfigurationCompatibility {
+  /** Provider-owned interpretation of explicit caller grants; omission keeps host policy. */
+  readonly approveMcpPermission?: (
+    request: acp.RequestPermissionRequest,
+    permissions: Readonly<Record<string, unknown>>,
+    servers: readonly AgentMcpServer[],
+  ) => string | undefined;
+  /** Execute task and result formatting as separate turns in the same session. */
+  readonly finalResultTurn?: boolean;
+}
+
+export type AcpProviderCompatibilityResolver = (
   definitionId: string,
-) => AcpConfigurationCompatibility | undefined;
+) => AcpProviderCompatibility | undefined;

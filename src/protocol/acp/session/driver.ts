@@ -18,7 +18,7 @@ import type {
   SessionProtocolOpeningResult,
 } from '../../session/port/opening.js';
 import type { SessionProtocolObserver } from '../../session/port/session.js';
-import type { AcpConfigurationCompatibilityResolver } from '../compatibility.js';
+import type { AcpProviderCompatibilityResolver } from '../compatibility.js';
 import { acpConfigurationRequester } from '../configuration-requester.js';
 import { AcpConfigurationSelectionError, applyAcpConfiguration } from '../configuration.js';
 import { acpFailureMessage } from '../failure.js';
@@ -86,7 +86,7 @@ const applyConfiguration = async (
   providerSessionId: string,
   options: readonly acp.SessionConfigOption[] | null | undefined,
   selection: AgentConfigurationSelection | undefined,
-  compatibilityFor: AcpConfigurationCompatibilityResolver,
+  compatibilityFor: AcpProviderCompatibilityResolver,
   definitionId: string,
   frame: Readonly<Record<string, unknown>> | undefined,
 ): Promise<void> => {
@@ -101,7 +101,7 @@ const applyConfiguration = async (
 
 const openAcpSession = (
   request: OpeningRequest,
-  compatibilityFor: AcpConfigurationCompatibilityResolver,
+  compatibilityFor: AcpProviderCompatibilityResolver,
 ): SessionProtocolOpening => {
   const completion = Promise.withResolvers<SessionProtocolOpeningResult>();
   const released = Promise.withResolvers<void>();
@@ -233,7 +233,7 @@ const openAcpSession = (
 };
 
 export const createAcpSessionProtocolDriver = (
-  compatibilityFor: AcpConfigurationCompatibilityResolver = () => undefined,
+  compatibilityFor: AcpProviderCompatibilityResolver = () => undefined,
 ): SessionProtocolDriver =>
   Object.freeze({
     openFresh: (request: FreshSessionProtocolOpeningRequest) =>

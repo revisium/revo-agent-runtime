@@ -5,7 +5,7 @@ import {
   promptPrefixDelivery,
   type InstructionsDeliveryResolver,
 } from '../execution/instructions/delivery.js';
-import type { AcpConfigurationCompatibilityResolver } from '../protocol/acp/compatibility.js';
+import type { AcpProviderCompatibilityResolver } from '../protocol/acp/compatibility.js';
 import { createAntigravityDetector } from './antigravity/detector.js';
 import { createClaudeDetector } from './claude/detector.js';
 import { claudeInstructionsDelivery } from './claude/instructions.js';
@@ -34,7 +34,7 @@ interface ProviderRegistration {
     platform: DiscoveryPlatform,
   ) => AgentDetector;
   readonly definitionId?: string;
-  readonly compatibility?: NonNullable<ReturnType<AcpConfigurationCompatibilityResolver>>;
+  readonly compatibility?: NonNullable<ReturnType<AcpProviderCompatibilityResolver>>;
   readonly fallback?: NonNullable<ReturnType<ConfigurationCatalogFallbackResolver>>;
   readonly instructions?: ProviderInstructionsDelivery;
 }
@@ -74,9 +74,8 @@ const providerRegistrations: readonly ProviderRegistration[] = Object.freeze([
 const registrationFor = (definitionId: string): ProviderRegistration | undefined =>
   providerRegistrations.find((registration) => registration.definitionId === definitionId);
 
-export const builtInConfigurationCompatibility: AcpConfigurationCompatibilityResolver = (
-  definitionId,
-) => registrationFor(definitionId)?.compatibility;
+export const builtInConfigurationCompatibility: AcpProviderCompatibilityResolver = (definitionId) =>
+  registrationFor(definitionId)?.compatibility;
 
 export const builtInConfigurationFallback: ConfigurationCatalogFallbackResolver = (definitionId) =>
   registrationFor(definitionId)?.fallback;

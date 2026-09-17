@@ -8,7 +8,7 @@ import type {
   ProtocolSession,
   ProtocolSessionRequest,
 } from '../driver.js';
-import type { AcpConfigurationCompatibilityResolver } from './compatibility.js';
+import type { AcpProviderCompatibilityResolver } from './compatibility.js';
 import { acpConfigurationRequester } from './configuration-requester.js';
 import {
   AcpConfigurationSelectionError,
@@ -44,10 +44,31 @@ const newSessionRequest = (
     : { _meta: request.instructions.sessionMeta }),
 });
 
+const finalResultPrompt = (schema: ProtocolSessionRequest['resultSchema']): acp.ContentBlock[] => [
+  {
+    type: 'text',
+    text:
+      'The task turn has finished. Do not call tools or repeat the task. Return exactly one JSON object matching the result schema, using the task results and instructions already in this session. No markdown or surrounding text. Result schema: ' +
+      JSON.stringify(schema),
+  },
+];
+
+const combinedUsage = (usages: readonly Required<AgentUsage>[]): Required<AgentUsage> =>
+  normalizeAcpUsage(
+    usages.reduce(
+      (total, usage) => ({
+        inputTokens: total.inputTokens + usage.inputTokens,
+        outputTokens: total.outputTokens + usage.outputTokens,
+        totalTokens: total.totalTokens + usage.totalTokens,
+      }),
+      { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    ),
+  );
+
 const runAcpInvocation = async (
   context: acp.ClientContext,
   request: ProtocolSessionRequest,
-  compatibilityFor: AcpConfigurationCompatibilityResolver,
+  compatibilityFor: AcpProviderCompatibilityResolver,
   capabilities: acp.AgentCapabilities | null | undefined,
   frames: AcpSessionFrameCapture,
   onSession: (session: acp.ActiveSession) => void,
@@ -77,37 +98,18 @@ const runAcpInvocation = async (
     response.stopReason === 'end_turn' &&
     onResultTurn()
   ) {
-    response = await session.prompt([
-      {
-        type: 'text',
-        text:
-          'The task turn has finished. Do not call tools or repeat the task. Return exactly one JSON object matching the result schema, using the task results and instructions already in this session. No markdown or surrounding text. Result schema: ' +
-          JSON.stringify(request.resultSchema),
-      },
-    ]);
+    response = await session.prompt(finalResultPrompt(request.resultSchema));
     if (request.definition.capabilities.usage && response.usage != null)
       usages.push(normalizeAcpUsage(response.usage));
   }
   request.observer.activity();
-  if (usages.length > 0)
-    request.observer.usage(
-      normalizeAcpUsage(
-        usages.reduce(
-          (total, usage) => ({
-            inputTokens: total.inputTokens + usage.inputTokens,
-            outputTokens: total.outputTokens + usage.outputTokens,
-            totalTokens: total.totalTokens + usage.totalTokens,
-          }),
-          { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-        ),
-      ),
-    );
+  if (usages.length > 0) request.observer.usage(combinedUsage(usages));
   return { status: 'completed' };
 };
 
 const openAcpSession = async (
   request: ProtocolSessionRequest,
-  compatibilityFor: AcpConfigurationCompatibilityResolver,
+  compatibilityFor: AcpProviderCompatibilityResolver,
 ): Promise<ProtocolSession> => {
   const ready = Promise.withResolvers<acp.ClientContext>();
   const terminal = Promise.withResolvers<ProtocolOutcome>();
@@ -219,7 +221,7 @@ const openAcpSession = async (
 };
 
 export const createAcpProtocolDriver = (
-  compatibilityFor: AcpConfigurationCompatibilityResolver = () => undefined,
+  compatibilityFor: AcpProviderCompatibilityResolver = () => undefined,
 ): ProtocolDriver =>
   Object.freeze({
     open: (request: ProtocolSessionRequest) => openAcpSession(request, compatibilityFor),

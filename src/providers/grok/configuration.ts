@@ -2,7 +2,7 @@ import type * as acp from '@agentclientprotocol/sdk';
 
 import type { AgentConfigurationSelectionValue } from '../../contracts/configuration.js';
 import type {
-  AcpConfigurationCompatibility,
+  AcpProviderCompatibility,
   AcpConfigurationRequester,
 } from '../../protocol/acp/compatibility.js';
 import { grokMcpPermission } from './permission.js';
@@ -208,7 +208,7 @@ const applyLegacy = async (
   return Object.freeze([updatedModel, reasoning]);
 };
 
-export const grokConfigurationCompatibility: AcpConfigurationCompatibility = Object.freeze({
+export const grokConfigurationCompatibility: AcpProviderCompatibility = Object.freeze({
   applyLegacy,
   approveMcpPermission: grokMcpPermission,
   finalResultTurn: true,
