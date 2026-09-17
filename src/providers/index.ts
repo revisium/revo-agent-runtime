@@ -5,7 +5,10 @@ import {
   promptPrefixDelivery,
   type InstructionsDeliveryResolver,
 } from '../execution/instructions/delivery.js';
-import type { AcpProviderCompatibilityResolver } from '../protocol/acp/compatibility.js';
+import type {
+  AcpProviderCompatibility,
+  AcpProviderCompatibilityResolver,
+} from '../protocol/acp/compatibility.js';
 import { createAntigravityDetector } from './antigravity/detector.js';
 import { createClaudeDetector } from './claude/detector.js';
 import { claudeInstructionsDelivery } from './claude/instructions.js';
@@ -18,6 +21,7 @@ import { createGooseDetector } from './goose/detector.js';
 import { grokConfigurationCompatibility } from './grok/configuration.js';
 import { createGrokDetector } from './grok/detector.js';
 import { grokModelCommandFallback } from './grok/model-command.js';
+import { grokMcpPermission } from './grok/permission.js';
 import { createHermesDetector } from './hermes/detector.js';
 import type { ProviderHost, ProviderInstructionsDelivery } from './instructions-delivery.js';
 import { createKiloDetector } from './kilo/detector.js';
@@ -34,7 +38,7 @@ interface ProviderRegistration {
     platform: DiscoveryPlatform,
   ) => AgentDetector;
   readonly definitionId?: string;
-  readonly compatibility?: NonNullable<ReturnType<AcpProviderCompatibilityResolver>>;
+  readonly compatibility?: AcpProviderCompatibility;
   readonly fallback?: NonNullable<ReturnType<ConfigurationCatalogFallbackResolver>>;
   readonly instructions?: ProviderInstructionsDelivery;
 }
@@ -55,7 +59,11 @@ const providerRegistrations: readonly ProviderRegistration[] = Object.freeze([
   {
     createDetector: createGrokDetector,
     definitionId: 'grok-acp',
-    compatibility: grokConfigurationCompatibility,
+    compatibility: {
+      ...grokConfigurationCompatibility,
+      approveMcpPermission: grokMcpPermission,
+      finalResultTurn: true,
+    },
     fallback: grokModelCommandFallback,
   },
   { createDetector: createHermesDetector },
