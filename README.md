@@ -17,10 +17,10 @@ Protocol-neutral discovery and supervised ACP v1 agent execution for Node.js.
 
 ## Status and installation
 
-The package metadata is prepared for the public alpha release
-(`0.2.0-alpha.0`) with npm provenance. This migration pull request does not
-publish the package; install dependencies from this repository while release
-publication remains deferred. Runtime requires Node.js `>=24.15.0 <25`;
+The package metadata is prepared for the next alpha release (`0.3.0-alpha.7`,
+following the published `0.3.0-alpha.6` dist-tag) with npm provenance. This
+change does not publish the package; install dependencies from this repository
+while release publication remains deferred. Runtime requires Node.js `>=24.15.0 <25`;
 repository development uses pnpm 11.13.0 through Corepack.
 
 ```bash

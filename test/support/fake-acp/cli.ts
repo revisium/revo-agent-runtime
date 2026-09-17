@@ -8,6 +8,7 @@ export const fakeAcpOptions = () =>
     configurationStateFile: optionValue('--configuration-state'),
     descendantPidFile: optionValue('--descendant-pid'),
     mode: optionValue('--mode') ?? 'success',
+    nativeResume: process.argv.includes('--native-resume'),
     readyFile: optionValue('--ready'),
     traceFile: optionValue('--trace'),
   });

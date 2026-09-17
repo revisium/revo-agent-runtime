@@ -1,5 +1,16 @@
 import type { AgentDefinition, JsonObject } from '../../../contracts/agent-definition.js';
 import type { AgentConfigurationSelection } from '../../../contracts/configuration.js';
+import type { AgentInstructionsDelivery, AgentMcpServer } from '../../../contracts/context.js';
+
+/** Instructions with their pre-decided channel and checkpoint identity for this incarnation. */
+export interface SessionProtocolInstructions {
+  readonly text: string;
+  readonly digest: string;
+  readonly delivery: AgentInstructionsDelivery;
+  readonly sessionMeta?: Readonly<JsonObject>;
+  /** True when a checkpointed prefix already reached the provider transcript. */
+  readonly dispatched: boolean;
+}
 
 interface SessionProtocolOpeningRequestBase {
   readonly definition: AgentDefinition;
@@ -7,6 +18,8 @@ interface SessionProtocolOpeningRequestBase {
   readonly parameters: Readonly<Record<string, unknown>>;
   readonly permissions: Readonly<Record<string, unknown>>;
   readonly configuration?: AgentConfigurationSelection;
+  readonly instructions?: SessionProtocolInstructions;
+  readonly mcpServers?: readonly AgentMcpServer[];
 }
 
 export interface FreshSessionProtocolRequest extends SessionProtocolOpeningRequestBase {

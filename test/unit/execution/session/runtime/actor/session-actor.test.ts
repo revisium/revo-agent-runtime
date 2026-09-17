@@ -24,6 +24,29 @@ const closeCommand = (callId = 'close_01'): PublicSessionCommand => ({
 });
 
 describe('session actor', () => {
+  test('does not treat cleanup_uncertain as confirmed teardown', async () => {
+    const released: boolean[] = [];
+    const actor = new SessionActor({
+      clock,
+      dispatcher: new SessionEffectDispatcher([]),
+      initialState: {
+        ...idleSessionState(),
+        error: {
+          code: 'revo.agent.process_cleanup_failed',
+          message: 'Session process cleanup could not be confirmed.',
+          phase: 'session_terminal',
+          retryable: false,
+        },
+        status: 'cleanup_uncertain',
+      },
+      reducer: (state) => ({ effects: [], state }),
+      release: (session) => {
+        released.push(session.confirmedTeardown);
+      },
+    });
+    await actor.whenQuiescent();
+    expect(released).toEqual([false]);
+  });
   test('replaces state before effect start and serializes a synchronous outcome', async () => {
     const commands: string[] = [];
     const reducer: SessionReducer = (state, command) => {

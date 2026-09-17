@@ -16,6 +16,7 @@ export const protocolFault = (
   if (failure?.code === 'configuration_value_unsupported')
     code = 'revo.agent.configuration_value_unsupported';
   if (failure?.code === 'capability_unsupported') code = 'revo.agent.session_unsupported';
+  if (failure?.code === 'parameters_invalid') code = 'revo.agent.parameters_invalid';
   const message = sanitizeDiagnosticDetails({
     message:
       redact?.(failure?.message ?? 'The provider session protocol operation failed.') ??

@@ -31,3 +31,26 @@ export const preferredModelForSessionSmoke = (providerId: string): string | unde
   if (providerId === 'opencode-acp') return 'xai/grok-4.20-0309-non-reasoning';
   return undefined;
 };
+
+export const sessionSmokeCoverage = (
+  catalog: AgentConfigurationCatalog,
+  providerId: string,
+): {
+  readonly default: {
+    readonly label: 'default-model';
+    readonly configuration: AgentConfigurationSelection;
+  };
+  readonly selected: {
+    readonly label: 'selected-model';
+    readonly configuration: AgentConfigurationSelection;
+  };
+} => ({
+  default: {
+    label: 'default-model',
+    configuration: configurationForSessionSmoke(catalog),
+  },
+  selected: {
+    label: 'selected-model',
+    configuration: configurationForSessionSmoke(catalog, preferredModelForSessionSmoke(providerId)),
+  },
+});

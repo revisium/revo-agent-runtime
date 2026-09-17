@@ -35,14 +35,109 @@ test.each([
   expect(spawned).toBe(0);
 });
 
+test('does not spawn when the native instructions file cannot be created', async () => {
+  let spawned = 0;
+  const services = managerServices({
+    executor: {
+      start: () => {
+        spawned += 1;
+        throw new Error('A failed native file must reject before spawn.');
+      },
+    },
+    instructionsDelivery: (request) => ({
+      artifact: { bytes: new Uint8Array(), path: `${request.outputDirectory}/file.md` },
+      channel: 'opencode:config.instructions-file',
+      environment: {},
+      mode: 'native_append',
+    }),
+    outputArtifactPlatform: {
+      createPrivateFile: async () => 'failed',
+      removeFile: async () => undefined,
+    },
+  });
+  const manager = createAgentManager(managerOptions([agentDefinition()]), services);
+  await manager.initialize([]);
+
+  await expect(
+    manager.start({ ...invocation('instructions-file-failed'), instructions: 'Read .revo.' }),
+  ).rejects.toMatchObject({
+    fault: { code: 'revo.agent.output_write_failed', phase: 'preflight' },
+  });
+  await expect(manager.shutdown()).resolves.toBeUndefined();
+
+  expect(spawned).toBe(0);
+});
+
+test('does not create a native instructions file when launch args are not literal', async () => {
+  let spawned = 0;
+  let files = 0;
+  const services = managerServices({
+    executor: {
+      start: () => {
+        spawned += 1;
+        throw new Error('Unsupported launch must reject before spawn.');
+      },
+    },
+    instructionsDelivery: (request) => ({
+      artifact: {
+        bytes: new Uint8Array(),
+        path: `${request.outputDirectory}/revo-opencode-instructions.md`,
+      },
+      channel: 'opencode:config.instructions-file',
+      environment: {},
+      mode: 'native_append',
+    }),
+    outputArtifactPlatform: {
+      createPrivateFile: async () => {
+        files += 1;
+        return 'created';
+      },
+      removeFile: async () => undefined,
+    },
+  });
+  const manager = createAgentManager(
+    managerOptions([
+      agentDefinition({
+        launch: {
+          ...agentDefinition().launch,
+          args: [...agentDefinition().launch.args, { kind: 'workspace' }],
+        },
+      }),
+    ]),
+    services,
+  );
+  await manager.initialize([]);
+
+  await expect(
+    manager.start({ ...invocation('workspace-arg-native'), instructions: 'Keep native.' }),
+  ).rejects.toMatchObject({
+    fault: { code: 'revo.agent.strategy_unsupported', phase: 'preflight' },
+  });
+  await expect(manager.shutdown()).resolves.toBeUndefined();
+
+  expect(spawned).toBe(0);
+  expect(files).toBe(0);
+});
+
 test('maps a synchronous spawn failure after claiming output and leaves shutdown quiescent', async () => {
   let claims = 0;
+  let files = 0;
+  let removed = 0;
   const services = managerServices({
     executor: {
       start: () => {
         throw new Error('The executor failed before admitting a process.');
       },
     },
+    instructionsDelivery: (request) => ({
+      artifact: {
+        bytes: new Uint8Array(),
+        path: `${request.outputDirectory}/revo-opencode-instructions.md`,
+      },
+      channel: 'opencode:config.instructions-file',
+      environment: {},
+      mode: 'native_append',
+    }),
     outputClaimPlatform: {
       createExclusiveDirectory: async () => {
         claims += 1;
@@ -50,16 +145,32 @@ test('maps a synchronous spawn failure after claiming output and leaves shutdown
       },
       inspectDirectory: async () => 'directory',
     },
+    outputArtifactPlatform: {
+      createPrivateFile: async () => {
+        files += 1;
+        return 'created';
+      },
+      removeFile: async () => {
+        removed += 1;
+      },
+    },
   });
   const manager = createAgentManager(managerOptions([agentDefinition()]), services);
   await manager.initialize([]);
 
-  await expect(manager.start(invocation('synchronous-spawn-failure'))).rejects.toMatchObject({
+  await expect(
+    manager.start({
+      ...invocation('synchronous-spawn-failure'),
+      instructions: 'Keep native.',
+    }),
+  ).rejects.toMatchObject({
     fault: { code: 'revo.agent.protocol_failed', phase: 'execution' },
   });
   await expect(manager.shutdown()).resolves.toBeUndefined();
 
   expect(claims).toBe(1);
+  expect(files).toBe(1);
+  expect(removed).toBe(1);
 });
 
 test('does not accept cancellation observed after output claim and before spawn', async () => {

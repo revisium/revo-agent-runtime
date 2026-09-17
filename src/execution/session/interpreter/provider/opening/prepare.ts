@@ -1,6 +1,9 @@
 import type { AgentFault } from '../../../../../contracts/manager/core.js';
 import type { SessionEffect } from '../../../kernel/effect/session-effect.js';
-import type { SessionOpeningPreparer } from '../../../port/opening-preparation.js';
+import type {
+  PreparedSessionOpening,
+  SessionOpeningPreparer,
+} from '../../../port/opening-preparation.js';
 import type { SessionEffectOutput } from '../../../runtime/effects/outcomes.js';
 import type { SessionRuntimeIdentitySource } from '../../../runtime/primitives/identity.js';
 import { SessionOutputCollector } from '../../output/collect.js';
@@ -23,6 +26,30 @@ const preparationFault = (timedOut: boolean): AgentFault => ({
   phase: 'session_opening',
   retryable: false,
 });
+
+const preparedOpening = (settlement: {
+  readonly state: string;
+  readonly value?: Awaited<ReturnType<SessionOpeningPreparer['prepare']>>;
+}): PreparedSessionOpening | undefined => {
+  if (settlement.state !== 'fulfilled' || settlement.value?.status !== 'prepared') return undefined;
+  return settlement.value.value;
+};
+
+const disposePreparedInstructions = (prepared: PreparedSessionOpening | undefined): void => {
+  void prepared?.instructions?.artifact?.dispose();
+};
+
+/** Follow a timed-out prepare so a later artifact is unlinked without registering it. */
+const disposeEventualPreparedInstructions = (
+  operation: ReturnType<SessionOpeningPreparer['prepare']>,
+): void => {
+  void operation.then(
+    (result) => {
+      if (result.status === 'prepared') disposePreparedInstructions(result.value);
+    },
+    () => undefined,
+  );
+};
 
 export const createOpeningPreparationInterpreter = (options: {
   readonly clock: SessionObservationClock;
@@ -74,6 +101,8 @@ const prepareOpening = async (
           ? 'opening.preparation.timed_out'
           : 'opening.preparation.failed',
     });
+    disposePreparedInstructions(preparedOpening(settlement));
+    if (settlement.state === 'unknown') disposeEventualPreparedInstructions(operation);
     return;
   }
   if (settlement.value.status === 'rejected') {
@@ -94,6 +123,7 @@ const prepareOpening = async (
   });
   if (!registered) {
     output.outcome({ ...base, fault: preparationFault(false), type: 'opening.preparation.failed' });
+    disposePreparedInstructions(settlement.value.value);
     return;
   }
   output.outcome({ ...base, preparationId, type: 'opening.preparation.succeeded' });

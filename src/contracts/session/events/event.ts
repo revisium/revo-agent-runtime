@@ -1,3 +1,4 @@
+import type { AgentInstructionsDelivery } from '../../context.js';
 import type { AgentFault, AgentExecutionPin } from '../../manager/core.js';
 import type { AgentSessionCapabilities } from '../capabilities/negotiated.js';
 import type {
@@ -38,6 +39,7 @@ export interface SessionOpenedEvent extends AgentSessionEventBase {
   readonly type: 'session.opened';
   readonly pin: AgentExecutionPin;
   readonly capabilities: AgentSessionCapabilities;
+  readonly instructionsDelivery?: AgentInstructionsDelivery;
   readonly resumed: boolean;
 }
 

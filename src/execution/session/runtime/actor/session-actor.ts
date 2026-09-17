@@ -40,7 +40,11 @@ type CoalescedControlCommand = Extract<
 >;
 
 export interface SessionActorOptions {
-  readonly release?: (session: { readonly sessionId: string; readonly epoch: number }) => void;
+  readonly release?: (session: {
+    readonly sessionId: string;
+    readonly epoch: number;
+    readonly confirmedTeardown: boolean;
+  }) => void;
   readonly initialState: SessionState;
   readonly reducer: SessionReducer;
   readonly dispatcher: SessionEffectDispatcher;
@@ -192,7 +196,11 @@ export class SessionActor implements SessionCommandRuntime {
       this.#state.status === 'cleanup_uncertain' ||
       projectTerminalRecord(this.#state) !== undefined;
     if (terminal)
-      this.options.release?.({ sessionId: this.#state.sessionId, epoch: this.#state.epoch });
+      this.options.release?.({
+        sessionId: this.#state.sessionId,
+        epoch: this.#state.epoch,
+        confirmedTeardown: this.#state.status !== 'cleanup_uncertain',
+      });
   }
 
   #finishOutcome(command: SessionCommand): void {

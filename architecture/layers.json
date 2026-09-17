@@ -81,6 +81,7 @@
         "contracts",
         "definition",
         "execution",
+        "execution-security-digest-port",
         "execution-session-output-port",
         "session-opening-preparation-port"
       ]

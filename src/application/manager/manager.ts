@@ -18,7 +18,9 @@ import {
   type Unsubscribe,
 } from '../../contracts/manager.js';
 import type { AgentConfigurationInspector } from '../../execution/configuration/inspector.js';
+import type { InstructionsDeliveryResolver } from '../../execution/instructions/delivery.js';
 import type { InvocationExecutor } from '../../execution/invocation/executor.js';
+import type { OutputArtifactPlatform } from '../../execution/output/artifact.js';
 import type { OutputClaimPlatform } from '../../execution/output/claim.js';
 import type { ClaimedInvocationOutputPublisher } from '../../execution/output/publication.js';
 import type { ExecutablePreflight } from '../../execution/probe/executable-preflight.js';
@@ -43,6 +45,8 @@ export interface ManagerServices {
   readonly configurationInspector: AgentConfigurationInspector;
   readonly executor: InvocationExecutor;
   readonly executablePreflight: ExecutablePreflight;
+  readonly instructionsDelivery: InstructionsDeliveryResolver;
+  readonly outputArtifactPlatform: OutputArtifactPlatform;
   readonly outputClaimPlatform: OutputClaimPlatform;
   readonly outputPublisher: ClaimedInvocationOutputPublisher;
   readonly recoveryInspector: RecoveredProcessInspector;
@@ -106,8 +110,10 @@ export const createAgentManager = (
     executor: services.executor,
     executablePreflight: services.executablePreflight,
     inputPolicy: EffectiveInvocationInputPolicy.create(definitions.list()),
+    instructionsDelivery: services.instructionsDelivery,
     isClosed: () => closed,
     limits: validated.limits,
+    outputArtifactPlatform: services.outputArtifactPlatform,
     outputClaimPlatform: services.outputClaimPlatform,
     outputPublisher: services.outputPublisher,
     pendingOperations,

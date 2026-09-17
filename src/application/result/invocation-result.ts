@@ -1,3 +1,4 @@
+import type { AgentInstructionsDelivery } from '../../contracts/context.js';
 import type {
   AgentExecutionPin,
   AgentInvocationResult,
@@ -22,6 +23,11 @@ export interface InvocationResultTiming {
   readonly startedAt?: string;
 }
 
+/** Runtime-owned facts about the run that belong beside launch evidence. */
+export interface InvocationResultContext {
+  readonly instructionsDelivery?: AgentInstructionsDelivery;
+}
+
 const ownedValue = (value: unknown): PlainJsonObject => snapshotPlainJsonObject(value, 1_048_576);
 
 const durationBetween = (acceptedAt: string, finishedAt: string): number => {
@@ -39,6 +45,7 @@ const baseResult = (
   outcome: ExecutionOutcome,
   evidence: ExecutionEvidence,
   timing: InvocationResultTiming,
+  context: InvocationResultContext,
 ) =>
   Object.freeze({
     acceptedAt: timing.acceptedAt,
@@ -48,6 +55,9 @@ const baseResult = (
       signal: evidence.processExit.signal,
     }),
     finishedAt: timing.finishedAt,
+    ...(context.instructionsDelivery === undefined
+      ? {}
+      : { instructionsDelivery: Object.freeze({ ...context.instructionsDelivery }) }),
     invocationId: request.invocationId,
     launch: Object.freeze({ ...evidence.launch }),
     ...(request.metadata === undefined ? {} : { metadata: ownedValue(request.metadata) }),
@@ -118,7 +128,7 @@ const normalizedResult = (
     });
   return Object.freeze({
     ...base,
-    error: executionFailure(outcome.code),
+    error: executionFailure(outcome.code, outcome.diagnostic),
     files: withOptionalResult(files, publication.committed),
     status: 'failed',
     ...(!publication.rawPublished || outcome.evidence === undefined
@@ -155,8 +165,9 @@ export const buildInvocationResult = (
   evidence: ExecutionEvidence,
   timing: InvocationResultTiming,
   publication: ResultPublication = defaultResultPublication,
+  context: InvocationResultContext = {},
 ): AgentInvocationResult => {
-  const base = baseResult(request, pin, outcome, evidence, timing);
+  const base = baseResult(request, pin, outcome, evidence, timing, context);
   try {
     return normalizedResult(base, request, outcome, publication);
   } catch {

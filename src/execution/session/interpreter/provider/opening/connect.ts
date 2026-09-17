@@ -1,10 +1,12 @@
 import type { AgentFault } from '../../../../../contracts/manager/core.js';
+import type { SessionProtocolInstructions } from '../../../../../protocol/session/model/request.js';
 import type { SessionProtocolDriver } from '../../../../../protocol/session/port/driver.js';
 import type {
   SessionProtocolOpening,
   SessionProtocolOpeningResult,
 } from '../../../../../protocol/session/port/opening.js';
 import type { SessionEffect } from '../../../kernel/effect/session-effect.js';
+import type { PreparedSessionInstructions } from '../../../port/opening-preparation.js';
 import type { SessionEffectOutput } from '../../../runtime/effects/outcomes.js';
 import type { SessionRuntimeIdentitySource } from '../../../runtime/primitives/identity.js';
 import type { SessionEffectHandler } from '../../shared/effect/handler.js';
@@ -32,6 +34,17 @@ const closeProvider = async (provider: ClosableProvider, reason: string): Promis
     // Process cleanup remains the authoritative ownership fence.
   }
 };
+
+/** The driver receives the decision and wire metadata; the artifact and environment stay here. */
+const protocolInstructions = (
+  prepared: PreparedSessionInstructions,
+): SessionProtocolInstructions => ({
+  delivery: prepared.delivery,
+  digest: prepared.digest,
+  dispatched: prepared.dispatched,
+  ...(prepared.sessionMeta === undefined ? {} : { sessionMeta: prepared.sessionMeta }),
+  text: prepared.text,
+});
 
 const timeoutFault = (): AgentFault => ({
   code: 'revo.agent.timeout',
@@ -98,9 +111,14 @@ const connectProvider = async (
   try {
     const request = preparation.opening.request;
     const input = request.request;
+    const prepared = preparation.prepared;
     const common = {
       ...(input.configuration === undefined ? {} : { configuration: input.configuration }),
-      definition: preparation.prepared.definition,
+      definition: prepared.definition,
+      ...(prepared.instructions === undefined
+        ? {}
+        : { instructions: protocolInstructions(prepared.instructions) }),
+      ...(prepared.mcpServers === undefined ? {} : { mcpServers: prepared.mcpServers }),
       observer,
       parameters: preparation.prepared.inputs.parameters,
       permissions: preparation.prepared.inputs.permissions,
@@ -189,9 +207,11 @@ const emitOpenSettlement = async (
     return;
   }
   const observed = options.clock.now();
+  const instructionsDelivery = preparation.prepared.instructions?.delivery;
   output.outcome({
     capabilities: mapProtocolCapabilities(settlement.value.capabilities),
     correlation: effect.correlation,
+    ...(instructionsDelivery === undefined ? {} : { instructionsDelivery }),
     observedAt: observed.iso,
     observedAtMs: observed.milliseconds,
     providerResourceId,

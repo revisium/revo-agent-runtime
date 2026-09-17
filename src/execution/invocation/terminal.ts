@@ -1,3 +1,4 @@
+import type { JsonObject } from '../../contracts/agent-definition.js';
 import type { AgentFault } from '../../contracts/manager/core.js';
 import type { AgentUsage } from '../../contracts/manager/invocation.js';
 import type { RawResponseEvidence } from '../result/raw-response.js';
@@ -19,6 +20,8 @@ export type ExecutionOutcome =
         readonly code?: AgentFault['code'];
         readonly reason?: string;
         readonly evidence?: RawResponseEvidence;
+        /** Redacted provider failure evidence published under `details.diagnostic.provider`. */
+        readonly diagnostic?: Readonly<JsonObject>;
       } & TerminalEvidence
     >
   | Readonly<{ readonly status: 'cancelled' } & TerminalEvidence>

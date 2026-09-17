@@ -8,7 +8,10 @@ import type {
   SessionProtocolCloseOutcome,
   SessionProtocolPromptOutcome,
 } from '../../session/model/outcome.js';
-import type { SessionProtocolInteractionResponseRequest } from '../../session/model/request.js';
+import type {
+  SessionProtocolInstructions,
+  SessionProtocolInteractionResponseRequest,
+} from '../../session/model/request.js';
 import type {
   ObservedSessionProtocolPromptRequest,
   SessionProtocolPrompt,
@@ -16,6 +19,7 @@ import type {
   SessionProtocolObserver,
 } from '../../session/port/session.js';
 import { acpFailureMessage } from '../failure.js';
+import { prefixInstructions } from '../instructions.js';
 import { normalizeAcpUsage } from '../usage.js';
 import { AcpSessionInteractionBroker } from './interaction/broker.js';
 
@@ -43,22 +47,39 @@ export interface AcpSessionResourceOptions {
   readonly capabilities: SessionProtocolCapabilities;
   readonly closeSupported: boolean;
   readonly context: acp.ClientContext;
+  readonly instructions?: SessionProtocolInstructions;
   readonly providerSessionId: string;
   readonly release: () => void;
   readonly flushUpdates: () => Promise<void>;
   readonly setObserver: (observer: SessionProtocolObserver | undefined) => void;
 }
 
+/** Instructions travel across incarnations as identity and channel facts, never as text. */
+const instructionsContinuation = (
+  instructions: SessionProtocolInstructions | undefined,
+  prefixDispatched: boolean,
+) =>
+  instructions === undefined
+    ? {}
+    : {
+        instructionsDelivery: { mode: instructions.delivery.mode },
+        instructionsDigest: instructions.digest,
+        instructionsDispatched: prefixDispatched,
+      };
+
 export class AcpSessionResource implements SessionProtocolSession {
   #closing: Promise<SessionProtocolCloseOutcome> | undefined;
+  #prefixDispatched: boolean;
 
-  constructor(private readonly options: AcpSessionResourceOptions) {}
+  constructor(private readonly options: AcpSessionResourceOptions) {
+    this.#prefixDispatched = options.instructions?.dispatched ?? false;
+  }
 
   prompt(request: ObservedSessionProtocolPromptRequest): SessionProtocolPrompt {
     this.options.setObserver(request.observer);
     const completion: Promise<SessionProtocolPromptOutcome> = this.options.context
       .request(acp.methods.agent.session.prompt, {
-        prompt: [{ text: request.prompt, type: 'text' }],
+        prompt: [{ text: this.#promptText(request.prompt), type: 'text' }],
         sessionId: this.options.providerSessionId,
       })
       .then(async (response) => {
@@ -92,7 +113,10 @@ export class AcpSessionResource implements SessionProtocolSession {
       });
     return Promise.resolve({
       continuation: {
-        data: { sessionId: this.options.providerSessionId },
+        data: {
+          sessionId: this.options.providerSessionId,
+          ...instructionsContinuation(this.options.instructions, this.#prefixDispatched),
+        },
         format: 'acp/v1',
       },
       status: 'captured',
@@ -102,6 +126,19 @@ export class AcpSessionResource implements SessionProtocolSession {
   close(): Promise<SessionProtocolCloseOutcome> {
     this.#closing ??= this.#close();
     return this.#closing;
+  }
+
+  /** The prefix is attempted once per logical session: the first prompt of a fresh transcript. */
+  #promptText(prompt: string): string {
+    const instructions = this.options.instructions;
+    if (
+      instructions === undefined ||
+      instructions.delivery.mode !== 'prompt_prefix' ||
+      this.#prefixDispatched
+    )
+      return prompt;
+    this.#prefixDispatched = true;
+    return prefixInstructions(prompt, instructions.text);
   }
 
   async #cancelPrompt(_reason?: string): Promise<SessionProtocolCancellationOutcome> {

@@ -153,9 +153,14 @@ export const reduceProviderOpenOutcome = (
     return unchangedTransition(state);
   if (command.type !== 'provider.opened')
     return beginOpeningProcessCleanup(state, command.fault, 'remove_state');
+  const instructionsDelivery =
+    command.instructionsDelivery === undefined
+      ? {}
+      : { instructionsDelivery: command.instructionsDelivery };
   const event: SessionOpenedEvent = {
     capabilities: command.capabilities,
     eventId: nextSessionEventId(state),
+    ...instructionsDelivery,
     observedAt: command.observedAt,
     pin: state.pin,
     resumed: state.progress.resumed,
@@ -170,6 +175,7 @@ export const reduceProviderOpenOutcome = (
       ...state,
       progress: {
         capabilities: command.capabilities,
+        ...instructionsDelivery,
         openedAtMs: command.observedAtMs,
         process: state.progress.process,
         processResourceId: state.progress.processResourceId,

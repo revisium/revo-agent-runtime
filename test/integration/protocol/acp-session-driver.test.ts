@@ -395,6 +395,34 @@ test('ACP session driver maps a handshake rejection to transport failure', async
   await agentConnection.closed;
 });
 
+test('ACP session driver maps HTTP MCP without capability to invalid parameters', async () => {
+  const pair = transportPair();
+  const agentConnection = acp
+    .agent({ name: 'fake-no-http-mcp-agent' })
+    .onRequest(acp.methods.agent.initialize, () => ({
+      agentCapabilities: protocolCapabilities,
+      protocolVersion: acp.PROTOCOL_VERSION,
+    }))
+    .onRequest(acp.methods.agent.session.new, () => ({ sessionId: 'session' }))
+    .connect(pair.agent);
+  const opening = createAcpSessionProtocolDriver().openFresh({
+    definition,
+    kind: 'fresh',
+    mcpServers: [{ name: 'remote', transport: 'http', url: 'https://fixture/mcp' }],
+    observer: observer([]),
+    parameters: {},
+    permissions: {},
+    transport: pair.client,
+    workspace: '/workspace',
+  });
+  await expect(opening.completion).resolves.toMatchObject({
+    failure: { code: 'parameters_invalid' },
+    status: 'failed',
+  });
+  agentConnection.close();
+  await agentConnection.closed;
+});
+
 test.each([
   {
     capabilities: protocolCapabilities,

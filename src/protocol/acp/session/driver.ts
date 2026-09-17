@@ -23,6 +23,7 @@ import { acpConfigurationRequester } from '../configuration-requester.js';
 import { AcpConfigurationSelectionError, applyAcpConfiguration } from '../configuration.js';
 import { acpFailureMessage } from '../failure.js';
 import { boundAcpInput } from '../frame-boundary.js';
+import { AcpMcpCapabilityError, acpMcpServers } from '../mcp.js';
 import { AcpSessionFrameCapture } from '../session-frame-capture.js';
 import { acpSessionClientCapabilities, negotiateAcpSessionCapabilities } from './capabilities.js';
 import { AcpSessionInteractionBroker } from './interaction/broker.js';
@@ -37,6 +38,7 @@ const failure = (
   code:
     | 'configuration_stale'
     | 'configuration_value_unsupported'
+    | 'parameters_invalid'
     | 'protocol_invalid'
     | 'transport_failed',
   message: string,
@@ -47,6 +49,7 @@ const failure = (
 });
 
 const connectionFailure = (error: unknown): SessionProtocolOpeningResult => {
+  if (error instanceof AcpMcpCapabilityError) return failure('parameters_invalid', error.message);
   if (!(error instanceof AcpConfigurationSelectionError))
     return failure(
       'transport_failed',
@@ -71,6 +74,12 @@ const continuationSessionId = (continuation: SessionProtocolContinuation): strin
   const value = continuation.data.sessionId;
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 };
+
+/** Native session metadata is spread only when a channel was selected; omission stays byte-identical. */
+const sessionMeta = (request: OpeningRequest): { readonly _meta?: JsonObject } =>
+  request.instructions?.sessionMeta === undefined
+    ? {}
+    : { _meta: request.instructions.sessionMeta };
 
 const applyConfiguration = async (
   context: acp.ClientContext,
@@ -139,6 +148,7 @@ const openAcpSession = (
         initialized.agentCapabilities,
         request.definition.capabilities.cancellation,
       );
+      const mcpServers = acpMcpServers(request.mcpServers, initialized.agentCapabilities);
       let configOptions: readonly acp.SessionConfigOption[] | null | undefined;
       if ('continuation' in request) {
         providerSessionId = continuationSessionId(request.continuation);
@@ -156,14 +166,16 @@ const openAcpSession = (
         }
         const response = await context.request(acp.methods.agent.session.resume, {
           cwd: request.workspace,
-          mcpServers: [],
+          mcpServers,
           sessionId: providerSessionId,
+          ...sessionMeta(request),
         });
         configOptions = response.configOptions;
       } else {
         const response = await context.request(acp.methods.agent.session.new, {
           cwd: request.workspace,
-          mcpServers: [],
+          mcpServers,
+          ...sessionMeta(request),
         });
         providerSessionId = response.sessionId;
         configOptions = response.configOptions;
@@ -182,6 +194,7 @@ const openAcpSession = (
         capabilities,
         closeSupported: initialized.agentCapabilities?.sessionCapabilities?.close != null,
         context,
+        ...(request.instructions === undefined ? {} : { instructions: request.instructions }),
         providerSessionId,
         flushUpdates: () => updates.whenIdle(),
         setObserver: (next) => {

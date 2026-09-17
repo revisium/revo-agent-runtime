@@ -1,7 +1,9 @@
 import type { AgentDefinition } from '../../contracts/agent-definition.js';
 import type { AgentConfigurationSelection } from '../../contracts/configuration.js';
+import type { AgentMcpServer } from '../../contracts/context.js';
 import type { AgentLaunchEvidence } from '../../contracts/launch.js';
 import type { OwnedProcess, ProcessExit } from '../../process/index.js';
+import type { PreparedInstructions } from '../instructions/prepare.js';
 import type { ExecutionOutcome } from './terminal.js';
 
 export type ExecutionDrainage =
@@ -43,6 +45,8 @@ export interface InvocationExecution {
 export interface InvocationExecutionRequest {
   readonly definition: AgentDefinition;
   readonly configuration?: AgentConfigurationSelection;
+  readonly instructions?: PreparedInstructions;
+  readonly mcpServers?: readonly AgentMcpServer[];
   readonly launch: AgentLaunchEvidence;
   readonly workspace: string;
   readonly prompt: string;

@@ -1,4 +1,5 @@
 import type { JsonObject } from '../../../../contracts/agent-definition.js';
+import type { AgentInstructionsDelivery } from '../../../../contracts/context.js';
 import type {
   ActiveProcessIdentity,
   AgentExecutionPin,
@@ -71,6 +72,7 @@ interface ActiveSessionStateBase extends SessionStateBase {
   readonly processResourceId: string;
   readonly process: ActiveProcessIdentity;
   readonly capabilities: AgentSessionCapabilities;
+  readonly instructionsDelivery?: AgentInstructionsDelivery;
   readonly openedAt: string;
   readonly lastTurn?: TerminalTurnState;
 }
