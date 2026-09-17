@@ -27,6 +27,7 @@ import {
   pinNodeRuntimeWithoutVendorShadow,
 } from './support/cli-identity.js';
 import { fakeAgentDefinition } from './support/fake-agent-definition.js';
+import { prepareFixtureWorkspace } from './support/fixture-workspace.js';
 import { knowledgeMcpSource } from './support/knowledge-mcp-source.js';
 import {
   answerFixtureEchoPermissions,
@@ -36,6 +37,8 @@ import {
   combinedInvocationPrompt,
   declaredAuthSource,
   fixtureOutputNames,
+  fixtureServerAuditObserved,
+  fixtureToolObserverObserved,
   invocationNonceObserved,
   invocationResultSchema,
   jsonOnlyInvocationPrompt,
@@ -54,10 +57,15 @@ import {
   uniqueFixtureSecret,
   uniqueSessionId,
 } from './support/live-context-evidence.js';
+import {
+  requireLiveSpawnPreflight,
+  selectOpenCodePreflightProvider,
+} from './support/live-spawn-preflight.js';
 import { type BuiltInProviderId } from './support/provider-selection.js';
 
 const selection = process.env.REVO_LIVE_CONTEXT_SMOKE;
 const evidenceRoot = process.env.REVO_LIVE_CONTEXT_EVIDENCE_DIR;
+if (selection !== undefined) requireLiveSpawnPreflight();
 const mcpToken = uniqueFixtureSecret();
 const liveEnvironment = Object.freeze({
   inherit: Object.freeze(['HOME', 'PATH'].filter((name) => process.env[name] !== undefined)),
@@ -121,9 +129,10 @@ const delay = (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 const selectedLiveProviders = (value: string): readonly BuiltInProviderId[] => {
-  if (value === 'all') return Object.freeze(['opencode', 'codex', 'grok']);
-  if (value === 'opencode' || value === 'codex' || value === 'grok') return [value];
-  throw new Error('REVO_LIVE_CONTEXT_SMOKE must be opencode, codex, grok, or all.');
+  if (value === 'all') return Object.freeze(['opencode', 'codex', 'claude', 'grok']);
+  if (value === 'opencode' || value === 'codex' || value === 'claude' || value === 'grok')
+    return [value];
+  throw new Error('REVO_LIVE_CONTEXT_SMOKE must be opencode, codex, claude, grok, or all.');
 };
 
 const discoverSelected = async (provider: BuiltInProviderId) => {
@@ -132,8 +141,10 @@ const discoverSelected = async (provider: BuiltInProviderId) => {
     dirname(process.execPath),
   );
   const executable = canonicalExecutableOnPath(provider, vendorPath);
+  if (executable === undefined) return undefined;
   const discovery = await discoverAgents(liveDiscoveryOptions(provider, executable));
-  return discovery.definitions.find(({ id }) => id === `${provider}-acp`);
+  const definition = discovery.definitions.find(({ id }) => id === `${provider}-acp`);
+  return definition;
 };
 
 const createLiveManager = (
@@ -167,6 +178,7 @@ const retainIfConfigured = async (
     readonly fault: string;
     readonly phase: string;
     readonly serverAuditObserved: boolean;
+    readonly toolObserverObserved?: boolean;
     readonly serverAuditCorrelationId?: string;
     readonly serverAuditToolName?: string;
   },
@@ -189,6 +201,9 @@ const retainIfConfigured = async (
     resultText: byName['result.json'] ?? '',
     secrets: [mcpToken],
     serverAuditObserved: extra.serverAuditObserved,
+    ...(extra.toolObserverObserved === undefined
+      ? {}
+      : { toolObserverObserved: extra.toolObserverObserved }),
     ...(extra.serverAuditCorrelationId === undefined
       ? {}
       : { serverAuditCorrelationId: extra.serverAuditCorrelationId }),
@@ -303,6 +318,8 @@ const runJsonOnlyProbe = async (
   configuration: ReturnType<typeof configurationForSessionSmoke>,
   expected: string,
 ): Promise<void> => {
+  if (definition.id === 'opencode-acp')
+    selectOpenCodePreflightProvider(configuration.selections.model);
   const state = recordingSink();
   const manager = createLiveManager(definition, [], state.sink);
   try {
@@ -317,7 +334,7 @@ const runJsonOnlyProbe = async (
           limits: { idleTimeoutMs: 120_000, wallClockTimeoutMs: 180_000 },
           output: { directory: join(directory, `${definition.id}-json-only`) },
           parameters: {},
-          permissions: {},
+          permissions: definition.id === 'grok-acp' ? { mcpTools: ['knowledge__echo'] } : {},
           prompt: jsonOnlyInvocationPrompt(),
           result: { schema: invocationResultSchema },
           workspace: { directory },
@@ -335,11 +352,14 @@ const runJsonOnlyProbe = async (
       phase: 'json-only',
       serverAuditObserved: false,
     });
+    if (result.status === 'failed' && isAuthFailure(result.error))
+      throw new Error('Authentication failed during default-model probe');
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown';
     console.log(
       `${definition.id}: probe=json-only; coverage=default-model; status=failed; reason=${message.slice(0, 160)}`,
     );
+    if (isAuthFailure(error)) throw error;
   } finally {
     await manager.shutdown();
   }
@@ -356,6 +376,8 @@ const runMcpOnlySessionProbe = async (
   runNonce: string,
   auditRoot: string,
 ): Promise<void> => {
+  if (definition.id === 'opencode-acp')
+    selectOpenCodePreflightProvider(configuration.selections.model);
   const events: AgentSessionEvent[] = [];
   const state = recordingSink();
   const manager = createLiveManager(definition, events, state.sink);
@@ -372,7 +394,7 @@ const runMcpOnlySessionProbe = async (
         mcpServers: [knowledgeServer(scriptPath, auditPath, correlationId)],
         output: { directory: join(directory, `${definition.id}-mcp-only`) },
         parameters: {},
-        permissions: {},
+        permissions: definition.id === 'grok-acp' ? { mcpTools: ['knowledge__echo'] } : {},
         sessionId: correlationId,
         workspace: { directory },
       },
@@ -412,11 +434,14 @@ const runMcpOnlySessionProbe = async (
         ...(toolObserved ? { serverAuditToolName: 'echo' } : {}),
       },
     );
+    if (first.status === 'failed' && isAuthFailure(first.error))
+      throw new Error('Authentication failed during MCP probe');
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown';
     console.log(
       `${definition.id}: probe=mcp-only-session; status=failed; reason=${message.slice(0, 160)}`,
     );
+    if (isAuthFailure(error)) throw error;
   } finally {
     await manager.shutdown();
   }
@@ -435,6 +460,7 @@ const runLiveProvider = async (
   const scriptPath = join(directory, 'knowledge-mcp.js');
   await writeFile(scriptPath, knowledgeMcpSource);
   const invocationEvents: AgentSessionEvent[] = [];
+  await prepareFixtureWorkspace(definition.id, directory);
   const sessionEvents: AgentSessionEvent[] = [];
   const manager = createLiveManager(definition, invocationEvents, invocationState.sink);
   const invocationCorrelation = `${definition.id}-context-invocation`;
@@ -499,6 +525,8 @@ const runLiveProvider = async (
       );
       configuration = coverage.selected.configuration;
       defaultModelConfiguration = coverage.default.configuration;
+      if (definition.id === 'opencode-acp')
+        selectOpenCodePreflightProvider(configuration.selections.model);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown';
       console.log(`${definition.id}: preflight=blocked; configuration=${message.slice(0, 160)}`);
@@ -515,7 +543,7 @@ const runLiveProvider = async (
           mcpServers: [knowledgeServer(scriptPath, invocationAuditPath, invocationCorrelation)],
           output: { directory: join(directory, `${definition.id}-invocation`) },
           parameters: {},
-          permissions: {},
+          permissions: definition.id === 'grok-acp' ? { mcpTools: ['knowledge__echo'] } : {},
           prompt: combinedInvocationPrompt(),
           result: { schema: invocationResultSchema },
           workspace: { directory },
@@ -535,11 +563,8 @@ const runLiveProvider = async (
     ]);
     if (leaked) throw new Error('Live invocation leaked the MCP fixture token.');
     const invocationOutputs = await readOutputs(invocation.files.directory);
-    const invocationNonce = invocationNonceObserved(
-      invocation,
-      invocationOutputs,
-      instructionNonce,
-    );
+    const invocationNonce =
+      invocation.status === 'succeeded' && invocation.value.nonce === instructionNonce;
     if (semanticResultRedacted(invocation))
       throw new Error('Live invocation semantic result contained unexpected REDACTED.');
     const invocationAudit = await readFixtureServerAudit(invocationAuditPath);
@@ -560,7 +585,12 @@ const runLiveProvider = async (
       fault: summarizeInvocationFault(invocation),
       phase: 'invocation',
       serverAuditCorrelationId: invocationCorrelation,
-      serverAuditObserved: invocationTool,
+      serverAuditObserved: fixtureServerAuditObserved(
+        invocationAudit,
+        invocationCorrelation,
+        instructionNonce,
+      ),
+      toolObserverObserved: fixtureToolObserverObserved(invocationEvents, invocationOutputs),
       ...(invocationTool ? { serverAuditToolName: 'echo' } : {}),
     });
     if (invocationState.activeIds.size !== 0) throw new Error('Live invocation left active state.');
@@ -587,7 +617,7 @@ const runLiveProvider = async (
           mcpServers: [knowledgeServer(scriptPath, sessionAuditPath, sessionCorrelation)],
           output: { directory: join(directory, `${definition.id}-session`) },
           parameters: {},
-          permissions: {},
+          permissions: definition.id === 'grok-acp' ? { mcpTools: ['knowledge__echo'] } : {},
           sessionId: sessionCorrelation,
           workspace: { directory },
         },
@@ -605,6 +635,10 @@ const runLiveProvider = async (
       const snapshot = sessionManager.sessions.inspect(session.sessionId);
       console.log(`${definition.id}: ${summarizeSessionDiagnostics(first, snapshot?.status)}`);
       await session.close('context smoke complete');
+      if (await containsSecret(join(directory, `${definition.id}-session`), fixtureOutputNames))
+        throw new Error('Live session leaked the MCP fixture token.');
+      if (JSON.stringify(sessionEvents).includes(mcpToken))
+        throw new Error('Live session events leaked the MCP fixture token.');
       const sessionText = [
         first.status === 'completed' ? first.message.content : '',
         ...sessionEvents.map((event) =>
@@ -650,7 +684,12 @@ const runLiveProvider = async (
           fault: summarizeSessionDiagnostics(first, snapshot?.status),
           phase: 'session',
           serverAuditCorrelationId: sessionCorrelation,
-          serverAuditObserved: sessionTool,
+          serverAuditObserved: fixtureServerAuditObserved(
+            sessionAudit,
+            sessionCorrelation,
+            instructionNonce,
+          ),
+          toolObserverObserved: fixtureToolObserverObserved(sessionEvents, sessionText),
           ...(sessionTool ? { serverAuditToolName: 'echo' } : {}),
         },
       );
@@ -676,6 +715,7 @@ const runLiveProvider = async (
           auditRoot,
         );
       } catch (error) {
+        if (isAuthFailure(error)) return 'auth_failed';
         const message = error instanceof Error ? error.message : 'unknown';
         console.log(
           `${definition.id}: probe=additional; status=failed; reason=${message.slice(0, 160)}`,
@@ -708,6 +748,7 @@ const runLiveProvider = async (
       }
       assertLivePath('invocation', invocationEvidence);
       assertLivePath('session', sessionEvidence);
+      console.log(`${definition.id}: combined-acceptance=passed; paths=invocation,session`);
       return 'passed';
     } finally {
       await sessionManager.shutdown();

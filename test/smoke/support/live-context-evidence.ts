@@ -49,6 +49,7 @@ export interface LiveDiagnosticInput {
   readonly resultText?: string;
   readonly extraTexts?: readonly string[];
   readonly serverAuditObserved: boolean;
+  readonly toolObserverObserved?: boolean;
   readonly serverAuditCorrelationId?: string;
   readonly serverAuditToolName?: string;
   readonly cleanup: string;
@@ -290,12 +291,19 @@ export const readFixtureServerAudit = async (
   return records;
 };
 
+const isFixtureEchoTitle = (title: unknown): boolean =>
+  title === 'echo' ||
+  title === 'mcp.knowledge.echo' ||
+  title === 'knowledge_echo' ||
+  title === 'knowledge__echo' ||
+  title === 'mcp__knowledge__echo';
+
 const recordHasEchoToolFrame = (value: unknown): boolean => {
   if (!isRecord(value)) return false;
-  if (value.type === 'tool.activity' && value.title === 'echo') return true;
+  if (value.type === 'tool.activity' && isFixtureEchoTitle(value.title)) return true;
   if (
     (value.sessionUpdate === 'tool_call' || value.sessionUpdate === 'tool_call_update') &&
-    value.title === 'echo'
+    isFixtureEchoTitle(value.title)
   )
     return true;
   return recordHasEchoToolFrame(value.params) || recordHasEchoToolFrame(value.update);
@@ -321,19 +329,32 @@ export const fixtureMcpEvidence = (input: {
   readonly nonce: string;
   readonly outputs: string;
 }): boolean => {
-  if (input.nonce.length === 0) return false;
-  const audited = input.audit.some(
+  return (
+    fixtureServerAuditObserved(input.audit, input.correlationId, input.nonce) &&
+    fixtureToolObserverObserved(input.events, input.outputs)
+  );
+};
+
+export const fixtureServerAuditObserved = (
+  audit: readonly FixtureServerAuditRecord[],
+  correlationId: string,
+  nonce: string,
+): boolean =>
+  nonce.length > 0 &&
+  audit.some(
     (record) =>
-      record.correlationId === input.correlationId &&
+      record.correlationId === correlationId &&
       record.method === 'tools/call' &&
       record.name === 'echo' &&
-      record.text === input.nonce,
+      record.text === nonce,
   );
-  if (!audited) return false;
-  if (input.events.some((event) => event.type === 'tool.activity' && event.title === 'echo'))
-    return true;
-  return outputsHaveEchoToolFrame(input.outputs);
-};
+
+export const fixtureToolObserverObserved = (
+  events: readonly AgentSessionEvent[],
+  outputs: string,
+): boolean =>
+  events.some((event) => event.type === 'tool.activity' && isFixtureEchoTitle(event.title)) ||
+  outputsHaveEchoToolFrame(outputs);
 
 const allowlistedEvent = (
   record: Record<string, unknown>,
@@ -425,6 +446,9 @@ export const retainSafeLiveDiagnostic = async (
     fault: input.fault,
     phase: input.phase,
     protocolEvents,
+    ...(input.toolObserverObserved === undefined
+      ? {}
+      : { toolObserverObserved: input.toolObserverObserved }),
     serverAudit: {
       observed: input.serverAuditObserved,
       ...(input.serverAuditCorrelationId === undefined

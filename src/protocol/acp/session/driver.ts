@@ -126,11 +126,17 @@ const openAcpSession = (
     .onNotification(acp.methods.client.session.update, async ({ params }) => {
       if (belongsToSession(params.sessionId)) await updates.deliver(params.update);
     })
-    .onRequest(acp.methods.client.session.requestPermission, ({ params }) =>
-      belongsToSession(params.sessionId)
+    .onRequest(acp.methods.client.session.requestPermission, ({ params }) => {
+      if (!belongsToSession(params.sessionId)) return { outcome: { outcome: 'cancelled' } };
+      const grant = compatibilityFor(request.definition.id)?.approveMcpPermission?.(
+        params,
+        request.permissions,
+        request.mcpServers ?? [],
+      );
+      return grant === undefined
         ? broker.permission(params)
-        : { outcome: { outcome: 'cancelled' } },
-    )
+        : { outcome: { outcome: 'selected', optionId: grant } };
+    })
     .onRequest(acp.methods.client.elicitation.create, ({ params }) =>
       'sessionId' in params &&
       typeof params.sessionId === 'string' &&

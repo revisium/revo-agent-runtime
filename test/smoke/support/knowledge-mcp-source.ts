@@ -22,7 +22,12 @@ const writeAudit = (name, text) => {
     fs.chmodSync(auditPath, 0o600);
   } catch (error) {}
 };
+let framed = false;
 const writeMessage = (message) => {
+  if (!framed) {
+    process.stdout.write(JSON.stringify(message) + '\\n');
+    return;
+  }
   const body = Buffer.from(JSON.stringify(message), 'utf8');
   process.stdout.write('Content-Length: ' + body.length + '\\r\\n\\r\\n');
   process.stdout.write(body);
@@ -79,14 +84,19 @@ const handle = (message) => {
 };
 let buffer = Buffer.alloc(0);
 const consumeNdjson = () => {
+  if ('Content-Length:'.startsWith(buffer.toString('utf8')) || buffer.toString('utf8').startsWith('Content-Length:')) return false;
   const newline = buffer.indexOf('\\n');
   if (newline === -1) return false;
   const line = buffer.subarray(0, newline).toString('utf8').trim();
   buffer = buffer.subarray(newline + 1);
-  if (line.startsWith('{')) handle(JSON.parse(line));
+  if (line.startsWith('{')) {
+    framed = false;
+    handle(JSON.parse(line));
+  }
   return true;
 };
 const consumeFramed = () => {
+  if (!buffer.toString('utf8').startsWith('Content-Length:')) return false;
   const headerEnd = buffer.indexOf('\\r\\n\\r\\n');
   if (headerEnd === -1) return false;
   const header = buffer.subarray(0, headerEnd).toString('utf8');
@@ -98,6 +108,7 @@ const consumeFramed = () => {
   const length = Number(match[1]);
   const start = headerEnd + 4;
   if (buffer.length < start + length) return false;
+  framed = true;
   handle(JSON.parse(buffer.subarray(start, start + length).toString('utf8')));
   buffer = buffer.subarray(start + length);
   return true;
@@ -106,4 +117,5 @@ process.stdin.on('data', (chunk) => {
   buffer = Buffer.concat([buffer, chunk]);
   while (consumeFramed() || consumeNdjson()) {}
 });
+process.stdin.on('end', () => process.exit(0));
 `;

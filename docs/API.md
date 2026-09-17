@@ -392,6 +392,24 @@ The runtime claims the output directory exclusively and publishes bounded
 transient `revo-opencode-instructions.md` may exist in that directory while an
 OpenCode process with native instructions runs.
 
+For the built-in Grok ACP definition (version `1.0.1`), `permissions.mcpTools`
+may list up to 64 exact Grok names, for example
+`permissions: { mcpTools: ['knowledge__echo'] }`. Names use `server__tool` form;
+patterns never grant permission and duplicate entries are rejected. An attached MCP server and a structured
+Grok tool request must uniquely match the name before the runtime selects
+`allow_once`. This grants that named tool for this invocation or session; it
+never issues a persistent grant or authorizes a detached server. With no match,
+invocations retain their rejection policy and sessions retain host interaction.
+
+Grok invocations execute the task and then request the schema-valid result in a
+separate turn of the same provider session. Only the result turn feeds the strict
+JSON parser; task narration remains in the captured transport output. The result
+turn rejects permission requests and tells the provider not to repeat the task or
+call tools. It is not a task retry or a model fallback. Both turns share the
+invocation deadline and their reported token usage is summed. Other providers
+retain their existing invocation flow. Interactive Grok sessions retain ordinary
+multi-turn messages and do not automatically add a result turn.
+
 ## Events, cancellation, and errors
 
 The event stream contains only `invocation.accepted`, `invocation.started`,

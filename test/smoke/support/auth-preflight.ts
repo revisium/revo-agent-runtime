@@ -1,7 +1,7 @@
 import { AgentManagerError, type AgentFault, type AgentProbeResult } from '../../../src/index.js';
 
 const authPattern =
-  /\b(?:unauthori[sz]ed|unauthenticated|authentication (?:required|failed)|not (?:logged|signed) in|please log in|login required|\b401\b|\b403\b)\b/i;
+  /\b(?:unauthori[sz]ed|unauthenticated|authentication (?:required|failed)|not (?:logged|signed) in|please log in|login required|refresh OAuth token|cached-login preflight failed|\b401\b|\b403\b)\b/i;
 
 const bounded = (value: string): string => value.slice(0, 160);
 

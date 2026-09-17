@@ -82,6 +82,26 @@ test('assistant echo and forged tool mentions are not MCP evidence', () => {
   ).toBe(true);
 });
 
+test('namespaced fixture tool titles require the same correlated server audit', () => {
+  const nonce = 'Nq8vL2mR7wK4pX9cZ1aB';
+  const input = {
+    audit: [
+      { correlationId: 'inv-1', method: 'tools/call' as const, name: 'echo' as const, text: nonce },
+    ],
+    correlationId: 'inv-1',
+    nonce,
+    outputs: '',
+  };
+  expect(fixtureMcpEvidence({ ...input, events: [toolEvent('mcp.knowledge.echo')] })).toBe(true);
+  expect(fixtureMcpEvidence({ ...input, events: [toolEvent('knowledge_echo')] })).toBe(true);
+  expect(fixtureMcpEvidence({ ...input, events: [toolEvent('knowledge__echo')] })).toBe(true);
+  expect(fixtureMcpEvidence({ ...input, events: [toolEvent('mcp__knowledge__echo')] })).toBe(true);
+  expect(
+    fixtureMcpEvidence({ ...input, audit: [], events: [toolEvent('mcp.knowledge.echo')] }),
+  ).toBe(false);
+  expect(fixtureMcpEvidence({ ...input, events: [toolEvent('mcp.other.echo')] })).toBe(false);
+});
+
 test('permission-required live paths are blocked, not successful', () => {
   const passing = {
     delivery: 'acp:session/prompt.prefix',

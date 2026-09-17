@@ -1,5 +1,6 @@
 import * as acp from '@agentclientprotocol/sdk';
 
+import type { AgentUsage } from '../../contracts/manager/invocation.js';
 import { protocolFailureDetails } from '../../diagnostics/diagnostic.js';
 import type {
   ProtocolDriver,
@@ -50,6 +51,8 @@ const runAcpInvocation = async (
   capabilities: acp.AgentCapabilities | null | undefined,
   frames: AcpSessionFrameCapture,
   onSession: (session: acp.ActiveSession) => void,
+  onResultTurn: () => boolean,
+  isCancelled: () => boolean,
 ): Promise<ProtocolOutcome> => {
   const session = await context.buildSession(newSessionRequest(request, capabilities)).start();
   onSession(session);
@@ -64,10 +67,41 @@ const runAcpInvocation = async (
     compatibilityFor(request.definition.id),
     frames.sessionResponse(),
   );
-  const response = await session.prompt(acpPrompt(request));
-  request.observer.activity();
+  if (isCancelled()) return { status: 'completed' };
+  let response = await session.prompt(acpPrompt(request));
+  const usages: Required<AgentUsage>[] = [];
   if (request.definition.capabilities.usage && response.usage != null)
-    request.observer.usage(normalizeAcpUsage(response.usage));
+    usages.push(normalizeAcpUsage(response.usage));
+  if (
+    compatibilityFor(request.definition.id)?.finalResultTurn &&
+    response.stopReason === 'end_turn' &&
+    onResultTurn()
+  ) {
+    response = await session.prompt([
+      {
+        type: 'text',
+        text:
+          'The task turn has finished. Do not call tools or repeat the task. Return exactly one JSON object matching the result schema, using the task results and instructions already in this session. No markdown or surrounding text. Result schema: ' +
+          JSON.stringify(request.resultSchema),
+      },
+    ]);
+    if (request.definition.capabilities.usage && response.usage != null)
+      usages.push(normalizeAcpUsage(response.usage));
+  }
+  request.observer.activity();
+  if (usages.length > 0)
+    request.observer.usage(
+      normalizeAcpUsage(
+        usages.reduce(
+          (total, usage) => ({
+            inputTokens: total.inputTokens + usage.inputTokens,
+            outputTokens: total.outputTokens + usage.outputTokens,
+            totalTokens: total.totalTokens + usage.totalTokens,
+          }),
+          { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        ),
+      ),
+    );
   return { status: 'completed' };
 };
 
@@ -79,6 +113,10 @@ const openAcpSession = async (
   const terminal = Promise.withResolvers<ProtocolOutcome>();
   const released = Promise.withResolvers<void>();
   let session: acp.ActiveSession | undefined;
+  const compatibility = compatibilityFor(request.definition.id);
+  let collectingResult = !compatibility?.finalResultTurn;
+  let resultTurn = false;
+  let cancelled = false;
 
   const frames = new AcpSessionFrameCapture();
   const stream = acp.ndJsonStream(
@@ -89,6 +127,16 @@ const openAcpSession = async (
     .client({ name: 'revo-agent-runtime' })
     .onRequest(acp.methods.client.session.requestPermission, async ({ params }) => {
       request.observer.activity();
+      const grant =
+        !resultTurn && session?.sessionId === params.sessionId
+          ? compatibility?.approveMcpPermission?.(
+              params,
+              request.permissions,
+              request.mcpServers ?? [],
+            )
+          : undefined;
+      if (grant !== undefined) return { outcome: { outcome: 'selected', optionId: grant } };
+      if (resultTurn) return { outcome: { outcome: 'cancelled' } };
       const decision = await request.observer.permission({
         options: params.options.map((option) => ({ id: option.optionId, kind: option.kind })),
       });
@@ -99,6 +147,7 @@ const openAcpSession = async (
     .onNotification(acp.methods.client.session.update, ({ params }) => {
       request.observer.activity();
       if (
+        collectingResult &&
         params.update.sessionUpdate === 'agent_message_chunk' &&
         params.update.content.type === 'text'
       ) {
@@ -123,6 +172,13 @@ const openAcpSession = async (
           (started) => {
             session = started;
           },
+          () => {
+            if (cancelled) return false;
+            collectingResult = true;
+            resultTurn = true;
+            return true;
+          },
+          () => cancelled,
         );
       } catch (error) {
         outcome = failedOutcome(error);
@@ -143,6 +199,7 @@ const openAcpSession = async (
   return Object.freeze({
     completion: terminal.promise,
     cancel: async (): Promise<void> => {
+      cancelled = true;
       if (session === undefined) return;
       await context.notify(acp.methods.agent.session.cancel, { sessionId: session.sessionId });
     },

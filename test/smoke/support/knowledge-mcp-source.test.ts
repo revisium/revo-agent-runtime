@@ -33,6 +33,26 @@ test('knowledge fixture source does not embed the instruction nonce', () => {
   expect(knowledgeMcpSource).toContain("description: 'Echo text for Revo live MCP evidence.'");
 });
 
+test('knowledge fixture answers newline-delimited MCP initialize with newline-delimited JSON', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'revo-mcp-ndjson-'));
+  const script = join(root, 'knowledge-mcp.js');
+  await writeFile(script, knowledgeMcpSource);
+  const child = spawn(process.execPath, [script], { stdio: ['pipe', 'pipe', 'pipe'] });
+  try {
+    const response = new Promise<string>((resolve, reject) => {
+      child.stdout?.once('data', (chunk: Buffer) => resolve(chunk.toString('utf8')));
+      child.once('error', reject);
+    });
+    child.stdin?.write(`${JSON.stringify({ id: 1, jsonrpc: '2.0', method: 'initialize' })}\n`);
+    const line = await response;
+    expect(line).not.toContain('Content-Length');
+    expect(JSON.parse(line)).toMatchObject({ id: 1, result: { capabilities: { tools: {} } } });
+    expect(line.endsWith('\n')).toBe(true);
+  } finally {
+    child.kill();
+  }
+});
+
 test('knowledge fixture writes a private tools/call audit for the instruction nonce', async () => {
   const root = await mkdtemp(join(tmpdir(), 'revo-mcp-audit-'));
   const script = join(root, 'knowledge-mcp.js');

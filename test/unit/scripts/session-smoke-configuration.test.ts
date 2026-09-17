@@ -40,10 +40,10 @@ const catalog = {
   schemaVersion: 'agent-configuration-catalog/v2',
 } as const satisfies AgentConfigurationCatalog;
 
-test('selects an explicit supported live model and cheapest thought level', () => {
+test('selects an explicit supported live model without copying model-dependent defaults', () => {
   expect(configurationForSessionSmoke(catalog, 'sonnet')).toEqual({
     catalogRevision: 'revision',
-    selections: { effort: 'low', fast: true, model: 'sonnet' },
+    selections: { model: 'sonnet' },
   });
 });
 
@@ -51,6 +51,13 @@ test('fails instead of silently substituting an unavailable requested model', ()
   expect(() => configurationForSessionSmoke(catalog, 'missing')).toThrow(
     'Requested smoke model is unavailable.',
   );
+});
+
+test('does not replay default-model effort and fast options when switching models', () => {
+  expect(configurationForSessionSmoke(catalog, 'sonnet')).toEqual({
+    catalogRevision: 'revision',
+    selections: { model: 'sonnet' },
+  });
 });
 
 test('keeps the inspected current model when no explicit model is requested', () => {
@@ -79,7 +86,7 @@ test('labels default-model coverage separately from the selected matrix model', 
     label: 'selected-model',
     configuration: {
       catalogRevision: 'revision',
-      selections: { effort: 'low', fast: true, model: 'sonnet' },
+      selections: { model: 'sonnet' },
     },
   });
 });

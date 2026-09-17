@@ -67,6 +67,15 @@ test('positive selected xai cached credential is ready', () => {
   });
 });
 
+test('readiness belongs to the provider actually selected for the model', () => {
+  expect(
+    evaluateOpenCodeAuthList({ exitCode: 0, stdout: positiveXai, provider: 'openai' }),
+  ).toMatchObject({ ready: false, reason: 'missing-selected' });
+  expect(
+    evaluateOpenCodeAuthList({ exitCode: 0, stdout: otherProvider, provider: 'openai' }),
+  ).toMatchObject({ ready: true, reason: 'selected-openai', source: 'openai-oauth' });
+});
+
 test('zero credentials and header-only auth list are not ready', () => {
   expect(
     evaluateOpenCodeAuthList({ env: {}, exitCode: 0, stderr: '', stdout: headerOnly }),

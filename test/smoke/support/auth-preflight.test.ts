@@ -9,6 +9,10 @@ import {
 } from './auth-preflight.js';
 
 test('classifies provider auth failures without treating timeout as auth', () => {
+  expect(isAuthFailure(new Error('Failed to refresh OAuth token'))).toBe(true);
+  expect(isAuthFailure(new Error('opencode exact-context cached-login preflight failed'))).toBe(
+    true,
+  );
   expect(
     isAuthFailure(
       new AgentManagerError({

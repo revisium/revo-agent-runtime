@@ -18,12 +18,20 @@ const selectedValue = (
 export const configurationForSessionSmoke = (
   catalog: AgentConfigurationCatalog,
   preferredModel?: string,
-): AgentConfigurationSelection => ({
-  catalogRevision: catalog.catalogRevision,
-  selections: Object.fromEntries(
-    catalog.options.map((option) => [option.id, selectedValue(option, preferredModel)]),
-  ),
-});
+): AgentConfigurationSelection => {
+  const model = catalog.options.find((option) => option.category === 'model');
+  // Switching the model can remove effort/fast options from the provider's next catalog.
+  const switching = preferredModel !== undefined && model?.currentValue !== preferredModel;
+  const options = switching
+    ? catalog.options.filter((option) => option.category === 'model')
+    : catalog.options;
+  return {
+    catalogRevision: catalog.catalogRevision,
+    selections: Object.fromEntries(
+      options.map((option) => [option.id, selectedValue(option, preferredModel)]),
+    ),
+  };
+};
 
 export const preferredModelForSessionSmoke = (providerId: string): string | undefined => {
   if (providerId === 'codex-acp') return 'gpt-5.6-luna';

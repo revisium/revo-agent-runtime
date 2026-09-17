@@ -25,8 +25,8 @@ const authFailure = (text: string): boolean =>
     text,
   );
 
-const isXai = (name: string): boolean =>
-  name.replaceAll(/[^a-z0-9]+/gi, '').toLowerCase() === 'xai';
+const normalizedProvider = (name: string): string =>
+  name.replaceAll(/[^a-z0-9]+/gi, '').toLowerCase();
 
 const closed = (
   cachedLogin: OpenCodeAuthStatus['cachedLogin'],
@@ -45,7 +45,9 @@ export const evaluateOpenCodeAuthList = ({
   exitCode,
   error,
   env,
+  provider = 'xai',
 }: {
+  readonly provider?: string;
   readonly env?: NodeJS.ProcessEnv | Readonly<Record<string, string | undefined>>;
   readonly error?: Error;
   readonly exitCode?: number | null;
@@ -77,7 +79,10 @@ export const evaluateOpenCodeAuthList = ({
   }
   if (count === 0) return closed('absent', 'header-only');
   if (credentialLines.length !== count) return closed('unproven', 'unknown');
-  const selected = credentialLines.filter((entry) => isXai(entry.name));
+  const providerId = normalizedProvider(provider);
+  if (!['xai', 'openai', 'anthropic', 'google', 'githubcopilot'].includes(providerId))
+    return closed('unproven', 'unsupported-provider');
+  const selected = credentialLines.filter((entry) => normalizedProvider(entry.name) === providerId);
   if (selected.length === 0) return closed('absent', 'missing-selected');
   if (selected.length > 1) return closed('unproven', 'ambiguous');
   const type = selected[0]?.type;
@@ -86,7 +91,7 @@ export const evaluateOpenCodeAuthList = ({
   return Object.freeze({
     cachedLogin: 'present',
     ready: true,
-    reason: 'selected-xai',
-    source: `xai-${type}`,
+    reason: `selected-${providerId}`,
+    source: `${providerId}-${type}`,
   });
 };

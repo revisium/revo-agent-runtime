@@ -5,6 +5,7 @@ import type {
   AcpConfigurationCompatibility,
   AcpConfigurationRequester,
 } from '../../protocol/acp/compatibility.js';
+import { grokMcpPermission } from './permission.js';
 
 const maximumItems = 1_000;
 const maximumStringLength = 4_096;
@@ -209,5 +210,7 @@ const applyLegacy = async (
 
 export const grokConfigurationCompatibility: AcpConfigurationCompatibility = Object.freeze({
   applyLegacy,
+  approveMcpPermission: grokMcpPermission,
+  finalResultTurn: true,
   legacyOptions: asAcpOptions,
 });

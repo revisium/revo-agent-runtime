@@ -61,7 +61,12 @@ supplies them. The returned catalog contains provider-neutral select and boolean
 options, current values, a revision, and an optional model view.
 
 Grok has a narrow compatibility adapter for legacy session model metadata and a
-bounded `grok models` fallback when stable options are absent. OpenCode model
+bounded `grok models` fallback when stable options are absent. Its built-in
+`1.0.1` definition accepts explicit exact MCP grants through `permissions.mcpTools`
+(`server__tool` names, attached servers only, `allow_once`). Grok invocations use
+a separate final-result turn in the same session to keep tool-phase narration
+out of the strict JSON result; interactive sessions retain their normal flow.
+Root Grok CLI `--allow` is not used to implement these ACP grants. OpenCode model
 values are grouped by the session-available provider instead of flattened; the
 catalog identifies the current provider and model without discarding other
 available groups.
