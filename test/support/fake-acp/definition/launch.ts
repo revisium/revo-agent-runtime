@@ -14,6 +14,12 @@ const optionalArgument = (flag: string, value: string | undefined) =>
         { kind: 'literal' as const, value },
       ];
 
+/** Node prints its own version; a reported version override prints the fixture's instead. */
+const versionProbeArguments = (reportedVersion: string | undefined): readonly string[] =>
+  reportedVersion === undefined
+    ? ['--version']
+    : ['-e', `process.stdout.write(${JSON.stringify(`v${reportedVersion}\n`)})`];
+
 export const fakeAcpLaunch = (
   options: FakeAcpDefinitionOptions,
 ): AgentDefinitionInput['launch'] => ({
@@ -24,11 +30,20 @@ export const fakeAcpLaunch = (
     { kind: 'literal', value: '--mode' },
     { kind: 'literal', value: options.mode ?? 'success' },
     ...(options.withWorkspaceArg === true ? [{ kind: 'workspace' as const }] : []),
+    ...(options.resume === 'native'
+      ? [{ kind: 'literal' as const, value: '--native-resume' }]
+      : []),
     ...optionalArgument('--trace', options.traceFile),
     ...optionalArgument('--configuration-state', options.configurationStateFile),
     ...optionalArgument('--descendant-pid', options.descendantPidFile),
     ...optionalArgument('--ready', options.readyFile),
   ],
   command: options.command ?? process.execPath,
-  versionProbe: { args: ['--version'], prefix: 'v', stream: 'stdout', timeoutMs: 1_000 },
+  ...(options.environment === undefined ? {} : { environment: options.environment }),
+  versionProbe: {
+    args: [...versionProbeArguments(options.reportedVersion)],
+    prefix: 'v',
+    stream: 'stdout',
+    timeoutMs: 1_000,
+  },
 });

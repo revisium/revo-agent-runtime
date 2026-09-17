@@ -5,6 +5,11 @@ import { expect, test, vi } from 'vitest';
 import { createSessionOpeningPreparer } from '../../../../../src/application/session/admission/preparer.js';
 import type { AgentDefinition } from '../../../../../src/contracts/agent-definition.js';
 import type { ValidatedAgentDefinition } from '../../../../../src/definition/index.js';
+import {
+  promptPrefixDelivery,
+  type InstructionsDeliveryPlan,
+  type InstructionsDeliveryResolver,
+} from '../../../../../src/execution/instructions/delivery.js';
 import type { OutputClaimPlatform } from '../../../../../src/execution/output/claim.js';
 import type { SessionOutputPublicationTarget } from '../../../../../src/execution/output/session/publication.js';
 import type { ExecutablePreflight } from '../../../../../src/execution/probe/executable-preflight.js';
@@ -77,6 +82,7 @@ const setup = (
       | 'uncertain'
       | 'throw'
     )[];
+    readonly instructionsDelivery?: InstructionsDeliveryResolver;
     readonly preflight?: Awaited<ReturnType<ExecutablePreflight['probe']>>;
   } = {},
 ) => {
@@ -123,7 +129,13 @@ const setup = (
           : undefined,
       list: () => [selected],
     },
+    digest: { digest: () => 'digest' },
     executablePreflight,
+    instructionsDelivery: options.instructionsDelivery ?? (() => promptPrefixDelivery),
+    outputArtifactPlatform: {
+      createPrivateFile: async () => 'failed',
+      removeFile: async () => undefined,
+    },
     outputClaimPlatform,
     outputTarget,
   });
@@ -161,6 +173,36 @@ test('prepares a pinned literal launch with immutable effective inputs and optio
     status: 'prepared',
     value: { launch: { cwd: resolve('/workspace') } },
   });
+});
+
+test('rejects a checkpoint whose instruction keys are malformed before preflight', async () => {
+  const story = setup();
+  const resumed = sessionOpeningCommand('resume').opening;
+  if (resumed.request.kind !== 'resume') throw new Error('fixture must resume');
+  const request = opening({
+    request: {
+      ...resumed.request,
+      continuation: {
+        data: { instructionsDigest: 'short', sessionId: 'provider' },
+        format: 'acp/v1',
+      },
+      request: {
+        ...resumed.request.request,
+        instructions: 'Read .revo/index.md.',
+        parameters: { model: 'fast' },
+        permissions: { write: true },
+      },
+    },
+  });
+
+  await expect(
+    story.preparer.prepare(request, { signal: new AbortController().signal }),
+  ).resolves.toMatchObject({
+    fault: { code: 'revo.agent.checkpoint_invalid' },
+    status: 'rejected',
+  });
+  // oxlint-disable-next-line typescript/unbound-method -- Vitest inspects the spy without invoking it
+  expect(story.executablePreflight.probe).not.toHaveBeenCalled();
 });
 
 test('rejects a missing or stale definition pin', async () => {
@@ -266,6 +308,39 @@ test('maps cancellation and executable preflight rejection', async () => {
     rejected.preparer.prepare(opening(), { signal: new AbortController().signal }),
   ).resolves.toMatchObject({
     fault: { code: 'revo.agent.probe_spawn_failed' },
+    status: 'rejected',
+  });
+});
+
+test('rejects when the native instructions file cannot be created', async () => {
+  const filePlan: InstructionsDeliveryPlan = {
+    artifact: {
+      bytes: new TextEncoder().encode('Read .revo/index.md.'),
+      path: '/output/session/revo-opencode-instructions.md',
+    },
+    channel: 'opencode:config.instructions-file',
+    environment: {
+      OPENCODE_CONFIG_CONTENT: '{"instructions":["/output/session/revo-opencode-instructions.md"]}',
+    },
+    mode: 'native_append',
+  };
+  const story = setup({ instructionsDelivery: () => filePlan });
+  const value = opening();
+  if (value.request.kind !== 'fresh') throw new Error('fixture must be fresh');
+
+  await expect(
+    story.preparer.prepare(
+      {
+        ...value,
+        request: {
+          kind: 'fresh',
+          request: { ...value.request.request, instructions: 'Read .revo/index.md.' },
+        },
+      },
+      { signal: new AbortController().signal },
+    ),
+  ).resolves.toMatchObject({
+    fault: { code: 'revo.agent.output_write_failed' },
     status: 'rejected',
   });
 });

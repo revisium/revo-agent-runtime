@@ -4,6 +4,8 @@ import type { AgentConfigurationSelection } from '../../../../contracts/configur
 import { AgentManagerError } from '../../../../contracts/manager/core.js';
 import type { AgentSessionLaunchInput } from '../../../../contracts/session.js';
 import { isJsonObject } from '../../../../definition/canonical-json.js';
+import { snapshotInstructions } from '../../../../execution/instructions/text.js';
+import { snapshotMcpServers } from '../../../../execution/mcp/servers.js';
 import { hasExactJsonKeys, immutableJsonByteLength } from './immutable-json.js';
 
 export interface DecodedAgentSessionLaunchInput extends Omit<
@@ -66,6 +68,29 @@ const configuration = (value: unknown): AgentConfigurationSelection | undefined 
   }
 };
 
+const agentContext = (
+  value: Readonly<JsonObject>,
+): Pick<AgentSessionLaunchInput, 'instructions' | 'mcpServers'> => {
+  try {
+    const instructions = snapshotInstructions(value.instructions);
+    const mcpServers = snapshotMcpServers(value.mcpServers);
+    return {
+      ...(instructions === undefined ? {} : { instructions }),
+      ...(mcpServers === undefined ? {} : { mcpServers }),
+    };
+  } catch {
+    return invalidSessionRequest();
+  }
+};
+
+export const launchInputOptionalKeys = [
+  'configuration',
+  'instructions',
+  'limits',
+  'mcpServers',
+  'metadata',
+] as const;
+
 export const decodeAgentSessionLaunchInput = (
   value: Readonly<JsonObject>,
 ): DecodedAgentSessionLaunchInput => {
@@ -73,6 +98,7 @@ export const decodeAgentSessionLaunchInput = (
   const metadata = value.metadata === undefined ? undefined : jsonObject(value.metadata, 262_144);
   return Object.freeze({
     ...(selectedConfiguration === undefined ? {} : { configuration: selectedConfiguration }),
+    ...agentContext(value),
     ...(value.limits === undefined ? {} : { limits: jsonObject(value.limits, 4_096) }),
     ...(metadata === undefined ? {} : { metadata }),
     output: directory(value.output),

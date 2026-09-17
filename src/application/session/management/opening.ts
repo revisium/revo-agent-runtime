@@ -6,7 +6,13 @@ import type {
 } from '../../../contracts/session.js';
 import type { SessionOpeningCommand } from '../../../execution/session/runtime/actor/port.js';
 import { decodeResumeToken, inspectResumeTokenPin } from '../boundary/checkpoint/decode.js';
-import { captureSessionLaunchContext } from '../boundary/input/context.js';
+import { requireMatchingInstructions } from '../boundary/checkpoint/instructions.js';
+import {
+  captureSessionLaunchContext,
+  type CapturedSessionLaunchContext,
+} from '../boundary/input/context.js';
+import type { DecodedAgentSessionLaunchInput } from '../boundary/input/launch.js';
+import { resolveSessionMcpServers } from '../boundary/input/mcp.js';
 import { decodeOpenAgentSession } from '../boundary/input/open.js';
 import { decodeResumeAgentSession } from '../boundary/input/resume.js';
 import { continuationId, sessionId } from '../policy/identity/identifiers.js';
@@ -32,6 +38,21 @@ const pinOf = (descriptor: AgentDescriptor): AgentExecutionPin =>
     installationId: descriptor.agent.installationId,
     definitionDigest: descriptor.definitionDigest,
   });
+
+/** MCP bindings resolve before any process exists, and their values join the redaction set. */
+const launchWithMcpServers = (
+  request: DecodedAgentSessionLaunchInput,
+  launch: CapturedSessionLaunchContext,
+): Pick<SessionOpeningCommand['opening'], 'environment' | 'mcpServers'> => {
+  const resolved = resolveSessionMcpServers(request.mcpServers, launch.environment.values);
+  return {
+    environment: Object.freeze({
+      secrets: Object.freeze([...new Set([...launch.environment.secrets, ...resolved.secrets])]),
+      values: launch.environment.values,
+    }),
+    ...(resolved.servers === undefined ? {} : { mcpServers: resolved.servers }),
+  };
+};
 
 export class ManagedSessionOpeningBuilder {
   constructor(
@@ -64,7 +85,7 @@ export class ManagedSessionOpeningBuilder {
           acceptedAt: observed.iso,
           acceptedAtMs: observed.milliseconds,
           incarnationId: this.options.nextIdentity('incarnation'),
-          environment: launch.environment,
+          ...launchWithMcpServers(request, launch),
           limits,
           ...(request.metadata === undefined ? {} : { metadata: request.metadata }),
           pin,
@@ -100,6 +121,11 @@ export class ManagedSessionOpeningBuilder {
     );
     const id = sessionId(decoded.token.sessionId);
     continuationId(decoded.token.resumeTokenId);
+    requireMatchingInstructions(
+      decoded.envelope.provider.data,
+      request.instructions,
+      this.options.digest,
+    );
     const epoch = this.registry.claimResume(id, decoded.token.resumeTokenId);
     const observed = this.options.clock.now();
     return {
@@ -111,7 +137,7 @@ export class ManagedSessionOpeningBuilder {
           acceptedAt: observed.iso,
           acceptedAtMs: observed.milliseconds,
           incarnationId: this.options.nextIdentity('incarnation'),
-          environment: launch.environment,
+          ...launchWithMcpServers(request, launch),
           limits,
           ...(request.metadata === undefined ? {} : { metadata: request.metadata }),
           pin,

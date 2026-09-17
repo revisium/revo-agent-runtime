@@ -12,7 +12,7 @@ const tokenCount = (value: unknown): number => {
   return Number(value);
 };
 
-export const normalizeAcpUsage = (value: unknown): AgentUsage => {
+export const normalizeAcpUsage = (value: unknown): Required<AgentUsage> => {
   if (
     typeof value !== 'object' ||
     value === null ||

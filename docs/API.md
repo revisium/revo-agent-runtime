@@ -3,7 +3,8 @@
 `@revisium/revo-agent-runtime` exports only its package root. Deep imports are
 private. The root exports `discoverAgents`, `createAgentManager`,
 `projectSelectableAgentConfiguration`, `decodeAgentConfigurationSelection`,
-`AgentManagerError`, and the public TypeScript contracts.
+`AgentManagerError`, and the public TypeScript contracts, including
+`AgentMcpServer`, `AgentMcpBinding`, and `AgentInstructionsDelivery`.
 
 ## Discovery
 
@@ -312,12 +313,79 @@ prompt with `revo.agent.configuration_value_unsupported`; a missing value from
 a changed supplied revision fails with `revo.agent.configuration_stale`. The
 runtime does not substitute a default, latest, alias, or nearest model.
 
+## Instructions and MCP servers
+
+`StartAgentInvocation` and `AgentSessionLaunchInput` accept optional
+`instructions` (a string) and `mcpServers`. Both are captured as bounded,
+immutable plain data before launch; `instructions` on `send()` is rejected.
+
+```ts
+instructions: 'Read .revo/index.md before acting.',
+mcpServers: [{
+  name: 'knowledge', transport: 'stdio', command: 'revo', args: ['mcp'],
+  env: { REVO_SESSION_TOKEN: { environment: 'REVO_SESSION_TOKEN' } },
+}]
+```
+
+Instructions are additive context delivered once per provider process, with
+the user prompt or session turns kept separate. The runtime chooses the channel
+per opened session and never replaces a provider's base rules:
+
+| Provider (definition)                                | Delivery                                                                                                 | `instructionsDelivery.channel`              |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `claude-acp` at the bundled bridge `0.70.0`          | `session/new` and `session/resume` `_meta.systemPrompt.append`                                           | `acp:session/new._meta.systemPrompt.append` |
+| `opencode-acp` reporting CLI `1.18.23` (not Windows) | Private `revo-opencode-instructions.md` in the output directory, bound through `OPENCODE_CONFIG_CONTENT` | `opencode:config.instructions-file`         |
+| Every other definition or condition                  | Delimited prefix on the first dispatched prompt only                                                     | `acp:session/prompt.prefix`                 |
+
+The prefix contract is literal: `<<<REVO_INSTRUCTIONS>>>`, a newline, the
+instructions, a newline, `<<<END_REVO_INSTRUCTIONS>>>`, a blank line, then the
+prompt. Invocation prompts keep the Revo invocation contract after it. Sessions
+prefix their first turn only. A missing native channel is not an error; it is
+visible only through `instructionsDelivery` (`mode` and `channel`), which is
+present on `AgentInvocationResult`, `session.opened`, and `AgentSessionSnapshot`
+exactly when instructions were supplied. Empty instructions equal omitted
+instructions and leave every wire frame unchanged.
+
+OpenCode native delivery is skipped (prefix instead) when the reported version is
+not `1.18.23`, on Windows, when the caller context or the definition binds
+`OPENCODE_CONFIG_CONTENT` in any letter case, or when the output directory path
+contains `{` or `}`. The file is created exclusively with owner-only permissions
+inside the claimed output directory before the process starts, is read by the
+provider on every turn, and is removed only after process teardown is confirmed;
+it never appears in the published `files` set, events, snapshots, results,
+faults, or checkpoints. A file that cannot be created fails opening with
+`revo.agent.output_write_failed`. Once a native channel is selected, a provider
+rejection of `session/new` or `session/resume` fails with
+`revo.agent.protocol_failed` and is never retried through a prefix.
+
+Sessions checkpoint an instruction SHA-256 digest, the delivery mode, and a
+prefix-dispatched flag, never instruction text. `resume()` must resupply
+identical instructions; changed, omitted, or newly added instructions fail with
+`revo.agent.checkpoint_invalid` before any process starts and without consuming
+the token. A resumed session stays native only when the checkpoint used a native
+channel and it is still eligible; otherwise it prefixes its first resumed prompt
+unless the checkpoint already dispatched a prefix. Built-in definitions do not
+advertise native resume.
+
+MCP bindings are `{ value }` or `{ environment }`; environment bindings resolve
+against the captured launch environment and a missing name fails before spawn
+with `revo.agent.parameters_invalid`. Every resolved env or header value joins
+the redaction set for that run, so it is removed from output files, events,
+results, faults, and echoed provider text; conversation content may echo the
+instructions themselves. HTTP servers require the agent to advertise MCP HTTP
+support; otherwise the run fails with `revo.agent.parameters_invalid` instead of
+silently dropping the server. Descriptors prove delivery to the provider, not a
+successful MCP connection. Limits: instructions at most 262,000 UTF-8 bytes
+without NUL; at most 32 uniquely named servers, 128 arguments or bindings each,
+262,144 serialized bytes.
+
 ## Invocation and result
 
 `StartAgentInvocation` requires an invocation id, exact agent reference,
 workspace, prompt, parameter and permission records, output directory, and a
 JSON Schema for the expected top-level object. It may include metadata,
-configuration selections, and tighter per-invocation limits.
+instructions, MCP servers, configuration selections, and tighter per-invocation
+limits.
 
 `start()` returns an `AgentInvocationHandle` with `invocationId`, a definition
 pin, `result()`, and `cancel()`. `result()` resolves to one of `succeeded`,
@@ -328,7 +396,27 @@ redacted raw-response diagnostics.
 
 The runtime claims the output directory exclusively and publishes bounded
 `events.ndjson`, `stdout.log`, `stderr.log`, and terminal `result.json` files.
-`result.json` is present for succeeded, cancelled, and timed-out results.
+`result.json` is present for succeeded, cancelled, and timed-out results. A
+transient `revo-opencode-instructions.md` may exist in that directory while an
+OpenCode process with native instructions runs.
+
+For the built-in Grok ACP definition (version `1.0.1`), `permissions.mcpTools`
+may list up to 64 exact Grok names, for example
+`permissions: { mcpTools: ['knowledge__echo'] }`. Names use `server__tool` form;
+patterns never grant permission and duplicate entries are rejected. An attached MCP server and a structured
+Grok tool request must uniquely match the name before the runtime selects
+`allow_once`. This grants that named tool for this invocation or session; it
+never issues a persistent grant or authorizes a detached server. With no match,
+invocations retain their rejection policy and sessions retain host interaction.
+
+Grok invocations execute the task and then request the schema-valid result in a
+separate turn of the same provider session. Only the result turn feeds the strict
+JSON parser; task narration remains in the captured transport output. The result
+turn rejects permission requests and tells the provider not to repeat the task or
+call tools. It is not a task retry or a model fallback. Both turns share the
+invocation deadline and their reported token usage is summed. Other providers
+retain their existing invocation flow. Interactive Grok sessions retain ordinary
+multi-turn messages and do not automatically add a result turn.
 
 ## Events, cancellation, and errors
 

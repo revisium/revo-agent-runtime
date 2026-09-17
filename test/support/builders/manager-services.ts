@@ -5,7 +5,9 @@ import type {
 } from '../../../src/contracts/agent-definition.js';
 import type { AgentManagerOptions } from '../../../src/contracts/manager.js';
 import type { AgentConfigurationInspector } from '../../../src/execution/configuration/inspector.js';
+import { promptPrefixDelivery } from '../../../src/execution/instructions/delivery.js';
 import type { InvocationExecutor } from '../../../src/execution/invocation/executor.js';
+import type { OutputArtifactPlatform } from '../../../src/execution/output/artifact.js';
 import type { OutputClaimPlatform } from '../../../src/execution/output/claim.js';
 import type { ClaimedInvocationOutputPublisher } from '../../../src/execution/output/publication.js';
 import type { ExecutablePreflight } from '../../../src/execution/probe/executable-preflight.js';
@@ -78,10 +80,16 @@ export const managerServices = (overrides: Partial<ManagerServices> = {}): Manag
   const recoveryInspector: RecoveredProcessInspector = {
     inspectAndReconcileRecoveredProcess: async () => ({ status: 'absent' }),
   };
+  const outputArtifactPlatform: OutputArtifactPlatform = {
+    createPrivateFile: async () => 'created',
+    removeFile: async () => undefined,
+  };
   return Object.freeze({
     configurationInspector,
     executor: acceptedExecutor(),
     executablePreflight,
+    instructionsDelivery: () => promptPrefixDelivery,
+    outputArtifactPlatform,
     outputClaimPlatform,
     outputPublisher,
     recoveryInspector,

@@ -1,3 +1,4 @@
+import type { AgentInstructionsDelivery } from '../../../../contracts/context.js';
 import type { ActiveProcessIdentity, AgentFault } from '../../../../contracts/manager/core.js';
 import type { AgentSessionCapabilities } from '../../../../contracts/session/capabilities/negotiated.js';
 import type { AgentSessionEventAppendResult } from '../../../../contracts/session/events/sink.js';
@@ -51,7 +52,11 @@ type ProcessStartOutcome =
 type ProviderOpenOutcome =
   | Outcome<
       'provider.opened',
-      { readonly providerResourceId: string; readonly capabilities: AgentSessionCapabilities }
+      {
+        readonly providerResourceId: string;
+        readonly capabilities: AgentSessionCapabilities;
+        readonly instructionsDelivery?: AgentInstructionsDelivery;
+      }
     >
   | FaultOutcome<'provider.open_failed'>
   | FaultOutcome<'provider.open_timed_out'>;

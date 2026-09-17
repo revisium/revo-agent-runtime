@@ -77,6 +77,16 @@ test('maps configuration selection protocol failures to stable fault codes', () 
   ).toMatchObject({ code: 'revo.agent.configuration_value_unsupported' });
 });
 
+test('maps invalid-parameter protocol failures to the public parameters code', () => {
+  expect(
+    protocolFault(
+      { code: 'parameters_invalid', message: 'HTTP MCP is unavailable.', retryable: false },
+      'session_opening',
+      undefined,
+    ),
+  ).toMatchObject({ code: 'revo.agent.parameters_invalid' });
+});
+
 test('uses a structured provider reason as the actionable fault message', () => {
   expect(
     protocolFault(

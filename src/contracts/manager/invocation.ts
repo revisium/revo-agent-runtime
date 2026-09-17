@@ -1,5 +1,6 @@
 import type { AgentRef } from '../agent-definition.js';
 import type { AgentConfigurationSelection } from '../configuration.js';
+import type { AgentInstructionsDelivery, AgentMcpServer } from '../context.js';
 import type { AgentLaunchEvidence } from '../launch.js';
 import type { AgentFault, AgentExecutionPin } from './core.js';
 
@@ -7,6 +8,8 @@ export interface StartAgentInvocation {
   readonly invocationId: string;
   readonly agent: AgentRef;
   readonly prompt: string;
+  readonly instructions?: string;
+  readonly mcpServers?: readonly AgentMcpServer[];
   readonly configuration?: AgentConfigurationSelection;
   readonly workspace: { readonly directory: string };
   readonly parameters: Record<string, unknown>;
@@ -71,6 +74,7 @@ interface AgentInvocationResultBase {
   readonly invocationId: string;
   readonly pin: AgentExecutionPin;
   readonly launch: AgentLaunchEvidence;
+  readonly instructionsDelivery?: AgentInstructionsDelivery;
   readonly metadata?: Record<string, unknown>;
   readonly acceptedAt: string;
   readonly startedAt?: string;

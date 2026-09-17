@@ -1,13 +1,17 @@
 import { decodeAgentConfigurationSelection } from '../../configuration/selection.js';
 import { AgentManagerError, type StartAgentInvocation } from '../../contracts/manager.js';
+import { snapshotInstructions } from '../../execution/instructions/text.js';
+import { snapshotMcpServers } from '../../execution/mcp/servers.js';
 import { snapshotPlainJsonObject } from '../../execution/output/plain-json-snapshot.js';
 import { fault } from '../faults/agent-faults.js';
 
 const requestKeys = [
   'agent',
   'configuration',
+  'instructions',
   'invocationId',
   'limits',
+  'mcpServers',
   'metadata',
   'output',
   'parameters',
@@ -114,6 +118,28 @@ const snapshotLimits = (value: unknown): StartAgentInvocation['limits'] | undefi
 const snapshotRecord = (value: unknown, maximumBytes: number) =>
   snapshotPlainJsonObject(value, maximumBytes);
 
+/** Instructions and MCP descriptors are agent parameters; their shape faults name that phase. */
+const snapshotAgentContext = (
+  input: Readonly<Record<string, unknown>>,
+): Pick<StartAgentInvocation, 'instructions' | 'mcpServers'> => {
+  try {
+    const instructions = snapshotInstructions(input.instructions);
+    const mcpServers = snapshotMcpServers(input.mcpServers);
+    return {
+      ...(instructions === undefined ? {} : { instructions }),
+      ...(mcpServers === undefined ? {} : { mcpServers }),
+    };
+  } catch {
+    throw new AgentManagerError(
+      fault(
+        'revo.agent.parameters_invalid',
+        'Agent instructions or MCP servers are invalid.',
+        'preflight',
+      ),
+    );
+  }
+};
+
 export const snapshotStartRequest = (value: unknown): StartAgentInvocation => {
   try {
     const input = exactDataObject(value, requestKeys, [
@@ -136,6 +162,7 @@ export const snapshotStartRequest = (value: unknown): StartAgentInvocation => {
       input.metadata === undefined ? undefined : snapshotRecord(input.metadata, 65_536);
     return Object.freeze({
       agent: snapshotAgent(input.agent),
+      ...snapshotAgentContext(input),
       ...(configuration === undefined ? {} : { configuration }),
       invocationId: boundedString(input.invocationId, 256),
       ...(limits === undefined ? {} : { limits }),
@@ -147,7 +174,8 @@ export const snapshotStartRequest = (value: unknown): StartAgentInvocation => {
       result: Object.freeze({ schema: snapshotRecord(result.schema, 1_048_576) }),
       workspace: snapshotDirectory(input.workspace, 16_384),
     });
-  } catch {
+  } catch (error: unknown) {
+    if (error instanceof AgentManagerError) throw error;
     throw new AgentManagerError(
       fault('revo.agent.definition_invalid', 'Agent invocation request is invalid.', 'preflight'),
     );

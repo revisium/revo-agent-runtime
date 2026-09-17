@@ -1,4 +1,5 @@
 import type { AgentRef, JsonObject } from '../../agent-definition.js';
+import type { AgentInstructionsDelivery } from '../../context.js';
 import type { AgentFault, AgentExecutionPin } from '../../manager/core.js';
 import type { AgentSessionCapabilities } from '../capabilities/negotiated.js';
 import type { AgentSessionEventCursor } from '../events/event.js';
@@ -29,6 +30,7 @@ export interface AgentSessionSnapshot {
   readonly sessionId: string;
   readonly pin: AgentExecutionPin;
   readonly capabilities?: AgentSessionCapabilities;
+  readonly instructionsDelivery?: AgentInstructionsDelivery;
   readonly status: AgentSessionStatus;
   readonly activeTurnId?: string;
   readonly pendingInteractions: readonly AgentSessionPendingInteraction[];

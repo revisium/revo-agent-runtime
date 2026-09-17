@@ -10,6 +10,7 @@ type SessionProtocolFailureCode =
   | 'configuration_stale'
   | 'configuration_value_unsupported'
   | 'interaction_rejected'
+  | 'parameters_invalid'
   | 'protocol_invalid'
   | 'transport_failed'
   | 'session_closed'

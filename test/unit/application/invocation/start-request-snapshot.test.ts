@@ -80,6 +80,50 @@ test.each([
   expect(() => snapshotStartRequest(build())).toThrow('Agent invocation request is invalid.');
 });
 
+test('captures string instructions and MCP descriptors, treating empty instructions as absent', () => {
+  const mcpServers = [
+    { name: 'knowledge', transport: 'stdio', command: 'revo', args: ['mcp'] },
+  ] as const;
+  const snapshot = snapshotStartRequest({
+    ...request(),
+    instructions: 'Read .revo/index.md first.',
+    mcpServers,
+  });
+
+  expect(snapshot.instructions).toBe('Read .revo/index.md first.');
+  expect(snapshot.mcpServers).toEqual(mcpServers);
+  expect(Object.isFrozen(snapshot.mcpServers?.[0])).toBe(true);
+  expect(snapshotStartRequest({ ...request(), instructions: '' })).not.toHaveProperty(
+    'instructions',
+  );
+});
+
+test.each([
+  ['legacy instruction object', { instructions: { delivery: 'prompt-prefix', text: 'Read' } }],
+  ['NUL instructions', { instructions: 'read\0me' }],
+  ['unsupported MCP transport', { mcpServers: [{ name: 'x', transport: 'sse' }] }],
+  [
+    'ambiguous MCP binding',
+    {
+      mcpServers: [
+        {
+          name: 'x',
+          transport: 'stdio',
+          command: 'revo',
+          args: [],
+          env: { T: { value: 'a', environment: 'B' } },
+        },
+      ],
+    },
+  ],
+])('rejects %s as invalid parameters', (_label, fields) => {
+  expect(() => snapshotStartRequest({ ...request(), ...fields })).toThrow(
+    expect.objectContaining({
+      fault: expect.objectContaining({ code: 'revo.agent.parameters_invalid', phase: 'preflight' }),
+    }),
+  );
+});
+
 test('rejects cyclic and accessor-bearing values without evaluating application code', () => {
   const cyclic: Record<string, unknown> = {};
   cyclic.self = cyclic;

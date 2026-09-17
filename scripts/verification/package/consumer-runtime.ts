@@ -107,6 +107,7 @@ const handle = await manager.start({
     catalogRevision: configuration.catalogRevision,
     selections: { model: 'packed/model' },
   },
+  instructions: 'Packed consumer instructions.',
   invocationId: 'packed-consumer-invocation',
   output: { directory: outputDirectory },
   parameters: {},
@@ -119,6 +120,7 @@ const result = await handle.result();
 assert.equal(result.schemaVersion, 'agent-invocation-result/v1');
 assert.equal(result.invocationId, 'packed-consumer-invocation');
 assert.deepEqual(result.pin, handle.pin);
+assert.deepEqual(result.instructionsDelivery, { channel: 'acp:session/prompt.prefix', mode: 'prompt_prefix' });
 assert.deepEqual(result.launch, {
   executable: process.execPath,
   reportedVersion: process.versions.node,

@@ -6,9 +6,16 @@ import { PassThrough, Readable, Writable } from 'node:stream';
 import * as acp from '@agentclientprotocol/sdk';
 
 import { fakeAcpOptions } from './cli.js';
+import {
+  appendedInstructionsEcho,
+  appendedSystemPrompt,
+  configuredInstructionsEcho,
+  rejectSessionCreation,
+} from './instructions.js';
 import { resultTextForMode } from './result.js';
 
-const { configurationStateFile, descendantPidFile, mode, readyFile, traceFile } = fakeAcpOptions();
+const { configurationStateFile, descendantPidFile, mode, nativeResume, readyFile, traceFile } =
+  fakeAcpOptions();
 const inboundChunks: string[] = [];
 const outboundChunks: string[] = [];
 const protocolOutput = new PassThrough();
@@ -18,6 +25,7 @@ let closeCalls = 0;
 let cancelCalls = 0;
 let configurationOptions: acp.SessionConfigOption[] = [];
 let remembered = '';
+let appendedInstructions: string | undefined;
 let pendingSessionPrompt: ReturnType<typeof Promise.withResolvers<acp.PromptResponse>> | undefined;
 
 const configurationState = async (): Promise<string | undefined> => {
@@ -111,8 +119,11 @@ const frames = (chunks: readonly string[]): readonly unknown[] =>
       }
     });
 
+/** The runtime-owned OpenCode binding is the only environment fact the trace records. */
+const environment = { OPENCODE_CONFIG_CONTENT: process.env.OPENCODE_CONFIG_CONTENT };
+
 const trace = (exited: boolean): string =>
-  `${JSON.stringify({ cancelCalls, cancelReceived, closeCalls, closeReceived, exited, inbound: frames(inboundChunks), outbound: frames(outboundChunks) })}\n`;
+  `${JSON.stringify({ cancelCalls, cancelReceived, closeCalls, closeReceived, environment, exited, inbound: frames(inboundChunks), outbound: frames(outboundChunks) })}\n`;
 
 const writeTrace = (exited = false): void => {
   if (traceFile === undefined) return;
@@ -137,20 +148,29 @@ acp
       return new Promise<never>(() => undefined);
     }
     return {
-      agentCapabilities: { sessionCapabilities: { close: {} } },
+      agentCapabilities: {
+        sessionCapabilities: { close: {}, ...(nativeResume ? { resume: {} } : {}) },
+      },
       protocolVersion: acp.PROTOCOL_VERSION,
     };
   })
-  .onRequest(acp.methods.agent.session.new, async () => {
+  .onRequest(acp.methods.agent.session.new, async ({ params }) => {
     if (mode === 'configuration-hang') {
       if (readyFile !== undefined) writeFileSync(readyFile, 'ready\n', 'utf8');
       return new Promise<never>(() => undefined);
     }
+    if (mode === 'session-new-reject') rejectSessionCreation();
+    appendedInstructions = appendedSystemPrompt(params);
     configurationOptions = mode.startsWith('configuration') ? await fakeConfigurationOptions() : [];
     return {
       ...(mode.startsWith('configuration') ? { configOptions: configurationOptions } : {}),
       sessionId: 'fake-acp-session',
     };
+  })
+  .onRequest(acp.methods.agent.session.resume, ({ params }) => {
+    if (mode === 'session-new-reject') rejectSessionCreation();
+    appendedInstructions = appendedSystemPrompt(params);
+    return {};
   })
   .onRequest(acp.methods.agent.session.setConfigOption, ({ params }) => {
     configurationOptions = configurationOptions.map((option) => {
@@ -253,6 +273,23 @@ acp
         sessionId: context.params.sessionId,
         update: {
           content: { text: remembered, type: 'text' },
+          sessionUpdate: 'agent_message_chunk',
+        },
+      });
+      return { stopReason: 'end_turn' };
+    }
+    if (mode === 'instructions-native' || mode === 'instructions-file') {
+      // Echo what the provider would actually consume: appended metadata or the file bytes.
+      await context.client.notify(acp.methods.client.session.update, {
+        sessionId: context.params.sessionId,
+        update: {
+          content: {
+            text:
+              mode === 'instructions-native'
+                ? appendedInstructionsEcho(appendedInstructions)
+                : configuredInstructionsEcho(),
+            type: 'text',
+          },
           sessionUpdate: 'agent_message_chunk',
         },
       });

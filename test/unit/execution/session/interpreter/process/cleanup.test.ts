@@ -44,6 +44,45 @@ it('publishes confirmed cleanup only after terminate-and-reap confirms it', asyn
   expect(resources.processes.get('process-1')).toBeUndefined();
 });
 
+it('unlinks native instructions after confirmed cleanup and leaves them on uncertain cleanup', async () => {
+  const confirmedDisposals = { count: 0 };
+  const uncertainDisposals = { count: 0 };
+  const run = async (outcome: ProcessCleanupOutcome, bucket: { count: number }) => {
+    const resources = createSessionInterpreterResources();
+    resources.processes.register('process-1', process(outcome));
+    resources.preparations.register('preparation-1', {
+      correlation: effect.correlation,
+      opening: { limits: { maxOutputBytes: 16 } } as never,
+      output: {
+        dispose: () => undefined,
+        writeStderr: () => undefined,
+        writeStdout: () => undefined,
+      } as never,
+      prepared: {
+        instructions: {
+          artifact: {
+            dispose: async () => {
+              bucket.count += 1;
+            },
+            path: '/output/revo-opencode-instructions.md',
+          },
+        },
+      } as never,
+    });
+    const recorded = recordingSessionEffectOutput();
+    createProcessCleanupInterpreter({ clock, resources }).execute(effect, recorded.output);
+    await flushMicrotasks(8);
+    return recorded.outcomes.at(-1)?.type;
+  };
+
+  expect(
+    await run({ exit: { exitCode: 0, signal: null }, status: 'confirmed' }, confirmedDisposals),
+  ).toBe('process.cleanup.confirmed');
+  expect(confirmedDisposals.count).toBe(1);
+  expect(await run({ status: 'uncertain' }, uncertainDisposals)).toBe('process.cleanup.uncertain');
+  expect(uncertainDisposals.count).toBe(0);
+});
+
 it('ignores an effect outside the cleanup discriminant', async () => {
   const recorded = recordingSessionEffectOutput();
   createProcessCleanupInterpreter({

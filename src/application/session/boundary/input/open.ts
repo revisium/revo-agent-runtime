@@ -7,6 +7,7 @@ import {
   decodeAgentSessionLaunchInput,
   type DecodedAgentSessionLaunchInput,
   invalidSessionRequest,
+  launchInputOptionalKeys,
   sessionRequestJsonLimits,
 } from './launch.js';
 
@@ -22,7 +23,7 @@ export const decodeOpenAgentSession = (input: unknown): DecodedOpenAgentSession 
       !hasExactJsonKeys(
         value,
         ['agent', 'output', 'parameters', 'permissions', 'sessionId', 'workspace'],
-        ['configuration', 'limits', 'metadata'],
+        launchInputOptionalKeys,
       ) ||
       !isJsonObject(value.agent) ||
       !hasExactJsonKeys(value.agent, ['id', 'version', 'installationId'])

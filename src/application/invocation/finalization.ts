@@ -9,7 +9,11 @@ import type { ExecutionOutcome } from '../../execution/invocation/terminal.js';
 import type { ClaimedInvocationOutput } from '../../execution/output/claim.js';
 import type { ClaimedInvocationOutputPublisher } from '../../execution/output/publication.js';
 import type { EffectiveLimits } from '../manager/limits.js';
-import { buildInvocationResult, type InvocationResultTiming } from '../result/invocation-result.js';
+import {
+  buildInvocationResult,
+  type InvocationResultContext,
+  type InvocationResultTiming,
+} from '../result/invocation-result.js';
 
 interface TerminalActiveState {
   removeTerminal(): Promise<boolean>;
@@ -27,6 +31,7 @@ export interface InvocationFinalizationRequest {
   readonly outputPublisher: ClaimedInvocationOutputPublisher;
   readonly activeState: TerminalActiveState;
   readonly timing: Omit<InvocationResultTiming, 'finishedAt'>;
+  readonly context?: InvocationResultContext;
 }
 
 export const finalizeInvocation = async ({
@@ -41,11 +46,20 @@ export const finalizeInvocation = async ({
   outputPublisher,
   activeState,
   timing,
+  context = {},
 }: InvocationFinalizationRequest): Promise<AgentInvocationResult | undefined> => {
   const evidence = execution.evidence();
   if (evidence === undefined) return undefined;
   const resultTiming = Object.freeze({ ...timing, finishedAt: finished.timestamp });
-  const terminal = buildInvocationResult(request, pin, outcome, evidence, resultTiming);
+  const terminal = buildInvocationResult(
+    request,
+    pin,
+    outcome,
+    evidence,
+    resultTiming,
+    undefined,
+    context,
+  );
   if (!(await activeState.removeTerminal())) return undefined;
   const capturedOutput = execution.output?.() ?? {
     stdout: new Uint8Array(),
@@ -75,5 +89,6 @@ export const finalizeInvocation = async ({
         evidence,
         resultTiming,
         { committed: false, rawPublished: false },
+        context,
       );
 };

@@ -65,7 +65,44 @@ test('fails a non-literal ACP bridge command without dropping launch input', asy
     const start = manager.start(requestFor(directory, 'non-literal-launch'));
 
     await expect(start).rejects.toMatchObject({
-      fault: { code: 'revo.agent.protocol_failed' },
+      fault: { code: 'revo.agent.strategy_unsupported', phase: 'preflight' },
+    });
+    await manager.shutdown();
+  });
+});
+
+test('does not leave a native OpenCode instructions file when launch args are not literal', async () => {
+  await withTemporaryDirectory(async (directory) => {
+    const output = join(directory, 'output');
+    const manager = createAgentManager({
+      activeStateSink: noOpActiveStateSink,
+      definitions: [
+        fakeAcpDefinition({
+          id: 'opencode-acp',
+          reportedVersion: '1.18.23',
+          withWorkspaceArg: true,
+        }),
+      ],
+    });
+    await manager.initialize([]);
+
+    await expect(
+      manager.start({
+        agent: { id: 'opencode-acp', version: '1.0.0', installationId: 'fixture-installation' },
+        instructions: 'Keep this native instruction text.',
+        invocationId: 'unsupported-native-leak',
+        output: { directory: output },
+        parameters: {},
+        permissions: {},
+        prompt: 'Return the fake result.',
+        result: { schema: { type: 'object' } },
+        workspace: { directory },
+      }),
+    ).rejects.toMatchObject({
+      fault: { code: 'revo.agent.strategy_unsupported', phase: 'preflight' },
+    });
+    await expect(stat(join(output, 'revo-opencode-instructions.md'))).rejects.toMatchObject({
+      code: 'ENOENT',
     });
     await manager.shutdown();
   });

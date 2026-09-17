@@ -62,14 +62,15 @@ const cleanup = async (
     timeoutMs: effect.timeoutMs,
     timer: options.timer ?? systemSessionOperationTimer,
   });
-  emit(
-    effect,
-    output,
-    options,
+  const confirmed =
     settlement.state === 'fulfilled' &&
-      settlement.phase === 'initial' &&
-      settlement.value.status === 'confirmed',
-  );
+    settlement.phase === 'initial' &&
+    settlement.value.status === 'confirmed';
+  if (confirmed) {
+    const prepared = options.resources.preparations.forSession(effect.correlation);
+    await prepared?.prepared.instructions?.artifact?.dispose();
+  }
+  emit(effect, output, options, confirmed);
 };
 
 const emit = (

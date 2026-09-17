@@ -8,10 +8,12 @@ import {
   type StartAgentInvocation,
 } from '../../contracts/manager.js';
 import type { SealedAgentRegistry } from '../../definition/index.js';
+import type { InstructionsDeliveryResolver } from '../../execution/instructions/delivery.js';
 import type {
   InvocationExecution,
   InvocationExecutor,
 } from '../../execution/invocation/executor.js';
+import type { OutputArtifactPlatform } from '../../execution/output/artifact.js';
 import type { OutputClaimPlatform } from '../../execution/output/claim.js';
 import type { ClaimedInvocationOutputPublisher } from '../../execution/output/publication.js';
 import type { ExecutablePreflight } from '../../execution/probe/executable-preflight.js';
@@ -39,8 +41,10 @@ interface ManagedInvocationServices {
   readonly executor: InvocationExecutor;
   readonly executablePreflight: ExecutablePreflight;
   readonly inputPolicy: EffectiveInvocationInputPolicy;
+  readonly instructionsDelivery: InstructionsDeliveryResolver;
   readonly isClosed: () => boolean;
   readonly limits: EffectiveLimits;
+  readonly outputArtifactPlatform: OutputArtifactPlatform;
   readonly outputClaimPlatform: OutputClaimPlatform;
   readonly outputPublisher: ClaimedInvocationOutputPublisher;
   readonly pendingOperations: PendingOperations;
@@ -78,6 +82,8 @@ export class ManagedInvocations {
       const start = await prepareInvocationStart(prepared, context, pending.signal, {
         executablePreflight: this.services.executablePreflight,
         inputPolicy: this.services.inputPolicy,
+        instructionsDelivery: this.services.instructionsDelivery,
+        outputArtifactPlatform: this.services.outputArtifactPlatform,
         outputClaimPlatform: this.services.outputClaimPlatform,
       });
       const events = new InvocationEvents(
@@ -86,7 +92,7 @@ export class ManagedInvocations {
         this.services.queries,
         this.services.subscriptions,
       );
-      const execution = startInvocationExecution(
+      const execution = await startInvocationExecution(
         this.services.executor,
         start,
         events,

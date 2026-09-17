@@ -1,5 +1,6 @@
 import { ProcessStartError, type OwnedProcess, type ProcessSpawner } from '../../process/index.js';
 import type { ProtocolDriver, ProtocolSession } from '../../protocol/driver.js';
+import { protocolInstructions } from '../instructions/prepare.js';
 import { launchEnvironment } from '../process/launch-environment.js';
 import { literalArguments } from '../process/literal-launch.js';
 import { InvocationArtifacts } from './artifacts.js';
@@ -54,7 +55,7 @@ class InvocationLifecycle {
 
   private async run(): Promise<void> {
     const args = literalArguments(this.request.definition);
-    if (args === undefined) return this.rejectUnsupportedStrategy();
+    if (args === undefined) return await this.rejectUnsupportedStrategy();
 
     const process = await this.spawn(args);
     if (process === undefined) return;
@@ -86,12 +87,26 @@ class InvocationLifecycle {
     await this.finishAcceptedProcess(process, outcome);
   }
 
-  private rejectUnsupportedStrategy(): void {
+  private async rejectUnsupportedStrategy(): Promise<void> {
     const outcome = { status: 'failed' as const };
     this.commit(outcome);
+    await this.disposeInstructionsArtifact();
     this.admission.resolve({ cleanup: 'confirmed', outcome, status: 'rejected' });
     this.completion.resolve(outcome);
     this.drainage.resolve({ outcome, status: 'terminal' });
+  }
+
+  /** Native instruction bindings layer over the definition-owned launch environment. */
+  private spawnEnvironment(): Readonly<Record<string, string>> {
+    return Object.freeze({
+      ...launchEnvironment(this.request.definition, this.request.environment),
+      ...this.request.instructions?.environment,
+    });
+  }
+
+  /** The instructions file outlives the provider; it is removed only after confirmed teardown. */
+  private async disposeInstructionsArtifact(): Promise<void> {
+    await this.request.instructions?.artifact?.dispose();
   }
 
   private async spawn(args: readonly string[]): Promise<OwnedProcess | undefined> {
@@ -101,7 +116,7 @@ class InvocationLifecycle {
           args,
           command: this.request.launch.executable,
           cwd: this.request.workspace,
-          environment: launchEnvironment(this.request.definition, this.request.environment),
+          environment: this.spawnEnvironment(),
           onStderr: this.artifacts.writeStderr,
           onStdout: this.artifacts.writeStdout,
         },
@@ -111,6 +126,7 @@ class InvocationLifecycle {
       const outcome = this.terminal.current() ?? ({ status: 'failed' } as const);
       this.commit(outcome);
       const cleanup = error instanceof ProcessStartError ? error.cleanup : 'confirmed';
+      if (cleanup === 'confirmed') await this.disposeInstructionsArtifact();
       this.admission.resolve({ cleanup, outcome, status: 'rejected' });
       if (cleanup === 'confirmed') {
         this.completion.resolve(outcome);
@@ -130,6 +146,7 @@ class InvocationLifecycle {
       this.drainage.resolve({ status: 'cleanup_uncertain' });
       return;
     }
+    await this.disposeInstructionsArtifact();
     const evidence = this.artifacts.finalizeEvidence(this.request.launch, cleanup.exit);
     this.admission.resolve({
       cleanup: 'confirmed',
@@ -154,6 +171,10 @@ class InvocationLifecycle {
         ...(this.request.configuration === undefined
           ? {}
           : { configuration: this.request.configuration }),
+        ...(this.request.instructions === undefined
+          ? {}
+          : { instructions: protocolInstructions(this.request.instructions) }),
+        ...(this.request.mcpServers === undefined ? {} : { mcpServers: this.request.mcpServers }),
         observer: observation.observer,
         parameters: this.request.parameters,
         permissions: this.request.permissions,
@@ -204,6 +225,7 @@ class InvocationLifecycle {
       this.drainage.resolve({ status: 'cleanup_uncertain' });
       return;
     }
+    await this.disposeInstructionsArtifact();
     const evidence = this.artifacts.finalizeEvidence(this.request.launch, cleanup.exit);
     this.artifacts.finalizeOutput();
     this.completion.resolve(outcome);

@@ -37,7 +37,15 @@ export const projectSessionSnapshot = (state: SessionState): AgentSessionSnapsho
   return {
     acceptedAt: state.acceptedAt,
     ...(activeTurnId === undefined ? {} : { activeTurnId }),
-    ...(active ? { capabilities: state.capabilities, openedAt: state.openedAt } : {}),
+    ...(active
+      ? {
+          capabilities: state.capabilities,
+          ...(state.instructionsDelivery === undefined
+            ? {}
+            : { instructionsDelivery: state.instructionsDelivery }),
+          openedAt: state.openedAt,
+        }
+      : {}),
     ...(state.events.cursor === undefined ? {} : { cursor: state.events.cursor }),
     ...(state.metadata === undefined ? {} : { metadata: state.metadata }),
     outputDirectory: state.outputDirectory,

@@ -1,6 +1,8 @@
 import { createSessionOpeningPreparer } from '../../application/session/admission/preparer.js';
 import type { AgentSessionComposer } from '../../application/session/management/composition.js';
 import { createManagedAgentSessionController } from '../../application/session/management/managed-sessions.js';
+import type { InstructionsDeliveryResolver } from '../../execution/instructions/delivery.js';
+import type { OutputArtifactPlatform } from '../../execution/output/artifact.js';
 import type { ClaimedInvocationOutput, OutputClaimPlatform } from '../../execution/output/claim.js';
 import type { SessionOutputPublicationTarget } from '../../execution/output/session/publication.js';
 import type { ExecutablePreflight } from '../../execution/probe/executable-preflight.js';
@@ -19,6 +21,8 @@ export interface SessionComposerServices {
   readonly driver: SessionProtocolDriver;
   readonly executablePreflight: ExecutablePreflight;
   readonly identities: { next(kind: string): string };
+  readonly instructionsDelivery: InstructionsDeliveryResolver;
+  readonly outputArtifactPlatform: OutputArtifactPlatform;
   readonly outputClaimPlatform: OutputClaimPlatform;
   readonly outputTarget: (output: ClaimedInvocationOutput) => SessionOutputPublicationTarget;
   readonly recoveryInspector: RecoveredProcessInspector;
@@ -32,7 +36,10 @@ export const createAgentSessionComposer = (
     create: ({ agents, definitions, options, redactionSecrets }) => {
       const preparer = createSessionOpeningPreparer({
         definitions,
+        digest: services.digest,
         executablePreflight: services.executablePreflight,
+        instructionsDelivery: services.instructionsDelivery,
+        outputArtifactPlatform: services.outputArtifactPlatform,
         outputClaimPlatform: services.outputClaimPlatform,
         outputTarget: services.outputTarget,
       });
@@ -48,7 +55,10 @@ export const createAgentSessionComposer = (
       });
       const runtimeFactory = new SessionActorFactory({
         release: (identity) =>
-          composition.resources.preparations.release({ ...identity, effectId: 'release' }),
+          composition.resources.preparations.release(
+            { ...identity, effectId: 'release' },
+            identity.confirmedTeardown,
+          ),
         dispatcher: new SessionEffectDispatcher(composition.interpreters),
         reducer: reduceSession,
       });

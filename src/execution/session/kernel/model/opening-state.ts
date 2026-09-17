@@ -1,4 +1,5 @@
 import type { JsonObject } from '../../../../contracts/agent-definition.js';
+import type { AgentInstructionsDelivery, AgentMcpServer } from '../../../../contracts/context.js';
 import type {
   ActiveProcessIdentity,
   AgentExecutionPin,
@@ -33,6 +34,8 @@ export interface SessionOpeningDescriptor {
   readonly pin: AgentExecutionPin;
   readonly request: SessionOpeningRequest;
   readonly environment?: SessionLaunchEnvironment;
+  /** MCP descriptors already bound to the launch environment; their values are secrets. */
+  readonly mcpServers?: readonly AgentMcpServer[];
   readonly limits: Required<AgentSessionLimits>;
   readonly usageBaseline: AgentSessionUsage;
   readonly acceptedAt: string;
@@ -81,6 +84,7 @@ export type OpeningProgress =
       readonly process: ActiveProcessIdentity;
       readonly providerResourceId: string;
       readonly capabilities: AgentSessionCapabilities;
+      readonly instructionsDelivery?: AgentInstructionsDelivery;
       readonly openedAtMs: number;
       readonly resumed: boolean;
     };

@@ -44,8 +44,10 @@ export const finalizeAcceptedInvocation = async ({
   try {
     const outcome = await execution.completion;
     finished = events.finish();
+    const instructionsDelivery = prepared.instructions?.delivery;
     result = await finalizeInvocation({
       activeState,
+      ...(instructionsDelivery === undefined ? {} : { context: { instructionsDelivery } }),
       execution,
       finished,
       limits,

@@ -4,12 +4,20 @@ import type {
   AgentConfigurationSelection,
   AgentDefinitionInput,
   AgentDiscoveryResult,
+  AgentInstructionsDelivery,
   AgentManagerInitialization,
+  AgentMcpBinding,
+  AgentMcpServer,
   AgentSession,
   AgentSessions,
   InspectAgentConfiguration,
   OpenAgentSession,
 } from '${packageName}';
+
+const delivery: AgentInstructionsDelivery = { channel: 'acp:session/prompt.prefix', mode: 'prompt_prefix' };
+void delivery;
+const binding: AgentMcpBinding = { environment: 'TOKEN' };
+const knowledge: AgentMcpServer = { name: 'knowledge', transport: 'stdio', command: 'revo', args: ['mcp'], env: { TOKEN: binding } };
 
 const definition: AgentDefinitionInput = {
   schemaVersion: 'agent-definition/v1',
@@ -39,6 +47,8 @@ void catalog;
 
 const sessionRequest: OpenAgentSession = {
   agent: { id: 'agent', version: '1', installationId: 'agent-installation' },
+  instructions: 'Read .revo/index.md.',
+  mcpServers: [knowledge],
   output: { directory: '/output/session' },
   parameters: {},
   permissions: {},
