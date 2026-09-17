@@ -272,8 +272,11 @@ test('retains only fixture output files into a private evidence directory', asyn
   };
   expect(JSON.stringify(diagnostic)).not.toContain(secret);
   expect(JSON.stringify(diagnostic)).not.toContain('agent_thought_chunk');
-  expect((await stat(retained)).mode & 0o777).toBe(0o700);
-  expect((await stat(join(retained, 'diagnostic.json'))).mode & 0o777).toBe(0o600);
+  // Windows does not expose POSIX file permission bits.
+  if (process.platform !== 'win32') {
+    expect((await stat(retained)).mode & 0o777).toBe(0o700);
+    expect((await stat(join(retained, 'diagnostic.json'))).mode & 0o777).toBe(0o600);
+  }
 });
 
 test('session ids include a per-run nonce', () => {

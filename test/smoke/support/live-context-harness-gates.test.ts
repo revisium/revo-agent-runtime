@@ -204,8 +204,11 @@ test('diagnostic retention keeps a bounded safe summary for normal runs', async 
   expect(diagnostic.serverAudit.observed).toBe(true);
   expect(JSON.stringify(diagnostic)).not.toContain('agent_thought_chunk');
   expect(JSON.stringify(diagnostic)).not.toContain('hidden');
-  expect((await stat(retained)).mode & 0o777).toBe(0o700);
-  expect((await stat(join(retained, 'diagnostic.json'))).mode & 0o777).toBe(0o600);
+  // Windows does not expose POSIX file permission bits.
+  if (process.platform !== 'win32') {
+    expect((await stat(retained)).mode & 0o777).toBe(0o700);
+    expect((await stat(join(retained, 'diagnostic.json'))).mode & 0o777).toBe(0o600);
+  }
 });
 
 test('diagnostic retention fails closed on symlink escape', async () => {
