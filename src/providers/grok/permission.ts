@@ -5,6 +5,12 @@ import type { AgentMcpServer } from '../../contracts/context.js';
 const record = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const validToolName = (name: unknown): name is string => {
+  if (typeof name !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(name)) return false;
+  const separator = name.indexOf('__', 1);
+  return separator > 0 && separator + 2 < name.length;
+};
+
 /** Explicit exact-tool grants never authorize detached servers or persistent approvals. */
 export const grokMcpPermission = (
   request: acp.RequestPermissionRequest,
@@ -15,10 +21,7 @@ export const grokMcpPermission = (
   const raw = request.toolCall.rawInput;
   if (
     !Array.isArray(grants) ||
-    !grants.every(
-      (name: unknown) =>
-        typeof name === 'string' && /^[A-Za-z0-9_.-]+__[A-Za-z0-9_.-]+$/.test(name),
-    ) ||
+    !grants.every(validToolName) ||
     !record(raw) ||
     raw.variant !== 'UseTool' ||
     typeof raw.tool_name !== 'string' ||

@@ -116,6 +116,18 @@ export const snapshotMcpServers = (value: unknown): readonly AgentMcpServer[] | 
   return Object.freeze(servers);
 };
 
+const resolvedBindingValue = (
+  source: AgentMcpBinding,
+  environment: Readonly<Record<string, string>>,
+): string => {
+  if ('value' in source) return source.value;
+  const value = Object.hasOwn(environment, source.environment)
+    ? environment[source.environment]
+    : undefined;
+  if (value === undefined) throw new TypeError('Missing MCP environment binding.');
+  return value;
+};
+
 const resolveBindings = (
   entries: Bindings | undefined,
   environment: Readonly<Record<string, string>>,
@@ -123,13 +135,7 @@ const resolveBindings = (
   Object.freeze(
     Object.fromEntries(
       Object.entries(entries ?? {}).map(([name, source]) => {
-        const value =
-          'value' in source
-            ? source.value
-            : Object.hasOwn(environment, source.environment)
-              ? environment[source.environment]
-              : undefined;
-        if (value === undefined) throw new TypeError('Missing MCP environment binding.');
+        const value = resolvedBindingValue(source, environment);
         return [name, Object.freeze({ value })];
       }),
     ),

@@ -17,6 +17,9 @@ import { inboundParams, promptTexts, readFakeAcpTrace } from '../../support/fake
 import { fakeAcpDefinition } from '../../support/fakes/fake-acp.js';
 import { noOpActiveStateSink } from '../../support/stories/active-state.js';
 
+// Native file delivery is eligible only on supported POSIX hosts.
+const nativeTest = test.skipIf(process.platform === 'win32');
+
 const instructions = 'Prefer terse answers. nonce-51d0';
 const fileName = 'revo-opencode-instructions.md';
 const fileDelivery = {
@@ -116,38 +119,69 @@ const decodedPayload = (token: AgentSessionResumeToken): string =>
 const runtimeOwnedEvents = (events: readonly AgentSessionEvent[]) =>
   events.filter((event) => !event.type.startsWith('assistant.'));
 
-test('an eligible invocation binds a private instructions file only for the process lifetime', async () => {
-  await withTemporaryDirectory(async (directory) => {
-    const traceFile = join(directory, 'opencode.trace.json');
-    const manager = createAgentManager({
-      activeStateSink: noOpActiveStateSink,
-      definitions: [openCodeLike(traceFile)],
-    });
-    await manager.initialize([]);
-    const start = request(directory, 'file');
-    const result = await (await manager.start(start)).result();
-    const trace = await readFakeAcpTrace(traceFile);
-    await manager.shutdown();
+nativeTest(
+  'an eligible invocation binds a private instructions file only for the process lifetime',
+  async () => {
+    await withTemporaryDirectory(async (directory) => {
+      const traceFile = join(directory, 'opencode.trace.json');
+      const manager = createAgentManager({
+        activeStateSink: noOpActiveStateSink,
+        definitions: [openCodeLike(traceFile)],
+      });
+      await manager.initialize([]);
+      const start = request(directory, 'file');
+      const result = await (await manager.start(start)).result();
+      const trace = await readFakeAcpTrace(traceFile);
+      await manager.shutdown();
 
-    expect(trace.environment.OPENCODE_CONFIG_CONTENT).toBe(configuration(start.output.directory));
-    expect(inboundParams(trace, 'session/new')).toEqual({ cwd: directory, mcpServers: [] });
-    expect(promptTexts(trace)[0]).toMatch(/^Return the fake result\.\n\nRevo invocation contract/);
-    expect(result).toMatchObject({ instructionsDelivery: fileDelivery, status: 'succeeded' });
-    if (result.status !== 'succeeded') throw new Error('Expected success.');
-    expect(echoedFile(result.value)).toEqual({
-      content: instructions,
-      mode: '600',
-      path: join(start.output.directory, fileName),
+      expect(trace.environment.OPENCODE_CONFIG_CONTENT).toBe(configuration(start.output.directory));
+      expect(inboundParams(trace, 'session/new')).toEqual({ cwd: directory, mcpServers: [] });
+      expect(promptTexts(trace)[0]).toMatch(
+        /^Return the fake result\.\n\nRevo invocation contract/,
+      );
+      expect(result).toMatchObject({ instructionsDelivery: fileDelivery, status: 'succeeded' });
+      if (result.status !== 'succeeded') throw new Error('Expected success.');
+      expect(echoedFile(result.value)).toEqual({
+        content: instructions,
+        mode: '600',
+        path: join(start.output.directory, fileName),
+      });
+      expect((await readdir(start.output.directory)).sort()).toEqual([
+        'events.ndjson',
+        'result.json',
+        'stderr.log',
+        'stdout.log',
+      ]);
+      expect(JSON.stringify({ ...result, value: undefined })).not.toContain(fileName);
     });
-    expect((await readdir(start.output.directory)).sort()).toEqual([
-      'events.ndjson',
-      'result.json',
-      'stderr.log',
-      'stdout.log',
-    ]);
-    expect(JSON.stringify({ ...result, value: undefined })).not.toContain(fileName);
-  });
-});
+  },
+);
+
+test.runIf(process.platform === 'win32')(
+  'an otherwise eligible Windows invocation keeps the prefix and writes no file',
+  async () => {
+    await withTemporaryDirectory(async (directory) => {
+      const traceFile = join(directory, 'windows.trace.json');
+      const manager = createAgentManager({
+        activeStateSink: noOpActiveStateSink,
+        definitions: [openCodeLike(traceFile)],
+      });
+      await manager.initialize([]);
+      const start = request(directory, 'windows-prefix');
+
+      try {
+        const result = await (await manager.start(start)).result();
+        const trace = await readFakeAcpTrace(traceFile);
+        expect(trace.environment.OPENCODE_CONFIG_CONTENT).toBeUndefined();
+        expect(promptTexts(trace)[0]).toMatch(/^<<<REVO_INSTRUCTIONS>>>\n/);
+        expect(result).toMatchObject({ instructionsDelivery: prefixDelivery, status: 'succeeded' });
+        expect(await missing(join(start.output.directory, fileName))).toBe(true);
+      } finally {
+        await manager.shutdown();
+      }
+    });
+  },
+);
 
 test.each([
   ['an unverified reported version', { reportedVersion: '1.18.22' }, undefined],
@@ -184,7 +218,7 @@ test.each([
   },
 );
 
-test('a brace in the output directory keeps the prefix and writes no file', async () => {
+nativeTest('a brace in the output directory keeps the prefix and writes no file', async () => {
   await withTemporaryDirectory(async (directory) => {
     const manager = createAgentManager({
       activeStateSink: noOpActiveStateSink,
@@ -200,7 +234,7 @@ test('a brace in the output directory keeps the prefix and writes no file', asyn
   });
 });
 
-test.each(['close', 'cancel', 'idle_timeout'] as const)(
+nativeTest.each(['close', 'cancel', 'idle_timeout'] as const)(
   'a session removes its file only after the %s terminal path and never records it',
   async (terminal) => {
     await withTemporaryDirectory(async (directory) => {
@@ -254,7 +288,7 @@ test.each(['close', 'cancel', 'idle_timeout'] as const)(
   },
 );
 
-test('a rejected native session removes the file it created', async () => {
+nativeTest('a rejected native session removes the file it created', async () => {
   await withTemporaryDirectory(async (directory) => {
     const traceFile = join(directory, 'reject.trace.json');
     const manager = sessionManager(
@@ -344,82 +378,85 @@ test('a reserved instruction file already in the claimed directory fails closed 
   });
 });
 
-test('fake-native resume recreates the file, honors the stored mode rule, and rejects changed instructions', async () => {
-  await withTemporaryDirectory(async (directory) => {
-    const traceFile = join(directory, 'resume.trace.json');
-    const events: AgentSessionEvent[] = [];
-    const manager = sessionManager([openCodeLike(traceFile, { resume: 'native' })], events);
-    await manager.initialize([]);
-    const firstOutput = join(directory, 'resume-1');
-    const session = await manager.sessions.open(launch(directory, firstOutput, 'resume'));
-    await (await session.send({ prompt: 'first', turnId: 'first' })).result();
-    const hibernation = await session.hibernate();
-    if (hibernation.state !== 'hibernated') throw new Error('Expected hibernation.');
-    await expect.poll(() => missing(join(firstOutput, fileName))).toBe(true);
-    const payload = decodedPayload(hibernation.resumeToken);
-    expect(payload).toContain('"instructionsDelivery":{"mode":"native_append"}');
-    expect(payload).toContain('"instructionsDispatched":false');
-    expect(payload).toMatch(/"instructionsDigest":"[a-f0-9]{64}"/);
-    expect(payload).not.toContain('nonce-51d0');
-    expect(payload).not.toContain(fileName);
+nativeTest(
+  'fake-native resume recreates the file, honors the stored mode rule, and rejects changed instructions',
+  async () => {
+    await withTemporaryDirectory(async (directory) => {
+      const traceFile = join(directory, 'resume.trace.json');
+      const events: AgentSessionEvent[] = [];
+      const manager = sessionManager([openCodeLike(traceFile, { resume: 'native' })], events);
+      await manager.initialize([]);
+      const firstOutput = join(directory, 'resume-1');
+      const session = await manager.sessions.open(launch(directory, firstOutput, 'resume'));
+      await (await session.send({ prompt: 'first', turnId: 'first' })).result();
+      const hibernation = await session.hibernate();
+      if (hibernation.state !== 'hibernated') throw new Error('Expected hibernation.');
+      await expect.poll(() => missing(join(firstOutput, fileName))).toBe(true);
+      const payload = decodedPayload(hibernation.resumeToken);
+      expect(payload).toContain('"instructionsDelivery":{"mode":"native_append"}');
+      expect(payload).toContain('"instructionsDispatched":false');
+      expect(payload).toMatch(/"instructionsDigest":"[a-f0-9]{64}"/);
+      expect(payload).not.toContain('nonce-51d0');
+      expect(payload).not.toContain(fileName);
 
-    const resumeInput = (outputDirectory: string, text: string | undefined) => ({
-      ...(text === undefined ? {} : { instructions: text }),
-      output: { directory: outputDirectory },
-      parameters: {},
-      permissions: {},
-      token: hibernation.resumeToken,
-      workspace: { directory },
-    });
-    await expect(
-      manager.sessions.resume(resumeInput(join(directory, 'changed'), 'Changed. nonce-51d0')),
-    ).rejects.toMatchObject({
-      fault: { code: 'revo.agent.checkpoint_invalid' },
-    });
-    await expect(
-      manager.sessions.resume(resumeInput(join(directory, 'omitted'), undefined)),
-    ).rejects.toMatchObject({
-      fault: { code: 'revo.agent.checkpoint_invalid' },
-    });
+      const resumeInput = (outputDirectory: string, text: string | undefined) => ({
+        ...(text === undefined ? {} : { instructions: text }),
+        output: { directory: outputDirectory },
+        parameters: {},
+        permissions: {},
+        token: hibernation.resumeToken,
+        workspace: { directory },
+      });
+      await expect(
+        manager.sessions.resume(resumeInput(join(directory, 'changed'), 'Changed. nonce-51d0')),
+      ).rejects.toMatchObject({
+        fault: { code: 'revo.agent.checkpoint_invalid' },
+      });
+      await expect(
+        manager.sessions.resume(resumeInput(join(directory, 'omitted'), undefined)),
+      ).rejects.toMatchObject({
+        fault: { code: 'revo.agent.checkpoint_invalid' },
+      });
 
-    const secondOutput = join(directory, 'resume-2');
-    const resumed = await manager.sessions.resume(resumeInput(secondOutput, instructions));
-    const resumedTurn = await (await resumed.send({ prompt: 'again', turnId: 'again' })).result();
-    if (resumedTurn.status !== 'completed') throw new Error('Expected completion.');
-    expect(echoedFile(resumedTurn.message.content)).toEqual({
-      content: instructions,
-      mode: '600',
-      path: join(secondOutput, fileName),
-    });
-    expect(manager.sessions.inspect('resume')).toMatchObject({
-      instructionsDelivery: fileDelivery,
-    });
-    const secondHibernation = await resumed.hibernate();
-    if (secondHibernation.state !== 'hibernated') throw new Error('Expected hibernation.');
-    await expect.poll(() => missing(join(secondOutput, fileName))).toBe(true);
+      const secondOutput = join(directory, 'resume-2');
+      const resumed = await manager.sessions.resume(resumeInput(secondOutput, instructions));
+      const resumedTurn = await (await resumed.send({ prompt: 'again', turnId: 'again' })).result();
+      if (resumedTurn.status !== 'completed') throw new Error('Expected completion.');
+      expect(echoedFile(resumedTurn.message.content)).toEqual({
+        content: instructions,
+        mode: '600',
+        path: join(secondOutput, fileName),
+      });
+      expect(manager.sessions.inspect('resume')).toMatchObject({
+        instructionsDelivery: fileDelivery,
+      });
+      const secondHibernation = await resumed.hibernate();
+      if (secondHibernation.state !== 'hibernated') throw new Error('Expected hibernation.');
+      await expect.poll(() => missing(join(secondOutput, fileName))).toBe(true);
 
-    const thirdOutput = join(directory, 'resume-3');
-    const ineligible = await manager.sessions.resume(
-      { ...resumeInput(thirdOutput, instructions), token: secondHibernation.resumeToken },
-      callerConfiguration,
-    );
-    await (await ineligible.send({ prompt: 'third', turnId: 'third' })).result();
-    await (await ineligible.send({ prompt: 'fourth', turnId: 'fourth' })).result();
-    expect(manager.sessions.inspect('resume')).toMatchObject({
-      instructionsDelivery: prefixDelivery,
-    });
-    expect(await missing(join(thirdOutput, fileName))).toBe(true);
-    await ineligible.close();
-    await manager.shutdown();
-    const trace = await readFakeAcpTrace(traceFile);
+      const thirdOutput = join(directory, 'resume-3');
+      const ineligible = await manager.sessions.resume(
+        { ...resumeInput(thirdOutput, instructions), token: secondHibernation.resumeToken },
+        callerConfiguration,
+      );
+      await (await ineligible.send({ prompt: 'third', turnId: 'third' })).result();
+      await (await ineligible.send({ prompt: 'fourth', turnId: 'fourth' })).result();
+      expect(manager.sessions.inspect('resume')).toMatchObject({
+        instructionsDelivery: prefixDelivery,
+      });
+      expect(await missing(join(thirdOutput, fileName))).toBe(true);
+      await ineligible.close();
+      await manager.shutdown();
+      const trace = await readFakeAcpTrace(traceFile);
 
-    expect(promptTexts(trace)).toEqual([
-      `<<<REVO_INSTRUCTIONS>>>\n${instructions}\n<<<END_REVO_INSTRUCTIONS>>>\n\nthird`,
-      'fourth',
-    ]);
-    expect(trace.environment.OPENCODE_CONFIG_CONTENT).toBe('{"custom":true}');
-  });
-});
+      expect(promptTexts(trace)).toEqual([
+        `<<<REVO_INSTRUCTIONS>>>\n${instructions}\n<<<END_REVO_INSTRUCTIONS>>>\n\nthird`,
+        'fourth',
+      ]);
+      expect(trace.environment.OPENCODE_CONFIG_CONTENT).toBe('{"custom":true}');
+    });
+  },
+);
 
 test('a stored prefix stays a prefix on resume even when native becomes eligible, and is never sent twice', async () => {
   await withTemporaryDirectory(async (directory) => {

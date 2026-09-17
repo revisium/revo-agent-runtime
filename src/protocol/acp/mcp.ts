@@ -17,10 +17,10 @@ const pairs = (bindings: Readonly<Record<string, AgentMcpBinding>> = {}) =>
 
 /** Maps resolved descriptors onto ACP servers; HTTP requires the advertised capability. */
 export const acpMcpServers = (
-  servers: readonly AgentMcpServer[] = [],
+  servers: readonly AgentMcpServer[] | undefined,
   capabilities: acp.AgentCapabilities | null | undefined,
 ): acp.McpServer[] =>
-  servers.map((server) => {
+  (servers ?? []).map((server) => {
     if (server.transport === 'stdio')
       return {
         name: server.name,

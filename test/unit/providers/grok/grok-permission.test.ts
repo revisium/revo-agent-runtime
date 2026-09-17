@@ -22,6 +22,7 @@ test.each([
   { mcpTools: '*' },
   { mcpTools: [1] },
   { mcpTools: ['knowledge__*'] },
+  { mcpTools: ['knowledgeecho'] },
   { mcpTools: ['other__echo'] },
 ])('absent or nonmatching grants do not approve MCP requests: %j', (permissions) => {
   expect(grokMcpPermission(call, permissions, servers)).toBeUndefined();
@@ -90,4 +91,17 @@ test('persistent or rejection choices never substitute for allow_once', () => {
       servers,
     ),
   ).toBeUndefined();
+});
+
+test('exact underscore identifiers retain their namespace and tool grant', () => {
+  expect(
+    grokMcpPermission(
+      {
+        ...call,
+        toolCall: { ...call.toolCall, rawInput: { ...call.toolCall.rawInput, tool_name: '____' } },
+      },
+      { mcpTools: ['____'] },
+      [{ ...servers[0]!, name: '_' }],
+    ),
+  ).toBe('once');
 });

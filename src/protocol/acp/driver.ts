@@ -65,18 +65,22 @@ const combinedUsage = (usages: readonly Required<AgentUsage>[]): Required<AgentU
     ),
   );
 
+interface InvocationSessionControl {
+  sessionStarted(session: acp.ActiveSession): void;
+  beginResultTurn(): boolean;
+  isCancelled(): boolean;
+}
+
 const runAcpInvocation = async (
   context: acp.ClientContext,
   request: ProtocolSessionRequest,
   compatibilityFor: AcpProviderCompatibilityResolver,
   capabilities: acp.AgentCapabilities | null | undefined,
   frames: AcpSessionFrameCapture,
-  onSession: (session: acp.ActiveSession) => void,
-  onResultTurn: () => boolean,
-  isCancelled: () => boolean,
+  control: InvocationSessionControl,
 ): Promise<ProtocolOutcome> => {
   const session = await context.buildSession(newSessionRequest(request, capabilities)).start();
-  onSession(session);
+  control.sessionStarted(session);
   request.observer.activity();
   await applyAcpConfiguration(
     acpConfigurationRequester(context),
@@ -88,7 +92,7 @@ const runAcpInvocation = async (
     compatibilityFor(request.definition.id),
     frames.sessionResponse(),
   );
-  if (isCancelled()) return { status: 'completed' };
+  if (control.isCancelled()) return { status: 'completed' };
   let response = await session.prompt(acpPrompt(request));
   const usages: Required<AgentUsage>[] = [];
   if (request.definition.capabilities.usage && response.usage != null)
@@ -96,7 +100,7 @@ const runAcpInvocation = async (
   if (
     compatibilityFor(request.definition.id)?.finalResultTurn &&
     response.stopReason === 'end_turn' &&
-    onResultTurn()
+    control.beginResultTurn()
   ) {
     response = await session.prompt(finalResultPrompt(request.resultSchema));
     if (request.definition.capabilities.usage && response.usage != null)
@@ -171,16 +175,18 @@ const openAcpSession = async (
           compatibilityFor,
           initialized.agentCapabilities,
           frames,
-          (started) => {
-            session = started;
+          {
+            sessionStarted: (started) => {
+              session = started;
+            },
+            beginResultTurn: () => {
+              if (cancelled) return false;
+              collectingResult = true;
+              resultTurn = true;
+              return true;
+            },
+            isCancelled: () => cancelled,
           },
-          () => {
-            if (cancelled) return false;
-            collectingResult = true;
-            resultTurn = true;
-            return true;
-          },
-          () => cancelled,
         );
       } catch (error) {
         outcome = failedOutcome(error);

@@ -131,12 +131,7 @@ export class AcpSessionResource implements SessionProtocolSession {
   /** The prefix is attempted once per logical session: the first prompt of a fresh transcript. */
   #promptText(prompt: string): string {
     const instructions = this.options.instructions;
-    if (
-      instructions === undefined ||
-      instructions.delivery.mode !== 'prompt_prefix' ||
-      this.#prefixDispatched
-    )
-      return prompt;
+    if (instructions?.delivery.mode !== 'prompt_prefix' || this.#prefixDispatched) return prompt;
     this.#prefixDispatched = true;
     return prefixInstructions(prompt, instructions.text);
   }

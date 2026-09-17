@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { chmod, lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 import type {
   AgentInvocationResult,
@@ -431,7 +431,7 @@ export const retainSafeLiveDiagnostic = async (
   if ((await lstat(destinationRoot)).isSymbolicLink()) throw new Error('symlink destination');
   const resolvedRoot = await realpath(destinationRoot);
   const directory = join(resolvedRoot, safeLabel);
-  if (directory !== resolvedRoot && !directory.startsWith(`${resolvedRoot}/`))
+  if (directory !== resolvedRoot && !directory.startsWith(`${resolvedRoot}${sep}`))
     throw new Error('path escape');
   for (const candidate of candidateTexts(input)) {
     if (containsSecret(candidate, input.secrets)) throw new Error('secret detected');

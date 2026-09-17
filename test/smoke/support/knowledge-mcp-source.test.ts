@@ -77,7 +77,10 @@ test('knowledge fixture writes a private tools/call audit for the instruction no
     expect(text).toContain('"name":"echo"');
     expect(text).toContain(nonce);
     expect(text).toContain('inv-context-1');
-    expect((await stat(audit)).mode & 0o777).toBe(0o600);
+    // Windows does not expose POSIX file permission bits.
+    if (process.platform !== 'win32') {
+      expect((await stat(audit)).mode & 0o777).toBe(0o600);
+    }
   } finally {
     child.kill();
   }
