@@ -3,12 +3,21 @@ import { fakeAcpLaunch } from './launch.js';
 import type { FakeAcpDefinitionOptions } from './options.js';
 
 const schemaDialect = 'https://json-schema.org/draft/2020-12/schema';
+
+const sessionModes = new Set([
+  'instructions-file',
+  'instructions-native',
+  'session',
+  'session-cancellation',
+  'session-interactions',
+]);
+
 export const fakeAcpAgentDefinition = (
   options: FakeAcpDefinitionOptions = {},
 ): AgentDefinitionInput => ({
   schemaVersion: 'agent-definition/v1',
   id: options.id ?? 'codex',
-  version: '1.0.0',
+  version: options.version ?? '1.0.0',
   displayName: options.displayName ?? 'Codex',
   launch: fakeAcpLaunch(options),
   protocol: { driver: 'acp/v1', permissionStrategy: 'acp/v1' },
@@ -17,10 +26,7 @@ export const fakeAcpAgentDefinition = (
   permissions: { schema: { $schema: schemaDialect, type: 'object' } },
   capabilities: {
     cancellation: true,
-    ...(options.mode === 'session' ||
-    options.mode === 'session-cancellation' ||
-    options.mode === 'session-interactions' ||
-    options.session === true
+    ...(sessionModes.has(options.mode ?? 'success') || options.session === true
       ? {
           session: {
             interactions: {
@@ -28,7 +34,7 @@ export const fakeAcpAgentDefinition = (
               permission: options.mode === 'session-interactions',
             },
             multiTurn: true as const,
-            resume: 'none' as const,
+            resume: options.resume ?? ('none' as const),
             updates: {
               message: true as const,
               plan: false,

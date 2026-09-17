@@ -7,7 +7,11 @@ import type { SessionOpeningCommand, SessionRuntimeFactory } from './port.js';
 import { SessionActor } from './session-actor.js';
 
 export interface SessionActorFactoryOptions {
-  readonly release?: (session: { readonly sessionId: string; readonly epoch: number }) => void;
+  readonly release?: (session: {
+    readonly sessionId: string;
+    readonly epoch: number;
+    readonly confirmedTeardown: boolean;
+  }) => void;
   readonly reducer: SessionReducer;
   readonly dispatcher: SessionEffectDispatcher;
   readonly clock?: SessionClock;

@@ -33,6 +33,38 @@ describe('session request boundaries', () => {
     expect(Object.isFrozen(decoded.parameters)).toBe(true);
   });
 
+  test('captures string instructions and MCP descriptors independently of the caller', () => {
+    const mcpServers = [{ name: 'knowledge', transport: 'stdio', command: 'revo', args: ['mcp'] }];
+    const decoded = decodeOpenAgentSession({
+      ...openRequest(),
+      instructions: 'Read .revo/index.md',
+      mcpServers,
+    });
+    mcpServers[0]!.args.push('changed');
+
+    expect(decoded.instructions).toBe('Read .revo/index.md');
+    expect(decoded.mcpServers?.[0]).toMatchObject({ args: ['mcp'] });
+    expect(decodeOpenAgentSession({ ...openRequest(), instructions: '' })).not.toHaveProperty(
+      'instructions',
+    );
+  });
+
+  test.each([
+    { instructions: { delivery: 'prompt-prefix', text: 'Read .revo/index.md' } },
+    { instructions: 'read\0me' },
+    { mcpServers: [{ name: 'x', transport: 'sse' }] },
+  ])('rejects malformed instructions or MCP input %#', (fields) => {
+    expect(() => decodeOpenAgentSession({ ...openRequest(), ...fields })).toThrow(
+      AgentManagerError,
+    );
+  });
+
+  test('rejects instructions supplied on a turn', () => {
+    expect(() =>
+      decodeSendAgentSessionInput({ instructions: 'Later.', prompt: 'ok', turnId: 'trn' }, limits),
+    ).toThrow(AgentManagerError);
+  });
+
   test('does not invoke a top-level request getter', () => {
     const getter = vi.fn(() => 'dlg_01');
     const input = Object.defineProperty(openRequest(), 'sessionId', {
@@ -125,6 +157,9 @@ describe('session request boundaries', () => {
     input.token.sessionId = 'changed';
 
     expect(decoded.token.sessionId).toBe('dlg_01');
+    expect(
+      decodeResumeAgentSession({ ...input, instructions: 'Read .revo/index.md' }).instructions,
+    ).toBe('Read .revo/index.md');
     expect(Object.isFrozen(decoded.token)).toBe(true);
     expect(() => decodeResumeAgentSession({ ...input, sessionId: 'override' })).toThrow(
       AgentManagerError,

@@ -4,6 +4,12 @@ export type {
   AgentRef,
 } from './contracts/agent-definition.js';
 export type {
+  AgentInstructionsDelivery,
+  AgentInstructionsDeliveryChannel,
+  AgentMcpBinding,
+  AgentMcpServer,
+} from './contracts/context.js';
+export type {
   AgentConfigurationBooleanOption,
   AgentConfigurationCatalog,
   AgentConfigurationKnownModel,
@@ -134,6 +140,7 @@ import { createConfigurationInspector } from './execution/configuration/inspecto
 import { createConfigurationServerSpawner } from './execution/configuration/server-process.js';
 import { createInvocationExecutor } from './execution/invocation/executor.js';
 import { createExecutablePreflight } from './execution/probe/executable-preflight.js';
+import { nodeOutputArtifactPlatform } from './platform/node/output/artifact.js';
 import { nodeOutputClaimPlatform } from './platform/node/output/claim.js';
 import { nodeClaimedOutputPublisher } from './platform/node/output/publication.js';
 import { createNodeSessionOutputTarget } from './platform/node/output/session/publication.js';
@@ -147,9 +154,11 @@ import { createAcpSessionProtocolDriver } from './protocol/acp/session/driver.js
 import {
   builtInConfigurationCompatibility,
   builtInConfigurationFallback,
+  builtInInstructionsDelivery,
 } from './providers/index.js';
 import { createOpenCodeCatalogEnricher } from './providers/opencode/catalog.js';
 
+const instructionsDelivery = builtInInstructionsDelivery({ platform: process.platform });
 const acpProtocolDriver = createAcpProtocolDriver(builtInConfigurationCompatibility);
 const acpConfigurationDriver = createAcpConfigurationDriver(builtInConfigurationCompatibility);
 const configurationEnrichers = new Map([
@@ -164,6 +173,8 @@ const sessionComposer = createAgentSessionComposer({
   driver: createAcpSessionProtocolDriver(builtInConfigurationCompatibility),
   executablePreflight: createExecutablePreflight(nodeExecutableProbe),
   identities: nodeSessionIdentitySource,
+  instructionsDelivery,
+  outputArtifactPlatform: nodeOutputArtifactPlatform,
   outputClaimPlatform: nodeOutputClaimPlatform,
   outputTarget: createNodeSessionOutputTarget,
   recoveryInspector: nodeRecoveredProcessInspector,
@@ -180,6 +191,8 @@ export const createAgentManager = (options: import('./contracts/manager.js').Age
     ),
     executablePreflight: createExecutablePreflight(nodeExecutableProbe),
     executor: createInvocationExecutor(nodeProcessSpawner, acpProtocolDriver),
+    instructionsDelivery,
+    outputArtifactPlatform: nodeOutputArtifactPlatform,
     outputClaimPlatform: nodeOutputClaimPlatform,
     outputPublisher: nodeClaimedOutputPublisher,
     recoveryInspector: nodeRecoveredProcessInspector,

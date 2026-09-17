@@ -18,11 +18,12 @@ import type {
   SessionProtocolOpeningResult,
 } from '../../session/port/opening.js';
 import type { SessionProtocolObserver } from '../../session/port/session.js';
-import type { AcpConfigurationCompatibilityResolver } from '../compatibility.js';
+import type { AcpProviderCompatibilityResolver } from '../compatibility.js';
 import { acpConfigurationRequester } from '../configuration-requester.js';
 import { AcpConfigurationSelectionError, applyAcpConfiguration } from '../configuration.js';
 import { acpFailureMessage } from '../failure.js';
 import { boundAcpInput } from '../frame-boundary.js';
+import { AcpMcpCapabilityError, acpMcpServers } from '../mcp.js';
 import { AcpSessionFrameCapture } from '../session-frame-capture.js';
 import { acpSessionClientCapabilities, negotiateAcpSessionCapabilities } from './capabilities.js';
 import { AcpSessionInteractionBroker } from './interaction/broker.js';
@@ -37,6 +38,7 @@ const failure = (
   code:
     | 'configuration_stale'
     | 'configuration_value_unsupported'
+    | 'parameters_invalid'
     | 'protocol_invalid'
     | 'transport_failed',
   message: string,
@@ -47,6 +49,7 @@ const failure = (
 });
 
 const connectionFailure = (error: unknown): SessionProtocolOpeningResult => {
+  if (error instanceof AcpMcpCapabilityError) return failure('parameters_invalid', error.message);
   if (!(error instanceof AcpConfigurationSelectionError))
     return failure(
       'transport_failed',
@@ -72,12 +75,18 @@ const continuationSessionId = (continuation: SessionProtocolContinuation): strin
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 };
 
+/** Native session metadata is spread only when a channel was selected; omission stays byte-identical. */
+const sessionMeta = (request: OpeningRequest): { readonly _meta?: JsonObject } =>
+  request.instructions?.sessionMeta === undefined
+    ? {}
+    : { _meta: request.instructions.sessionMeta };
+
 const applyConfiguration = async (
   context: acp.ClientContext,
   providerSessionId: string,
   options: readonly acp.SessionConfigOption[] | null | undefined,
   selection: AgentConfigurationSelection | undefined,
-  compatibilityFor: AcpConfigurationCompatibilityResolver,
+  compatibilityFor: AcpProviderCompatibilityResolver,
   definitionId: string,
   frame: Readonly<Record<string, unknown>> | undefined,
 ): Promise<void> => {
@@ -92,7 +101,7 @@ const applyConfiguration = async (
 
 const openAcpSession = (
   request: OpeningRequest,
-  compatibilityFor: AcpConfigurationCompatibilityResolver,
+  compatibilityFor: AcpProviderCompatibilityResolver,
 ): SessionProtocolOpening => {
   const completion = Promise.withResolvers<SessionProtocolOpeningResult>();
   const released = Promise.withResolvers<void>();
@@ -117,11 +126,17 @@ const openAcpSession = (
     .onNotification(acp.methods.client.session.update, async ({ params }) => {
       if (belongsToSession(params.sessionId)) await updates.deliver(params.update);
     })
-    .onRequest(acp.methods.client.session.requestPermission, ({ params }) =>
-      belongsToSession(params.sessionId)
+    .onRequest(acp.methods.client.session.requestPermission, ({ params }) => {
+      if (!belongsToSession(params.sessionId)) return { outcome: { outcome: 'cancelled' } };
+      const grant = compatibilityFor(request.definition.id)?.approveMcpPermission?.(
+        params,
+        request.permissions,
+        request.mcpServers ?? [],
+      );
+      return grant === undefined
         ? broker.permission(params)
-        : { outcome: { outcome: 'cancelled' } },
-    )
+        : { outcome: { outcome: 'selected', optionId: grant } };
+    })
     .onRequest(acp.methods.client.elicitation.create, ({ params }) =>
       'sessionId' in params &&
       typeof params.sessionId === 'string' &&
@@ -139,6 +154,7 @@ const openAcpSession = (
         initialized.agentCapabilities,
         request.definition.capabilities.cancellation,
       );
+      const mcpServers = acpMcpServers(request.mcpServers, initialized.agentCapabilities);
       let configOptions: readonly acp.SessionConfigOption[] | null | undefined;
       if ('continuation' in request) {
         providerSessionId = continuationSessionId(request.continuation);
@@ -156,14 +172,16 @@ const openAcpSession = (
         }
         const response = await context.request(acp.methods.agent.session.resume, {
           cwd: request.workspace,
-          mcpServers: [],
+          mcpServers,
           sessionId: providerSessionId,
+          ...sessionMeta(request),
         });
         configOptions = response.configOptions;
       } else {
         const response = await context.request(acp.methods.agent.session.new, {
           cwd: request.workspace,
-          mcpServers: [],
+          mcpServers,
+          ...sessionMeta(request),
         });
         providerSessionId = response.sessionId;
         configOptions = response.configOptions;
@@ -182,6 +200,7 @@ const openAcpSession = (
         capabilities,
         closeSupported: initialized.agentCapabilities?.sessionCapabilities?.close != null,
         context,
+        ...(request.instructions === undefined ? {} : { instructions: request.instructions }),
         providerSessionId,
         flushUpdates: () => updates.whenIdle(),
         setObserver: (next) => {
@@ -214,7 +233,7 @@ const openAcpSession = (
 };
 
 export const createAcpSessionProtocolDriver = (
-  compatibilityFor: AcpConfigurationCompatibilityResolver = () => undefined,
+  compatibilityFor: AcpProviderCompatibilityResolver = () => undefined,
 ): SessionProtocolDriver =>
   Object.freeze({
     openFresh: (request: FreshSessionProtocolOpeningRequest) =>

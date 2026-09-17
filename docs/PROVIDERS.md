@@ -35,6 +35,25 @@ entrypoint. It does not run a PATH-dependent npm wrapper. Cursor likewise
 rejects unrelated `agent` launchers. Explicit overrides are consumer-selected
 absolute executables; an invalid override fails rather than falling back.
 
+## Instructions delivery
+
+Caller `instructions` reach a provider through a source-proven additive channel
+where one exists for the exact pinned adapter, otherwise through the documented
+first-prompt prefix. Neither channel replaces provider base rules, and a native
+channel is never retried as a prefix after a provider rejection.
+
+| Provider | Native channel                                                              | Condition                                                                                                |
+| -------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Claude   | `_meta.systemPrompt.append` on `session/new` / `session/resume`             | Definition version equals the bundled `claude-agent-acp` bridge version (`0.70.0`)                       |
+| OpenCode | `OPENCODE_CONFIG_CONTENT` instructions file in the claimed output directory | Reported CLI `1.18.23`, not Windows, variable unbound by caller/definition, no braces in the output path |
+| Codex    | none through the pinned bridge                                              | prefix                                                                                                   |
+| Grok     | none proven                                                                 | prefix                                                                                                   |
+| Others   | none                                                                        | prefix                                                                                                   |
+
+The effective channel is reported as `instructionsDelivery` on results,
+`session.opened`, and snapshots. Adding a native channel or version requires
+re-verifying the provider source facts it depends on.
+
 ## Configuration
 
 `manager.inspectConfiguration()` uses stable ACP `configOptions` when a provider
@@ -42,7 +61,12 @@ supplies them. The returned catalog contains provider-neutral select and boolean
 options, current values, a revision, and an optional model view.
 
 Grok has a narrow compatibility adapter for legacy session model metadata and a
-bounded `grok models` fallback when stable options are absent. OpenCode model
+bounded `grok models` fallback when stable options are absent. Its built-in
+`1.0.1` definition accepts explicit exact MCP grants through `permissions.mcpTools`
+(`server__tool` names, attached servers only, `allow_once`). Grok invocations use
+a separate final-result turn in the same session to keep tool-phase narration
+out of the strict JSON result; interactive sessions retain their normal flow.
+Root Grok CLI `--allow` is not used to implement these ACP grants. OpenCode model
 values are grouped by the session-available provider instead of flattened; the
 catalog identifies the current provider and model without discarding other
 available groups.

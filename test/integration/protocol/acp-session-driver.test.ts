@@ -395,6 +395,34 @@ test('ACP session driver maps a handshake rejection to transport failure', async
   await agentConnection.closed;
 });
 
+test('ACP session driver maps HTTP MCP without capability to invalid parameters', async () => {
+  const pair = transportPair();
+  const agentConnection = acp
+    .agent({ name: 'fake-no-http-mcp-agent' })
+    .onRequest(acp.methods.agent.initialize, () => ({
+      agentCapabilities: protocolCapabilities,
+      protocolVersion: acp.PROTOCOL_VERSION,
+    }))
+    .onRequest(acp.methods.agent.session.new, () => ({ sessionId: 'session' }))
+    .connect(pair.agent);
+  const opening = createAcpSessionProtocolDriver().openFresh({
+    definition,
+    kind: 'fresh',
+    mcpServers: [{ name: 'remote', transport: 'http', url: 'https://fixture/mcp' }],
+    observer: observer([]),
+    parameters: {},
+    permissions: {},
+    transport: pair.client,
+    workspace: '/workspace',
+  });
+  await expect(opening.completion).resolves.toMatchObject({
+    failure: { code: 'parameters_invalid' },
+    status: 'failed',
+  });
+  agentConnection.close();
+  await agentConnection.closed;
+});
+
 test.each([
   {
     capabilities: protocolCapabilities,
@@ -456,4 +484,51 @@ test('ACP session driver rejects a definition without declared session capabilit
       workspace: '/workspace',
     }),
   ).toThrow('ACP session definition lacks session capability.');
+});
+
+test('explicit provider MCP grant bypasses interaction only for the owned session', async () => {
+  const pair = transportPair();
+  const outcomes: acp.RequestPermissionResponse[] = [];
+  const agent = acp
+    .agent({ name: 'scoped-grant-fixture' })
+    .onRequest(acp.methods.agent.initialize, () => ({
+      protocolVersion: acp.PROTOCOL_VERSION,
+      agentCapabilities: protocolCapabilities,
+    }))
+    .onRequest(acp.methods.agent.session.new, () => ({ sessionId: 'session' }))
+    .onRequest(acp.methods.agent.session.prompt, async ({ client }) => {
+      for (const sessionId of ['foreign', 'session']) {
+        outcomes.push(
+          // oxlint-disable-next-line no-await-in-loop -- permission fences are exercised in wire order
+          await client.request(acp.methods.client.session.requestPermission, {
+            sessionId,
+            options: [{ kind: 'allow_once', name: 'once', optionId: 'once' }],
+            toolCall: { toolCallId: 'echo', title: 'echo' },
+          }),
+        );
+      }
+      return { stopReason: 'end_turn' };
+    })
+    .onRequest(acp.methods.agent.session.close, () => ({}))
+    .connect(pair.agent);
+  const opened = openedSession(
+    await createAcpSessionProtocolDriver(() => ({
+      approveMcpPermission: () => 'once',
+    })).openFresh({
+      definition,
+      kind: 'fresh',
+      parameters: {},
+      permissions: {},
+      transport: pair.client,
+      workspace: '/workspace',
+      observer: observer([]),
+    }).completion,
+  );
+  await opened.session.prompt({ prompt: 'echo', observer: observer([]) }).completion;
+  expect(outcomes).toEqual([
+    { outcome: { outcome: 'cancelled' } },
+    { outcome: { outcome: 'selected', optionId: 'once' } },
+  ]);
+  await opened.session.close();
+  agent.close();
 });

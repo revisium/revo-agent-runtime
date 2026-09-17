@@ -132,3 +132,161 @@ test('fails when preparation identity is already registered', async () => {
   await flushMicrotasks(8);
   expect(story.recorded.outcomes.at(-1)).toMatchObject({ type: 'opening.preparation.failed' });
 });
+
+const nativeArtifact = (disposals: { count: number }) => ({
+  artifact: {
+    dispose: async () => {
+      disposals.count += 1;
+    },
+    path: '/output/revo-opencode-instructions.md',
+  },
+  delivery: {
+    channel: 'opencode:config.instructions-file' as const,
+    mode: 'native_append' as const,
+  },
+  digest: 'digest',
+  dispatched: false,
+  text: 'Read .revo/index.md.',
+});
+
+test('disposes a native artifact when preparation settles after the timeout window', async () => {
+  const disposals = { count: 0 };
+  let scheduled = 0;
+  const timer = {
+    schedule: (_milliseconds: number, callback: () => void) => {
+      scheduled += 1;
+      if (scheduled === 1) queueMicrotask(callback);
+      return { cancel: () => undefined };
+    },
+  };
+  const story = setup(
+    {
+      prepare: async () => {
+        await Promise.resolve();
+        return {
+          status: 'prepared',
+          value: { ...prepared, instructions: nativeArtifact(disposals) },
+        };
+      },
+    },
+    timer,
+  );
+  story.interpreter.execute(effect, story.recorded.output);
+  await flushMicrotasks(24);
+  expect(story.recorded.outcomes.at(-1)).toMatchObject({ type: 'opening.preparation.timed_out' });
+  expect(disposals.count).toBe(1);
+  expect(story.resources.preparations.get('preparation-1')).toBeUndefined();
+});
+
+test('disposes a native artifact when preparation identity collides', async () => {
+  const disposals = { count: 0 };
+  const story = setup({
+    prepare: async () => ({
+      status: 'prepared',
+      value: { ...prepared, instructions: nativeArtifact(disposals) },
+    }),
+  });
+  story.resources.preparations.register('preparation-1', {
+    correlation: effect.correlation,
+    opening: effect.opening,
+    output: { writeStderr: () => undefined, writeStdout: () => undefined } as never,
+    prepared,
+  });
+  story.interpreter.execute(effect, story.recorded.output);
+  await flushMicrotasks(8);
+  expect(story.recorded.outcomes.at(-1)).toMatchObject({ type: 'opening.preparation.failed' });
+  expect(disposals.count).toBe(1);
+});
+
+const dualImmediateTimer = () => ({
+  schedule: (_milliseconds: number, callback: () => void) => {
+    queueMicrotask(callback);
+    return { cancel: () => undefined };
+  },
+});
+
+test('disposes a native artifact that arrives after both timeout windows expire', async () => {
+  const disposals = { count: 0 };
+  let complete:
+    | ((value: Awaited<ReturnType<SessionOpeningPreparer['prepare']>>) => void)
+    | undefined;
+  const story = setup(
+    {
+      prepare: () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    },
+    dualImmediateTimer(),
+  );
+  story.interpreter.execute(effect, story.recorded.output);
+  await flushMicrotasks(24);
+  expect(story.recorded.outcomes).toEqual([
+    expect.objectContaining({ type: 'opening.preparation.timed_out' }),
+  ]);
+  expect(disposals.count).toBe(0);
+  expect(story.resources.preparations.get('preparation-1')).toBeUndefined();
+
+  complete?.({
+    status: 'prepared',
+    value: { ...prepared, instructions: nativeArtifact(disposals) },
+  });
+  await flushMicrotasks(24);
+  expect(disposals.count).toBe(1);
+  expect(story.resources.preparations.get('preparation-1')).toBeUndefined();
+  expect(story.recorded.outcomes).toHaveLength(1);
+});
+
+test('a rejected prepare after both timeout windows does not leak or reject unhandled', async () => {
+  const disposals = { count: 0 };
+  let fail: ((reason: unknown) => void) | undefined;
+  const story = setup(
+    {
+      prepare: () =>
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+    },
+    dualImmediateTimer(),
+  );
+  story.interpreter.execute(effect, story.recorded.output);
+  await flushMicrotasks(24);
+  expect(story.recorded.outcomes.at(-1)).toMatchObject({ type: 'opening.preparation.timed_out' });
+  fail?.(new Error('late prepare failure'));
+  await flushMicrotasks(24);
+  expect(disposals.count).toBe(0);
+  expect(story.resources.preparations.get('preparation-1')).toBeUndefined();
+});
+
+test('a late admission rejection after both timeout windows is not registered', async () => {
+  const disposals = { count: 0 };
+  let complete:
+    | ((value: Awaited<ReturnType<SessionOpeningPreparer['prepare']>>) => void)
+    | undefined;
+  const story = setup(
+    {
+      prepare: () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    },
+    dualImmediateTimer(),
+  );
+  story.interpreter.execute(effect, story.recorded.output);
+  await flushMicrotasks(24);
+  complete?.({
+    fault: {
+      code: 'revo.agent.output_write_failed',
+      message: 'write failed',
+      phase: 'session_opening',
+      retryable: false,
+    },
+    status: 'rejected',
+  });
+  await flushMicrotasks(24);
+  expect(disposals.count).toBe(0);
+  expect(story.resources.preparations.get('preparation-1')).toBeUndefined();
+  expect(story.recorded.outcomes).toEqual([
+    expect.objectContaining({ type: 'opening.preparation.timed_out' }),
+  ]);
+});

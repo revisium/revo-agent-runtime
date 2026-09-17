@@ -1,6 +1,6 @@
 {
   "name": "@revisium/revo-agent-runtime",
-  "version": "0.2.0-alpha.0",
+  "version": "0.3.0-alpha.7",
   "description": "Protocol-neutral agent execution runtime for Revo.",
   "homepage": "https://github.com/revisium/revo-agent-runtime#readme",
   "bugs": {
@@ -42,6 +42,7 @@
     "smoke:configuration": "node --import tsx test/smoke/configuration.ts",
     "smoke:recovery": "node --import tsx test/smoke/recovery.ts",
     "smoke:session": "node --import tsx test/smoke/session.ts",
+    "smoke:context": "node --import tsx test/smoke/context.ts",
     "test:unit": "vitest run test/unit",
     "test:contract": "vitest run test/contract",
     "test:integration": "vitest run test/integration",

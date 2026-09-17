@@ -50,13 +50,15 @@ class SessionPreparationRegistry {
     return this.#bySession.get(this.#sessionKey(correlation))?.resource;
   }
 
-  release(correlation: EffectCorrelation): void {
+  release(correlation: EffectCorrelation, confirmedTeardown = true): void {
     const key = this.#sessionKey(correlation);
     const entry = this.#bySession.get(key);
     if (entry === undefined) return;
     this.#bySession.delete(key);
     this.#byId.delete(entry.id);
     entry.resource.output.dispose();
+    // Unlink only after confirmed process teardown; lingering files stay in the 0700 output dir.
+    if (confirmedTeardown) void entry.resource.prepared.instructions?.artifact?.dispose();
   }
 
   #sessionKey(correlation: EffectCorrelation): string {

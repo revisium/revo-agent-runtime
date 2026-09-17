@@ -1,12 +1,14 @@
 import * as acp from '@agentclientprotocol/sdk';
 
+import type { AgentUsage } from '../../contracts/manager/invocation.js';
+import { protocolFailureDetails } from '../../diagnostics/diagnostic.js';
 import type {
   ProtocolDriver,
   ProtocolOutcome,
   ProtocolSession,
   ProtocolSessionRequest,
 } from '../driver.js';
-import type { AcpConfigurationCompatibilityResolver } from './compatibility.js';
+import type { AcpProviderCompatibilityResolver } from './compatibility.js';
 import { acpConfigurationRequester } from './configuration-requester.js';
 import {
   AcpConfigurationSelectionError,
@@ -14,22 +16,113 @@ import {
   applyAcpConfiguration,
 } from './configuration.js';
 import { boundAcpInput } from './frame-boundary.js';
+import { AcpMcpCapabilityError, acpMcpServers } from './mcp.js';
 import { acpPrompt } from './prompt.js';
 import { AcpSessionFrameCapture } from './session-frame-capture.js';
 import { normalizeAcpUsage } from './usage.js';
 
 const maxAcpFrameBytes = 1_048_576;
 
+/** A provider rejection after the channel was chosen fails once; there is no second channel. */
+const failedOutcome = (error: unknown): ProtocolOutcome => {
+  if (error instanceof AcpConfigurationSelectionError)
+    return { status: 'failed', code: error.code };
+  if (error instanceof AcpMcpCapabilityError)
+    return { status: 'failed', code: 'revo.agent.parameters_invalid' };
+  return { status: 'failed', diagnostic: protocolFailureDetails(error) };
+};
+
+/** Native session metadata is spread only when a channel was selected; omission stays byte-identical. */
+const newSessionRequest = (
+  request: ProtocolSessionRequest,
+  capabilities: acp.AgentCapabilities | null | undefined,
+): acp.NewSessionRequest => ({
+  cwd: request.workspace,
+  mcpServers: acpMcpServers(request.mcpServers, capabilities),
+  ...(request.instructions?.sessionMeta === undefined
+    ? {}
+    : { _meta: request.instructions.sessionMeta }),
+});
+
+const finalResultPrompt = (schema: ProtocolSessionRequest['resultSchema']): acp.ContentBlock[] => [
+  {
+    type: 'text',
+    text:
+      'The task turn has finished. Do not call tools or repeat the task. Return exactly one JSON object matching the result schema, using the task results and instructions already in this session. No markdown or surrounding text. Result schema: ' +
+      JSON.stringify(schema),
+  },
+];
+
+const combinedUsage = (usages: readonly Required<AgentUsage>[]): Required<AgentUsage> =>
+  normalizeAcpUsage(
+    usages.reduce(
+      (total, usage) => ({
+        inputTokens: total.inputTokens + usage.inputTokens,
+        outputTokens: total.outputTokens + usage.outputTokens,
+        totalTokens: total.totalTokens + usage.totalTokens,
+      }),
+      { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    ),
+  );
+
+interface InvocationSessionControl {
+  sessionStarted(session: acp.ActiveSession): void;
+  beginResultTurn(): boolean;
+  isCancelled(): boolean;
+}
+
+const runAcpInvocation = async (
+  context: acp.ClientContext,
+  request: ProtocolSessionRequest,
+  compatibilityFor: AcpProviderCompatibilityResolver,
+  capabilities: acp.AgentCapabilities | null | undefined,
+  frames: AcpSessionFrameCapture,
+  control: InvocationSessionControl,
+): Promise<ProtocolOutcome> => {
+  const session = await context.buildSession(newSessionRequest(request, capabilities)).start();
+  control.sessionStarted(session);
+  request.observer.activity();
+  await applyAcpConfiguration(
+    acpConfigurationRequester(context),
+    {
+      configOptions: session.newSessionResponse.configOptions ?? [],
+      sessionId: session.sessionId,
+    },
+    request.configuration,
+    compatibilityFor(request.definition.id),
+    frames.sessionResponse(),
+  );
+  if (control.isCancelled()) return { status: 'completed' };
+  let response = await session.prompt(acpPrompt(request));
+  const usages: Required<AgentUsage>[] = [];
+  if (request.definition.capabilities.usage && response.usage != null)
+    usages.push(normalizeAcpUsage(response.usage));
+  if (
+    compatibilityFor(request.definition.id)?.finalResultTurn &&
+    response.stopReason === 'end_turn' &&
+    control.beginResultTurn()
+  ) {
+    response = await session.prompt(finalResultPrompt(request.resultSchema));
+    if (request.definition.capabilities.usage && response.usage != null)
+      usages.push(normalizeAcpUsage(response.usage));
+  }
+  request.observer.activity();
+  if (usages.length > 0) request.observer.usage(combinedUsage(usages));
+  return { status: 'completed' };
+};
+
 const openAcpSession = async (
   request: ProtocolSessionRequest,
-  compatibilityFor: AcpConfigurationCompatibilityResolver,
+  compatibilityFor: AcpProviderCompatibilityResolver,
 ): Promise<ProtocolSession> => {
-  const ready = Promise.withResolvers<{
-    readonly context: acp.ClientContext;
-    readonly session: acp.ActiveSession;
-  }>();
+  const ready = Promise.withResolvers<acp.ClientContext>();
   const terminal = Promise.withResolvers<ProtocolOutcome>();
   const released = Promise.withResolvers<void>();
+  let session: acp.ActiveSession | undefined;
+  const compatibility = compatibilityFor(request.definition.id);
+  let collectingResult = !compatibility?.finalResultTurn;
+  let resultTurn = false;
+  let cancelled = false;
 
   const frames = new AcpSessionFrameCapture();
   const stream = acp.ndJsonStream(
@@ -40,6 +133,16 @@ const openAcpSession = async (
     .client({ name: 'revo-agent-runtime' })
     .onRequest(acp.methods.client.session.requestPermission, async ({ params }) => {
       request.observer.activity();
+      const grant =
+        !resultTurn && session?.sessionId === params.sessionId
+          ? compatibility?.approveMcpPermission?.(
+              params,
+              request.permissions,
+              request.mcpServers ?? [],
+            )
+          : undefined;
+      if (grant !== undefined) return { outcome: { outcome: 'selected', optionId: grant } };
+      if (resultTurn) return { outcome: { outcome: 'cancelled' } };
       const decision = await request.observer.permission({
         options: params.options.map((option) => ({ id: option.optionId, kind: option.kind })),
       });
@@ -50,6 +153,7 @@ const openAcpSession = async (
     .onNotification(acp.methods.client.session.update, ({ params }) => {
       request.observer.activity();
       if (
+        collectingResult &&
         params.update.sessionUpdate === 'agent_message_chunk' &&
         params.update.content.type === 'text'
       ) {
@@ -57,43 +161,39 @@ const openAcpSession = async (
       }
     })
     .connectWith(stream, async (context) => {
-      await context.request(acp.methods.agent.initialize, {
+      const initialized = await context.request(acp.methods.agent.initialize, {
         clientCapabilities: acpClientCapabilities(),
         protocolVersion: acp.PROTOCOL_VERSION,
       });
       request.observer.activity();
-      const session = await context.buildSession(request.workspace).start();
-      request.observer.activity();
-      ready.resolve({ context, session });
+      ready.resolve(context);
+      let outcome: ProtocolOutcome;
       try {
-        try {
-          await applyAcpConfiguration(
-            acpConfigurationRequester(context),
-            {
-              configOptions: session.newSessionResponse.configOptions ?? [],
-              sessionId: session.sessionId,
+        outcome = await runAcpInvocation(
+          context,
+          request,
+          compatibilityFor,
+          initialized.agentCapabilities,
+          frames,
+          {
+            sessionStarted: (started) => {
+              session = started;
             },
-            request.configuration,
-            compatibilityFor(request.definition.id),
-            frames.sessionResponse(),
-          );
-        } catch (error) {
-          terminal.resolve({
-            status: 'failed',
-            ...(error instanceof AcpConfigurationSelectionError ? { code: error.code } : {}),
-          });
-          await released.promise;
-          return;
-        }
-        const response = await session.prompt(acpPrompt(request));
-        request.observer.activity();
-        if (request.definition.capabilities.usage && response.usage != null)
-          request.observer.usage(normalizeAcpUsage(response.usage));
-        terminal.resolve({ status: 'completed' });
-        await released.promise;
-      } finally {
-        session.dispose();
+            beginResultTurn: () => {
+              if (cancelled) return false;
+              collectingResult = true;
+              resultTurn = true;
+              return true;
+            },
+            isCancelled: () => cancelled,
+          },
+        );
+      } catch (error) {
+        outcome = failedOutcome(error);
       }
+      terminal.resolve(outcome);
+      await released.promise;
+      session?.dispose();
     });
 
   void connection.catch((error: unknown) => {
@@ -102,29 +202,32 @@ const openAcpSession = async (
     released.resolve();
   });
 
-  const established = await ready.promise;
+  const context = await ready.promise;
   let close: Promise<void> | undefined;
   return Object.freeze({
     completion: terminal.promise,
     cancel: async (): Promise<void> => {
-      await established.context.notify(acp.methods.agent.session.cancel, {
-        sessionId: established.session.sessionId,
-      });
+      cancelled = true;
+      if (session === undefined) return;
+      await context.notify(acp.methods.agent.session.cancel, { sessionId: session.sessionId });
     },
     close: (): Promise<void> => {
-      close ??= established.context
-        .request(acp.methods.agent.session.close, { sessionId: established.session.sessionId })
-        .then(() => {
-          request.observer.activity();
-        })
-        .finally(() => released.resolve());
+      close ??= (
+        session === undefined
+          ? Promise.resolve()
+          : context
+              .request(acp.methods.agent.session.close, { sessionId: session.sessionId })
+              .then(() => {
+                request.observer.activity();
+              })
+      ).finally(() => released.resolve());
       return close;
     },
   });
 };
 
 export const createAcpProtocolDriver = (
-  compatibilityFor: AcpConfigurationCompatibilityResolver = () => undefined,
+  compatibilityFor: AcpProviderCompatibilityResolver = () => undefined,
 ): ProtocolDriver =>
   Object.freeze({
     open: (request: ProtocolSessionRequest) => openAcpSession(request, compatibilityFor),

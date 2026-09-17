@@ -7,7 +7,7 @@ import {
   type ProtocolConfigurationSession,
   type ProtocolConfigurationRequest,
 } from '../configuration-driver.js';
-import type { AcpConfigurationCompatibilityResolver } from './compatibility.js';
+import type { AcpProviderCompatibilityResolver } from './compatibility.js';
 import { acpConfigurationRequester } from './configuration-requester.js';
 import { acpClientCapabilities, applyAcpConfiguration } from './configuration.js';
 import { acpFailureMessage } from './failure.js';
@@ -18,7 +18,7 @@ const maxAcpFrameBytes = 1_048_576;
 
 const inspectAcpConfiguration = async (
   request: ProtocolConfigurationRequest,
-  compatibilityFor: AcpConfigurationCompatibilityResolver,
+  compatibilityFor: AcpProviderCompatibilityResolver,
 ): Promise<ProtocolConfigurationSession> => {
   const ready = Promise.withResolvers<{
     readonly catalog: Awaited<ReturnType<typeof applyAcpConfiguration>>;
@@ -85,7 +85,7 @@ const inspectAcpConfiguration = async (
 };
 
 export const createAcpConfigurationDriver = (
-  compatibilityFor: AcpConfigurationCompatibilityResolver,
+  compatibilityFor: AcpProviderCompatibilityResolver,
 ): ProtocolConfigurationDriver =>
   Object.freeze({
     inspect: (request: ProtocolConfigurationRequest) =>

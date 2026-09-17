@@ -1,3 +1,4 @@
+import type { JsonObject } from '../../contracts/agent-definition.js';
 import { AgentManagerError, type AgentFault } from '../../contracts/manager.js';
 import type { ExecutionOutcome } from '../../execution/invocation/executor.js';
 import type { OutputClaimRejection } from '../../execution/output/claim.js';
@@ -45,13 +46,29 @@ const collectingResultMessages: Readonly<Record<CollectingResultFaultCode, strin
   },
 );
 
-export const executionFailure = (code: AgentFault['code'] | undefined): AgentFault => {
+/** Provider failure evidence rides beside the stable code without changing it. */
+const withProviderDiagnostic = (
+  base: AgentFault,
+  diagnostic: Readonly<JsonObject> | undefined,
+): AgentFault =>
+  diagnostic === undefined
+    ? base
+    : Object.freeze({ ...base, details: { diagnostic: { provider: diagnostic } } });
+
+export const executionFailure = (
+  code: AgentFault['code'] | undefined,
+  diagnostic?: Readonly<JsonObject>,
+): AgentFault => withProviderDiagnostic(executionFault(code), diagnostic);
+
+const executionFault = (code: AgentFault['code'] | undefined): AgentFault => {
   if (code === 'revo.agent.configuration_stale')
     return fault(code, 'The selected agent configuration changed after inspection.', 'execution');
   if (code === 'revo.agent.configuration_value_unsupported')
     return fault(code, 'The selected agent configuration value is unavailable.', 'execution');
   if (code === 'revo.agent.output_write_failed')
     return fault(code, 'The agent output could not be finalized.', 'finalizing');
+  if (code === 'revo.agent.parameters_invalid')
+    return fault(code, 'The agent does not support the requested MCP transport.', 'execution');
   if (isCollectingResultFault(code))
     return fault(code, collectingResultMessages[code], 'collecting_result');
   return protocolFailure();

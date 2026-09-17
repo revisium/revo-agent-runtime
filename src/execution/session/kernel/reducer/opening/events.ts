@@ -119,6 +119,9 @@ const finishOpenedEvent = (
     state: {
       ...base,
       capabilities: progress.capabilities,
+      ...(progress.instructionsDelivery === undefined
+        ? {}
+        : { instructionsDelivery: progress.instructionsDelivery }),
       openedAt: event.observedAt,
       process: progress.process,
       processResourceId: progress.processResourceId,

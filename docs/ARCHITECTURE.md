@@ -46,18 +46,18 @@ folders, and prevent consumers from reaching its implementation files.
 | `definition`                      | Shape schema, semantic validation, canonical identity/digest, and sealed registry composition               | Contracts; Zod, canonicalize, and Node crypto at their owning boundaries |
 | `discovery`                       | Provider-neutral detection runner and Node executable/package resolution ports                              | Contracts and definition validation                                      |
 | `providers/codex`                 | Codex bridge identity, opaque version-probe convention, and detector                                        | Shared provider composition and discovery ports                          |
-| `providers/claude`                | Claude bridge identity, opaque version-probe convention, and detector                                       | Shared provider composition and discovery ports                          |
+| `providers/claude`                | Claude bridge identity, opaque version-probe convention, detector, and bridge-pinned native instructions    | Shared provider composition, discovery, and instructions-delivery ports  |
 | `providers/antigravity`           | Antigravity Registry launch identity, opaque build-label probe, and detector                                | Shared provider composition and discovery ports                          |
 | `providers/cline`                 | Cline CLI identity, opaque version-probe convention, and detector                                           | Shared provider composition and discovery ports                          |
 | `providers/copilot`               | GitHub Copilot CLI identity, opaque version-probe convention, and detector                                  | Shared provider composition and discovery ports                          |
 | `providers/cursor`                | Cursor adjacent packaged Node/index layout identity and detector                                            | Shared provider composition and discovery ports                          |
 | `providers/gemini`                | Gemini CLI identity, opaque version-probe convention, and detector                                          | Shared provider composition and discovery ports                          |
 | `providers/goose`                 | Goose CLI identity, opaque version-probe convention, and detector                                           | Shared provider composition and discovery ports                          |
-| `providers/grok`                  | Grok identity/detector plus legacy ACP configuration and bounded model-command fallback                     | Shared provider, ACP compatibility, and configuration ports              |
+| `providers/grok`                  | Grok identity/detector, configuration, exact MCP grants, result turn and fallback                           | Shared provider, ACP compatibility, and configuration ports              |
 | `providers/hermes`                | Hermes CLI identity, opaque version-probe convention, and detector                                          | Shared provider composition and discovery ports                          |
 | `providers/kilo`                  | Kilo CLI identity, opaque version-probe convention, and detector                                            | Shared provider composition and discovery ports                          |
 | `providers/kimi`                  | Kimi Code identity, opaque version-probe convention, and detector                                           | Shared provider composition and discovery ports                          |
-| `providers/opencode`              | OpenCode identity/detector plus stable ACP provider grouping                                                | Shared provider and ACP compatibility ports                              |
+| `providers/opencode`              | OpenCode identity/detector, stable ACP provider grouping, and version-gated instructions-file eligibility   | Shared provider, ACP compatibility, and instructions-delivery ports      |
 | `providers/qwen`                  | Qwen Code identity, opaque version-probe convention, and detector                                           | Shared provider composition and discovery ports                          |
 | `providers/vibe`                  | Mistral Vibe CLI identity, opaque version-probe convention, and detector                                    | Shared provider composition and discovery ports                          |
 | `discovery`                       | Portable discovery port, detector runner, and root composition                                              | Contracts and provider composition                                       |
@@ -77,7 +77,9 @@ folders, and prevent consumers from reaching its implementation files.
 | `application/session/admission`   | Pinned definition, effective inputs, literal launch, preflight, and exclusive output preparation            | Shared admission and the preparation port                                |
 | `execution/invocation`            | Executor contracts/composition, top-down lifecycle, session operations, artifacts, and terminal arbitration | Portable process/protocol ports, output, result, and security            |
 | `execution/configuration`         | Inspection deadline, bounded fallback, process ownership, close, and reap                                   | Normalized catalog and portable process/configuration ports              |
-| `execution/output`                | Bounded streams/events, exclusive output claim, and publication capability                                  | Contracts and redaction channel                                          |
+| `execution/output`                | Bounded streams/events, exclusive output claim, private artifact port, and publication capability           | Contracts and redaction channel                                          |
+| `execution/instructions`          | Instruction text bounds, pure delivery-channel port and plans, pre-spawn preparation, checkpoint identity   | Contracts and the private artifact port                                  |
+| `execution/mcp`                   | Bounded MCP descriptor snapshots, launch-environment binding resolution, and redaction values               | Contracts and plain-JSON snapshots                                       |
 | `execution/result`                | Raw response evidence, schema validation, and result normalization                                          | Contracts, output snapshots, and redaction channel                       |
 | `execution/probe`                 | Fresh executable/version preflight policy                                                                   | Executable probe port and definition version rules                       |
 | `execution/process`               | Literal launch arguments derived from agent definitions                                                     | Definition contracts                                                     |
@@ -92,7 +94,7 @@ folders, and prevent consumers from reaching its implementation files.
 | `composition/session`             | Concrete wiring of policy, state machine, actor, interpreters, ACP driver, and platform services            | Session application/execution layers and portable ports                  |
 | `process/index`                   | Portable owned-process, cleanup, identity, and recovery contracts                                           | No runtime or platform modules                                           |
 | `process/node`                    | Platform selection, process launch, identity, cleanup, and recovery                                         | Internal process contracts; Node, Execa, and Koffi                       |
-| `platform/node/output`            | Durable, non-replacing filesystem claim and publication                                                     | Output ports; Node filesystem APIs                                       |
+| `platform/node/output`            | Durable, non-replacing filesystem claim, owner-only transient artifact files, and publication               | Output ports; Node filesystem APIs                                       |
 | `platform/node/session`           | Runtime identities and atomic session stdout/stderr/manifest publication                                    | Session runtime and output ports; Node APIs                              |
 | `platform/node/probe`             | Bounded executable resolution/version observation                                                           | Probe and process ports; Execa and Node APIs                             |
 
@@ -125,6 +127,18 @@ before `send()` returns. Turn handles release their execution context on
 settlement, so retained results do not keep actors alive. Eviction leaves issued
 handles and the kernel's duplicate-ID ledger intact. Native continuation transfers
 conversation state and accepted identities, not a durable result registry.
+
+Instruction delivery is decided once per process incarnation, before spawn, by
+the pure `execution/instructions` resolver port: provider implementations under
+`providers/claude` and `providers/opencode` are composed at the root exactly like
+configuration compatibility, and the application admission code (`preparer`,
+`prepare-invocation-start`) applies the plan by layering environment, creating
+the private file, and handing drivers only the decision plus wire metadata.
+Protocol drivers spread `_meta` when present and prefix when told to; they know
+no provider names and never fall back. The artifact is removed after confirmed
+process teardown (`InvocationLifecycle` terminal paths, session preparation
+release). MCP bindings resolve at the application boundary and their values join
+the incarnation redaction set in both launch paths.
 
 Host-environment capture is injected at the root composition boundary.
 Actor construction does not retain its original opening descriptor, and

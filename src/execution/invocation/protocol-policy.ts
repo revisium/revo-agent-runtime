@@ -1,4 +1,7 @@
+import type { JsonObject } from '../../contracts/agent-definition.js';
+import type { AgentFault } from '../../contracts/manager/core.js';
 import type { AgentUsage } from '../../contracts/manager/invocation.js';
+import { redactDiagnosticDetails } from '../../diagnostics/diagnostic.js';
 import type {
   ProtocolObserver,
   ProtocolOutcome,
@@ -6,7 +9,33 @@ import type {
 } from '../../protocol/driver.js';
 import { normalizeResult } from '../result/normalizer.js';
 import { createRawResponseCapture } from '../result/raw-response.js';
+import { createRedactionChannel } from '../security/redaction/channel.js';
 import type { ExecutionOutcome } from './terminal.js';
+
+const redactText =
+  (secrets: readonly string[]) =>
+  (value: string): string => {
+    const channel = createRedactionChannel(secrets);
+    try {
+      const decoder = new TextDecoder();
+      return (
+        decoder.decode(channel.feed(new TextEncoder().encode(value)), { stream: true }) +
+        decoder.decode(channel.flush())
+      );
+    } finally {
+      channel.dispose();
+    }
+  };
+
+const redactedFailure = (
+  outcome: Extract<ProtocolOutcome, { readonly status: 'failed' }>,
+  secrets: readonly string[],
+): { readonly code?: AgentFault['code']; readonly diagnostic?: Readonly<JsonObject> } => ({
+  ...(outcome.code === undefined ? {} : { code: outcome.code }),
+  ...(outcome.diagnostic === undefined
+    ? {}
+    : { diagnostic: redactDiagnosticDetails(outcome.diagnostic, redactText(secrets)) }),
+});
 
 export interface ProtocolObservation {
   readonly observer: ProtocolObserver;
@@ -55,10 +84,7 @@ export const observeProtocol = (
     },
     result: (protocolOutcome): ExecutionOutcome => {
       if (protocolOutcome.status === 'failed')
-        return {
-          status: 'failed',
-          ...(protocolOutcome.code === undefined ? {} : { code: protocolOutcome.code }),
-        };
+        return { status: 'failed', ...redactedFailure(protocolOutcome, options.secrets) };
       const evidence = capture.take();
       const normalized = normalizeResult({
         evidence,

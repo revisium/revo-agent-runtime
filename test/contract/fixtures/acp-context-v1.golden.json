@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "acp-context-wire/v1",
+  "omissionSessionNew": {
+    "cwd": "/workspace",
+    "mcpServers": []
+  },
+  "claudeNativeAppendSessionNew": {
+    "_meta": {
+      "systemPrompt": {
+        "append": "Answer in haiku. nonce-7c2e"
+      }
+    },
+    "cwd": "/workspace",
+    "mcpServers": []
+  },
+  "opencodeNativeSessionNew": {
+    "cwd": "/workspace",
+    "mcpServers": []
+  },
+  "opencodeNativeConfigContent": {
+    "instructions": ["/output/revo-opencode-instructions.md"]
+  },
+  "promptPrefix": "<<<REVO_INSTRUCTIONS>>>\nRead .revo/index.md before answering. nonce-4f1c\n<<<END_REVO_INSTRUCTIONS>>>\n\nReturn the fake result.",
+  "mcpStdioResolvedSessionNew": {
+    "cwd": "/workspace",
+    "mcpServers": [
+      {
+        "name": "knowledge",
+        "command": "revo",
+        "args": ["mcp"],
+        "env": [{ "name": "TOKEN", "value": "literal-secret" }]
+      }
+    ]
+  }
+}
